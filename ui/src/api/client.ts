@@ -93,3 +93,18 @@ export function dropFlow(id: string): Promise<{ ok: boolean }> {
 export function forwardAll(): Promise<{ forwarded: number }> {
   return request('/api/intercept/forward-all', { method: 'POST' });
 }
+
+// --- repeater (M3) --------------------------------------------------------
+
+export function sendRepeaterRequest(payload: {
+  url: string;
+  method: string;
+  headers: [string, string][];
+  body: string;
+}): Promise<import('../tabs/repeaterModel').RepeaterResponse> {
+  return request('/api/repeater/send', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}

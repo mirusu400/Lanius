@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from .. import __version__
 from ..addons.intercept import InterceptError
+from ..addons.repeater import RepeaterError, build_flow, render_raw
 from ..config import Settings
 from ..db.store import FlowStore
 from ..events import EventBroker
@@ -42,6 +43,15 @@ class ForwardBody(BaseModel):
     reason: str | None = None
     response_headers: list[list[str]] | None = None
     response_body: str | None = None
+
+
+class RepeaterRequest(BaseModel):
+    url: str
+    method: str = "GET"
+    headers: list[list[str]] = []
+    body: str = ""
+    http_version: str = "HTTP/1.1"
+    timeout: float = 30.0
 
 
 def redact_headers(
@@ -176,6 +186,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/intercept/forward-all")
     async def forward_all() -> dict[str, Any]:
         return {"forwarded": engine.intercept.resume_all()}
+
+    # --- repeater (M3) ----------------------------------------------------
+    @app.post("/api/repeater/send")
+    async def repeater_send(req: RepeaterRequest) -> dict[str, Any]:
+        try:
+            flow = build_flow(
+                url=req.url,
+                method=req.method,
+                headers=[list(h) for h in req.headers],
+                body=req.body,
+                http_version=req.http_version,
+            )
+            record = await engine.repeater.send(flow, timeout=req.timeout)
+        except RepeaterError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return render_raw(record)
 
     @app.websocket("/ws")
     async def ws_stream(websocket: WebSocket) -> None:

@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react';
 import { getFlow } from '../api/client';
 import type { FlowDetail, FlowSummary } from '../api/types';
 import { formatUrl } from '../tabs/proxyModel';
+import { sendToRepeater } from '../tabs/repeaterStore';
 
 interface Props {
   flow: FlowSummary | null;
+  onSentToRepeater?: () => void;
 }
 
 type Pane = 'request' | 'response';
@@ -26,7 +28,7 @@ function HeaderList({ headers }: { headers: [string, string][] | null }) {
   );
 }
 
-export function FlowDetailView({ flow }: Props) {
+export function FlowDetailView({ flow, onSentToRepeater }: Props) {
   const [detail, setDetail] = useState<FlowDetail | null>(null);
   const [pane, setPane] = useState<Pane>('request');
   const [reveal, setReveal] = useState(false);
@@ -80,6 +82,15 @@ export function FlowDetailView({ flow }: Props) {
           onClick={() => setPane('response')}
         >
           Response {flow.status_code ? `(${flow.status_code})` : ''}
+        </button>
+        <button
+          className="to-repeater"
+          onClick={() => {
+            sendToRepeater(flow, detail);
+            onSentToRepeater?.();
+          }}
+        >
+          Send to Repeater
         </button>
         <label className="reveal">
           <input

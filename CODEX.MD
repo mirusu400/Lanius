@@ -150,7 +150,7 @@
 - **M0 — 엔진 부트스트랩 ✅ 완료:** `DumpMaster` 임베드, HTTP flow 캡처 → SQLite 기록, 이벤트 브로커 + WS 스트림, REST 히스토리 API, 헤더 리댁션. (GUI 없음, CLI/curl 검증 완료)
 - **M1 — 라이브 히스토리 ✅ 완료:** 백엔드 WS 스트림 + React/TS GUI + 프록시 히스토리 테이블(실시간). 요청/응답 상세 뷰, 필터/검색. (Tauri 셸 번들은 M2 이후)
 - **M2 — 인터셉트 ✅ 완료:** 브레이크포인트 on/off(요청·응답·host 필터), 원시 HTTP 텍스트 편집 후 Forward/Drop/Forward all.
-- **M3 — Repeater:** 히스토리/인터셉트에서 요청을 Repeater로 보내 편집·재전송, 응답 확인.
+- **M3 — Repeater ✅ 완료:** 히스토리에서 'Send to Repeater' → 다중 탭 편집·재전송, 응답 확인. (응답 diff는 후속)
 - **M4 — Target/Scope/엔드포인트:** 사이트맵 트리, Scope include/exclude 영구 규칙, 엔드포인트 그룹핑·파라미터 식별.
 - **M5 — Intruder:** 페이로드 위치 지정 + 워드리스트 퍼징(워커 오프로드), 결과 테이블/정렬.
 - **M6 — 유틸 & 원시 TCP:** Decoder/Comparer, 원시 TCP 바이트 뷰(`tcp_message`).
@@ -232,6 +232,9 @@ cd shell && npm run tauri dev
 | M2 | Drop은 `resume()` → `kill()` 순서 | `kill()`이 resume 이벤트를 발생시키지 않고 `intercepted`만 해제해, 순서가 반대면 클라이언트가 영구 대기(실측 후 회귀 테스트 추가) |
 | M2 | mitmproxy `errorcheck` 애드온 제거 + 포트 사전 점검 | 기본 동작이 `sys.exit(1)`이라 호스트 앱까지 종료됨. 바인드 실패를 `ProxyStartError`로 변환 |
 | M2 | 인터셉트 편집은 원시 HTTP 텍스트 | Burp와 동일한 사용 감각. 파싱/직렬화는 `interceptModel.ts`에서 순수 함수로 테스트 |
+| M3 | Repeater는 mitmproxy `ReplayHandler` 재사용 | 자체 HTTP 클라이언트를 쓰지 않아 TLS·HTTP/2·upstream 모드·애드온 훅이 프록시 트래픽과 동일하게 동작 |
+| M3 | Repeater 전송도 히스토리에 기록(`source='repeater'`) | 프록시 트래픽과 구분하면서 동일한 조회 경로 재사용 |
+| M3 | 에디터의 헤더가 URL보다 우선 | 명시적 `Host` 스푸핑 등 펜테스트에 필요한 동작 |
 
 ---
 

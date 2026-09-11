@@ -12,6 +12,7 @@ from mitmproxy.tools.dump import DumpMaster
 
 from .addons.capture import CaptureAddon
 from .addons.intercept import InterceptAddon
+from .addons.repeater import RepeaterAddon
 from .config import Settings
 from .db.store import FlowStore
 from .events import EventBroker
@@ -37,6 +38,7 @@ class ProxyEngine:
         self.master: DumpMaster | None = None
         self.capture = CaptureAddon(store, broker)
         self.intercept = InterceptAddon(broker)
+        self.repeater = RepeaterAddon(store)
         self._task: asyncio.Task[None] | None = None
 
     @property
@@ -57,6 +59,7 @@ class ProxyEngine:
         # Intercept runs first so it can pause before capture records the flow.
         master.addons.add(self.intercept)
         master.addons.add(self.capture)
+        master.addons.add(self.repeater)
         return master
 
     async def start(self) -> None:

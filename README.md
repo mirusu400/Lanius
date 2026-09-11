@@ -14,7 +14,8 @@ Lanius는 **mitmproxy를 엔진으로 임베드**하고 그 위에 Burp Suite �
 - ✅ 민감 헤더 기본 리댁션 (`Authorization`, `Cookie`, `Set-Cookie`)
 - ✅ **M1** React+TS GUI: 실시간 프록시 히스토리 테이블, 필터/검색, 요청·응답 상세 뷰
 - ✅ **M2** 인터셉트: 브레이크포인트, 원시 HTTP 편집, Forward / Drop / Forward all
-- ⬜ M3 이후: Repeater, Target/Scope, Intruder
+- ✅ **M3** Repeater: 히스토리에서 보내기, 다중 탭 편집·재전송, 응답 뷰
+- ⬜ M4 이후: Target/Scope, Intruder
 
 ## 빠른 시작
 
@@ -70,6 +71,7 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 | POST | `/api/intercept/{id}/forward` | (선택적 편집 후) 전달 |
 | POST | `/api/intercept/{id}/drop` | 요청 폐기 |
 | POST | `/api/intercept/forward-all` | 대기 중 전체 전달 |
+| POST | `/api/repeater/send` | 요청 전송 (`url`, `method`, `headers`, `body`) |
 | WS | `/ws` | 실시간 이벤트 (`flow.*`, `intercept.*`, `engine.*`) |
 
 모든 엔드포인트는 기본적으로 `127.0.0.1`에만 바인딩된다.
@@ -78,11 +80,11 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 
 ```bash
 cd engine
-.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (54)
+.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (67)
 .venv/bin/python -m mypy          # 타입 체크
 
 cd ../ui
-npm test                          # UI 테스트 (42, jsdom 렌더 포함)
+npm test                          # UI 테스트 (62, jsdom 렌더 포함)
 npx tsc -b                        # 타입 체크
 ```
 
