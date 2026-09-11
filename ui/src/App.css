@@ -1040,3 +1040,54 @@ pre.body {
   background: rgba(226, 112, 58, 0.2);
   color: var(--accent);
 }
+
+/* --- plugins --- */
+.plugins-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+}
+
+.plugins-header {
+  align-items: center;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+
+.plugins-header button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  cursor: pointer;
+  padding: 4px 10px;
+}
+
+.plugins-table td {
+  white-space: normal;
+}
+
+.plugins-table button {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 8px;
+}
+
+.plugins-table button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.plugin-error-text {
+  color: #ff9c94;
+  font-size: 11px;
+  margin-top: 4px;
+  white-space: pre-wrap;
+}

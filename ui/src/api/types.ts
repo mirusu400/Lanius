@@ -184,3 +184,17 @@ export interface AttackSummary {
 export interface Attack extends AttackSummary {
   results: AttackResult[];
 }
+
+// --- plugins (M7) ---------------------------------------------------------
+
+export interface PluginInfo {
+  name: string;
+  path: string;
+  enabled: boolean;
+  loaded: boolean;
+  error: string | null;
+  description: string | null;
+  version: string | null;
+  author: string | null;
+  hooks: string[];
+}

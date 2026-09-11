@@ -284,3 +284,27 @@ export function compareTexts(
     body: JSON.stringify({ left, right, mode }),
   });
 }
+
+// --- plugins (M7) ---------------------------------------------------------
+
+export function listPlugins(): Promise<{
+  items: import('./types').PluginInfo[];
+  directory: string;
+}> {
+  return request('/api/plugins');
+}
+
+export function setPluginEnabled(
+  name: string,
+  enabled: boolean,
+): Promise<import('./types').PluginInfo> {
+  return request(`/api/plugins/${name}/${enabled ? 'enable' : 'disable'}`, {
+    method: 'POST',
+  });
+}
+
+export function reloadPlugin(
+  name: string,
+): Promise<import('./types').PluginInfo> {
+  return request(`/api/plugins/${name}/reload`, { method: 'POST' });
+}

@@ -24,6 +24,7 @@ from ..addons.codecs import (
     run_chain,
 )
 from ..addons.intruder import IntruderError, find_positions, strip_markers
+from ..addons.plugins import PluginError
 from ..addons.scope import ScopeError, rule_from_url
 from ..config import Settings
 from ..db.store import FlowStore
@@ -465,6 +466,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return compare(body.left, body.right, body.mode)  # type: ignore[arg-type]
         except CodecError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # --- plugins (M7) -----------------------------------------------------
+    @app.get("/api/plugins")
+    async def list_plugins() -> dict[str, Any]:
+        await asyncio.to_thread(engine.plugins.discover)
+        return {
+            "items": engine.plugins.list(),
+            "directory": str(settings.plugins_dir),
+        }
+
+    @app.post("/api/plugins/{name}/enable")
+    async def enable_plugin(name: str) -> dict[str, Any]:
+        try:
+            return engine.plugins.enable(name).as_dict()
+        except PluginError as exc:
+            status = 404 if "not found" in str(exc) else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @app.post("/api/plugins/{name}/disable")
+    async def disable_plugin(name: str) -> dict[str, Any]:
+        try:
+            return engine.plugins.disable(name).as_dict()
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/plugins/{name}/reload")
+    async def reload_plugin(name: str) -> dict[str, Any]:
+        try:
+            return engine.plugins.reload(name).as_dict()
+        except PluginError as exc:
+            status = 404 if "not found" in str(exc) else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
 
     @app.websocket("/ws")
     async def ws_stream(websocket: WebSocket) -> None:

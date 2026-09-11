@@ -14,6 +14,7 @@ from .addons.capture import CaptureAddon
 from .addons.intercept import InterceptAddon
 from .addons.repeater import RepeaterAddon
 from .addons.intruder import IntruderAddon
+from .addons.plugins import PluginManager
 from .addons.scope import ScopeManager
 from .config import Settings
 from .db.store import FlowStore
@@ -43,6 +44,12 @@ class ProxyEngine:
         self.intercept = InterceptAddon(broker)
         self.repeater = RepeaterAddon(store)
         self.intruder = IntruderAddon(self.repeater, broker)
+        self.plugins = PluginManager(
+            settings.plugins_dir,
+            store,
+            broker,
+            on_chain_changed=self._reorder_capture_last,
+        )
         self._task: asyncio.Task[None] | None = None
 
     @property
@@ -68,7 +75,24 @@ class ProxyEngine:
         master.addons.add(self.intercept)
         master.addons.add(self.capture)
         master.addons.add(self.repeater)
+        self.plugins.addons = master.addons
+        self.plugins.load_enabled()
+        self._reorder_capture_last()
         return master
+
+    def _reorder_capture_last(self) -> None:
+        """Keep the capture addon at the end of the chain.
+
+        mitmproxy runs hooks in chain order, so capture must come after user
+        plugins; otherwise a plugin's edits are applied after we have already
+        persisted the flow and never show up in the history.
+        """
+        if self.master is None:
+            return
+        chain = self.master.addons.chain
+        if self.capture in chain and chain[-1] is not self.capture:
+            chain.remove(self.capture)
+            chain.append(self.capture)
 
     async def start(self) -> None:
         if self.running:

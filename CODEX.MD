@@ -154,7 +154,7 @@
 - **M4 — Target/Scope/엔드포인트 ✅ 완료:** 사이트맵 트리, Scope include/exclude 영구 규칙(+캡처 제한), 엔드포인트 그룹핑·파라미터 식별.
 - **M5 — Intruder ✅ 완료:** 페이로드 위치(§) 지정 + 워드리스트 퍼징 4종(sniper/battering ram/pitchfork/cluster bomb), 결과 테이블 + 길이 이상치 하이라이트.
 - **M6 — 유틸 & 원시 TCP ✅ 완료:** Decoder(체인)/Comparer(단어·바이트 diff), 원시 TCP 캡처 + 헥스 덤프 뷰.
-- **M7 — 플러그인 시스템:** Python 애드온 로더 + UI JS 플러그인 API + 예시 플러그인 1~2개.
+- **M7 — 플러그인 시스템 ✅ (엔진측 완료):** Python 애드온 로더(발견·활성/비활성·리로드·영구 상태) + 예시 플러그인 2개 + Plugins 탭. UI측 JS 플러그인 API는 후속.
 - **M8 — MCP 연동:** mitmproxy-MCP 포크 통합, 히스토리 조회·인터셉트·replay 툴 노출(시크릿 리댁션 포함).
 
 > DoD(완료 정의): 각 마일스톤은 문서화 + 테스트 + GUI에서 수동 검증 가능해야 한다.
@@ -248,6 +248,10 @@ cd shell && npm run tauri dev
 | M6 | `base64.b64decode(validate=True)` 사용 | 느슨한 디코딩은 `"!!!"`를 빈 바이트로 통과시켜 gzip이 "성공"해 버림(실측으로 발견) |
 | M6 | 원시 TCP는 별도 mode로 노출(`LANIUS_EXTRA_MODES`) | 비-HTTP 클라이언트는 HTTP 프록시를 쓰지 않으므로 reverse 모드가 필요. `tcp_hosts`도 지원 |
 | M6 | TCP flow는 같은 `flows` 테이블에 `type='tcp'` | 히스토리·스코프·검색을 그대로 재사용. 방향별 바이트는 request/response 바디에 저장 |
+| M7 | 플러그인 = mitmproxy 애드온 객체(`Plugin` 클래스 또는 `addons` 리스트) | 별도 API를 발명하지 않고 mitmproxy 훅 전체를 그대로 노출 |
+| M7 | 로드시 애드온 이름을 플러그인 이름으로 덮어씀 | mitmproxy는 클래스명으로 애드온을 식별해, 두 플러그인이 모두 `class Plugin`이면 충돌(실측으로 발견) |
+| M7 | capture 애드온을 항상 체인 마지막으로 재정렬 | 그렇지 않으면 플러그인의 응답 수정이 기록 이후에 일어나 히스토리에 반영되지 않음(실측으로 발견) |
+| M7 | 플러그인 오류는 격리해 표시만 | 하나가 깨져도 엔진과 다른 플러그인은 계속 동작. 단 샌드박스는 아님(§10 신뢰 전제) |
 
 ---
 

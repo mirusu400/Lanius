@@ -31,6 +31,7 @@ class Settings:
     extra_modes: list[str] = None  # type: ignore[assignment]
     # Hosts forced through the raw TCP layer instead of HTTP parsing.
     tcp_hosts: list[str] = None  # type: ignore[assignment]
+    plugins_dir: Path = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.data_dir is None:
@@ -48,6 +49,11 @@ class Settings:
             self.extra_modes = _split_env("LANIUS_EXTRA_MODES")
         if self.tcp_hosts is None:
             self.tcp_hosts = _split_env("LANIUS_TCP_HOSTS")
+        if self.plugins_dir is None:
+            self.plugins_dir = Path(
+                os.environ.get("LANIUS_PLUGINS_DIR", self.data_dir / "plugins")
+            )
+        self.plugins_dir = Path(self.plugins_dir)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -61,3 +67,4 @@ class Settings:
 
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.plugins_dir.mkdir(parents=True, exist_ok=True)

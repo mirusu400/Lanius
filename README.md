@@ -18,7 +18,8 @@ Lanius는 **mitmproxy를 엔진으로 임베드**하고 그 위에 Burp Suite �
 - ✅ **M4** Target: 사이트맵 트리, Scope 편집기(영구 저장·캡처 제한), 엔드포인트 그룹핑
 - ✅ **M5** Intruder: § 페이로드 위치, 공격 유형 4종, 실시간 결과 테이블
 - ✅ **M6** Decoder(인/디코드 체인) · Comparer(diff) · 원시 TCP 캡처와 헥스 뷰
-- ⬜ M7 이후: 플러그인 시스템, MCP 연동
+- ✅ **M7** 플러그인: Python 애드온 로더 + Plugins 탭 + 예시 플러그인 2개
+- ⬜ M8: MCP 연동
 
 ## 빠른 시작
 
@@ -51,6 +52,7 @@ CA는 최초 실행 시 `~/.mitmproxy`에 자동 생성되며, **절대 커밋�
 | `--log-level` | `LANIUS_LOG_LEVEL` | `info` |
 | (모드 추가) | `LANIUS_EXTRA_MODES` | 없음 (예: `reverse:tcp://127.0.0.1:19100@19101`) |
 | (강제 TCP) | `LANIUS_TCP_HOSTS` | 없음 |
+| (플러그인) | `LANIUS_PLUGINS_DIR` | `~/.lanius/plugins` |
 
 비-HTTP 서비스를 바이트 단위로 보려면 reverse 모드를 추가한다:
 
@@ -96,6 +98,8 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 | GET | `/api/codecs` | 사용 가능한 코덱/해시 목록 |
 | POST | `/api/decode` | 인/디코드 체인 실행 |
 | POST | `/api/compare` | 두 텍스트 diff (`word` / `byte`) |
+| GET | `/api/plugins` | 플러그인 목록 + 디렉터리 |
+| POST | `/api/plugins/{name}/enable\|disable\|reload` | 활성 / 비활성 / 리로드 |
 | WS | `/ws` | 실시간 이벤트 (`flow.*`, `tcp.*`, `intercept.*`, `scope.*`, `intruder.*`, `engine.*`) |
 
 모든 엔드포인트는 기본적으로 `127.0.0.1`에만 바인딩된다.
@@ -104,13 +108,25 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 
 ```bash
 cd engine
-.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (199)
+.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (226)
 .venv/bin/python -m mypy          # 타입 체크
 
 cd ../ui
-npm test                          # UI 테스트 (126, jsdom 렌더 포함)
+npm test                          # UI 테스트 (133, jsdom 렌더 포함)
 npx tsc -b                        # 타입 체크
 ```
+
+## 플러그인
+
+플러그인은 mitmproxy 애드온과 동일하다. `~/.lanius/plugins`에 `.py` 파일을 두면
+Plugins 탭에서 발견되며, 활성화하면 즉시 실시간 트래픽에 적용된다.
+작성법과 예시는 [`plugins/README.md`](./plugins/README.md) 참고.
+
+```bash
+cp plugins/*.py ~/.lanius/plugins/    # 예시 플러그인 설치
+```
+
+플러그인은 샌드박스가 아니라 엔진 프로세스에서 실행된다. 신뢰할 수 있는 코드만 활성화할 것.
 
 ## 주의
 
