@@ -582,3 +582,213 @@ pre.body {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* --- target tab --- */
+.target-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.target-tab .subtabs {
+  align-items: center;
+  padding-bottom: 6px;
+}
+
+.target-tab .subtabs .spacer {
+  flex: 1;
+}
+
+.target-tab .scope-filter {
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+.target-tab .subtabs > button:last-child {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.site-list {
+  border-right: 1px solid var(--border);
+  overflow: auto;
+  width: 340px;
+}
+
+.site {
+  border-bottom: 1px solid #26292f;
+  cursor: pointer;
+  padding: 8px 10px;
+  position: relative;
+}
+
+.site:hover {
+  background: #2b2f36;
+}
+
+.site.selected {
+  background: var(--accent-dim);
+}
+
+.site-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.in-scope {
+  background: var(--accent);
+  border-radius: 3px;
+  color: #14161a;
+  font-size: 10px;
+  margin-left: 6px;
+  padding: 1px 5px;
+}
+
+.site-meta {
+  font-size: 11px;
+}
+
+.add-scope {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 6px;
+  position: absolute;
+  right: 8px;
+  top: 8px;
+}
+
+.add-scope:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.site-detail {
+  flex: 1;
+  overflow: auto;
+}
+
+.pad {
+  padding: 24px;
+}
+
+/* sitemap tree */
+.sitemap-tree {
+  padding: 8px;
+}
+
+.tree-row {
+  align-items: center;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  gap: 6px;
+  padding: 2px 4px;
+}
+
+.tree-row:hover {
+  background: #2b2f36;
+}
+
+.twisty {
+  color: var(--muted);
+  width: 10px;
+}
+
+.tree-flows {
+  display: flex;
+  gap: 6px;
+  margin-left: 10px;
+}
+
+.tree-flows span {
+  font-size: 11px;
+}
+
+/* endpoints */
+.endpoint-list {
+  flex: 1;
+  overflow: auto;
+}
+
+.param {
+  background: #2b2f36;
+  border-radius: 3px;
+  margin-right: 4px;
+  padding: 1px 5px;
+}
+
+/* scope editor */
+.scope-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+.scope-controls {
+  align-items: center;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+
+.scope-controls input.scope-url {
+  flex: 1;
+}
+
+.scope-controls input,
+.scope-controls select,
+.scope-controls button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  padding: 4px 8px;
+}
+
+.scope-controls button {
+  cursor: pointer;
+}
+
+.scope-controls label {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  gap: 4px;
+}
+
+.scope-summary {
+  padding: 6px 10px;
+}
+
+.scope-table td.incl {
+  color: #6fcf6f;
+}
+
+.scope-table td.excl {
+  color: #e0a800;
+}
+
+.scope-table button.danger {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 8px;
+}
+
+.scope-table button.danger:hover {
+  border-color: #c0392b;
+  color: #e74c3c;
+}

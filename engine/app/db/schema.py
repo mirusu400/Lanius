@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -47,6 +47,26 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
             ts          REAL NOT NULL,
             level       TEXT NOT NULL DEFAULT 'info',
             message     TEXT NOT NULL
+        )
+        """,
+    ),
+    2: (
+        """
+        CREATE TABLE IF NOT EXISTS scope_rules (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind        TEXT NOT NULL DEFAULT 'include',
+            host        TEXT NOT NULL DEFAULT '*',
+            path        TEXT NOT NULL DEFAULT '*',
+            protocol    TEXT NOT NULL DEFAULT 'any',
+            port        INTEGER,
+            match_type  TEXT NOT NULL DEFAULT 'glob',
+            enabled     INTEGER NOT NULL DEFAULT 1
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS settings (
+            key         TEXT PRIMARY KEY,
+            value       TEXT NOT NULL
         )
         """,
     ),

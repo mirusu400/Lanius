@@ -66,12 +66,33 @@ def flow_to_record(flow: http.HTTPFlow) -> FlowRecord:
 
 
 class CaptureAddon:
-    """Persists every HTTP flow and broadcasts live events."""
+    """Persists HTTP flows and broadcasts live events.
 
-    def __init__(self, store: FlowStore, broker: EventBroker) -> None:
+    When a scope manager is attached and scope capture restriction is on,
+    out-of-scope flows are neither stored nor broadcast (codex.md §2: scope
+    limits capture/display/tooling).
+    """
+
+    def __init__(
+        self,
+        store: FlowStore,
+        broker: EventBroker,
+        scope: Any | None = None,
+    ) -> None:
         self.store = store
         self.broker = broker
+        self.scope = scope
         self._pending: set[asyncio.Task[None]] = set()
+
+    def in_scope(self, flow: http.HTTPFlow) -> bool:
+        if self.scope is None:
+            return True
+        req = flow.request
+        return bool(
+            self.scope.should_capture(
+                req.scheme, req.pretty_host, req.port, req.path.split("?", 1)[0]
+            )
+        )
 
     # --- mitmproxy hooks --------------------------------------------------
     def request(self, flow: http.HTTPFlow) -> None:
@@ -89,6 +110,8 @@ class CaptureAddon:
 
     # --- internals --------------------------------------------------------
     def _save(self, flow: http.HTTPFlow, event_type: str) -> None:
+        if not self.in_scope(flow):
+            return
         try:
             record = flow_to_record(flow)
         except Exception:  # pragma: no cover - defensive

@@ -151,7 +151,7 @@
 - **M1 — 라이브 히스토리 ✅ 완료:** 백엔드 WS 스트림 + React/TS GUI + 프록시 히스토리 테이블(실시간). 요청/응답 상세 뷰, 필터/검색. (Tauri 셸 번들은 M2 이후)
 - **M2 — 인터셉트 ✅ 완료:** 브레이크포인트 on/off(요청·응답·host 필터), 원시 HTTP 텍스트 편집 후 Forward/Drop/Forward all.
 - **M3 — Repeater ✅ 완료:** 히스토리에서 'Send to Repeater' → 다중 탭 편집·재전송, 응답 확인. (응답 diff는 후속)
-- **M4 — Target/Scope/엔드포인트:** 사이트맵 트리, Scope include/exclude 영구 규칙, 엔드포인트 그룹핑·파라미터 식별.
+- **M4 — Target/Scope/엔드포인트 ✅ 완료:** 사이트맵 트리, Scope include/exclude 영구 규칙(+캡처 제한), 엔드포인트 그룹핑·파라미터 식별.
 - **M5 — Intruder:** 페이로드 위치 지정 + 워드리스트 퍼징(워커 오프로드), 결과 테이블/정렬.
 - **M6 — 유틸 & 원시 TCP:** Decoder/Comparer, 원시 TCP 바이트 뷰(`tcp_message`).
 - **M7 — 플러그인 시스템:** Python 애드온 로더 + UI JS 플러그인 API + 예시 플러그인 1~2개.
@@ -235,6 +235,11 @@ cd shell && npm run tauri dev
 | M3 | Repeater는 mitmproxy `ReplayHandler` 재사용 | 자체 HTTP 클라이언트를 쓰지 않아 TLS·HTTP/2·upstream 모드·애드온 훅이 프록시 트래픽과 동일하게 동작 |
 | M3 | Repeater 전송도 히스토리에 기록(`source='repeater'`) | 프록시 트래픽과 구분하면서 동일한 조회 경로 재사용 |
 | M3 | 에디터의 헤더가 URL보다 우선 | 명시적 `Host` 스푸핑 등 펜테스트에 필요한 동작 |
+| M4 | 스코프 규칙은 SQLite에 영구 저장(스키마 v2) + 메모리 스냅샷 | 프로젝트 재시작 후에도 유지되면서, 애드온은 DB를 건드리지 않아 이벤트 루프를 막지 않음 |
+| M4 | include 규칙이 없으면 전부 스코프 | 새 프로젝트에서도 트래픽이 기록되도록(Burp 동작과 동일) |
+| M4 | 스코프 캡처 제한은 기본 off, 옵트인 | 기본값이 on이면 초기 사용자가 아무것도 못 보게 됨 |
+| M4 | 사이트의 in_scope는 "기록된 경로 중 하나라도 매칭" | `/users/*` 같은 규칙에서도 호스트가 타깃으로 표시되어야 함(실측으로 발견) |
+| M4 | 경로 파라미터는 휴리스틱 분류(id/uuid/date/hash/token) | 숫자·UUID 등 동적 세그먼트를 `{id}`로 묶어 실제 API 표면을 노출 |
 
 ---
 

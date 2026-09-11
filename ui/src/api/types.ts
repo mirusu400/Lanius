@@ -91,3 +91,56 @@ export interface FlowFilters {
   statusCode?: number;
   search?: string;
 }
+
+// --- target / scope (M4) --------------------------------------------------
+
+export interface ScopeRule {
+  id: number | null;
+  kind: 'include' | 'exclude';
+  host: string;
+  path: string;
+  protocol: 'any' | 'http' | 'https';
+  port: number | null;
+  match_type: 'glob' | 'regex';
+  enabled: boolean;
+}
+
+export interface ScopeState {
+  rules: ScopeRule[];
+  restrict_capture: boolean;
+}
+
+export interface Site {
+  scheme: string;
+  host: string;
+  port: number | null;
+  flows: number;
+  paths: number;
+  last_seen: number | null;
+  in_scope: boolean;
+}
+
+export interface SitePath {
+  id: string;
+  method: string;
+  path: string;
+  query: string | null;
+  status_code: number | null;
+  response_size: number;
+  started_at: number | null;
+}
+
+export interface EndpointGroup {
+  key: string;
+  method: string;
+  scheme: string;
+  host: string;
+  port: number | null;
+  template: string;
+  count: number;
+  path_params: string[];
+  query_params: string[];
+  statuses: number[];
+  examples: string[];
+  last_seen: number | null;
+}

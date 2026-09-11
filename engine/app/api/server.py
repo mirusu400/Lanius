@@ -15,6 +15,8 @@ from pydantic import BaseModel
 from .. import __version__
 from ..addons.intercept import InterceptError
 from ..addons.repeater import RepeaterError, build_flow, render_raw
+from ..addons.endpoints import build_endpoints
+from ..addons.scope import ScopeError, rule_from_url
 from ..config import Settings
 from ..db.store import FlowStore
 from ..events import EventBroker
@@ -52,6 +54,36 @@ class RepeaterRequest(BaseModel):
     body: str = ""
     http_version: str = "HTTP/1.1"
     timeout: float = 30.0
+
+
+class ScopeRuleBody(BaseModel):
+    kind: str = "include"
+    host: str = "*"
+    path: str = "*"
+    protocol: str = "any"
+    port: int | None = None
+    match_type: str = "glob"
+    enabled: bool = True
+
+
+class ScopeRulePatch(BaseModel):
+    kind: str | None = None
+    host: str | None = None
+    path: str | None = None
+    protocol: str | None = None
+    port: int | None = None
+    match_type: str | None = None
+    enabled: bool | None = None
+
+
+class ScopeFromUrl(BaseModel):
+    url: str
+    kind: str = "include"
+    prefix: bool = True
+
+
+class CaptureRestriction(BaseModel):
+    restrict_capture: bool
 
 
 def redact_headers(
@@ -202,6 +234,113 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except RepeaterError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return render_raw(record)
+
+    # --- scope / target (M4) ----------------------------------------------
+    @app.get("/api/scope")
+    async def get_scope() -> dict[str, Any]:
+        return engine.scope.scope.as_dict()
+
+    @app.post("/api/scope/rules")
+    async def add_scope_rule(body: ScopeRuleBody) -> dict[str, Any]:
+        try:
+            rule = await asyncio.to_thread(
+                lambda: engine.scope.add_rule(**body.model_dump())
+            )
+        except ScopeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return rule.as_dict()
+
+    @app.post("/api/scope/from-url")
+    async def add_scope_from_url(body: ScopeFromUrl) -> dict[str, Any]:
+        try:
+            template = rule_from_url(body.url, kind=body.kind, prefix=body.prefix)  # type: ignore[arg-type]
+            fields = template.as_dict()
+            fields.pop("id", None)
+            rule = await asyncio.to_thread(lambda: engine.scope.add_rule(**fields))
+        except ScopeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return rule.as_dict()
+
+    @app.patch("/api/scope/rules/{rule_id}")
+    async def patch_scope_rule(rule_id: int, patch: ScopeRulePatch) -> dict[str, Any]:
+        changes = patch.model_dump(exclude_unset=True)
+        try:
+            scope = await asyncio.to_thread(
+                lambda: engine.scope.update_rule(rule_id, **changes)
+            )
+        except ScopeError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return scope.as_dict()
+
+    @app.delete("/api/scope/rules/{rule_id}")
+    async def delete_scope_rule(rule_id: int) -> dict[str, Any]:
+        try:
+            await asyncio.to_thread(lambda: engine.scope.delete_rule(rule_id))
+        except ScopeError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"ok": True}
+
+    @app.patch("/api/scope")
+    async def set_scope_capture(body: CaptureRestriction) -> dict[str, Any]:
+        scope = await asyncio.to_thread(
+            lambda: engine.scope.set_restrict_capture(body.restrict_capture)
+        )
+        return scope.as_dict()
+
+    @app.get("/api/scope/check")
+    async def check_scope(url: str) -> dict[str, Any]:
+        try:
+            return {"url": url, "in_scope": engine.scope.scope.contains_url(url)}
+        except ScopeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/sitemap")
+    async def sitemap(in_scope_only: bool = False) -> dict[str, Any]:
+        sites = await asyncio.to_thread(store.distinct_sites)
+        items = []
+        for site in sites:
+            # A site counts as in scope when any of its recorded paths is, so a
+            # rule like /users/* still marks the host as a target.
+            paths = await asyncio.to_thread(
+                store.distinct_paths_for_site,
+                site["scheme"],
+                site["host"],
+                site["port"],
+            )
+            inside = any(
+                engine.scope.contains(site["scheme"], site["host"], site["port"], p)
+                for p in (paths or ["/"])
+            )
+            if in_scope_only and not inside:
+                continue
+            items.append({**site, "in_scope": inside})
+        return {"sites": items}
+
+    @app.get("/api/sitemap/paths")
+    async def sitemap_paths(
+        host: str, scheme: str = "https", port: int | None = None
+    ) -> dict[str, Any]:
+        rows = await asyncio.to_thread(store.paths_for_site, scheme, host, port)
+        return {"items": rows, "count": len(rows)}
+
+    @app.get("/api/endpoints")
+    async def endpoints(
+        host: str | None = None,
+        in_scope_only: bool = False,
+        limit: int = Query(5000, ge=1, le=20000),
+    ) -> dict[str, Any]:
+        records = await asyncio.to_thread(store.list, limit=limit, host=host)
+        if in_scope_only:
+            records = [
+                r
+                for r in records
+                if engine.scope.contains(r.scheme, r.host, r.port, r.path)
+            ]
+        grouped = build_endpoints(records)
+        return {
+            "items": [e.as_dict() for e in grouped],
+            "count": len(grouped),
+        }
 
     @app.websocket("/ws")
     async def ws_stream(websocket: WebSocket) -> None:

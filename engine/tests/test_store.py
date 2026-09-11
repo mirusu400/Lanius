@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import time
 
+import sqlite3
+
+from app.db.schema import SCHEMA_VERSION, migrate
 from app.db.store import FlowRecord, FlowStore
 
 
@@ -29,8 +32,37 @@ def make_record(flow_id: str, **kwargs) -> FlowRecord:
 def test_migrate_sets_user_version(tmp_path) -> None:
     store = FlowStore(tmp_path / "t.sqlite")
     version = store._conn.execute("PRAGMA user_version").fetchone()[0]
-    assert version == 1
+    assert version == SCHEMA_VERSION
     store.close()
+
+
+def test_migrate_is_idempotent(tmp_path) -> None:
+    path = tmp_path / "m.sqlite"
+    conn = sqlite3.connect(path)
+    assert migrate(conn) == SCHEMA_VERSION
+    assert migrate(conn) == SCHEMA_VERSION
+    conn.close()
+
+
+def test_migrate_upgrades_a_v1_database(tmp_path) -> None:
+    """An existing v1 project file must gain the v2 tables, not be recreated."""
+    path = tmp_path / "old.sqlite"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE flows (id TEXT PRIMARY KEY)")
+    conn.execute("INSERT INTO flows (id) VALUES ('legacy')")
+    conn.execute("PRAGMA user_version = 1")
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(path)
+    assert migrate(conn) == SCHEMA_VERSION
+    tables = {
+        row[0]
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    }
+    assert {"scope_rules", "settings"} <= tables
+    assert conn.execute("SELECT id FROM flows").fetchone()[0] == "legacy"
+    conn.close()
 
 
 def test_upsert_and_get_roundtrip() -> None:

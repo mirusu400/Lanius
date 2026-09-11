@@ -108,3 +108,80 @@ export function sendRepeaterRequest(payload: {
     body: JSON.stringify(payload),
   });
 }
+
+// --- target / scope (M4) --------------------------------------------------
+
+export function getScope(): Promise<import('./types').ScopeState> {
+  return request('/api/scope');
+}
+
+export function addScopeRule(
+  rule: Partial<import('./types').ScopeRule>,
+): Promise<import('./types').ScopeRule> {
+  return request('/api/scope/rules', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(rule),
+  });
+}
+
+export function addScopeFromUrl(
+  url: string,
+  kind: 'include' | 'exclude' = 'include',
+): Promise<import('./types').ScopeRule> {
+  return request('/api/scope/from-url', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ url, kind }),
+  });
+}
+
+export function patchScopeRule(
+  id: number,
+  patch: Partial<import('./types').ScopeRule>,
+): Promise<import('./types').ScopeState> {
+  return request(`/api/scope/rules/${id}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteScopeRule(id: number): Promise<{ ok: boolean }> {
+  return request(`/api/scope/rules/${id}`, { method: 'DELETE' });
+}
+
+export function setRestrictCapture(
+  restrict_capture: boolean,
+): Promise<import('./types').ScopeState> {
+  return request('/api/scope', {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ restrict_capture }),
+  });
+}
+
+export function getSitemap(
+  inScopeOnly = false,
+): Promise<{ sites: import('./types').Site[] }> {
+  return request(`/api/sitemap?in_scope_only=${inScopeOnly}`);
+}
+
+export function getSitePaths(
+  host: string,
+  scheme: string,
+  port: number | null,
+): Promise<{ items: import('./types').SitePath[]; count: number }> {
+  const params = new URLSearchParams({ host, scheme });
+  if (port !== null) params.set('port', String(port));
+  return request(`/api/sitemap/paths?${params}`);
+}
+
+export function getEndpoints(
+  host?: string,
+  inScopeOnly = false,
+): Promise<{ items: import('./types').EndpointGroup[]; count: number }> {
+  const params = new URLSearchParams({ in_scope_only: String(inScopeOnly) });
+  if (host) params.set('host', host);
+  return request(`/api/endpoints?${params}`);
+}

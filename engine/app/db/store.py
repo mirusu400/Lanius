@@ -13,7 +13,7 @@ import threading
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 from .schema import migrate
 
@@ -180,7 +180,7 @@ class FlowStore:
         method: str | None = None,
         status_code: int | None = None,
         search: str | None = None,
-    ) -> list[FlowRecord]:
+    ) -> List[FlowRecord]:
         clauses: list[str] = []
         params: list[Any] = []
         if host:
@@ -208,6 +208,141 @@ class FlowStore:
     def count(self) -> int:
         with self._lock:
             return int(self._conn.execute("SELECT COUNT(*) FROM flows").fetchone()[0])
+
+    # --- scope rules (M4) -------------------------------------------------
+    def list_scope_rules(self) -> List[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, kind, host, path, protocol, port, match_type, enabled"
+                " FROM scope_rules ORDER BY id"
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "kind": row["kind"],
+                "host": row["host"],
+                "path": row["path"],
+                "protocol": row["protocol"],
+                "port": row["port"],
+                "match_type": row["match_type"],
+                "enabled": bool(row["enabled"]),
+            }
+            for row in rows
+        ]
+
+    def add_scope_rule(self, rule: dict[str, Any]) -> int:
+        with self._lock:
+            cursor = self._conn.execute(
+                "INSERT INTO scope_rules (kind, host, path, protocol, port,"
+                " match_type, enabled) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    rule["kind"],
+                    rule["host"],
+                    rule["path"],
+                    rule["protocol"],
+                    rule["port"],
+                    rule["match_type"],
+                    int(rule["enabled"]),
+                ),
+            )
+            self._conn.commit()
+            return int(cursor.lastrowid or 0)
+
+    def update_scope_rule(self, rule_id: int, changes: dict[str, Any]) -> bool:
+        allowed = {
+            "kind",
+            "host",
+            "path",
+            "protocol",
+            "port",
+            "match_type",
+            "enabled",
+        }
+        fields = {k: v for k, v in changes.items() if k in allowed}
+        if not fields:
+            return False
+        assignments = ", ".join(f"{k} = ?" for k in fields)
+        values: list[Any] = [
+            int(v) if k == "enabled" else v for k, v in fields.items()
+        ]
+        values.append(rule_id)
+        with self._lock:
+            cursor = self._conn.execute(
+                f"UPDATE scope_rules SET {assignments} WHERE id = ?", values
+            )
+            self._conn.commit()
+            return cursor.rowcount > 0
+
+    def delete_scope_rule(self, rule_id: int) -> bool:
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM scope_rules WHERE id = ?", (rule_id,)
+            )
+            self._conn.commit()
+            return cursor.rowcount > 0
+
+    # --- settings ---------------------------------------------------------
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT value FROM settings WHERE key = ?", (key,)
+            ).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                (key, value),
+            )
+            self._conn.commit()
+
+    # --- sitemap / endpoints (M4) -----------------------------------------
+    def distinct_sites(self) -> List[dict[str, Any]]:
+        """One row per (scheme, host, port) with flow counts."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT scheme, host, port, COUNT(*) AS flows,"
+                " COUNT(DISTINCT path) AS paths, MAX(started_at) AS last_seen"
+                " FROM flows WHERE host IS NOT NULL"
+                " GROUP BY scheme, host, port ORDER BY host"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def distinct_paths_for_site(
+        self, scheme: str, host: str, port: int | None
+    ) -> List[str]:
+        """Distinct paths for one site (used for scope evaluation)."""
+        clauses = ["host = ?", "scheme = ?"]
+        params: list[Any] = [host, scheme]
+        if port is not None:
+            clauses.append("port = ?")
+            params.append(port)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT DISTINCT path FROM flows"
+                f" WHERE {' AND '.join(clauses)} AND path IS NOT NULL",
+                params,
+            ).fetchall()
+        return [row["path"] for row in rows]
+
+    def paths_for_site(
+        self, scheme: str, host: str, port: int | None
+    ) -> List[dict[str, Any]]:
+        clauses = ["host = ?", "scheme = ?"]
+        params: list[Any] = [host, scheme]
+        if port is not None:
+            clauses.append("port = ?")
+            params.append(port)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, method, path, query, status_code, response_size,"
+                " started_at FROM flows"
+                f" WHERE {' AND '.join(clauses)}"
+                " ORDER BY path, method",
+                params,
+            ).fetchall()
+        return [dict(row) for row in rows]
 
 
 def _truncate(body: bytes | None) -> bytes | None:
