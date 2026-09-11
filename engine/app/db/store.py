@@ -297,6 +297,15 @@ class FlowStore:
             )
             self._conn.commit()
 
+    def list_events(self, limit: int = 200) -> List[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, ts, level, message FROM events"
+                " ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     # --- sitemap / endpoints (M4) -----------------------------------------
     def distinct_sites(self) -> List[dict[str, Any]]:
         """One row per (scheme, host, port) with flow counts."""

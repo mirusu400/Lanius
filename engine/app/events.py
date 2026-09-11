@@ -20,10 +20,16 @@ class EventBroker:
     Slow subscribers drop their oldest event instead of stalling the engine.
     """
 
-    def __init__(self, queue_size: int = DEFAULT_QUEUE_SIZE) -> None:
+    def __init__(
+        self,
+        queue_size: int = DEFAULT_QUEUE_SIZE,
+        on_publish: Any | None = None,
+    ) -> None:
         self._queue_size = queue_size
         self._subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
         self.dropped = 0
+        # Optional sink used to persist notable events for the Logger tab.
+        self.on_publish = on_publish
 
     @property
     def subscriber_count(self) -> int:
@@ -39,6 +45,11 @@ class EventBroker:
 
     def publish(self, event_type: str, data: Any) -> None:
         event = {"type": event_type, "data": data}
+        if self.on_publish is not None:
+            try:
+                self.on_publish(event_type, data)
+            except Exception:  # pragma: no cover - logging must never break
+                logger.exception("event sink failed for %s", event_type)
         for queue in list(self._subscribers):
             while True:
                 try:

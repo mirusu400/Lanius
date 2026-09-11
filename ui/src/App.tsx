@@ -7,6 +7,8 @@ import { IntruderTab } from './tabs/IntruderTab';
 import { DecoderTab } from './tabs/DecoderTab';
 import { ComparerTab } from './tabs/ComparerTab';
 import { PluginsTab } from './tabs/PluginsTab';
+import { LoggerTab } from './tabs/LoggerTab';
+import { SettingsTab } from './tabs/SettingsTab';
 import './App.css';
 
 const TABS = [
@@ -22,11 +24,6 @@ const TABS = [
 ] as const;
 
 type Tab = (typeof TABS)[number];
-
-const ROADMAP: Record<string, string> = {
-  Logger: 'M1+ — 전체 이벤트 로그',
-  Settings: 'M1+ — CA 내보내기, 프록시 설정',
-};
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('Proxy');
@@ -62,12 +59,11 @@ export default function App() {
           <ComparerTab />
         ) : tab === 'Plugins' ? (
           <PluginsTab />
-        ) : (
-          <div className="placeholder">
-            <h2>{tab}</h2>
-            <p className="muted">{ROADMAP[tab]}</p>
-          </div>
-        )}
+        ) : tab === 'Logger' ? (
+          <LoggerTab />
+        ) : tab === 'Settings' ? (
+          <SettingsTab />
+        ) : null}
       </main>
     </div>
   );

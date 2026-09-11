@@ -161,3 +161,57 @@ def test_forward_all(client) -> None:
     for _ in range(3):
         addon.request(tflow.tflow(req=tutils.treq(host="example.com"), resp=False))
     assert client.post("/api/intercept/forward-all").json() == {"forwarded": 3}
+
+
+# --- CA / events (final pass) ---------------------------------------------
+
+
+def test_ca_info_reports_availability(client) -> None:
+    data = client.get("/api/ca").json()
+    assert "confdir" in data
+    assert set(data["available"]) == {"pem", "cer", "p12"}
+    assert data["install_url"] == "http://mitm.it"
+
+
+def test_ca_download_unknown_format(client) -> None:
+    assert client.get("/api/ca/jpeg").status_code == 404
+
+
+def test_ca_download_serves_the_certificate(client) -> None:
+    confdir = client.app.state.settings.confdir
+    confdir.mkdir(parents=True, exist_ok=True)
+    (confdir / "mitmproxy-ca-cert.pem").write_text("-----BEGIN CERTIFICATE-----")
+    res = client.get("/api/ca/pem")
+    assert res.status_code == 200
+    assert "BEGIN CERTIFICATE" in res.text
+
+
+def test_ca_private_key_is_not_exposed(client) -> None:
+    """The CA private key must never be downloadable (codex.md §10)."""
+    confdir = client.app.state.settings.confdir
+    confdir.mkdir(parents=True, exist_ok=True)
+    (confdir / "mitmproxy-ca.pem").write_text("PRIVATE KEY")
+    # Only the three public cert formats are routable.
+    assert client.get("/api/ca/mitmproxy-ca.pem").status_code == 404
+    for fmt in ("pem", "cer", "p12"):
+        res = client.get(f"/api/ca/{fmt}")
+        assert "PRIVATE KEY" not in res.text
+
+
+def test_events_endpoint_records_notable_events(client) -> None:
+    client.patch("/api/intercept", json={"enabled": True})
+    items = client.get("/api/events").json()["items"]
+    assert any("intercept.rules" in i["message"] for i in items)
+
+
+def test_events_endpoint_skips_per_flow_noise(client) -> None:
+    client.app.state.broker.publish("flow.request", {"id": "x"})
+    items = client.get("/api/events").json()["items"]
+    assert not any("flow.request" in i["message"] for i in items)
+
+
+def test_events_are_newest_first(client) -> None:
+    client.patch("/api/intercept", json={"enabled": True})
+    client.delete("/api/flows")
+    items = client.get("/api/events").json()["items"]
+    assert "flows.cleared" in items[0]["message"]

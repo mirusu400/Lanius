@@ -308,3 +308,31 @@ export function reloadPlugin(
 ): Promise<import('./types').PluginInfo> {
   return request(`/api/plugins/${name}/reload`, { method: 'POST' });
 }
+
+// --- logger / CA ----------------------------------------------------------
+
+export interface LogEvent {
+  id: number;
+  ts: number;
+  level: string;
+  message: string;
+}
+
+export function listEvents(limit = 200): Promise<{ items: LogEvent[] }> {
+  return request(`/api/events?limit=${limit}`);
+}
+
+export interface CaInfo {
+  confdir: string;
+  available: Record<string, boolean>;
+  install_url: string;
+  proxy: string;
+}
+
+export function getCaInfo(): Promise<CaInfo> {
+  return request('/api/ca');
+}
+
+export function caDownloadUrl(format: string): string {
+  return `${API_BASE}/api/ca/${format}`;
+}

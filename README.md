@@ -20,6 +20,9 @@ Lanius는 **mitmproxy를 엔진으로 임베드**하고 그 위에 Burp Suite �
 - ✅ **M6** Decoder(인/디코드 체인) · Comparer(diff) · 원시 TCP 캡처와 헥스 뷰
 - ✅ **M7** 플러그인: Python 애드온 로더 + Plugins 탭 + 예시 플러그인 2개
 - ✅ **M8** MCP 연동: 에이전트용 툴 13종 (리댁션 기본)
+- ✅ Logger(실시간·저장 이벤트) · Settings(엔진 상태, CA 내보내기)
+
+9개 탭 모두 구현 완료 — 남은 항목은 데스크톱 셸(Tauri) 번들링이다.
 
 ## 빠른 시작
 
@@ -98,6 +101,8 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 | GET | `/api/codecs` | 사용 가능한 코덱/해시 목록 |
 | POST | `/api/decode` | 인/디코드 체인 실행 |
 | POST | `/api/compare` | 두 텍스트 diff (`word` / `byte`) |
+| GET | `/api/ca`, `/api/ca/{pem\|cer\|p12}` | CA 정보 / 공개 인증서 내려받기 |
+| GET | `/api/events` | 저장된 이벤트 로그 |
 | GET | `/api/plugins` | 플러그인 목록 + 디렉터리 |
 | POST | `/api/plugins/{name}/enable\|disable\|reload` | 활성 / 비활성 / 리로드 |
 | WS | `/ws` | 실시간 이벤트 (`flow.*`, `tcp.*`, `intercept.*`, `scope.*`, `intruder.*`, `engine.*`) |
@@ -108,11 +113,11 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 
 ```bash
 cd engine
-.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (252)
+.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (259)
 .venv/bin/python -m mypy          # 타입 체크
 
 cd ../ui
-npm test                          # UI 테스트 (133, jsdom 렌더 포함)
+npm test                          # UI 테스트 (141, jsdom 렌더 포함)
 npx tsc -b                        # 타입 체크
 ```
 

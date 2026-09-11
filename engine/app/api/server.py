@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .. import __version__
@@ -139,7 +141,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.ensure_dirs()
     store = FlowStore(settings.db_path)
-    broker = EventBroker()
+
+    # Notable (non per-flow) events are persisted for the Logger tab.
+    LOGGED_EVENTS = (
+        "engine.",
+        "intercept.rules",
+        "scope.changed",
+        "plugins.changed",
+        "intruder.started",
+        "intruder.finished",
+        "flows.cleared",
+    )
+
+    def _log_event(event_type: str, data: Any) -> None:
+        if not event_type.startswith(LOGGED_EVENTS):
+            return
+        try:
+            store.log_event(time.time(), "info", f"{event_type} {data}"[:2000])
+        except Exception:  # pragma: no cover - logging must never break
+            logger.exception("failed to log event %s", event_type)
+
+    broker = EventBroker(on_publish=_log_event)
     engine = ProxyEngine(settings, store, broker)
 
     # Built below, then started by the lifespan (its session manager needs a
@@ -488,6 +510,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return compare(body.left, body.right, body.mode)  # type: ignore[arg-type]
         except CodecError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # --- CA certificate / settings ----------------------------------------
+    # Only the public CA certificate is exposed; the private key never is
+    # (codex.md §10).
+    CA_FILES = {
+        "pem": "mitmproxy-ca-cert.pem",
+        "cer": "mitmproxy-ca-cert.cer",
+        "p12": "mitmproxy-ca-cert.p12",
+    }
+
+    @app.get("/api/ca")
+    async def ca_info() -> dict[str, Any]:
+        available = {
+            fmt: (settings.confdir / filename).exists()
+            for fmt, filename in CA_FILES.items()
+        }
+        return {
+            "confdir": str(settings.confdir),
+            "available": available,
+            "install_url": "http://mitm.it",
+            "proxy": f"{settings.proxy_host}:{settings.proxy_port}",
+        }
+
+    @app.get("/api/ca/{fmt}")
+    async def ca_download(fmt: str) -> FileResponse:
+        filename = CA_FILES.get(fmt)
+        if filename is None:
+            raise HTTPException(status_code=404, detail=f"unknown format {fmt!r}")
+        path = settings.confdir / filename
+        if not path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="CA not generated yet; start the proxy once",
+            )
+        return FileResponse(
+            path, filename=filename, media_type="application/octet-stream"
+        )
+
+    # --- events / logger --------------------------------------------------
+    @app.get("/api/events")
+    async def list_events(limit: int = Query(200, ge=1, le=2000)) -> dict[str, Any]:
+        rows = await asyncio.to_thread(store.list_events, limit)
+        return {"items": rows, "count": len(rows)}
 
     # --- plugins (M7) -----------------------------------------------------
     @app.get("/api/plugins")
