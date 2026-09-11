@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0e131f"/>
+      <stop offset="50%" stop-color="#131a29"/>
+      <stop offset="100%" stop-color="#0a0d15"/>
+    </linearGradient>
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b4866" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#1f2738" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#2e3a52" stop-opacity="0.6"/>
+    </linearGradient>
+    <!-- Hook/Beak Gradient -->
+    <linearGradient id="beakGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#ff7b00"/>
+      <stop offset="45%" stop-color="#ff3d00"/>
+      <stop offset="100%" stop-color="#990033"/>
+    </linearGradient>
+    <linearGradient id="beakMetal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2c3240"/>
+      <stop offset="50%" stop-color="#181c26"/>
+      <stop offset="100%" stop-color="#0f121a"/>
+    </linearGradient>
+    <!-- Stream Gradients -->
+    <linearGradient id="clientStream" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00f2fe" stop-opacity="0"/>
+      <stop offset="40%" stop-color="#00c3ff" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#00f2fe" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="serverStream" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ff0077" stop-opacity="1"/>
+      <stop offset="60%" stop-color="#7928ca" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#7928ca" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="packetGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="#ff007f"/>
+    </linearGradient>
+    <!-- Glow Filters -->
+    <filter id="glowFilter" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="24" result="blur"/>
+    </filter>
+  </defs>
+
+  <!-- Squircle Base -->
+  <rect x="16" y="16" width="480" height="480" rx="105" fill="url(#bgGrad)"/>
+  <rect x="16" y="16" width="480" height="480" rx="105" fill="none" stroke="url(#borderGrad)" stroke-width="2.5"/>
+
+  <!-- Subtle Grid/Radar Texture -->
+  <g opacity="0.15">
+    <circle cx="256" cy="256" r="80" fill="none" stroke="#00c3ff" stroke-width="1.5" stroke-dasharray="4 6"/>
+    <circle cx="256" cy="256" r="150" fill="none" stroke="#ff3d00" stroke-width="1.5" stroke-dasharray="6 8"/>
+    <line x1="60" y1="256" x2="452" y2="256" stroke="#ffffff" stroke-width="0.75" stroke-dasharray="3 9"/>
+  </g>
+
+  <!-- Ambient Glow Behind Intercept Point -->
+  <circle cx="256" cy="256" r="70" fill="#ff3d00" opacity="0.22" filter="url(#softGlow)"/>
+  <circle cx="256" cy="256" r="45" fill="#00f2fe" opacity="0.25" filter="url(#softGlow)"/>
+
+  <!-- Client Stream (Left to Center) -->
+  <g filter="url(#glowFilter)">
+    <path d="M 64 256 L 206 256" stroke="url(#clientStream)" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="110" cy="256" r="3.5" fill="#ffffff"/>
+    <circle cx="165" cy="256" r="4.5" fill="#ffffff"/>
+  </g>
+
+  <!-- Server Stream (Center to Right) -->
+  <g filter="url(#glowFilter)">
+    <path d="M 306 256 L 448 256" stroke="url(#serverStream)" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="345" cy="256" r="4.5" fill="#ffffff"/>
+    <circle cx="400" cy="256" r="3.5" fill="#ffffff"/>
+  </g>
+
+  <!-- Intercepted Packet (Center Diamond / Hexagon) -->
+  <g filter="url(#glowFilter)">
+    <!-- Outer Breakpoint Bracket -->
+    <path d="M 230 220 L 220 220 L 220 292 L 230 292" fill="none" stroke="#00f2fe" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 282 220 L 292 220 L 292 292 L 282 292" fill="none" stroke="#ff0077" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Central Data Gem / Intercept Node -->
+    <polygon points="256,226 284,256 256,286 228,256" fill="url(#packetGrad)" opacity="0.95"/>
+    <polygon points="256,236 274,256 256,276 238,256" fill="#ffffff" opacity="0.85"/>
+  </g>
+
+  <!-- The Predatory Shrike Hook / Beak swooping down onto the packet -->
+  <g filter="url(#glowFilter)">
+    <!-- Back Shrike Crest -->
+    <path d="M 195 105 C 230 95 285 110 325 145 C 310 155 295 160 280 162 C 305 175 320 195 325 215 C 295 210 270 200 250 185 Z"
+          fill="url(#beakMetal)" stroke="#4a5568" stroke-width="1.5"/>
+
+    <!-- Main Upper Hook / Beak (Curving sharply down to grasp packet) -->
+    <path d="M 200 115 C 245 105 295 125 320 165 C 335 190 338 220 328 250 C 322 268 308 285 288 298 C 282 278 278 260 268 245 C 255 228 232 215 210 205 C 218 175 215 145 200 115 Z"
+          fill="url(#beakMetal)" stroke="#2d3748" stroke-width="2"/>
+
+    <!-- Fiery Predator Edge (Beak Hook Blade) -->
+    <path d="M 245 155 C 285 170 315 205 315 250 C 315 272 300 292 284 304 C 286 288 282 272 272 258 C 258 240 236 228 215 220 C 230 198 240 178 245 155 Z"
+          fill="url(#beakGrad)"/>
+
+    <!-- Sharp Talon / Tip highlight -->
+    <path d="M 292 286 C 290 298 282 308 276 314 C 274 306 276 295 282 288 Z"
+          fill="#ffffff" opacity="0.9"/>
+
+    <!-- Glowing Cyber Eye -->
+    <circle cx="246" cy="172" r="7" fill="#ff3d00" filter="url(#glowFilter)"/>
+    <circle cx="246" cy="172" r="3" fill="#ffffff"/>
+  </g>
+</svg>

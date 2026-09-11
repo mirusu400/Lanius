@@ -132,9 +132,11 @@ cargo test                        # 셸 테스트 (8)
 
 ```bash
 cd engine && .venv/bin/pyinstaller --clean --noconfirm lanius-engine.spec   # 엔진 바이너리
-cd ../ui && npm run build                                                   # 프론트 정적 빌드
 cd ../shell && npx tauri build --bundles app                                # Lanius.app
 ```
+
+프론트엔드는 바이너리에 컴파일되어 들어가므로 `beforeBuildCommand`가 `ui`를 항상 먼저
+재빌드한다(낡은 UI가 번들되는 것을 방지).
 
 결과물은 `shell/src-tauri/target/release/bundle/macos/Lanius.app` (약 49MB, Python 설치 불필요).
 앱을 실행하면 엔진이 사이드카로 자동 기동되고, 창을 닫거나 앱이 강제 종료돼도
