@@ -29,6 +29,24 @@ function HeaderList({ headers }: { headers: [string, string][] | null }) {
   );
 }
 
+/** Classic hex dump: offset, bytes, printable ASCII. */
+export function toHex(text: string, width = 16): string {
+  const bytes = new TextEncoder().encode(text);
+  const lines: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += width) {
+    const chunk = bytes.slice(offset, offset + width);
+    const hex = [...chunk]
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join(' ')
+      .padEnd(width * 3 - 1, ' ');
+    const ascii = [...chunk]
+      .map((b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.'))
+      .join('');
+    lines.push(`${offset.toString(16).padStart(8, '0')}  ${hex}  |${ascii}|`);
+  }
+  return lines.join('\n') || '(비어 있음)';
+}
+
 export function FlowDetailView({ flow, onSentToRepeater }: Props) {
   const [detail, setDetail] = useState<FlowDetail | null>(null);
   const [pane, setPane] = useState<Pane>('request');
@@ -60,6 +78,7 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
     );
   }
 
+  const isTcp = flow.type === 'tcp';
   const body = pane === 'request' ? detail?.request_body : detail?.response_body;
   const headers =
     pane === 'request'
@@ -76,13 +95,15 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
           className={pane === 'request' ? 'active' : ''}
           onClick={() => setPane('request')}
         >
-          Request
+          {isTcp ? '→ Server' : 'Request'}
         </button>
         <button
           className={pane === 'response' ? 'active' : ''}
           onClick={() => setPane('response')}
         >
-          Response {flow.status_code ? `(${flow.status_code})` : ''}
+          {isTcp
+            ? '← Client'
+            : `Response ${flow.status_code ? `(${flow.status_code})` : ''}`}
         </button>
         <button
           className="to-repeater"
@@ -109,10 +130,21 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
         </label>
       </div>
       <div className="detail-body">
-        <h4>Headers</h4>
-        <HeaderList headers={headers} />
-        <h4>Body</h4>
-        <pre className="body mono">{body || '(비어 있음)'}</pre>
+        {isTcp ? (
+          <>
+            <h4>Raw bytes {flow.comment ? `· ${flow.comment}` : ''}</h4>
+            <pre className="body mono">{body || '(비어 있음)'}</pre>
+            <h4>Hex</h4>
+            <pre className="body mono">{toHex(body ?? '')}</pre>
+          </>
+        ) : (
+          <>
+            <h4>Headers</h4>
+            <HeaderList headers={headers} />
+            <h4>Body</h4>
+            <pre className="body mono">{body || '(비어 있음)'}</pre>
+          </>
+        )}
       </div>
     </div>
   );

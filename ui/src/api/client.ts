@@ -232,3 +232,55 @@ export function stopAttack(
 ): Promise<import('./types').AttackSummary> {
   return request(`/api/intruder/attacks/${id}/stop`, { method: 'POST' });
 }
+
+// --- decoder / comparer (M6) ----------------------------------------------
+
+export interface ChainStep {
+  codec: string;
+  direction: 'encode' | 'decode';
+}
+
+export function listCodecs(): Promise<{ codecs: string[]; hashes: string[] }> {
+  return request('/api/codecs');
+}
+
+export function decodeChain(
+  value: string,
+  steps: ChainStep[],
+): Promise<{
+  input: string;
+  output: string;
+  steps: { codec: string; direction: string; value: string }[];
+}> {
+  return request('/api/decode', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ value, steps }),
+  });
+}
+
+export interface CompareBlock {
+  tag: 'equal' | 'insert' | 'delete' | 'replace';
+  left: string;
+  right: string;
+}
+
+export function compareTexts(
+  left: string,
+  right: string,
+  mode: 'word' | 'byte' = 'word',
+): Promise<{
+  mode: string;
+  blocks: CompareBlock[];
+  added: number;
+  removed: number;
+  unchanged: number;
+  similarity: number;
+  identical: boolean;
+}> {
+  return request('/api/compare', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ left, right, mode }),
+  });
+}

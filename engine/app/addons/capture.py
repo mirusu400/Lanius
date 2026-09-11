@@ -11,6 +11,7 @@ import logging
 from typing import Any
 
 from mitmproxy import http
+from mitmproxy import tcp
 
 from ..db.store import FlowRecord, FlowStore
 from ..events import EventBroker
@@ -65,6 +66,49 @@ def flow_to_record(flow: http.HTTPFlow) -> FlowRecord:
     return record
 
 
+def tcp_flow_to_record(flow: tcp.TCPFlow) -> FlowRecord:
+    """Convert a raw TCP flow into a persistable record.
+
+    Non-HTTP traffic is represented at the byte level only (codex.md §5):
+    client->server bytes land in the request body, server->client in the
+    response body.
+    """
+    address = getattr(flow.server_conn, "address", None) or ("", 0)
+    host = str(address[0]) if address else ""
+    port = int(address[1]) if address and len(address) > 1 else None
+
+    to_server = b"".join(m.content for m in flow.messages if m.from_client)
+    to_client = b"".join(m.content for m in flow.messages if not m.from_client)
+    timestamps = [m.timestamp for m in flow.messages]
+
+    record = FlowRecord(
+        id=flow.id,
+        type="tcp",
+        client_addr=_addr(getattr(flow.client_conn, "peername", None)),
+        server_addr=_addr(getattr(flow.server_conn, "peername", None)),
+        scheme="tcp",
+        method="TCP",
+        host=host,
+        port=port,
+        path=f"tcp://{host}:{port}",
+        request_headers=[],
+        request_body=to_server,
+        request_size=len(to_server),
+        response_body=to_client,
+        response_size=len(to_client),
+        started_at=getattr(flow.client_conn, "timestamp_start", None)
+        or (min(timestamps) if timestamps else None),
+        completed_at=max(timestamps) if timestamps else None,
+        source="proxy",
+        comment=f"{len(flow.messages)} messages",
+    )
+    if record.started_at and record.completed_at:
+        record.duration_ms = (record.completed_at - record.started_at) * 1000
+    if flow.error is not None:
+        record.error = flow.error.msg
+    return record
+
+
 class CaptureAddon:
     """Persists HTTP flows and broadcasts live events.
 
@@ -104,6 +148,21 @@ class CaptureAddon:
     def error(self, flow: http.HTTPFlow) -> None:
         self._save(flow, "flow.error")
 
+    # --- raw TCP (M6) -----------------------------------------------------
+    # mitmproxy relays traffic it cannot parse as a raw TCP layer (still doing
+    # TLS interception). We surface those bytes; structure is a plugin concern.
+    def tcp_start(self, flow: tcp.TCPFlow) -> None:
+        self._save_tcp(flow, "tcp.start")
+
+    def tcp_message(self, flow: tcp.TCPFlow) -> None:
+        self._save_tcp(flow, "tcp.message")
+
+    def tcp_end(self, flow: tcp.TCPFlow) -> None:
+        self._save_tcp(flow, "tcp.end")
+
+    def tcp_error(self, flow: tcp.TCPFlow) -> None:
+        self._save_tcp(flow, "tcp.error")
+
     async def done(self) -> None:
         if self._pending:
             await asyncio.gather(*list(self._pending), return_exceptions=True)
@@ -116,6 +175,26 @@ class CaptureAddon:
             record = flow_to_record(flow)
         except Exception:  # pragma: no cover - defensive
             logger.exception("failed to convert flow %s", flow.id)
+            return
+        self.broker.publish(event_type, record.summary())
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self.store.upsert(record)
+            return
+        task = loop.create_task(self._persist(record))
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+
+    def _save_tcp(self, flow: tcp.TCPFlow, event_type: str) -> None:
+        try:
+            record = tcp_flow_to_record(flow)
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("failed to convert tcp flow %s", flow.id)
+            return
+        if self.scope is not None and not self.scope.should_capture(
+            "tcp", record.host, record.port, "/"
+        ):
             return
         self.broker.publish(event_type, record.summary())
         try:

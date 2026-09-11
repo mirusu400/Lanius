@@ -17,7 +17,8 @@ Lanius는 **mitmproxy를 엔진으로 임베드**하고 그 위에 Burp Suite �
 - ✅ **M3** Repeater: 히스토리에서 보내기, 다중 탭 편집·재전송, 응답 뷰
 - ✅ **M4** Target: 사이트맵 트리, Scope 편집기(영구 저장·캡처 제한), 엔드포인트 그룹핑
 - ✅ **M5** Intruder: § 페이로드 위치, 공격 유형 4종, 실시간 결과 테이블
-- ⬜ M6 이후: Decoder/Comparer, 원시 TCP, 플러그인, MCP
+- ✅ **M6** Decoder(인/디코드 체인) · Comparer(diff) · 원시 TCP 캡처와 헥스 뷰
+- ⬜ M7 이후: 플러그인 시스템, MCP 연동
 
 ## 빠른 시작
 
@@ -48,6 +49,15 @@ CA는 최초 실행 시 `~/.mitmproxy`에 자동 생성되며, **절대 커밋�
 | `--api-host` / `--api-port` | `LANIUS_API_HOST` / `LANIUS_API_PORT` | `127.0.0.1:8081` |
 | `--db` | `LANIUS_DATA_DIR` | `~/.lanius/lanius.sqlite` |
 | `--log-level` | `LANIUS_LOG_LEVEL` | `info` |
+| (모드 추가) | `LANIUS_EXTRA_MODES` | 없음 (예: `reverse:tcp://127.0.0.1:19100@19101`) |
+| (강제 TCP) | `LANIUS_TCP_HOSTS` | 없음 |
+
+비-HTTP 서비스를 바이트 단위로 보려면 reverse 모드를 추가한다:
+
+```bash
+LANIUS_EXTRA_MODES='reverse:tcp://127.0.0.1:19100@19101' python -m app.main
+# 클라이언트를 127.0.0.1:19101 로 접속시키면 원시 TCP flow로 캡처된다
+```
 
 ## UI (M1)
 
@@ -83,7 +93,10 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 | POST | `/api/intruder/positions`, `/api/intruder/plan` | 위치 파싱 / 요청 수 예측 |
 | POST/GET | `/api/intruder/attacks` | 공격 시작 / 목록 |
 | GET/POST | `/api/intruder/attacks/{id}`, `/stop` | 결과 조회 / 중단 |
-| WS | `/ws` | 실시간 이벤트 (`flow.*`, `intercept.*`, `scope.*`, `intruder.*`, `engine.*`) |
+| GET | `/api/codecs` | 사용 가능한 코덱/해시 목록 |
+| POST | `/api/decode` | 인/디코드 체인 실행 |
+| POST | `/api/compare` | 두 텍스트 diff (`word` / `byte`) |
+| WS | `/ws` | 실시간 이벤트 (`flow.*`, `tcp.*`, `intercept.*`, `scope.*`, `intruder.*`, `engine.*`) |
 
 모든 엔드포인트는 기본적으로 `127.0.0.1`에만 바인딩된다.
 
@@ -91,11 +104,11 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 
 ```bash
 cd engine
-.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (154)
+.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (199)
 .venv/bin/python -m mypy          # 타입 체크
 
 cd ../ui
-npm test                          # UI 테스트 (109, jsdom 렌더 포함)
+npm test                          # UI 테스트 (126, jsdom 렌더 포함)
 npx tsc -b                        # 타입 체크
 ```
 

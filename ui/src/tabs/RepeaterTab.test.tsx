@@ -128,9 +128,9 @@ describe('RepeaterTab', () => {
     render(<RepeaterTabView />);
     sendToRepeater(flow);
     sendToRepeater({ ...flow, id: 'f2', path: '/second' });
-    await waitFor(() => expect(getTabs()).toHaveLength(2));
-
-    expect(editor().value).toContain('/second');
+    // wait on the DOM, not the store, so React effects have flushed
+    await waitFor(() => expect(editor()?.value).toContain('/second'));
+    expect(getTabs()).toHaveLength(2);
     const [helloTab] = screen
       .getAllByRole('button')
       .filter((b) => b.textContent === 'GET /hello×');

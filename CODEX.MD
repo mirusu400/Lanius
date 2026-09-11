@@ -153,7 +153,7 @@
 - **M3 — Repeater ✅ 완료:** 히스토리에서 'Send to Repeater' → 다중 탭 편집·재전송, 응답 확인. (응답 diff는 후속)
 - **M4 — Target/Scope/엔드포인트 ✅ 완료:** 사이트맵 트리, Scope include/exclude 영구 규칙(+캡처 제한), 엔드포인트 그룹핑·파라미터 식별.
 - **M5 — Intruder ✅ 완료:** 페이로드 위치(§) 지정 + 워드리스트 퍼징 4종(sniper/battering ram/pitchfork/cluster bomb), 결과 테이블 + 길이 이상치 하이라이트.
-- **M6 — 유틸 & 원시 TCP:** Decoder/Comparer, 원시 TCP 바이트 뷰(`tcp_message`).
+- **M6 — 유틸 & 원시 TCP ✅ 완료:** Decoder(체인)/Comparer(단어·바이트 diff), 원시 TCP 캡처 + 헥스 덤프 뷰.
 - **M7 — 플러그인 시스템:** Python 애드온 로더 + UI JS 플러그인 API + 예시 플러그인 1~2개.
 - **M8 — MCP 연동:** mitmproxy-MCP 포크 통합, 히스토리 조회·인터셉트·replay 툴 노출(시크릿 리댁션 포함).
 
@@ -244,6 +244,10 @@ cd shell && npm run tauri dev
 | M5 | 요청 생성은 `asyncio.to_thread`, 전송은 Repeater 경로 | 템플릿 치환(CPU)이 루프를 막지 않고, 전송은 검증된 엔진 경로를 재사용 |
 | M5 | 동시 요청 수 5로 제한(세마포어) + 최대 10만 요청 가드 | 대상 서버와 로컬 리소스를 보호. 오폭 방지 |
 | M5 | 길이 이상치 자동 하이라이트 | 브루트포스 결과에서 "성공" 응답을 눈으로 찾지 않아도 됨 |
+| M6 | 코덱/비교 로직은 엔진(Python)에 배치 | UI와 플러그인이 같은 구현을 공유. JWT·gzip 등은 파이썬 표준 라이브러리로 충분 |
+| M6 | `base64.b64decode(validate=True)` 사용 | 느슨한 디코딩은 `"!!!"`를 빈 바이트로 통과시켜 gzip이 "성공"해 버림(실측으로 발견) |
+| M6 | 원시 TCP는 별도 mode로 노출(`LANIUS_EXTRA_MODES`) | 비-HTTP 클라이언트는 HTTP 프록시를 쓰지 않으므로 reverse 모드가 필요. `tcp_hosts`도 지원 |
+| M6 | TCP flow는 같은 `flows` 테이블에 `type='tcp'` | 히스토리·스코프·검색을 그대로 재사용. 방향별 바이트는 request/response 바디에 저장 |
 
 ---
 

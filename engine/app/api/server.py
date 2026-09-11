@@ -16,6 +16,13 @@ from .. import __version__
 from ..addons.intercept import InterceptError
 from ..addons.repeater import RepeaterError, build_flow, render_raw
 from ..addons.endpoints import build_endpoints
+from ..addons.codecs import (
+    ChainStep,
+    CodecError,
+    available_codecs,
+    compare,
+    run_chain,
+)
 from ..addons.intruder import IntruderError, find_positions, strip_markers
 from ..addons.scope import ScopeError, rule_from_url
 from ..config import Settings
@@ -96,6 +103,22 @@ class AttackBody(BaseModel):
 
 class PositionsBody(BaseModel):
     template: str
+
+
+class ChainStepBody(BaseModel):
+    codec: str
+    direction: str = "decode"
+
+
+class DecodeBody(BaseModel):
+    value: str
+    steps: list[ChainStepBody] = []
+
+
+class CompareBody(BaseModel):
+    left: str
+    right: str
+    mode: str = "word"
 
 
 def redact_headers(
@@ -414,6 +437,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return engine.intruder.stop(attack_id).summary()
         except IntruderError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    # --- decoder / comparer (M6) ------------------------------------------
+    @app.get("/api/codecs")
+    async def list_codecs() -> dict[str, Any]:
+        return available_codecs()
+
+    @app.post("/api/decode")
+    async def decode(body: DecodeBody) -> dict[str, Any]:
+        steps = [
+            ChainStep(codec=s.codec, direction=s.direction)  # type: ignore[arg-type]
+            for s in body.steps
+        ]
+        try:
+            outputs = run_chain(body.value, steps)
+        except CodecError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "input": body.value,
+            "steps": outputs,
+            "output": outputs[-1]["value"] if outputs else body.value,
+        }
+
+    @app.post("/api/compare")
+    async def compare_texts(body: CompareBody) -> dict[str, Any]:
+        try:
+            return compare(body.left, body.right, body.mode)  # type: ignore[arg-type]
+        except CodecError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.websocket("/ws")
     async def ws_stream(websocket: WebSocket) -> None:

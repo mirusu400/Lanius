@@ -54,6 +54,10 @@ class ProxyEngine:
             listen_host=self.settings.proxy_host,
             listen_port=self.settings.proxy_port,
             confdir=str(self.settings.confdir),
+            # "regular" serves the HTTP(S) proxy; extra modes let us intercept
+            # non-HTTP services as raw TCP (codex.md §5).
+            mode=["regular", *self.settings.extra_modes],
+            tcp_hosts=list(self.settings.tcp_hosts),
         )
         master = DumpMaster(opts, with_termlog=False, with_dumper=False)
         # mitmproxy's errorcheck addon calls sys.exit() on startup errors, which
