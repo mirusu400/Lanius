@@ -7,6 +7,50 @@ export interface TreeNode {
   path: string;
   children: TreeNode[];
   flows: SitePath[];
+  /** Set on the top level of the combined tree. */
+  site?: Site;
+}
+
+/** One site plus the paths captured for it. */
+export interface SiteTree {
+  site: Site;
+  root: TreeNode;
+}
+
+/** Total number of requests under a node, including its descendants. */
+export function countFlows(node: TreeNode): number {
+  return (
+    node.flows.length +
+    node.children.reduce((sum, child) => sum + countFlows(child), 0)
+  );
+}
+
+/** Distinct status codes under a node, for an at-a-glance summary. */
+export function statusesUnder(node: TreeNode): number[] {
+  const seen = new Set<number>();
+  const walk = (current: TreeNode) => {
+    for (const flow of current.flows) {
+      if (flow.status_code !== null) seen.add(flow.status_code);
+    }
+    current.children.forEach(walk);
+  };
+  walk(node);
+  return [...seen].sort((a, b) => a - b);
+}
+
+/** Paths whose node should start expanded: the spine down to the first
+ *  branch, so a fresh site map is never a single collapsed row. */
+export function defaultExpanded(root: TreeNode, maxDepth = 2): Set<string> {
+  const open = new Set<string>();
+  const walk = (node: TreeNode, depth: number) => {
+    if (depth >= maxDepth) return;
+    for (const child of node.children) {
+      if (child.children.length > 0) open.add(child.path);
+      walk(child, depth + 1);
+    }
+  };
+  walk(root, 0);
+  return open;
 }
 
 export function siteLabel(site: Site): string {

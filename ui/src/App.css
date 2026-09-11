@@ -1259,3 +1259,85 @@ pre.body {
   color: var(--fg);
   padding: 5px 10px;
 }
+
+
+/* --- site map (combined tree) --- */
+.sitemap-pane {
+  border-right: 1px solid var(--border);
+  overflow: auto;
+  width: 46%;
+  min-width: 320px;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-count {
+  background: #2b2f36;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  padding: 0 6px;
+}
+
+.tree-statuses {
+  display: flex;
+  gap: 5px;
+  margin-left: auto;
+  padding-right: 8px;
+}
+
+.tree-statuses span {
+  font-size: 10px;
+}
+
+.tree-row.leaf {
+  gap: 8px;
+}
+
+.tree-row.leaf.selected {
+  background: var(--accent-dim);
+}
+
+.tree-method {
+  color: var(--muted);
+  min-width: 48px;
+}
+
+.tree-query {
+  color: var(--fg);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-status {
+  margin-left: auto;
+  padding-right: 8px;
+}
+
+.site-summary {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+}
+
+.site-summary .site {
+  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: default;
+  padding: 6px 10px;
+  padding-right: 74px;
+  position: relative;
+}
+
+.site-summary .site:hover {
+  background: transparent;
+}

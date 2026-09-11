@@ -1,4 +1,4 @@
-"""Intruder tests — attacks run against a real local HTTP server."""
+"""Intruder tests: attacks run against a real local HTTP server."""
 
 from __future__ import annotations
 

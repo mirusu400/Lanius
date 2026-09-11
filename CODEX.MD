@@ -1,6 +1,6 @@
-# Lanius — codex.md
+# Lanius codex.md
 
-> **프로젝트명:** Lanius (라니우스) — 때까치의 학명 속명(genus *Lanius*). 때까치("butcher bird")는 먹이를 매복해 낚아채 가시에 꽂아두는 포식성 새다.
+> **프로젝트명:** Lanius (라니우스). 때까치의 학명 속명(genus *Lanius*). 때까치("butcher bird")는 먹이를 매복해 낚아채 가시에 꽂아두는 포식성 새다.
 > 클라이언트와 서버 사이에서 트래픽을 가로채(intercept) 붙잡아 두는 이 도구의 성격을 담은 이름이다.
 >
 > 코딩 에이전트(및 기여자)를 위한 프로젝트 지침 문서.
@@ -39,7 +39,7 @@
 - **원시 TCP 인터셉트** (바이트 레벨 읽기/수정).
 - CA 인증서 관리 UI (내보내기 및 `mitm.it` 설치 안내).
 
-### 비목표 (Non-Goals) — 착수 금지 항목
+### 비목표 (Non-Goals): 착수 금지 항목
 
 - ❌ **프록시를 바닥부터 재구현.** mitmproxy로 충분하다.
 - ❌ **Burp Scanner / Collaborator 급 자동 취약점 스캐너의 초기 재현.** 필요 시 후속 마일스톤에서 별도 검토(예: Nuclei 연동).
@@ -147,15 +147,15 @@
 
 각 마일스톤은 "실제로 동작하는 세로 슬라이스"를 목표로 한다.
 
-- **M0 — 엔진 부트스트랩 ✅ 완료:** `DumpMaster` 임베드, HTTP flow 캡처 → SQLite 기록, 이벤트 브로커 + WS 스트림, REST 히스토리 API, 헤더 리댁션. (GUI 없음, CLI/curl 검증 완료)
-- **M1 — 라이브 히스토리 ✅ 완료:** 백엔드 WS 스트림 + React/TS GUI + 프록시 히스토리 테이블(실시간). 요청/응답 상세 뷰, 필터/검색. (Tauri 셸 번들은 M2 이후)
-- **M2 — 인터셉트 ✅ 완료:** 브레이크포인트 on/off(요청·응답·host 필터), 원시 HTTP 텍스트 편집 후 Forward/Drop/Forward all.
-- **M3 — Repeater ✅ 완료:** 히스토리에서 'Send to Repeater' → 다중 탭 편집·재전송, 응답 확인. (응답 diff는 후속)
-- **M4 — Target/Scope/엔드포인트 ✅ 완료:** 사이트맵 트리, Scope include/exclude 영구 규칙(+캡처 제한), 엔드포인트 그룹핑·파라미터 식별.
-- **M5 — Intruder ✅ 완료:** 페이로드 위치(§) 지정 + 워드리스트 퍼징 4종(sniper/battering ram/pitchfork/cluster bomb), 결과 테이블 + 길이 이상치 하이라이트.
-- **M6 — 유틸 & 원시 TCP ✅ 완료:** Decoder(체인)/Comparer(단어·바이트 diff), 원시 TCP 캡처 + 헥스 덤프 뷰.
-- **M7 — 플러그인 시스템 ✅ (엔진측 완료):** Python 애드온 로더(발견·활성/비활성·리로드·영구 상태) + 예시 플러그인 2개 + Plugins 탭. UI측 JS 플러그인 API는 후속.
-- **M8 — MCP 연동 ✅ 완료:** 자체 MCP 서버(13개 툴) — 히스토리·사이트맵·엔드포인트 조회, 스코프 관리, 인터셉트 제어·포워드·드롭, replay/send, 디코딩. 시크릿 기본 리댁션.
+- **M0. 엔진 부트스트랩 ✅ 완료:** `DumpMaster` 임베드, HTTP flow 캡처 → SQLite 기록, 이벤트 브로커 + WS 스트림, REST 히스토리 API, 헤더 리댁션. (GUI 없음, CLI/curl 검증 완료)
+- **M1. 라이브 히스토리 ✅ 완료:** 백엔드 WS 스트림 + React/TS GUI + 프록시 히스토리 테이블(실시간). 요청/응답 상세 뷰, 필터/검색. (Tauri 셸 번들은 M2 이후)
+- **M2. 인터셉트 ✅ 완료:** 브레이크포인트 on/off(요청·응답·host 필터), 원시 HTTP 텍스트 편집 후 Forward/Drop/Forward all.
+- **M3. Repeater ✅ 완료:** 히스토리에서 'Send to Repeater' → 다중 탭 편집·재전송, 응답 확인. (응답 diff는 후속)
+- **M4. Target/Scope/엔드포인트 ✅ 완료:** 사이트맵 트리, Scope include/exclude 영구 규칙(+캡처 제한), 엔드포인트 그룹핑·파라미터 식별.
+- **M5. Intruder ✅ 완료:** 페이로드 위치(§) 지정 + 워드리스트 퍼징 4종(sniper/battering ram/pitchfork/cluster bomb), 결과 테이블 + 길이 이상치 하이라이트.
+- **M6. 유틸 & 원시 TCP ✅ 완료:** Decoder(체인)/Comparer(단어·바이트 diff), 원시 TCP 캡처 + 헥스 덤프 뷰.
+- **M7. 플러그인 시스템 ✅ (엔진측 완료):** Python 애드온 로더(발견·활성/비활성·리로드·영구 상태) + 예시 플러그인 2개 + Plugins 탭. UI측 JS 플러그인 API는 후속.
+- **M8. MCP 연동 ✅ 완료:** 자체 MCP 서버(13개 툴). 히스토리·사이트맵·엔드포인트 조회, 스코프 관리, 인터셉트 제어·포워드·드롭, replay/send, 디코딩. 시크릿 기본 리댁션.
 
 > DoD(완료 정의): 각 마일스톤은 문서화 + 테스트 + GUI에서 수동 검증 가능해야 한다.
 
@@ -199,7 +199,7 @@
 
 ---
 
-## 11. 빌드 & 실행 (목표 커맨드 — 구현되며 채워짐)
+## 11. 빌드 & 실행 (목표 커맨드. 구현되며 채워짐)
 
 ```bash
 # 엔진(백엔드)
@@ -223,7 +223,7 @@ cd shell && npm run tauri dev
 | 초기 | 엔진 = mitmproxy 임베드 | 프록시 재발명 회피, 인증서·TLS 무료 확보 |
 | 초기 | BApp/Montoya 비호환 | JVM+전체 API+Scanner/Collaborator 재현 비용 과다 |
 | 초기 | 자체 플러그인(Python 애드온 + JS UI) | 필요한 익스텐션만 포팅하는 실용 노선 |
-| 초기 | 프로젝트명 = **Lanius** | 때까치속(학명)—"매복해 가로채는 포식자" 의미 유지. 후보였던 "Shrike"는 동명 보안업체(Shrike Security)와 정면 충돌해 회피 |
+| 초기 | 프로젝트명 = **Lanius** | 때까치속(학명)"매복해 가로채는 포식자" 의미 유지. 후보였던 "Shrike"는 동명 보안업체(Shrike Security)와 정면 충돌해 회피 |
 | M0 | Python 3.12 고정 | mitmproxy 11 휠이 3.14를 아직 지원하지 않음. 사이드카 번들 시에도 3.12 런타임 사용 |
 | M0 | uvicorn 단일 프로세스에 mitmproxy 공존 | `DumpMaster.run()`을 FastAPI lifespan에서 asyncio 태스크로 기동 → 동일 루프 공유, IPC 불필요 |
 | M0 | DB 쓰기는 `asyncio.to_thread` 오프로드 | 애드온 훅이 이벤트 루프를 블로킹하지 않도록(§5 동시성 제약). 브로커 publish는 논블로킹 |

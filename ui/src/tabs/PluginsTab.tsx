@@ -89,7 +89,7 @@ export function PluginsTab() {
                   )}
                 </td>
                 <td>
-                  {plugin.description ?? <span className="muted">—</span>}
+                  {plugin.description ?? <span className="muted">{t('common.none')}</span>}
                   {plugin.error && (
                     <div className="plugin-error-text mono">{plugin.error}</div>
                   )}

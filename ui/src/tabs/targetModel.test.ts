@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { EndpointGroup, ScopeRule, Site, SitePath } from '../api/types';
 import {
   buildTree,
+  countFlows,
   countNodes,
+  defaultExpanded,
   describeRule,
   endpointHost,
   siteLabel,
+  statusesUnder,
   summarizeScope,
 } from './targetModel';
 
@@ -167,5 +170,58 @@ describe('endpointHost', () => {
 
   it('tolerates a missing port', () => {
     expect(endpointHost(endpoint({ port: null }))).toBe('127.0.0.1');
+  });
+});
+
+describe('countFlows', () => {
+  it('sums requests across the whole subtree', () => {
+    const root = buildTree([
+      path('/a/b'),
+      path('/a/c'),
+      path('/a', { method: 'POST' }),
+    ]);
+    expect(countFlows(root)).toBe(3);
+    expect(countFlows(root.children[0])).toBe(3);
+  });
+
+  it('is zero for an empty tree', () => {
+    expect(countFlows(buildTree([]))).toBe(0);
+  });
+});
+
+describe('statusesUnder', () => {
+  it('collects distinct status codes in order', () => {
+    const root = buildTree([
+      path('/a', { status_code: 404 }),
+      path('/a/b', { status_code: 200 }),
+      path('/a/c', { status_code: 200 }),
+    ]);
+    expect(statusesUnder(root)).toEqual([200, 404]);
+  });
+
+  it('ignores requests with no response yet', () => {
+    const root = buildTree([path('/a', { status_code: null })]);
+    expect(statusesUnder(root)).toEqual([]);
+  });
+});
+
+describe('defaultExpanded', () => {
+  it('opens branches near the root so the map is readable', () => {
+    const root = buildTree([path('/api/v1/users'), path('/admin/login')]);
+    const open = defaultExpanded(root);
+    expect(open.has('/api')).toBe(true);
+    expect(open.has('/admin')).toBe(true);
+  });
+
+  it('does not open leaves', () => {
+    const root = buildTree([path('/solo')]);
+    expect(defaultExpanded(root).has('/solo')).toBe(false);
+  });
+
+  it('respects the depth limit', () => {
+    const root = buildTree([path('/a/b/c/d/e')]);
+    const open = defaultExpanded(root, 1);
+    expect(open.has('/a')).toBe(true);
+    expect(open.has('/a/b')).toBe(false);
   });
 });

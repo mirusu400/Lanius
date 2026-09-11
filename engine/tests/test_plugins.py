@@ -1,4 +1,4 @@
-"""Plugin system tests (M7) — plugins really run against real flows."""
+"""Plugin system tests: plugins really run against real flows."""
 
 from __future__ import annotations
 

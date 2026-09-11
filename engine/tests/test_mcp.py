@@ -1,4 +1,4 @@
-"""MCP server tests (M8) — tools are called through the real MCP machinery."""
+"""MCP server tests: tools are called through the real MCP machinery."""
 
 from __future__ import annotations
 

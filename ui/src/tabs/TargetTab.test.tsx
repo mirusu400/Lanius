@@ -146,37 +146,83 @@ afterEach(() => {
 describe('TargetTab', () => {
   it('lists captured sites', async () => {
     render(<TargetTab />);
-    expect(await screen.findByText('https://api.test')).toBeTruthy();
-    expect(screen.getByText('http://cdn.test')).toBeTruthy();
+    // The host appears in the tree and again in the summary card.
+    expect((await screen.findAllByText('https://api.test')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('http://cdn.test').length).toBeGreaterThan(0);
     expect(screen.getByText(t('target.siteMeta', { flows: 4, paths: 3 }))).toBeTruthy();
   });
 
   it('marks in-scope sites', async () => {
     render(<TargetTab />);
     await screen.findByText('https://api.test');
-    expect(screen.getAllByText(t('target.inScopeBadge'))).toHaveLength(1);
+    expect(screen.getAllByText(t('target.inScopeBadge')).length).toBe(1);
   });
 
-  it('shows the path tree for a selected site', async () => {
-    const user = userEvent.setup();
-    render(<TargetTab />);
-    await user.click(await screen.findByText('https://api.test'));
+  /** Text inside the tree only: hosts also appear in the summary cards, and
+   *  both mocked sites share the same path fixture, so plain getByText would
+   *  hit duplicates. */
+  const treeText = () =>
+    (document.querySelector('.sitemap-tree') as HTMLElement | null)
+      ?.textContent ?? '';
 
-    // deep levels start collapsed; expanding reveals the leaves
-    expect(await screen.findByText('api')).toBeTruthy();
-    expect(screen.queryByText('users')).toBeNull();
-    await user.click(screen.getByText('v1'));
-    expect(await screen.findByText('users')).toBeTruthy();
-    expect(screen.getByText('login')).toBeTruthy();
-    expect(screen.getByText('POST:401')).toBeTruthy();
+  const treeRows = () => [
+    ...document.querySelectorAll<HTMLElement>('.sitemap-tree .tree-row'),
+  ];
+
+  const rowFor = (label: string) =>
+    treeRows().find(
+      (row) => row.querySelector('.tree-name')?.textContent === label,
+    );
+
+  it('shows the whole site map without clicking a site first', async () => {
+    render(<TargetTab />);
+    await waitFor(() => expect(treeRows().length).toBeGreaterThan(4));
+
+    const text = treeText();
+    expect(text).toContain('https://api.test');
+    expect(text).toContain('http://cdn.test');
+    expect(text).toContain('api');
+    expect(text).toContain('v1');
+    expect(text).toContain('users');
+    expect(text).toContain('login');
   });
 
-  it('collapses an expanded tree node again', async () => {
+  it('shows the request method and status on each leaf', async () => {
+    render(<TargetTab />);
+    await waitFor(() => expect(treeRows().length).toBeGreaterThan(4));
+    expect(treeText()).toContain('POST');
+    expect(treeText()).toContain('401');
+  });
+
+  it('collapses and re-expands a branch', async () => {
     const user = userEvent.setup();
     render(<TargetTab />);
-    await user.click(await screen.findByText('https://api.test'));
-    await user.click(await screen.findByText('api'));
-    await waitFor(() => expect(screen.queryByText('v1')).toBeNull());
+    // Both mocked sites share the path fixture, so each has its own `api`
+    // node; count them to see one collapse independently of the other.
+    const countRows = (label: string) =>
+      treeRows().filter(
+        (row) => row.querySelector('.tree-name')?.textContent === label,
+      ).length;
+
+    await waitFor(() => expect(countRows('v1')).toBe(2));
+
+    await user.click(rowFor('api')!);
+    await waitFor(() => expect(countRows('v1')).toBe(1));
+
+    await user.click(rowFor('api')!);
+    await waitFor(() => expect(countRows('v1')).toBe(2));
+  });
+
+  it('opens the request detail when a leaf is selected', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await waitFor(() =>
+      expect(document.querySelector('.tree-row.leaf')).toBeTruthy(),
+    );
+    await user.click(document.querySelector('.tree-row.leaf') as HTMLElement);
+    await waitFor(() =>
+      expect(document.querySelector('.flow-detail')).toBeTruthy(),
+    );
   });
 
   it('adds a site to scope from the list', async () => {
@@ -252,8 +298,12 @@ describe('TargetTab', () => {
     const user = userEvent.setup();
     render(<TargetTab />);
     await user.click(await screen.findByRole('button', { name: new RegExp(t('target.scope')) }));
-    expect(
-      await screen.findByText(new RegExp(t('scope.noIncludeHint').trim())),
-    ).toBeTruthy();
+
+    // The hint is appended to the scope summary line.
+    await waitFor(() =>
+      expect(document.querySelector('.scope-summary')?.textContent).toContain(
+        t('scope.noIncludeHint').trim(),
+      ),
+    );
   });
 });

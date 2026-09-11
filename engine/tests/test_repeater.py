@@ -1,4 +1,4 @@
-"""Repeater tests — these send real requests to a local HTTP server."""
+"""Repeater tests: these send real requests to a local HTTP server."""
 
 from __future__ import annotations
 
