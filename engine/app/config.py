@@ -1,0 +1,49 @@
+"""Runtime configuration for the Lanius engine."""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+
+def _default_data_dir() -> Path:
+    return Path(os.environ.get("LANIUS_DATA_DIR", Path.home() / ".lanius"))
+
+
+@dataclass(slots=True)
+class Settings:
+    proxy_host: str = "127.0.0.1"
+    proxy_port: int = 8080
+    api_host: str = "127.0.0.1"  # local-only binding (codex.md §10)
+    api_port: int = 8081
+    data_dir: Path = None  # type: ignore[assignment]
+    db_path: Path = None  # type: ignore[assignment]
+    confdir: Path = None  # type: ignore[assignment]
+    log_level: str = "info"
+
+    def __post_init__(self) -> None:
+        if self.data_dir is None:
+            self.data_dir = _default_data_dir()
+        self.data_dir = Path(self.data_dir)
+        if self.db_path is None:
+            self.db_path = self.data_dir / "lanius.sqlite"
+        self.db_path = Path(self.db_path)
+        if self.confdir is None:
+            self.confdir = Path(
+                os.environ.get("LANIUS_MITM_CONFDIR", Path.home() / ".mitmproxy")
+            )
+        self.confdir = Path(self.confdir)
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        return cls(
+            proxy_host=os.environ.get("LANIUS_PROXY_HOST", "127.0.0.1"),
+            proxy_port=int(os.environ.get("LANIUS_PROXY_PORT", "8080")),
+            api_host=os.environ.get("LANIUS_API_HOST", "127.0.0.1"),
+            api_port=int(os.environ.get("LANIUS_API_PORT", "8081")),
+            log_level=os.environ.get("LANIUS_LOG_LEVEL", "info"),
+        )
+
+    def ensure_dirs(self) -> None:
+        self.data_dir.mkdir(parents=True, exist_ok=True)
