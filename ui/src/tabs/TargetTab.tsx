@@ -18,7 +18,7 @@ import type {
 } from '../api/types';
 import { ScopeEditor } from '../components/ScopeEditor';
 import { SitemapTree } from '../components/SitemapTree';
-import { buildTree, siteLabel } from './targetModel';
+import { buildTree, endpointHost, siteLabel } from './targetModel';
 
 type View = 'sitemap' | 'endpoints' | 'scope';
 
@@ -172,7 +172,7 @@ export function TargetTab() {
               {endpoints.map((endpoint) => (
                 <tr key={endpoint.key}>
                   <td className="mono">{endpoint.method}</td>
-                  <td>{endpoint.host}</td>
+                  <td className="mono">{endpointHost(endpoint)}</td>
                   <td className="mono">{endpoint.template}</td>
                   <td className="mono num">{endpoint.count}</td>
                   <td className="mono">

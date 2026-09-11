@@ -1,6 +1,6 @@
 /** Pure helpers for the Target tab (sitemap tree, scope display). */
 
-import type { ScopeRule, Site, SitePath } from '../api/types';
+import type { EndpointGroup, ScopeRule, Site, SitePath } from '../api/types';
 
 export interface TreeNode {
   name: string;
@@ -14,6 +14,16 @@ export function siteLabel(site: Site): string {
     (site.scheme === 'https' && site.port === 443) ||
     (site.scheme === 'http' && site.port === 80);
   return `${site.scheme}://${site.host}${isDefault ? '' : `:${site.port}`}`;
+}
+
+/** Host label for an endpoint, keeping a non-default port visible so two
+ *  sites on the same hostname stay distinguishable. */
+export function endpointHost(endpoint: EndpointGroup): string {
+  const isDefault =
+    (endpoint.scheme === 'https' && endpoint.port === 443) ||
+    (endpoint.scheme === 'http' && endpoint.port === 80) ||
+    endpoint.port === null;
+  return `${endpoint.host}${isDefault ? '' : `:${endpoint.port}`}`;
 }
 
 /** Build a path tree for one site's flows. */

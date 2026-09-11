@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ScopeRule, Site, SitePath } from '../api/types';
+import type { EndpointGroup, ScopeRule, Site, SitePath } from '../api/types';
 import {
   buildTree,
   countNodes,
   describeRule,
+  endpointHost,
   siteLabel,
   summarizeScope,
 } from './targetModel';
@@ -128,5 +129,43 @@ describe('summarizeScope', () => {
       excludes: 0,
       active: 0,
     });
+  });
+});
+
+describe('endpointHost', () => {
+  function endpoint(overrides: Partial<EndpointGroup> = {}): EndpointGroup {
+    return {
+      key: 'k',
+      method: 'GET',
+      scheme: 'http',
+      host: '127.0.0.1',
+      port: 19200,
+      template: '/users/{id}',
+      count: 1,
+      path_params: [],
+      query_params: [],
+      statuses: [200],
+      examples: [],
+      last_seen: 1,
+      ...overrides,
+    };
+  }
+
+  it('keeps a non-default port so same-host sites stay distinct', () => {
+    expect(endpointHost(endpoint())).toBe('127.0.0.1:19200');
+    expect(endpointHost(endpoint({ port: 19201 }))).toBe('127.0.0.1:19201');
+  });
+
+  it('hides default ports', () => {
+    expect(endpointHost(endpoint({ scheme: 'http', port: 80 }))).toBe(
+      '127.0.0.1',
+    );
+    expect(
+      endpointHost(endpoint({ scheme: 'https', port: 443, host: 'a.test' })),
+    ).toBe('a.test');
+  });
+
+  it('tolerates a missing port', () => {
+    expect(endpointHost(endpoint({ port: null }))).toBe('127.0.0.1');
   });
 });

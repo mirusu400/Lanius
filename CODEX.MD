@@ -242,6 +242,7 @@ cd shell && npm run tauri dev
 | M4 | include 규칙이 없으면 전부 스코프 | 새 프로젝트에서도 트래픽이 기록되도록(Burp 동작과 동일) |
 | M4 | 스코프 캡처 제한은 기본 off, 옵트인 | 기본값이 on이면 초기 사용자가 아무것도 못 보게 됨 |
 | M4 | 사이트의 in_scope는 "기록된 경로 중 하나라도 매칭" | `/users/*` 같은 규칙에서도 호스트가 타깃으로 표시되어야 함(실측으로 발견) |
+| M4 | 엔드포인트 목록의 Host에 비표준 포트 표기 | 같은 호스트의 다른 포트가 구분되지 않아 어느 사이트의 엔드포인트인지 알 수 없었음(번들 앱 재검증에서 발견) |
 | M4 | 경로 파라미터는 휴리스틱 분류(id/uuid/date/hash/token) | 숫자·UUID 등 동적 세그먼트를 `{id}`로 묶어 실제 API 표면을 노출 |
 | M5 | Intruder 공격 유형 4종 모두 구현 | 열린 질문(§13) 해소: sniper/battering ram/pitchfork/cluster bomb. Burp 무료판보다 넓은 범위 |
 | M5 | 요청 생성은 `asyncio.to_thread`, 전송은 Repeater 경로 | 템플릿 치환(CPU)이 루프를 막지 않고, 전송은 검증된 엔진 경로를 재사용 |
