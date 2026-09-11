@@ -32,18 +32,57 @@ export interface FlowDetail extends FlowSummary {
   response_body: string | null;
 }
 
+export interface InterceptRules {
+  enabled: boolean;
+  intercept_requests: boolean;
+  intercept_responses: boolean;
+  host_filter: string | null;
+}
+
+export interface PausedFlow {
+  id: string;
+  phase: 'request' | 'response';
+  method: string;
+  scheme: string;
+  host: string;
+  port: number;
+  path: string;
+  http_version: string;
+  request_headers: [string, string][];
+  request_body: string;
+  status_code?: number;
+  reason?: string;
+  response_headers?: [string, string][];
+  response_body?: string;
+}
+
+export interface FlowEdits {
+  method?: string;
+  path?: string;
+  request_headers?: [string, string][];
+  request_body?: string;
+  status_code?: number;
+  response_headers?: [string, string][];
+  response_body?: string;
+}
+
 export interface EngineStatus {
   version: string;
   proxy: { running: boolean; host: string; port: number };
   flows: number;
   subscribers: number;
   db_path: string;
+  intercept: InterceptRules;
+  paused: number;
 }
 
 export type EngineEvent =
   | { type: 'hello'; data: { version: string } }
   | { type: 'flow.request' | 'flow.response' | 'flow.error'; data: FlowSummary }
   | { type: 'flows.cleared'; data: Record<string, never> }
+  | { type: 'intercept.paused'; data: PausedFlow }
+  | { type: 'intercept.resolved'; data: { id: string; action: string } }
+  | { type: 'intercept.rules'; data: InterceptRules }
   | { type: 'engine.started' | 'engine.stopped'; data: Record<string, unknown> };
 
 export interface FlowFilters {

@@ -369,3 +369,119 @@ pre.body {
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* --- sub tabs (Proxy: Intercept / History) --- */
+.subtabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 0;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+}
+
+.subtabs button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 5px 12px;
+}
+
+.subtabs button.active {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--fg);
+}
+
+.badge {
+  background: var(--accent);
+  border-radius: 8px;
+  color: #14161a;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 6px;
+  padding: 1px 6px;
+}
+
+/* --- intercept panel --- */
+.intercept-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.intercept-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+}
+
+.intercept-controls label {
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.intercept-controls input.host {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  padding: 4px 8px;
+  width: 140px;
+}
+
+.intercept-controls button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  cursor: pointer;
+  padding: 4px 12px;
+}
+
+.intercept-controls button:disabled {
+  color: #555b66;
+  cursor: default;
+}
+
+.intercept-controls button.toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #14161a;
+  font-weight: 600;
+}
+
+.intercept-controls button.danger:not(:disabled):hover {
+  border-color: #c0392b;
+  color: #e74c3c;
+}
+
+.queue {
+  color: var(--muted);
+}
+
+.intercept-editor {
+  flex: 1;
+  background: #16181c;
+  border: none;
+  border-top: 1px solid var(--border);
+  color: var(--fg);
+  padding: 10px;
+  resize: none;
+  outline: none;
+  white-space: pre;
+  overflow: auto;
+}
+
+.intercept-idle {
+  padding: 40px;
+  text-align: center;
+}

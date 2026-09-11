@@ -101,3 +101,63 @@ def test_websocket_receives_hello_and_events(client) -> None:
 
 def test_redact_headers_none_passthrough() -> None:
     assert redact_headers(None) is None
+
+
+# --- intercept (M2) -------------------------------------------------------
+
+
+def test_intercept_defaults_off(client) -> None:
+    data = client.get("/api/intercept").json()
+    assert data["rules"]["enabled"] is False
+    assert data["paused"] == []
+
+
+def test_patch_intercept_rules(client) -> None:
+    rules = client.patch(
+        "/api/intercept",
+        json={"enabled": True, "intercept_responses": True, "host_filter": "a.com"},
+    ).json()
+    assert rules["enabled"] is True
+    assert rules["intercept_responses"] is True
+    assert rules["host_filter"] == "a.com"
+    assert client.get("/api/status").json()["intercept"]["enabled"] is True
+
+
+def test_partial_patch_keeps_other_rules(client) -> None:
+    client.patch("/api/intercept", json={"enabled": True, "host_filter": "a.com"})
+    rules = client.patch("/api/intercept", json={"enabled": False}).json()
+    assert rules["host_filter"] == "a.com"
+
+
+def test_forward_unknown_flow_conflicts(client) -> None:
+    assert client.post("/api/intercept/nope/forward").status_code == 409
+    assert client.post("/api/intercept/nope/drop").status_code == 409
+
+
+def test_forward_paused_flow_via_api(client) -> None:
+    from mitmproxy.test import tflow, tutils
+
+    client.patch("/api/intercept", json={"enabled": True})
+    addon = client.app.state.engine.intercept
+    flow = tflow.tflow(req=tutils.treq(host="example.com"), resp=False)
+    addon.request(flow)
+
+    listed = client.get("/api/intercept").json()["paused"]
+    assert listed[0]["id"] == flow.id
+
+    res = client.post(
+        f"/api/intercept/{flow.id}/forward", json={"method": "PUT"}
+    )
+    assert res.status_code == 200
+    assert flow.request.method == "PUT"
+    assert not flow.intercepted
+
+
+def test_forward_all(client) -> None:
+    from mitmproxy.test import tflow, tutils
+
+    client.patch("/api/intercept", json={"enabled": True})
+    addon = client.app.state.engine.intercept
+    for _ in range(3):
+        addon.request(tflow.tflow(req=tutils.treq(host="example.com"), resp=False))
+    assert client.post("/api/intercept/forward-all").json() == {"forwarded": 3}

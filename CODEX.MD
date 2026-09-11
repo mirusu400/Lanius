@@ -149,7 +149,7 @@
 
 - **M0 — 엔진 부트스트랩 ✅ 완료:** `DumpMaster` 임베드, HTTP flow 캡처 → SQLite 기록, 이벤트 브로커 + WS 스트림, REST 히스토리 API, 헤더 리댁션. (GUI 없음, CLI/curl 검증 완료)
 - **M1 — 라이브 히스토리 ✅ 완료:** 백엔드 WS 스트림 + React/TS GUI + 프록시 히스토리 테이블(실시간). 요청/응답 상세 뷰, 필터/검색. (Tauri 셸 번들은 M2 이후)
-- **M2 — 인터셉트:** 브레이크포인트 on/off, 요청/응답 편집 후 resume/kill/drop.
+- **M2 — 인터셉트 ✅ 완료:** 브레이크포인트 on/off(요청·응답·host 필터), 원시 HTTP 텍스트 편집 후 Forward/Drop/Forward all.
 - **M3 — Repeater:** 히스토리/인터셉트에서 요청을 Repeater로 보내 편집·재전송, 응답 확인.
 - **M4 — Target/Scope/엔드포인트:** 사이트맵 트리, Scope include/exclude 영구 규칙, 엔드포인트 그룹핑·파라미터 식별.
 - **M5 — Intruder:** 페이로드 위치 지정 + 워드리스트 퍼징(워커 오프로드), 결과 테이블/정렬.
@@ -228,6 +228,10 @@ cd shell && npm run tauri dev
 | M1 | 초기 GUI는 브라우저(Vite dev server) | 셸(Tauri) 선택 전에도 UI 반복 개발 가능. 셸은 이 정적 번들을 그대로 로드하면 됨 |
 | M1 | 엔진에 localhost 전용 CORS 허용 | UI dev server(5173)와 엔진(8081) 포트가 달라 필요. `127.0.0.1`/`localhost` origin만 허용 |
 | M1 | UI 로직은 순수 함수로 분리(`proxyModel.ts`) | 머지/필터/포맷을 DOM 없이 단위 테스트. 컴포넌트는 jsdom + RTL로 검증 |
+| M2 | mitmproxy `flow.intercept()/resume()` 사용 | 커넥션 보류 로직을 직접 만들지 않음(§9 엔진 우회 금지) |
+| M2 | Drop은 `resume()` → `kill()` 순서 | `kill()`이 resume 이벤트를 발생시키지 않고 `intercepted`만 해제해, 순서가 반대면 클라이언트가 영구 대기(실측 후 회귀 테스트 추가) |
+| M2 | mitmproxy `errorcheck` 애드온 제거 + 포트 사전 점검 | 기본 동작이 `sys.exit(1)`이라 호스트 앱까지 종료됨. 바인드 실패를 `ProxyStartError`로 변환 |
+| M2 | 인터셉트 편집은 원시 HTTP 텍스트 | Burp와 동일한 사용 감각. 파싱/직렬화는 `interceptModel.ts`에서 순수 함수로 테스트 |
 
 ---
 

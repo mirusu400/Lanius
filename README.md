@@ -13,7 +13,8 @@ Lanius는 **mitmproxy를 엔진으로 임베드**하고 그 위에 Burp Suite �
 - ✅ REST API: 히스토리 조회/필터/상세/초기화
 - ✅ 민감 헤더 기본 리댁션 (`Authorization`, `Cookie`, `Set-Cookie`)
 - ✅ **M1** React+TS GUI: 실시간 프록시 히스토리 테이블, 필터/검색, 요청·응답 상세 뷰
-- ⬜ M2 이후: 인터셉트, Repeater, Target/Scope, Intruder
+- ✅ **M2** 인터셉트: 브레이크포인트, 원시 HTTP 편집, Forward / Drop / Forward all
+- ⬜ M3 이후: Repeater, Target/Scope, Intruder
 
 ## 빠른 시작
 
@@ -64,7 +65,12 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 | GET | `/api/flows` | 히스토리 목록 (`limit`, `offset`, `host`, `method`, `status_code`, `search`) |
 | GET | `/api/flows/{id}` | flow 상세. `?reveal=true`로 리댁션 해제 |
 | DELETE | `/api/flows` | 히스토리 초기화 |
-| WS | `/ws` | 실시간 이벤트 (`flow.request`, `flow.response`, `flow.error`, `engine.*`) |
+| GET | `/api/intercept` | 인터셉트 규칙 + 대기 중 flow 목록 |
+| PATCH | `/api/intercept` | 규칙 변경 (`enabled`, `intercept_requests`, `intercept_responses`, `host_filter`) |
+| POST | `/api/intercept/{id}/forward` | (선택적 편집 후) 전달 |
+| POST | `/api/intercept/{id}/drop` | 요청 폐기 |
+| POST | `/api/intercept/forward-all` | 대기 중 전체 전달 |
+| WS | `/ws` | 실시간 이벤트 (`flow.*`, `intercept.*`, `engine.*`) |
 
 모든 엔드포인트는 기본적으로 `127.0.0.1`에만 바인딩된다.
 
@@ -72,11 +78,11 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 
 ```bash
 cd engine
-.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (27)
+.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (54)
 .venv/bin/python -m mypy          # 타입 체크
 
 cd ../ui
-npm test                          # UI 테스트 (22, jsdom 렌더 포함)
+npm test                          # UI 테스트 (42, jsdom 렌더 포함)
 npx tsc -b                        # 타입 체크
 ```
 

@@ -10,8 +10,10 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from .. import __version__
+from ..addons.intercept import InterceptError
 from ..config import Settings
 from ..db.store import FlowStore
 from ..events import EventBroker
@@ -20,6 +22,26 @@ from ..proxy import ProxyEngine
 logger = logging.getLogger(__name__)
 
 SENSITIVE_HEADERS = {"authorization", "cookie", "set-cookie", "proxy-authorization"}
+
+
+class InterceptRulesPatch(BaseModel):
+    enabled: bool | None = None
+    intercept_requests: bool | None = None
+    intercept_responses: bool | None = None
+    host_filter: str | None = None
+
+
+class ForwardBody(BaseModel):
+    method: str | None = None
+    path: str | None = None
+    host: str | None = None
+    port: int | None = None
+    request_headers: list[list[str]] | None = None
+    request_body: str | None = None
+    status_code: int | None = None
+    reason: str | None = None
+    response_headers: list[list[str]] | None = None
+    response_body: str | None = None
 
 
 def redact_headers(
@@ -77,6 +99,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "flows": await asyncio.to_thread(store.count),
             "subscribers": broker.subscriber_count,
             "db_path": str(settings.db_path),
+            "intercept": engine.intercept.rules.as_dict(),
+            "paused": len(engine.intercept.paused),
         }
 
     @app.get("/api/flows")
@@ -118,6 +142,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await asyncio.to_thread(store.clear)
         broker.publish("flows.cleared", {})
         return {"ok": True}
+
+    # --- intercept (M2) ---------------------------------------------------
+    @app.get("/api/intercept")
+    async def intercept_state() -> dict[str, Any]:
+        return {
+            "rules": engine.intercept.rules.as_dict(),
+            "paused": engine.intercept.list_paused(),
+        }
+
+    @app.patch("/api/intercept")
+    async def update_intercept(patch: InterceptRulesPatch) -> dict[str, Any]:
+        rules = engine.intercept.set_rules(**patch.model_dump(exclude_unset=True))
+        return rules.as_dict()
+
+    @app.post("/api/intercept/{flow_id}/forward")
+    async def forward_flow(flow_id: str, edits: ForwardBody | None = None) -> dict[str, Any]:
+        payload = edits.model_dump(exclude_unset=True) if edits else {}
+        try:
+            engine.intercept.forward(flow_id, payload)
+        except InterceptError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"ok": True}
+
+    @app.post("/api/intercept/{flow_id}/drop")
+    async def drop_flow(flow_id: str) -> dict[str, Any]:
+        try:
+            engine.intercept.drop(flow_id)
+        except InterceptError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"ok": True}
+
+    @app.post("/api/intercept/forward-all")
+    async def forward_all() -> dict[str, Any]:
+        return {"forwarded": engine.intercept.resume_all()}
 
     @app.websocket("/ws")
     async def ws_stream(websocket: WebSocket) -> None:

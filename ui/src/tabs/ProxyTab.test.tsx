@@ -79,6 +79,17 @@ beforeEach(() => {
           db_path: '/tmp/x.sqlite',
         });
       }
+      if (url.includes('/api/intercept')) {
+        return jsonResponse({
+          rules: {
+            enabled: false,
+            intercept_requests: true,
+            intercept_responses: false,
+            host_filter: null,
+          },
+          paused: [],
+        });
+      }
       if (url.includes('/api/flows/')) {
         return jsonResponse({
           ...seeded,
