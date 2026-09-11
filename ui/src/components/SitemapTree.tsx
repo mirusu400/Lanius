@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import type { TreeNode } from '../tabs/targetModel';
 import { statusClass } from '../tabs/proxyModel';
+import { useT } from '../i18n';
 
 function Node({ node, depth }: { node: TreeNode; depth: number }) {
   const [open, setOpen] = useState(depth < 2);
@@ -39,8 +40,9 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
 }
 
 export function SitemapTree({ root }: { root: TreeNode }) {
+  const t = useT();
   if (root.children.length === 0 && root.flows.length === 0) {
-    return <p className="muted pad">이 사이트에는 기록된 경로가 없습니다.</p>;
+    return <p className="muted pad">{t('target.noPaths')}</p>;
   }
   return (
     <div className="sitemap-tree">

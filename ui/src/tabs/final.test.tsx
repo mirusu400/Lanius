@@ -1,5 +1,6 @@
 /** Logger + Settings tabs against a mocked engine. */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor } from '@testing-library/react';
+import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -99,7 +100,7 @@ describe('LoggerTab', () => {
     MockSocket.last!.emit('intercept.paused', { id: 'zzz' });
     await screen.findByText('flow.request');
 
-    await user.type(screen.getByLabelText('log filter'), 'intercept');
+    await user.type(screen.getByLabelText(t('logger.filter')), 'intercept');
     await waitFor(() => expect(screen.queryByText('flow.request')).toBeNull());
     expect(screen.getByText('intercept.paused')).toBeTruthy();
   });
@@ -111,12 +112,12 @@ describe('LoggerTab', () => {
     MockSocket.last!.emit('flow.request', { id: 'a' });
     await screen.findByText('flow.request');
 
-    await user.click(screen.getByRole('button', { name: /일시정지/ }));
+    await user.click(screen.getByRole('button', { name: t('common.pause') }));
     MockSocket.last!.emit('flow.response', { id: 'b' });
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText('flow.response')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: '지우기' }));
+    await user.click(screen.getByRole('button', { name: t('common.clear') }));
     await waitFor(() => expect(screen.queryByText('flow.request')).toBeNull());
   });
 });
@@ -124,7 +125,7 @@ describe('LoggerTab', () => {
 describe('SettingsTab', () => {
   it('shows engine and proxy status', async () => {
     render(<SettingsTab />);
-    expect(await screen.findByText('running')).toBeTruthy();
+    expect(await screen.findByText(t('settings.running'))).toBeTruthy();
     // shown in both the proxy section and the CA section
     expect(screen.getAllByText('127.0.0.1:8080').length).toBeGreaterThan(0);
     expect(screen.getByText('42')).toBeTruthy();
@@ -132,9 +133,9 @@ describe('SettingsTab', () => {
 
   it('offers CA downloads for available formats only', async () => {
     render(<SettingsTab />);
-    const pem = (await screen.findByText('.pem 내려받기')) as HTMLAnchorElement;
+    const pem = (await screen.findByText(t('settings.caDownload', { format: 'pem' }))) as HTMLAnchorElement;
     expect(pem.getAttribute('href')).toContain('/api/ca/pem');
-    const p12 = screen.getByText('.p12 내려받기');
+    const p12 = screen.getByText(t('settings.caDownload', { format: 'p12' }));
     expect(p12.className).toContain('disabled');
     expect(p12.getAttribute('href')).toBeNull();
   });

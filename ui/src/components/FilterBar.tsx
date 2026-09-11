@@ -1,4 +1,5 @@
 import type { ConnectionState } from '../api/stream';
+import { useT } from '../i18n';
 import type { EngineStatus, FlowFilters } from '../api/types';
 
 interface Props {
@@ -26,11 +27,12 @@ export function FilterBar({
   status,
   count,
 }: Props) {
+  const t = useT();
   return (
     <div className="filter-bar">
       <input
         className="search"
-        placeholder="host / path 검색"
+        placeholder={t('proxy.searchPlaceholder')}
         value={filters.search ?? ''}
         onChange={(e) =>
           onChange({ ...filters, search: e.target.value || undefined })
@@ -38,7 +40,7 @@ export function FilterBar({
       />
       <input
         className="host"
-        placeholder="host"
+        placeholder={t('proxy.hostPlaceholder')}
         value={filters.host ?? ''}
         onChange={(e) =>
           onChange({ ...filters, host: e.target.value || undefined })
@@ -52,13 +54,13 @@ export function FilterBar({
       >
         {METHODS.map((m) => (
           <option key={m} value={m}>
-            {m || 'method'}
+            {m || t('proxy.methodPlaceholder')}
           </option>
         ))}
       </select>
       <input
         className="status-filter"
-        placeholder="status"
+        placeholder={t('proxy.statusPlaceholder')}
         value={filters.statusCode ?? ''}
         onChange={(e) =>
           onChange({
@@ -67,15 +69,17 @@ export function FilterBar({
           })
         }
       />
-      <button onClick={onTogglePause}>{paused ? '▶ 재개' : '⏸ 일시정지'}</button>
-      <button onClick={onReload}>새로고침</button>
+      <button onClick={onTogglePause}>{paused ? t('common.resume') : t('common.pause')}</button>
+      <button onClick={onReload}>{t('common.refresh')}</button>
       <button className="danger" onClick={onClear}>
-        비우기
+        {t('common.clear')}
       </button>
       <span className="spacer" />
-      <span className="count">{count} flows</span>
+      <span className="count">{t('proxy.flowCount', { count })}</span>
       <span className={`conn conn-${connection}`}>
-        {connection === 'open' ? '● live' : `○ ${connection}`}
+        {connection === 'open'
+          ? t('proxy.live')
+          : t('proxy.connState', { state: connection })}
       </span>
       {status && (
         <span className="engine-info mono">

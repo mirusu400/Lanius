@@ -1,5 +1,6 @@
 /** Renders the real InterceptPanel and asserts the edit/forward/drop flow. */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor } from '@testing-library/react';
+import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -63,9 +64,9 @@ describe('InterceptPanel', () => {
         onResolved={() => {}}
       />,
     );
-    expect(screen.getByText(/다음 요청을 기다리는 중/)).toBeTruthy();
+    expect(screen.getByText(t('intercept.idleOn'))).toBeTruthy();
     expect(
-      screen.getByRole('button', { name: 'Forward' }).hasAttribute('disabled'),
+      screen.getByRole('button', { name: t('intercept.forward') }).hasAttribute('disabled'),
     ).toBe(true);
   });
 
@@ -94,7 +95,7 @@ describe('InterceptPanel', () => {
         onResolved={onResolved}
       />,
     );
-    await user.click(screen.getByRole('button', { name: 'Forward' }));
+    await user.click(screen.getByRole('button', { name: t('intercept.forward') }));
     await waitFor(() => expect(onResolved).toHaveBeenCalledWith('p1'));
     const call = calls.find((c) => c.url.includes('/forward'));
     expect(call?.init?.body).toBe('{}');
@@ -116,7 +117,7 @@ describe('InterceptPanel', () => {
       editor,
       'POST /hacked HTTP/1.1{enter}Host: example.com{enter}{enter}x=1',
     );
-    await user.click(screen.getByRole('button', { name: 'Forward' }));
+    await user.click(screen.getByRole('button', { name: t('intercept.forward') }));
 
     await waitFor(() =>
       expect(calls.some((c) => c.url.includes('/forward'))).toBe(true),
@@ -140,7 +141,7 @@ describe('InterceptPanel', () => {
         onResolved={onResolved}
       />,
     );
-    await user.click(screen.getByRole('button', { name: 'Drop' }));
+    await user.click(screen.getByRole('button', { name: t('intercept.drop') }));
     await waitFor(() => expect(onResolved).toHaveBeenCalledWith('p1'));
     expect(calls.some((c) => c.url.endsWith('/p1/drop'))).toBe(true);
   });
@@ -156,7 +157,7 @@ describe('InterceptPanel', () => {
         onResolved={() => {}}
       />,
     );
-    await user.click(screen.getByRole('button', { name: /Intercept is on/ }));
+    await user.click(screen.getByRole('button', { name: t('intercept.on') }));
     expect(onToggle).toHaveBeenCalledWith({ enabled: false });
   });
 
@@ -172,8 +173,8 @@ describe('InterceptPanel', () => {
     );
     await user.clear(editorEl());
     await user.type(editorEl(), 'GARBAGE');
-    await user.click(screen.getByRole('button', { name: 'Forward' }));
-    expect(await screen.findByText(/형식이 잘못/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('intercept.forward') }));
+    expect(await screen.findByText(t('parse.badRequestLine'))).toBeTruthy();
     expect(calls.some((c) => c.url.includes('/forward'))).toBe(false);
   });
 
@@ -186,6 +187,6 @@ describe('InterceptPanel', () => {
         onResolved={() => {}}
       />,
     );
-    expect(screen.getByText('대기 2건')).toBeTruthy();
+    expect(screen.getByText(t('intercept.queued', { count: 2 }))).toBeTruthy();
   });
 });

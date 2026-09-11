@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#12141a"/>
+  <g fill="#ffffff">
+    <!-- Swooping Predator diving diagonally from top-left to bottom-right -->
+    <!-- Primary Swept-back Wings -->
+    <path d="M 105,145 C 145,135 210,150 270,205 C 320,165 375,130 425,120 C 390,175 350,225 310,265 C 335,280 370,305 405,335 C 350,330 305,310 275,285 C 245,320 205,355 155,385 C 180,335 205,290 225,250 C 180,215 135,185 105,145 Z"/>
+    <!-- Sharp Head & Hooked Beak leading the dive -->
+    <path d="M 295,255 C 325,270 365,300 385,335 C 395,350 398,368 390,380 C 382,375 375,365 365,350 C 350,330 330,315 305,300 C 295,285 292,270 295,255 Z"/>
+    <!-- Trailing Stepped Tail Feather (Shrike signature long stepped tail) -->
+    <polygon points="145,395 195,345 175,340 120,405"/>
+    <!-- Aerodynamic Negative Space Slash (Speed & Intercept) -->
+    <path d="M 245,215 L 290,260" stroke="#12141a" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="335" cy="290" r="6" fill="#12141a"/>
+  </g>
+</svg>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { decodeChain, listCodecs, type ChainStep } from '../api/client';
+import { useT } from '../i18n';
 
 interface StepOutput {
   codec: string;
@@ -9,6 +10,7 @@ interface StepOutput {
 }
 
 export function DecoderTab() {
+  const t = useT();
   const [input, setInput] = useState('');
   const [steps, setSteps] = useState<ChainStep[]>([]);
   const [outputs, setOutputs] = useState<StepOutput[]>([]);
@@ -58,18 +60,20 @@ export function DecoderTab() {
             ])
           }
         >
-          + 단계 추가
+          {t('decoder.addStep')}
         </button>
-        <button onClick={() => setSteps([])}>초기화</button>
-        <span className="muted">체인 {steps.length}단계</span>
+        <button onClick={() => setSteps([])}>{t('common.reset')}</button>
+        <span className="muted">
+          {t('decoder.chainSteps', { count: steps.length })}
+        </span>
       </div>
       {error && <div className="banner error">{error}</div>}
 
       <div className="decoder-body">
         <label className="field">
-          <span className="muted">입력</span>
+          <span className="muted">{t('decoder.input')}</span>
           <textarea
-            aria-label="decoder input"
+            aria-label={t('decoder.inputLabel')}
             className="mono"
             spellCheck={false}
             value={input}
@@ -81,7 +85,7 @@ export function DecoderTab() {
           <div className="chain-step" key={index}>
             <div className="chain-controls">
               <select
-                aria-label={`codec ${index + 1}`}
+                aria-label={t('decoder.codec', { index: index + 1 })}
                 value={step.codec}
                 onChange={(e) =>
                   setSteps((prev) =>
@@ -98,7 +102,7 @@ export function DecoderTab() {
                 ))}
               </select>
               <select
-                aria-label={`direction ${index + 1}`}
+                aria-label={t('decoder.direction', { index: index + 1 })}
                 value={step.direction}
                 onChange={(e) =>
                   setSteps((prev) =>
@@ -117,7 +121,7 @@ export function DecoderTab() {
                 <option value="encode">encode</option>
               </select>
               <button
-                aria-label={`remove step ${index + 1}`}
+                aria-label={t('decoder.removeStep', { index: index + 1 })}
                 onClick={() =>
                   setSteps((prev) => prev.filter((_, i) => i !== index))
                 }

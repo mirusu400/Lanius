@@ -1,5 +1,6 @@
 /** Plugins tab rendered against a mocked engine. */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor } from '@testing-library/react';
+import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -88,8 +89,8 @@ describe('PluginsTab', () => {
   it('enables a plugin and reflects the loaded state', async () => {
     const user = userEvent.setup();
     render(<PluginsTab />);
-    await user.click(await screen.findByLabelText('toggle stamp'));
-    await waitFor(() => expect(screen.getByText('loaded')).toBeTruthy());
+    await user.click(await screen.findByLabelText(t('plugins.toggleLabel', { name: 'stamp' })));
+    await waitFor(() => expect(screen.getByText(t('plugins.loaded'))).toBeTruthy());
     expect(calls.some((c) => c.endsWith('/api/plugins/stamp/enable'))).toBe(
       true,
     );
@@ -99,7 +100,7 @@ describe('PluginsTab', () => {
     plugins = [{ ...base, enabled: true, loaded: true }];
     const user = userEvent.setup();
     render(<PluginsTab />);
-    await user.click(await screen.findByLabelText('toggle stamp'));
+    await user.click(await screen.findByLabelText(t('plugins.toggleLabel', { name: 'stamp' })));
     await waitFor(() =>
       expect(calls.some((c) => c.endsWith('/disable'))).toBe(true),
     );
@@ -108,20 +109,20 @@ describe('PluginsTab', () => {
   it('shows load errors from the engine', async () => {
     render(<PluginsTab />);
     expect(await screen.findByText('RuntimeError: boom')).toBeTruthy();
-    expect(screen.getByText('error')).toBeTruthy();
+    expect(screen.getByText(t('common.error'))).toBeTruthy();
   });
 
   it('keeps the failure message visible after the list refreshes', async () => {
     const user = userEvent.setup();
     render(<PluginsTab />);
-    await user.click(await screen.findByLabelText('toggle broken'));
+    await user.click(await screen.findByLabelText(t('plugins.toggleLabel', { name: 'broken' })));
     expect(await screen.findByText(/broken: 400/)).toBeTruthy();
   });
 
   it('reloads a plugin', async () => {
     const user = userEvent.setup();
     render(<PluginsTab />);
-    await user.click(await screen.findByLabelText('reload stamp'));
+    await user.click(await screen.findByLabelText(t('plugins.reloadLabel', { name: 'stamp' })));
     await waitFor(() =>
       expect(calls.some((c) => c.endsWith('/stamp/reload'))).toBe(true),
     );
@@ -130,6 +131,6 @@ describe('PluginsTab', () => {
   it('explains an empty plugin directory', async () => {
     plugins = [];
     render(<PluginsTab />);
-    expect(await screen.findByText(/플러그인이 없습니다/)).toBeTruthy();
+    expect(await screen.findByText(t('plugins.none'))).toBeTruthy();
   });
 });

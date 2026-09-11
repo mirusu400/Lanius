@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#12141a"/>
+  <g fill="#ffffff">
+    <!-- Crown & Head -->
+    <polygon points="210,125 290,125 340,165 240,175"/>
+    <!-- Forehead to Beak Base -->
+    <polygon points="290,125 385,185 340,165"/>
+    <!-- Hooked Upper Beak -->
+    <polygon points="340,165 385,185 435,225 410,250 360,220"/>
+    <!-- Lower Beak & Jaw -->
+    <polygon points="360,220 405,248 375,270 335,235"/>
+    <!-- Bandit Eye Mask (Faceted Black Bar - Solid Contrast) -->
+    <polygon points="240,175 340,165 360,220 310,230 255,200" opacity="0.4" fill="#12141a"/>
+    <!-- Eye cutout -->
+    <polygon points="295,180 315,190 285,195"/>
+    <!-- Nape & Neck Crest -->
+    <polygon points="210,125 240,175 195,235 155,185"/>
+    <!-- Throat & Breast -->
+    <polygon points="240,175 335,235 300,315 225,270"/>
+    <!-- Wing Facet 1 -->
+    <polygon points="195,235 225,270 170,360 130,290"/>
+    <!-- Wing Facet 2 -->
+    <polygon points="225,270 300,315 250,400 170,360"/>
+    <!-- Tail Spike -->
+    <polygon points="170,360 215,415 150,430"/>
+  </g>
+</svg>

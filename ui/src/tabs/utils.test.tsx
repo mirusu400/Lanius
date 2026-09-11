@@ -1,5 +1,6 @@
 /** Decoder + Comparer tabs rendered against a mocked engine. */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor } from '@testing-library/react';
+import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -75,14 +76,14 @@ afterEach(() => {
 describe('DecoderTab', () => {
   it('starts with no chain steps', async () => {
     render(<DecoderTab />);
-    expect(await screen.findByText('체인 0단계')).toBeTruthy();
+    expect(await screen.findByText(t('decoder.chainSteps', { count: 0 }))).toBeTruthy();
   });
 
   it('adds a step and shows its output', async () => {
     const user = userEvent.setup();
     render(<DecoderTab />);
-    await user.type(screen.getByLabelText('decoder input'), 'aGk=');
-    await user.click(screen.getByRole('button', { name: '+ 단계 추가' }));
+    await user.type(screen.getByLabelText(t('decoder.inputLabel')), 'aGk=');
+    await user.click(screen.getByRole('button', { name: t('decoder.addStep') }));
 
     await waitFor(() =>
       expect(screen.getByText(/base64:decode\(aGk=\)/)).toBeTruthy(),
@@ -95,10 +96,10 @@ describe('DecoderTab', () => {
   it('chains multiple steps in order', async () => {
     const user = userEvent.setup();
     render(<DecoderTab />);
-    await user.type(screen.getByLabelText('decoder input'), 'x');
-    await user.click(screen.getByRole('button', { name: '+ 단계 추가' }));
-    await user.click(screen.getByRole('button', { name: '+ 단계 추가' }));
-    await user.selectOptions(screen.getByLabelText('codec 2'), 'url');
+    await user.type(screen.getByLabelText(t('decoder.inputLabel')), 'x');
+    await user.click(screen.getByRole('button', { name: t('decoder.addStep') }));
+    await user.click(screen.getByRole('button', { name: t('decoder.addStep') }));
+    await user.selectOptions(screen.getByLabelText(t('decoder.codec', { index: 2 })), 'url');
 
     await waitFor(() =>
       expect(
@@ -110,9 +111,9 @@ describe('DecoderTab', () => {
   it('switches a step to encode', async () => {
     const user = userEvent.setup();
     render(<DecoderTab />);
-    await user.type(screen.getByLabelText('decoder input'), 'x');
-    await user.click(screen.getByRole('button', { name: '+ 단계 추가' }));
-    await user.selectOptions(screen.getByLabelText('direction 1'), 'encode');
+    await user.type(screen.getByLabelText(t('decoder.inputLabel')), 'x');
+    await user.click(screen.getByRole('button', { name: t('decoder.addStep') }));
+    await user.selectOptions(screen.getByLabelText(t('decoder.direction', { index: 1 })), 'encode');
     await waitFor(() =>
       expect(screen.getByText(/base64:encode\(x\)/)).toBeTruthy(),
     );
@@ -121,17 +122,17 @@ describe('DecoderTab', () => {
   it('removes a step', async () => {
     const user = userEvent.setup();
     render(<DecoderTab />);
-    await user.click(screen.getByRole('button', { name: '+ 단계 추가' }));
-    await screen.findByText('체인 1단계');
-    await user.click(screen.getByLabelText('remove step 1'));
-    expect(await screen.findByText('체인 0단계')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('decoder.addStep') }));
+    await screen.findByText(t('decoder.chainSteps', { count: 1 }));
+    await user.click(screen.getByLabelText(t('decoder.removeStep', { index: 1 })));
+    expect(await screen.findByText(t('decoder.chainSteps', { count: 0 }))).toBeTruthy();
   });
 
   it('surfaces engine errors', async () => {
     const user = userEvent.setup();
     render(<DecoderTab />);
     failNext = true;
-    await user.click(screen.getByRole('button', { name: '+ 단계 추가' }));
+    await user.click(screen.getByRole('button', { name: t('decoder.addStep') }));
     expect(await screen.findByText(/400/)).toBeTruthy();
   });
 });
@@ -140,20 +141,20 @@ describe('ComparerTab', () => {
   it('renders a diff with change counts', async () => {
     const user = userEvent.setup();
     render(<ComparerTab />);
-    await user.type(screen.getByLabelText('left text'), 'the quick');
-    await user.type(screen.getByLabelText('right text'), 'the slow extra');
-    await user.click(screen.getByRole('button', { name: 'Compare' }));
+    await user.type(screen.getByLabelText(t('comparer.left')), 'the quick');
+    await user.type(screen.getByLabelText(t('comparer.right')), 'the slow extra');
+    await user.click(screen.getByRole('button', { name: t('comparer.compare') }));
 
     const diff = await screen.findByTestId('diff');
     expect(diff.textContent).toContain('quick\u2192slow');
     expect(diff.textContent).toContain('extra');
-    expect(screen.getByText(/\+2 \/ -1 · 유사도 50.0%/)).toBeTruthy();
+    expect(screen.getByText(t('comparer.summary', { added: 2, removed: 1, percent: '50.0' }))).toBeTruthy();
   });
 
   it('marks insertions and replacements with classes', async () => {
     const user = userEvent.setup();
     render(<ComparerTab />);
-    await user.click(screen.getByRole('button', { name: 'Compare' }));
+    await user.click(screen.getByRole('button', { name: t('comparer.compare') }));
     await screen.findByTestId('diff');
     expect(document.querySelectorAll('.diff-replace')).toHaveLength(1);
     expect(document.querySelectorAll('.diff-insert')).toHaveLength(1);
@@ -162,8 +163,8 @@ describe('ComparerTab', () => {
   it('supports byte mode', async () => {
     const user = userEvent.setup();
     render(<ComparerTab />);
-    await user.selectOptions(screen.getByLabelText('compare mode'), 'byte');
-    await user.click(screen.getByRole('button', { name: 'Compare' }));
+    await user.selectOptions(screen.getByLabelText(t('comparer.mode')), 'byte');
+    await user.click(screen.getByRole('button', { name: t('comparer.compare') }));
     await screen.findByTestId('diff');
     const call = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } })
       .mock.calls.at(-1);

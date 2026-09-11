@@ -1,32 +1,28 @@
 /** Pure helpers for the Intruder tab. */
 
 import type { AttackResult, AttackType, FlowDetail, FlowSummary } from '../api/types';
+import type { TranslationKey } from '../i18n/catalogue';
 
 export const MARKER = '\u00a7';
 
-export const ATTACK_TYPES: { value: AttackType; label: string; hint: string }[] =
-  [
-    {
-      value: 'sniper',
-      label: 'Sniper',
-      hint: '한 위치씩 순회 (payload set 1개)',
-    },
-    {
-      value: 'battering_ram',
-      label: 'Battering ram',
-      hint: '같은 값을 모든 위치에',
-    },
-    {
-      value: 'pitchfork',
-      label: 'Pitchfork',
-      hint: '세트를 나란히 (동시 진행)',
-    },
-    {
-      value: 'cluster_bomb',
-      label: 'Cluster bomb',
-      hint: '모든 조합 (곱집합)',
-    },
-  ];
+export const ATTACK_TYPES: {
+  value: AttackType;
+  label: string;
+  hint: TranslationKey;
+}[] = [
+  { value: 'sniper', label: 'Sniper', hint: 'intruder.sniperHint' },
+  {
+    value: 'battering_ram',
+    label: 'Battering ram',
+    hint: 'intruder.batteringRamHint',
+  },
+  { value: 'pitchfork', label: 'Pitchfork', hint: 'intruder.pitchforkHint' },
+  {
+    value: 'cluster_bomb',
+    label: 'Cluster bomb',
+    hint: 'intruder.clusterBombHint',
+  },
+];
 
 /** Count balanced `§...§` spans; -1 means the markers are unbalanced. */
 export function countPositions(template: string): number {

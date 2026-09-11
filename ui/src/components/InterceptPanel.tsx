@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { dropFlow, forwardAll, forwardFlow } from '../api/client';
 import type { InterceptRules, PausedFlow } from '../api/types';
 import { editsFromText, renderPaused } from '../tabs/interceptModel';
+import { errorText, useT } from '../i18n';
 
 interface Props {
   rules: InterceptRules;
@@ -17,6 +18,7 @@ export function InterceptPanel({
   onToggle,
   onResolved,
 }: Props) {
+  const t = useT();
   const current = paused[0] ?? null;
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export function InterceptPanel({
       onResolved(current.id);
       setError(null);
     } catch (err) {
-      setError((err as Error).message);
+      setError(errorText(err, t));
     }
   };
 
@@ -54,7 +56,7 @@ export function InterceptPanel({
           className={rules.enabled ? 'toggle on' : 'toggle'}
           onClick={() => onToggle({ enabled: !rules.enabled })}
         >
-          {rules.enabled ? 'Intercept is on' : 'Intercept is off'}
+          {rules.enabled ? t('intercept.on') : t('intercept.off')}
         </button>
         <label>
           <input
@@ -62,7 +64,7 @@ export function InterceptPanel({
             checked={rules.intercept_requests}
             onChange={(e) => onToggle({ intercept_requests: e.target.checked })}
           />
-          요청
+          {t('intercept.requests')}
         </label>
         <label>
           <input
@@ -72,34 +74,40 @@ export function InterceptPanel({
               onToggle({ intercept_responses: e.target.checked })
             }
           />
-          응답
+          {t('intercept.responses')}
         </label>
         <input
           className="host"
-          placeholder="host 필터"
+          placeholder={t('intercept.hostFilter')}
           value={rules.host_filter ?? ''}
           onChange={(e) => onToggle({ host_filter: e.target.value })}
         />
         <span className="spacer" />
-        <span className="queue">대기 {paused.length}건</span>
+        <span className="queue">
+          {t('intercept.queued', { count: paused.length })}
+        </span>
         <button onClick={() => act('forward')} disabled={!current}>
-          Forward
+          {t('intercept.forward')}
         </button>
         <button className="danger" onClick={() => act('drop')} disabled={!current}>
-          Drop
+          {t('intercept.drop')}
         </button>
         <button
           onClick={() => void forwardAll().then(() => onResolved('*'))}
           disabled={paused.length === 0}
         >
-          Forward all
+          {t('intercept.forwardAll')}
         </button>
       </div>
       {error && <div className="banner error">{error}</div>}
       {current ? (
         <>
           <div className="detail-url mono">
-            <strong>{current.phase === 'request' ? '요청 대기' : '응답 대기'}</strong>{' '}
+            <strong>
+              {current.phase === 'request'
+                ? t('intercept.waitingRequest')
+                : t('intercept.waitingResponse')}
+            </strong>{' '}
             {current.scheme}://{current.host}
             {current.path}
           </div>
@@ -112,9 +120,7 @@ export function InterceptPanel({
         </>
       ) : (
         <div className="intercept-idle muted">
-          {rules.enabled
-            ? '인터셉트 활성화됨 — 다음 요청을 기다리는 중입니다.'
-            : '인터셉트가 꺼져 있습니다. 켜면 요청을 붙잡아 편집할 수 있습니다.'}
+          {rules.enabled ? t('intercept.idleOn') : t('intercept.idleOff')}
         </div>
       )}
     </div>

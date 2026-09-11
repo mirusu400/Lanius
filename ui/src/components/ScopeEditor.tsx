@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import type { ScopeState } from '../api/types';
 import { describeRule, summarizeScope } from '../tabs/targetModel';
+import { useT } from '../i18n';
 
 interface Props {
   scope: ScopeState;
@@ -18,6 +19,7 @@ export function ScopeEditor({
   onDelete,
   onRestrictCapture,
 }: Props) {
+  const t = useT();
   const [url, setUrl] = useState('');
   const [kind, setKind] = useState<'include' | 'exclude'>('include');
   const [error, setError] = useState<string | null>(null);
@@ -39,21 +41,21 @@ export function ScopeEditor({
       <div className="scope-controls">
         <select
           value={kind}
-          aria-label="rule kind"
+          aria-label={t('scope.kind')}
           onChange={(e) => setKind(e.target.value as 'include' | 'exclude')}
         >
-          <option value="include">Include</option>
-          <option value="exclude">Exclude</option>
+          <option value="include">{t('scope.include')}</option>
+          <option value="exclude">{t('scope.exclude')}</option>
         </select>
         <input
           className="scope-url"
-          aria-label="scope url"
-          placeholder="https://target.com/app"
+          aria-label={t('scope.url')}
+          placeholder={t('scope.urlPlaceholder')}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && void add()}
         />
-        <button onClick={() => void add()}>규칙 추가</button>
+        <button onClick={() => void add()}>{t('scope.addRule')}</button>
         <span className="spacer" />
         <label>
           <input
@@ -61,20 +63,23 @@ export function ScopeEditor({
             checked={scope.restrict_capture}
             onChange={(e) => void onRestrictCapture(e.target.checked)}
           />
-          스코프 밖 트래픽 캡처 안 함
+          {t('scope.restrictCapture')}
         </label>
       </div>
       {error && <div className="banner error">{error}</div>}
       <div className="scope-summary muted">
-        include {summary.includes} · exclude {summary.excludes}
-        {summary.includes === 0 && ' — include 규칙이 없으면 전부 스코프입니다'}
+        {t('scope.summary', {
+          includes: summary.includes,
+          excludes: summary.excludes,
+        })}
+        {summary.includes === 0 && t('scope.noIncludeHint')}
       </div>
       <table className="flow-table scope-table">
         <thead>
           <tr>
-            <th className="col-method">Kind</th>
-            <th>Rule</th>
-            <th className="col-size">Enabled</th>
+            <th className="col-method">{t('scope.kind')}</th>
+            <th>{t('scope.rule')}</th>
+            <th className="col-size">{t('common.enabled')}</th>
             <th className="col-size" />
           </tr>
         </thead>
@@ -82,20 +87,20 @@ export function ScopeEditor({
           {scope.rules.length === 0 && (
             <tr>
               <td colSpan={4} className="empty">
-                규칙이 없습니다. URL을 입력해 스코프를 정의하세요.
+                {t('scope.noRules')}
               </td>
             </tr>
           )}
           {scope.rules.map((rule) => (
             <tr key={rule.id ?? describeRule(rule)}>
               <td className={rule.kind === 'include' ? 'incl' : 'excl'}>
-                {rule.kind}
+                {rule.kind === 'include' ? t('scope.include') : t('scope.exclude')}
               </td>
               <td className="mono">{describeRule(rule)}</td>
               <td>
                 <input
                   type="checkbox"
-                  aria-label={`toggle ${describeRule(rule)}`}
+                  aria-label={t('scope.toggle', { rule: describeRule(rule) })}
                   checked={rule.enabled}
                   onChange={(e) =>
                     rule.id !== null && void onToggle(rule.id, e.target.checked)
@@ -105,10 +110,10 @@ export function ScopeEditor({
               <td>
                 <button
                   className="danger"
-                  aria-label={`delete ${describeRule(rule)}`}
+                  aria-label={t('scope.delete', { rule: describeRule(rule) })}
                   onClick={() => rule.id !== null && void onDelete(rule.id)}
                 >
-                  삭제
+                  {t('common.delete')}
                 </button>
               </td>
             </tr>

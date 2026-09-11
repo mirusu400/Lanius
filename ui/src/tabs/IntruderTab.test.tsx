@@ -1,5 +1,6 @@
 /** Renders the real Intruder tab against a mocked engine. */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor } from '@testing-library/react';
+import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -137,27 +138,27 @@ afterEach(() => {
 });
 
 const templateBox = () =>
-  screen.getByRole('textbox', { name: 'request template' }) as HTMLTextAreaElement;
+  screen.getByRole('textbox', { name: t('intruder.templateLabel') }) as HTMLTextAreaElement;
 
 describe('IntruderTab', () => {
   it('shows the position and request estimate', () => {
     render(<IntruderTab />);
-    expect(screen.getByText(/위치 1 · 요청 3건/)).toBeTruthy();
+    expect(screen.getByText(t('intruder.positions', { count: 1, requests: 3 }))).toBeTruthy();
   });
 
   it('updates the estimate when payloads change', async () => {
     const user = userEvent.setup();
     render(<IntruderTab />);
-    await user.clear(screen.getByLabelText('payload set 1'));
-    await user.type(screen.getByLabelText('payload set 1'), 'a\nb');
-    await waitFor(() => expect(screen.getByText(/요청 2건/)).toBeTruthy());
+    await user.clear(screen.getByLabelText(t('intruder.payloadSet', { index: 1 })));
+    await user.type(screen.getByLabelText(t('intruder.payloadSet', { index: 1 })), 'a\nb');
+    await waitFor(() => expect(screen.getByText(t('intruder.positions', { count: 1, requests: 2 }))).toBeTruthy());
   });
 
   it('adds and clears payload markers', async () => {
     const user = userEvent.setup();
     render(<IntruderTab />);
-    await user.click(screen.getByRole('button', { name: 'Clear §' }));
-    await waitFor(() => expect(screen.getByText(/위치 0/)).toBeTruthy());
+    await user.click(screen.getByRole('button', { name: t('intruder.clearMarkers') }));
+    await waitFor(() => expect(screen.getByText(t('intruder.positions', { count: 0, requests: 0 }))).toBeTruthy());
     expect(templateBox().value).not.toContain('\u00a7');
   });
 
@@ -166,7 +167,7 @@ describe('IntruderTab', () => {
     render(<IntruderTab />);
     await user.clear(templateBox());
     await user.type(templateBox(), 'GET /?a=\u00a7x HTTP/1.1');
-    expect(await screen.findByText(/마커 개수가 맞지 않습니다/)).toBeTruthy();
+    expect(await screen.findByText(t('intercept.unbalancedMarker'))).toBeTruthy();
   });
 
   it('grows payload set inputs for cluster bomb', async () => {
@@ -178,16 +179,16 @@ describe('IntruderTab', () => {
       'GET /?u=\u00a7a\u00a7&p=\u00a7b\u00a7 HTTP/1.1',
     );
     await user.selectOptions(
-      screen.getByLabelText('attack type'),
+      screen.getByLabelText(t('intruder.attackType')),
       'cluster_bomb',
     );
-    expect(await screen.findByLabelText('payload set 2')).toBeTruthy();
+    expect(await screen.findByLabelText(t('intruder.payloadSet', { index: 2 }))).toBeTruthy();
   });
 
   it('starts an attack and renders results', async () => {
     const user = userEvent.setup();
     render(<IntruderTab />);
-    await user.click(screen.getByRole('button', { name: 'Start attack' }));
+    await user.click(screen.getByRole('button', { name: t('intruder.start') }));
 
     expect(await screen.findByText('letmein')).toBeTruthy();
     expect(started[0].payload_sets).toEqual([['a', 'b', 'c']]);
@@ -197,7 +198,7 @@ describe('IntruderTab', () => {
   it('highlights the response whose length stands out', async () => {
     const user = userEvent.setup();
     render(<IntruderTab />);
-    await user.click(screen.getByRole('button', { name: 'Start attack' }));
+    await user.click(screen.getByRole('button', { name: t('intruder.start') }));
     await screen.findByText('letmein');
 
     const row = screen.getByText('letmein').closest('tr');
@@ -213,7 +214,7 @@ describe('IntruderTab', () => {
     await waitFor(() =>
       expect(templateBox().value).toContain('GET /login?pw=guess'),
     );
-    expect(screen.getByLabelText('target url')).toHaveProperty(
+    expect(screen.getByLabelText(t('intruder.targetUrl'))).toHaveProperty(
       'value',
       'http://app.test',
     );
@@ -223,7 +224,7 @@ describe('IntruderTab', () => {
     status = 'running';
     const user = userEvent.setup();
     render(<IntruderTab />);
-    await user.click(screen.getByRole('button', { name: 'Start attack' }));
-    expect(await screen.findByRole('button', { name: 'Stop' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('intruder.start') }));
+    expect(await screen.findByRole('button', { name: t('intruder.stop') })).toBeTruthy();
   });
 });

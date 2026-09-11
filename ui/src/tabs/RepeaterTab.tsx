@@ -13,8 +13,10 @@ import {
   subscribe,
   updateTab,
 } from './repeaterStore';
+import { errorText, useT } from '../i18n';
 
 export function RepeaterTabView() {
+  const t = useT();
   const [tabs, setTabs] = useState<RepeaterTab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -40,7 +42,7 @@ export function RepeaterTabView() {
       const response = await sendRepeaterRequest(payload);
       updateTab(active.id, { response, sending: false });
     } catch (err) {
-      updateTab(active.id, { sending: false, error: (err as Error).message });
+      updateTab(active.id, { sending: false, error: errorText(err, t) });
     }
   };
 
@@ -57,7 +59,7 @@ export function RepeaterTabView() {
             <span
               className="close"
               role="button"
-              aria-label={`close ${tab.title}`}
+              aria-label={t('repeater.closeTab', { title: tab.title })}
               onClick={(e) => {
                 e.stopPropagation();
                 removeTab(tab.id);
@@ -79,14 +81,14 @@ export function RepeaterTabView() {
               className="target"
               value={active.url}
               onChange={(e) => updateTab(active.id, { url: e.target.value })}
-              placeholder="http://host:port"
+              placeholder={t('repeater.targetPlaceholder')}
             />
             <button
               className="send"
               onClick={send}
               disabled={active.sending}
             >
-              {active.sending ? 'Sending…' : 'Send'}
+              {active.sending ? t('repeater.sending') : t('repeater.send')}
             </button>
             {active.response && (
               <span className="resp-meta mono">
@@ -102,7 +104,7 @@ export function RepeaterTabView() {
           <div className="repeater-split">
             <textarea
               className="repeater-editor mono"
-              aria-label="request"
+              aria-label={t('repeater.request')}
               spellCheck={false}
               value={active.text}
               onChange={(e) => updateTab(active.id, { text: e.target.value })}
@@ -110,14 +112,13 @@ export function RepeaterTabView() {
             <pre className="repeater-response mono">
               {active.response
                 ? renderResponseText(active.response)
-                : '아직 응답이 없습니다. Send를 눌러 요청을 전송하세요.'}
+                : t('repeater.noResponse')}
             </pre>
           </div>
         </>
       ) : (
         <div className="intercept-idle muted">
-          Repeater 탭이 없습니다. Proxy 히스토리에서 "Send to Repeater"를
-          누르거나 +로 새 요청을 만드세요.
+          {t('repeater.noTabs')}
         </div>
       )}
     </div>

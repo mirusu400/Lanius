@@ -1,6 +1,7 @@
 /** Repeater state: raw HTTP request text <-> engine send payload. */
 
 import type { FlowDetail, FlowSummary } from '../api/types';
+import { ParseError } from '../i18n/ParseError';
 
 export interface RepeaterResponse {
   id: string;
@@ -86,10 +87,10 @@ export function toSendPayload(url: string, text: string): SendPayload {
     .split('\n')
     .filter((line) => line.length > 0);
   const body = separator === -1 ? '' : normalized.slice(separator + 2);
-  if (head.length === 0) throw new Error('빈 요청입니다');
+  if (head.length === 0) throw new ParseError('parse.emptyRequest');
 
   const [method, target] = head[0].split(/\s+/);
-  if (!method || !target) throw new Error('요청 라인 형식이 잘못되었습니다');
+  if (!method || !target) throw new ParseError('parse.badRequestLine');
 
   const headers: [string, string][] = [];
   for (const line of head.slice(1)) {

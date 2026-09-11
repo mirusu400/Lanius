@@ -20,6 +20,7 @@ import { FlowDetailView } from '../components/FlowDetail';
 import { FilterBar } from '../components/FilterBar';
 import { InterceptPanel } from '../components/InterceptPanel';
 import { matchesFilters, mergeFlow } from './proxyModel';
+import { useT } from '../i18n';
 
 const DEFAULT_RULES: InterceptRules = {
   enabled: false,
@@ -31,6 +32,7 @@ const DEFAULT_RULES: InterceptRules = {
 type View = 'intercept' | 'history';
 
 export function ProxyTab() {
+  const t = useT();
   const [view, setView] = useState<View>('history');
   const [flows, setFlows] = useState<FlowSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function ProxyTab() {
       setFlows(await listFlows(filtersRef.current));
       setError(null);
     } catch (err) {
-      setError(`엔진에 연결할 수 없습니다: ${(err as Error).message}`);
+      setError(t('proxy.engineUnreachable', { message: (err as Error).message }));
     }
   }, []);
 
@@ -128,7 +130,11 @@ export function ProxyTab() {
       try {
         setRules(await patchInterceptRules(patch));
       } catch (err) {
-        setError(`인터셉트 설정 실패: ${(err as Error).message}`);
+        setError(
+          t('proxy.interceptToggleFailed', {
+            message: (err as Error).message,
+          }),
+        );
       }
     },
     [],
@@ -156,14 +162,14 @@ export function ProxyTab() {
           className={view === 'intercept' ? 'active' : ''}
           onClick={() => setView('intercept')}
         >
-          Intercept
+          {t('proxy.intercept')}
           {queue.length > 0 && <span className="badge">{queue.length}</span>}
         </button>
         <button
           className={view === 'history' ? 'active' : ''}
           onClick={() => setView('history')}
         >
-          HTTP history
+          {t('proxy.history')}
         </button>
       </div>
 

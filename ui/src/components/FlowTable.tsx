@@ -1,4 +1,5 @@
 import type { FlowSummary } from '../api/types';
+import { useT } from '../i18n';
 import {
   formatBytes,
   formatDuration,
@@ -14,26 +15,26 @@ interface Props {
 }
 
 export function FlowTable({ flows, selectedId, onSelect }: Props) {
+  const t = useT();
   return (
     <div className="flow-table-wrap">
       <table className="flow-table">
         <thead>
           <tr>
-            <th className="col-time">Time</th>
-            <th className="col-method">Method</th>
-            <th className="col-host">Host</th>
-            <th className="col-url">URL</th>
-            <th className="col-status">Status</th>
-            <th className="col-size">Size</th>
-            <th className="col-time">Time</th>
+            <th className="col-time">{t('flow.time')}</th>
+            <th className="col-method">{t('flow.method')}</th>
+            <th className="col-host">{t('flow.host')}</th>
+            <th className="col-url">{t('flow.url')}</th>
+            <th className="col-status">{t('flow.status')}</th>
+            <th className="col-size">{t('flow.size')}</th>
+            <th className="col-time">{t('flow.time')}</th>
           </tr>
         </thead>
         <tbody>
           {flows.length === 0 && (
             <tr>
               <td colSpan={7} className="empty">
-                아직 캡처된 트래픽이 없습니다. 브라우저/클라이언트 프록시를
-                127.0.0.1:8080 으로 설정하세요.
+                {t('proxy.emptyTable')}
               </td>
             </tr>
           )}

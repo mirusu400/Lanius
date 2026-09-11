@@ -19,10 +19,12 @@ import type {
 import { ScopeEditor } from '../components/ScopeEditor';
 import { SitemapTree } from '../components/SitemapTree';
 import { buildTree, endpointHost, siteLabel } from './targetModel';
+import { useT } from '../i18n';
 
 type View = 'sitemap' | 'endpoints' | 'scope';
 
 export function TargetTab() {
+  const t = useT();
   const [view, setView] = useState<View>('sitemap');
   const [sites, setSites] = useState<Site[]>([]);
   const [selected, setSelected] = useState<Site | null>(null);
@@ -49,7 +51,7 @@ export function TargetTab() {
       setSites(data.sites);
       setError(null);
     } catch (err) {
-      setError(`사이트맵을 불러오지 못했습니다: ${(err as Error).message}`);
+      setError(t('target.sitemapFailed', { message: (err as Error).message }));
     }
   }, [inScopeOnly]);
 
@@ -95,19 +97,19 @@ export function TargetTab() {
           className={view === 'sitemap' ? 'active' : ''}
           onClick={() => setView('sitemap')}
         >
-          Site map
+          {t('target.sitemap')}
         </button>
         <button
           className={view === 'endpoints' ? 'active' : ''}
           onClick={() => setView('endpoints')}
         >
-          Endpoints
+          {t('target.endpoints')}
         </button>
         <button
           className={view === 'scope' ? 'active' : ''}
           onClick={() => setView('scope')}
         >
-          Scope
+          {t('target.scope')}
           {scope.rules.length > 0 && (
             <span className="badge">{scope.rules.length}</span>
           )}
@@ -119,9 +121,9 @@ export function TargetTab() {
             checked={inScopeOnly}
             onChange={(e) => setInScopeOnly(e.target.checked)}
           />
-          스코프만 보기
+          {t('target.inScopeOnly')}
         </label>
-        <button onClick={() => void refreshSites()}>새로고침</button>
+        <button onClick={() => void refreshSites()}>{t('common.refresh')}</button>
       </div>
 
       {error && <div className="banner error">{error}</div>}
@@ -152,20 +154,19 @@ export function TargetTab() {
           <table className="flow-table">
             <thead>
               <tr>
-                <th className="col-method">Method</th>
-                <th className="col-host">Host</th>
-                <th>Endpoint</th>
-                <th className="col-size">Count</th>
-                <th>Params</th>
-                <th className="col-host">Statuses</th>
+                <th className="col-method">{t('flow.method')}</th>
+                <th className="col-host">{t('flow.host')}</th>
+                <th>{t('target.endpoint')}</th>
+                <th className="col-size">{t('target.count')}</th>
+                <th>{t('target.params')}</th>
+                <th className="col-host">{t('target.statuses')}</th>
               </tr>
             </thead>
             <tbody>
               {endpoints.length === 0 && (
                 <tr>
                   <td colSpan={6} className="empty">
-                    엔드포인트가 없습니다. 트래픽을 캡처하면 경로가 템플릿으로
-                    묶여 표시됩니다.
+                    {t('target.noEndpoints')}
                   </td>
                 </tr>
               )}
@@ -192,7 +193,7 @@ export function TargetTab() {
         <div className="proxy-split">
           <div className="site-list">
             {sites.length === 0 && (
-              <p className="muted pad">아직 캡처된 사이트가 없습니다.</p>
+              <p className="muted pad">{t('target.noSites')}</p>
             )}
             {sites.map((site) => (
               <div
@@ -209,10 +210,15 @@ export function TargetTab() {
               >
                 <div className="site-name mono">
                   {siteLabel(site)}
-                  {site.in_scope && <span className="in-scope">scope</span>}
+                  {site.in_scope && (
+                    <span className="in-scope">{t('target.inScopeBadge')}</span>
+                  )}
                 </div>
                 <div className="site-meta muted">
-                  {site.flows} flows · {site.paths} paths
+                  {t('target.siteMeta', {
+                    flows: site.flows,
+                    paths: site.paths,
+                  })}
                 </div>
                 <button
                   className="add-scope"
@@ -221,7 +227,7 @@ export function TargetTab() {
                     void addSiteToScope(site);
                   }}
                 >
-                  + scope
+                  {t('target.addToScope')}
                 </button>
               </div>
             ))}
@@ -230,9 +236,7 @@ export function TargetTab() {
             {selected ? (
               <SitemapTree root={buildTree(paths)} />
             ) : (
-              <p className="muted pad">
-                사이트를 선택하면 경로 트리가 표시됩니다.
-              </p>
+              <p className="muted pad">{t('target.selectSite')}</p>
             )}
           </div>
         </div>

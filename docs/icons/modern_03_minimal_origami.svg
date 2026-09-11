@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#11131f"/>
+
+  <!-- Head Crown (Deep Violet) -->
+  <polygon points="220,130 300,120 340,165 260,175" fill="#4338ca"/>
+  <polygon points="300,120 375,155 340,165" fill="#6366f1"/>
+
+  <!-- Shrike Black Mask Facet -->
+  <polygon points="260,175 340,165 390,215 320,230" fill="#09090b"/>
+  <polygon points="340,165 410,195 390,215" fill="#18181b"/>
+
+  <!-- Glowing Geometric Eye (Amber Gold) -->
+  <polygon points="325,185 350,190 335,202" fill="#fbbf24"/>
+
+  <!-- Sharp Hooked Beak (Crimson & Coral) -->
+  <polygon points="390,215 450,225 435,275 385,245" fill="#e11d48"/>
+  <polygon points="410,195 450,225 390,215" fill="#fb7185"/>
+  <polygon points="385,245 435,275 405,290 370,255" fill="#be123c"/>
+
+  <!-- Neck & Nape (Indigo & Slate) -->
+  <polygon points="220,130 260,175 210,240 160,180" fill="#312e81"/>
+  <polygon points="160,180 210,240 165,310 125,240" fill="#1e1b4b"/>
+
+  <!-- Breast & Belly (Clean White & Platinum) -->
+  <polygon points="260,175 320,230 370,255 320,335 240,270" fill="#f8fafc"/>
+  <polygon points="210,240 260,175 240,270" fill="#e2e8f0"/>
+  <polygon points="320,335 370,255 375,320" fill="#cbd5e1"/>
+
+  <!-- Wing Feathers (Violet & Fuchsia Accents) -->
+  <polygon points="240,270 320,335 255,410 190,340" fill="#8b5cf6"/>
+  <polygon points="190,340 255,410 205,425 155,360" fill="#a855f7"/>
+  <polygon points="165,310 210,240 240,270 190,340" fill="#6d28d9"/>
+</svg>

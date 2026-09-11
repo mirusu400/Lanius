@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0a0e17"/>
+
+  <!-- Outer Wings / Shield Frame (Deep Navy) -->
+  <path d="M 256,90 L 380,140 C 395,220 370,310 256,415 C 142,310 117,220 132,140 Z" fill="#0f172a"/>
+  
+  <!-- Outer Wing Feathers Left (Cobalt Blue) -->
+  <polygon points="132,140 220,175 190,245 145,220" fill="#1e3a8a"/>
+  <polygon points="145,220 190,245 170,305 140,285" fill="#2563eb"/>
+  <polygon points="140,285 170,305 205,355 175,345" fill="#3b82f6"/>
+
+  <!-- Outer Wing Feathers Right (Cobalt Blue) -->
+  <polygon points="380,140 292,175 322,245 367,220" fill="#1e3a8a"/>
+  <polygon points="367,220 322,245 342,305 372,285" fill="#2563eb"/>
+  <polygon points="372,285 342,305 307,355 337,345" fill="#3b82f6"/>
+
+  <!-- Center Shield Breast (Teal / Emerald - Security & Trust) -->
+  <polygon points="256,190 292,230 256,380 220,230" fill="#059669"/>
+  <polygon points="256,190 292,230 256,380" fill="#10b981"/>
+
+  <!-- Shrike Head & Crown (Matte Charcoal) -->
+  <polygon points="256,115 285,155 256,170 227,155" fill="#334155"/>
+  <polygon points="256,115 285,155 256,170" fill="#475569"/>
+
+  <!-- Shrike Bandit Mask (Black Bar) -->
+  <polygon points="227,155 285,155 295,185 217,185" fill="#020617"/>
+
+  <!-- Eyes Left & Right (Pure White triangles) -->
+  <polygon points="235,168 245,172 238,176" fill="#ffffff"/>
+  <polygon points="277,168 267,172 274,176" fill="#ffffff"/>
+
+  <!-- Center Predatory Beak (Vibrant Safety Orange) -->
+  <polygon points="256,240 242,175 256,182" fill="#ea580c"/>
+  <polygon points="256,240 270,175 256,182" fill="#f97316"/>
+</svg>

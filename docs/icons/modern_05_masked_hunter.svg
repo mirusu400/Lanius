@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#181920"/>
+
+  <!-- Main Bird Silhouette Body (Clean Cool Graphite) -->
+  <path d="M 180,380 C 170,300 200,210 260,140 C 295,100 350,95 390,125 C 405,138 415,155 420,175 C 395,170 370,175 350,190 C 320,210 300,245 295,290 C 290,335 310,365 330,385 C 280,395 225,395 180,380 Z" fill="#27272a"/>
+
+  <!-- Crisp White Cheek & Neck Patch (High Contrast Negative) -->
+  <path d="M 260,255 C 300,240 345,245 375,270 C 355,320 315,360 260,375 C 270,335 270,295 260,255 Z" fill="#ffffff"/>
+
+  <!-- Prominent Black Robber/Bandit Mask (Signature Shrike) -->
+  <path d="M 285,150 L 375,135 C 410,160 425,195 430,225 C 410,220 390,215 370,220 C 340,228 320,245 305,265 C 305,225 300,185 285,150 Z" fill="#09090b"/>
+
+  <!-- Sharp Hooked Beak (Bold Electric Yellow / Amber - Ultra High Contrast) -->
+  <path d="M 400,185 C 430,195 460,210 470,235 C 475,250 472,268 460,285 C 455,270 450,258 438,250 C 422,240 400,235 380,235 L 400,185 Z" fill="#f59e0b"/>
+  <!-- Underbeak -->
+  <path d="M 380,235 C 410,235 430,245 440,260 C 420,270 395,270 375,265 Z" fill="#d97706"/>
+
+  <!-- Striking Eye (Pure White ring, Electric Red Center - Predatory Focus) -->
+  <circle cx="350" cy="180" r="14" fill="#ffffff"/>
+  <circle cx="350" cy="180" r="8" fill="#ef4444"/>
+  <circle cx="352" cy="178" r="3" fill="#ffffff"/>
+
+  <!-- Throat/Collar Accent Line (Cyan Breakpoint Notch) -->
+  <polygon points="260,375 285,370 270,390" fill="#06b6d4"/>
+</svg>

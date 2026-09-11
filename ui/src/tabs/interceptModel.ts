@@ -1,6 +1,7 @@
 /** Raw HTTP text <-> structured edits, so the editor feels like Burp. */
 
 import type { FlowEdits, PausedFlow } from '../api/types';
+import { ParseError } from '../i18n/ParseError';
 
 export interface ParsedRequest {
   method: string;
@@ -61,9 +62,9 @@ export function renderResponse(flow: PausedFlow): string {
 
 export function parseRequest(text: string): ParsedRequest {
   const { head, body } = splitMessage(text);
-  if (head.length === 0) throw new Error('빈 요청입니다');
+  if (head.length === 0) throw new ParseError('parse.emptyRequest');
   const [method, path, httpVersion = 'HTTP/1.1'] = head[0].split(/\s+/);
-  if (!method || !path) throw new Error('요청 라인 형식이 잘못되었습니다');
+  if (!method || !path) throw new ParseError('parse.badRequestLine');
   return {
     method,
     path,
@@ -75,11 +76,11 @@ export function parseRequest(text: string): ParsedRequest {
 
 export function parseResponse(text: string): ParsedResponse {
   const { head, body } = splitMessage(text);
-  if (head.length === 0) throw new Error('빈 응답입니다');
+  if (head.length === 0) throw new ParseError('parse.emptyResponse');
   const [httpVersion, status, ...reason] = head[0].split(/\s+/);
   const statusCode = Number(status);
   if (!Number.isFinite(statusCode)) {
-    throw new Error('상태 라인 형식이 잘못되었습니다');
+    throw new ParseError('parse.badStatusLine');
   }
   return {
     httpVersion,

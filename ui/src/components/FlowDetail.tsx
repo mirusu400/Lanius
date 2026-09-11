@@ -5,6 +5,8 @@ import type { FlowDetail, FlowSummary } from '../api/types';
 import { formatUrl } from '../tabs/proxyModel';
 import { sendToRepeater } from '../tabs/repeaterStore';
 import { sendToIntruder } from '../tabs/intruderStore';
+import { useT } from '../i18n';
+import type { Translator } from '../i18n';
 
 interface Props {
   flow: FlowSummary | null;
@@ -13,8 +15,15 @@ interface Props {
 
 type Pane = 'request' | 'response';
 
-function HeaderList({ headers }: { headers: [string, string][] | null }) {
-  if (!headers || headers.length === 0) return <p className="muted">없음</p>;
+function HeaderList({
+  headers,
+  t,
+}: {
+  headers: [string, string][] | null;
+  t: Translator;
+}) {
+  if (!headers || headers.length === 0)
+    return <p className="muted">{t('common.none')}</p>;
   return (
     <table className="headers">
       <tbody>
@@ -44,10 +53,11 @@ export function toHex(text: string, width = 16): string {
       .join('');
     lines.push(`${offset.toString(16).padStart(8, '0')}  ${hex}  |${ascii}|`);
   }
-  return lines.join('\n') || '(비어 있음)';
+  return lines.join('\n');
 }
 
 export function FlowDetailView({ flow, onSentToRepeater }: Props) {
+  const t = useT();
   const [detail, setDetail] = useState<FlowDetail | null>(null);
   const [pane, setPane] = useState<Pane>('request');
   const [reveal, setReveal] = useState(false);
@@ -73,7 +83,7 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
   if (!flow) {
     return (
       <div className="flow-detail empty-detail">
-        <p className="muted">flow를 선택하면 상세 내용이 표시됩니다.</p>
+        <p className="muted">{t('detail.selectPrompt')}</p>
       </div>
     );
   }
@@ -95,15 +105,17 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
           className={pane === 'request' ? 'active' : ''}
           onClick={() => setPane('request')}
         >
-          {isTcp ? '→ Server' : 'Request'}
+          {isTcp ? t('detail.toServer') : t('detail.request')}
         </button>
         <button
           className={pane === 'response' ? 'active' : ''}
           onClick={() => setPane('response')}
         >
           {isTcp
-            ? '← Client'
-            : `Response ${flow.status_code ? `(${flow.status_code})` : ''}`}
+            ? t('detail.toClient')
+            : `${t('detail.response')} ${
+                flow.status_code ? `(${flow.status_code})` : ''
+              }`.trim()}
         </button>
         <button
           className="to-repeater"
@@ -112,13 +124,13 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
             onSentToRepeater?.();
           }}
         >
-          Send to Repeater
+          {t('detail.sendToRepeater')}
         </button>
         <button
           className="to-repeater"
           onClick={() => sendToIntruder(flow, detail)}
         >
-          Send to Intruder
+          {t('detail.sendToIntruder')}
         </button>
         <label className="reveal">
           <input
@@ -126,23 +138,28 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
             checked={reveal}
             onChange={(e) => setReveal(e.target.checked)}
           />
-          민감 헤더 표시
+          {t('detail.revealSecrets')}
         </label>
       </div>
       <div className="detail-body">
         {isTcp ? (
           <>
-            <h4>Raw bytes {flow.comment ? `· ${flow.comment}` : ''}</h4>
-            <pre className="body mono">{body || '(비어 있음)'}</pre>
-            <h4>Hex</h4>
-            <pre className="body mono">{toHex(body ?? '')}</pre>
+            <h4>
+              {t('detail.rawBytes')}
+              {flow.comment ? ` · ${flow.comment}` : ''}
+            </h4>
+            <pre className="body mono">{body || t('common.empty')}</pre>
+            <h4>{t('detail.hex')}</h4>
+            <pre className="body mono">
+              {toHex(body ?? '') || t('common.empty')}
+            </pre>
           </>
         ) : (
           <>
-            <h4>Headers</h4>
-            <HeaderList headers={headers} />
-            <h4>Body</h4>
-            <pre className="body mono">{body || '(비어 있음)'}</pre>
+            <h4>{t('detail.headers')}</h4>
+            <HeaderList headers={headers} t={t} />
+            <h4>{t('detail.body')}</h4>
+            <pre className="body mono">{body || t('common.empty')}</pre>
           </>
         )}
       </div>

@@ -2,7 +2,8 @@
  * Renders the real ProxyTab against a mocked engine (fetch + WebSocket) and
  * asserts the live history table and detail pane behave as expected.
  */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor } from '@testing-library/react';
+import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -147,8 +148,8 @@ describe('ProxyTab', () => {
 
   it('shows connection state and flow count', async () => {
     render(<ProxyTab />);
-    await waitFor(() => expect(screen.getByText('● live')).toBeTruthy());
-    expect(screen.getByText('1 flows')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(t('proxy.live'))).toBeTruthy());
+    expect(screen.getByText(t('proxy.flowCount', { count: 1 }))).toBeTruthy();
   });
 
   it('shows request/response detail when a row is selected', async () => {
@@ -157,7 +158,7 @@ describe('ProxyTab', () => {
     await user.click(await screen.findByText('/seeded'));
 
     expect(await screen.findByText('<redacted>')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: /Response/ }));
+    await user.click(screen.getByRole('button', { name: new RegExp(t('detail.response')) }));
     expect(await screen.findByText('<h1>hello lanius</h1>')).toBeTruthy();
   });
 
@@ -165,7 +166,7 @@ describe('ProxyTab', () => {
     const user = userEvent.setup();
     render(<ProxyTab />);
     await screen.findByText('seeded.test');
-    await user.click(screen.getByRole('button', { name: /일시정지/ }));
+    await user.click(screen.getByRole('button', { name: t('common.pause') }));
 
     MockSocket.instances[0].emit('flow.request', live);
     await new Promise((r) => setTimeout(r, 20));

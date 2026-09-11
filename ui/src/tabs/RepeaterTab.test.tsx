@@ -1,5 +1,6 @@
 /** Renders the real Repeater tab against a mocked engine. */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor } from '@testing-library/react';
+import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -66,12 +67,12 @@ afterEach(() => {
 });
 
 const editor = () =>
-  screen.getByRole('textbox', { name: 'request' }) as HTMLTextAreaElement;
+  screen.getByRole('textbox', { name: t('repeater.request') }) as HTMLTextAreaElement;
 
 describe('RepeaterTab', () => {
   it('shows guidance when there are no tabs', () => {
     render(<RepeaterTabView />);
-    expect(screen.getByText(/Send to Repeater/)).toBeTruthy();
+    expect(screen.getByText(t('repeater.noTabs'))).toBeTruthy();
   });
 
   it('creates a new empty tab with +', async () => {
@@ -99,7 +100,7 @@ describe('RepeaterTab', () => {
       editor(),
       'POST /submit HTTP/1.1{enter}Host: echo.test{enter}{enter}a=1',
     );
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: t('repeater.send') }));
 
     await waitFor(() => expect(screen.getByText(/pong/)).toBeTruthy());
     expect(sent[0]).toEqual({
@@ -118,8 +119,8 @@ describe('RepeaterTab', () => {
     await waitFor(() => expect(editor()).toBeTruthy());
     await user.clear(editor());
     await user.type(editor(), 'OOPS');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
-    expect(await screen.findByText(/형식이 잘못/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('repeater.send') }));
+    expect(await screen.findByText(t('parse.badRequestLine'))).toBeTruthy();
     expect(sent).toHaveLength(0);
   });
 
@@ -143,7 +144,7 @@ describe('RepeaterTab', () => {
     render(<RepeaterTabView />);
     sendToRepeater(flow);
     await waitFor(() => expect(editor()).toBeTruthy());
-    await user.click(screen.getByLabelText('close GET /hello'));
+    await user.click(screen.getByLabelText(t('repeater.closeTab', { title: 'GET /hello' })));
     await waitFor(() => expect(getTabs()).toHaveLength(0));
   });
 });

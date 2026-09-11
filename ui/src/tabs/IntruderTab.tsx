@@ -19,10 +19,12 @@ import {
   requiredSets,
 } from './intruderModel';
 import { subscribeTarget } from './intruderStore';
+import { errorText, useT } from '../i18n';
 
 const DEFAULT_TEMPLATE = 'GET /?q=\u00a7test\u00a7 HTTP/1.1\nHost: example.com\n\n';
 
 export function IntruderTab() {
+  const t = useT();
   const [url, setUrl] = useState('http://example.com');
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
   const [attackType, setAttackType] = useState<AttackType>('sniper');
@@ -114,7 +116,7 @@ export function IntruderTab() {
       setAttack({ ...started, results: [] });
       void refresh(started.id);
     } catch (err) {
-      setError((err as Error).message);
+      setError(errorText(err, t));
     }
   };
 
@@ -135,12 +137,12 @@ export function IntruderTab() {
       <div className="intruder-controls">
         <input
           className="target"
-          aria-label="target url"
+          aria-label={t('intruder.targetUrl')}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
         />
         <select
-          aria-label="attack type"
+          aria-label={t('intruder.attackType')}
           value={attackType}
           onChange={(e) => setAttackType(e.target.value as AttackType)}
         >
@@ -150,48 +152,60 @@ export function IntruderTab() {
             </option>
           ))}
         </select>
-        <button onClick={mark}>Add §</button>
+        <button onClick={mark}>{t('intruder.addMarker')}</button>
         <button onClick={() => setTemplate(clearMarkers(template))}>
-          Clear §
+          {t('intruder.clearMarkers')}
         </button>
         <span className="spacer" />
         <span className="muted">
-          위치 {positions < 0 ? '오류' : positions} · 요청 {estimate}건
+          {positions < 0
+            ? t('intruder.positionsError')
+            : t('intruder.positions', {
+                count: positions,
+                requests: estimate,
+              })}
         </span>
         <button className="send" onClick={launch} disabled={running}>
-          {running ? 'Attacking…' : 'Start attack'}
+          {running ? t('intruder.attacking') : t('intruder.start')}
         </button>
-        {running && <button onClick={halt}>Stop</button>}
+        {running && <button onClick={halt}>{t('intruder.stop')}</button>}
       </div>
       {positions < 0 && (
-        <div className="banner error">§ 마커 개수가 맞지 않습니다.</div>
+        <div className="banner error">{t('intercept.unbalancedMarker')}</div>
       )}
       {error && <div className="banner error">{error}</div>}
 
       <div className="intruder-split">
         <div className="intruder-left">
-          <h4>Request template</h4>
+          <h4>{t('intruder.template')}</h4>
           <textarea
             ref={editorRef}
-            aria-label="request template"
+            aria-label={t('intruder.templateLabel')}
             className="intruder-editor mono"
             spellCheck={false}
             value={template}
             onChange={(e) => setTemplate(e.target.value)}
           />
           <h4>
-            Payload sets{' '}
+            {t('intruder.payloadSets')}{' '}
             <span className="muted">
-              {ATTACK_TYPES.find((t) => t.value === attackType)?.hint}
+              {(() => {
+                const hint = ATTACK_TYPES.find(
+                  (type) => type.value === attackType,
+                )?.hint;
+                return hint ? t(hint) : '';
+              })()}
             </span>
           </h4>
           <div className="payload-sets">
             {payloadText.map((text, index) => (
               <textarea
                 key={index}
-                aria-label={`payload set ${index + 1}`}
+                aria-label={t('intruder.payloadSet', { index: index + 1 })}
                 className="payload-input mono"
-                placeholder={`set ${index + 1} (한 줄에 하나)`}
+                placeholder={t('intruder.payloadPlaceholder', {
+                  index: index + 1,
+                })}
                 value={text}
                 onChange={(e) =>
                   setPayloadText((prev) =>
@@ -210,17 +224,17 @@ export function IntruderTab() {
                 {attack.status} · {attack.completed}/{attack.total}
               </span>
             ) : (
-              <span className="muted">공격을 시작하면 결과가 표시됩니다.</span>
+              <span className="muted">{t('intruder.noResults')}</span>
             )}
           </div>
           <table className="flow-table">
             <thead>
               <tr>
                 <th className="col-method">#</th>
-                <th>Payload</th>
-                <th className="col-status">Status</th>
-                <th className="col-size">Length</th>
-                <th className="col-time">Time</th>
+                <th>{t('intruder.payload')}</th>
+                <th className="col-status">{t('flow.status')}</th>
+                <th className="col-size">{t('intruder.length')}</th>
+                <th className="col-time">{t('flow.time')}</th>
               </tr>
             </thead>
             <tbody>

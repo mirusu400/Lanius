@@ -1,5 +1,6 @@
 /** Detail pane: HTTP vs raw TCP rendering. */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor } from '@testing-library/react';
+import { renderWithI18n as render, t } from '../test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FlowDetailView, toHex } from './FlowDetail';
@@ -81,23 +82,23 @@ describe('toHex', () => {
     expect(toHex('x'.repeat(20)).split('\n')).toHaveLength(2);
   });
 
-  it('handles empty input', () => {
-    expect(toHex('')).toBe('(비어 있음)');
+  it('returns an empty string for empty input (the caller localises it)', () => {
+    expect(toHex('')).toBe('');
   });
 });
 
 describe('FlowDetailView', () => {
   it('shows headers for HTTP flows', async () => {
     render(<FlowDetailView flow={httpFlow} />);
-    expect(await screen.findByText('Headers')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Response \(200\)/ })).toBeTruthy();
+    expect(await screen.findByText(t('detail.headers'))).toBeTruthy();
+    expect(screen.getByRole('button', { name: `${t('detail.response')} (200)` })).toBeTruthy();
   });
 
   it('shows a byte and hex view for TCP flows', async () => {
     render(<FlowDetailView flow={tcpFlow} />);
-    expect(await screen.findByText(/Raw bytes · 3 messages/)).toBeTruthy();
-    expect(screen.getByText('Hex')).toBeTruthy();
-    expect(screen.queryByText('Headers')).toBeNull();
+    expect(await screen.findByText(`${t('detail.rawBytes')} · 3 messages`)).toBeTruthy();
+    expect(screen.getByText(t('detail.hex'))).toBeTruthy();
+    expect(screen.queryByText(t('detail.headers'))).toBeNull();
     await waitFor(() =>
       expect(document.body.textContent).toContain('48 45 4c 4c 4f'),
     );
@@ -105,12 +106,12 @@ describe('FlowDetailView', () => {
 
   it('labels TCP directions instead of request/response', async () => {
     render(<FlowDetailView flow={tcpFlow} />);
-    expect(await screen.findByRole('button', { name: '→ Server' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '← Client' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: t('detail.toServer') })).toBeTruthy();
+    expect(screen.getByRole('button', { name: t('detail.toClient') })).toBeTruthy();
   });
 
   it('prompts when nothing is selected', () => {
     render(<FlowDetailView flow={null} />);
-    expect(screen.getByText(/flow를 선택하면/)).toBeTruthy();
+    expect(screen.getByText(t('detail.selectPrompt'))).toBeTruthy();
   });
 });

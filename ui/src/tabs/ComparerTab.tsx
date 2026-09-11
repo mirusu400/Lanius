@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { compareTexts, type CompareBlock } from '../api/client';
+import { useT } from '../i18n';
 
 interface Result {
   blocks: CompareBlock[];
@@ -11,6 +12,7 @@ interface Result {
 }
 
 export function ComparerTab() {
+  const t = useT();
   const [left, setLeft] = useState('');
   const [right, setRight] = useState('');
   const [mode, setMode] = useState<'word' | 'byte'>('word');
@@ -30,23 +32,25 @@ export function ComparerTab() {
     <div className="comparer-tab">
       <div className="comparer-controls">
         <select
-          aria-label="compare mode"
+          aria-label={t('comparer.mode')}
           value={mode}
           onChange={(e) => setMode(e.target.value as 'word' | 'byte')}
         >
-          <option value="word">단어 단위</option>
-          <option value="byte">바이트 단위</option>
+          <option value="word">{t('comparer.word')}</option>
+          <option value="byte">{t('comparer.byte')}</option>
         </select>
         <button className="send" onClick={() => void run()}>
-          Compare
+          {t('comparer.compare')}
         </button>
         {result && (
           <span className="muted mono">
             {result.identical
-              ? '동일'
-              : `+${result.added} / -${result.removed} · 유사도 ${(
-                  result.similarity * 100
-                ).toFixed(1)}%`}
+              ? t('comparer.identical')
+              : t('comparer.summary', {
+                  added: result.added,
+                  removed: result.removed,
+                  percent: (result.similarity * 100).toFixed(1),
+                })}
           </span>
         )}
       </div>
@@ -54,18 +58,18 @@ export function ComparerTab() {
 
       <div className="comparer-inputs">
         <textarea
-          aria-label="left text"
+          aria-label={t('comparer.left')}
           className="mono"
           spellCheck={false}
-          placeholder="왼쪽"
+          placeholder={t('comparer.leftPlaceholder')}
           value={left}
           onChange={(e) => setLeft(e.target.value)}
         />
         <textarea
-          aria-label="right text"
+          aria-label={t('comparer.right')}
           className="mono"
           spellCheck={false}
-          placeholder="오른쪽"
+          placeholder={t('comparer.rightPlaceholder')}
           value={right}
           onChange={(e) => setRight(e.target.value)}
         />

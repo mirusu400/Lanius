@@ -1,5 +1,6 @@
 /** Renders the real Target tab against a mocked engine. */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor } from '@testing-library/react';
+import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -147,13 +148,13 @@ describe('TargetTab', () => {
     render(<TargetTab />);
     expect(await screen.findByText('https://api.test')).toBeTruthy();
     expect(screen.getByText('http://cdn.test')).toBeTruthy();
-    expect(screen.getByText('4 flows · 3 paths')).toBeTruthy();
+    expect(screen.getByText(t('target.siteMeta', { flows: 4, paths: 3 }))).toBeTruthy();
   });
 
   it('marks in-scope sites', async () => {
     render(<TargetTab />);
     await screen.findByText('https://api.test');
-    expect(screen.getAllByText('scope')).toHaveLength(1);
+    expect(screen.getAllByText(t('target.inScopeBadge'))).toHaveLength(1);
   });
 
   it('shows the path tree for a selected site', async () => {
@@ -182,7 +183,7 @@ describe('TargetTab', () => {
     const user = userEvent.setup();
     render(<TargetTab />);
     await screen.findByText('https://api.test');
-    await user.click(screen.getAllByText('+ scope')[1]);
+    await user.click(screen.getAllByText(t('target.addToScope'))[1]);
     await waitFor(() =>
       expect(
         calls.some(
@@ -198,14 +199,14 @@ describe('TargetTab', () => {
     const user = userEvent.setup();
     render(<TargetTab />);
     await screen.findByText('http://cdn.test');
-    await user.click(screen.getByLabelText(/스코프만 보기/));
+    await user.click(screen.getByLabelText(t('target.inScopeOnly')));
     await waitFor(() => expect(screen.queryByText('http://cdn.test')).toBeNull());
   });
 
   it('shows grouped endpoints', async () => {
     const user = userEvent.setup();
     render(<TargetTab />);
-    await user.click(await screen.findByRole('button', { name: 'Endpoints' }));
+    await user.click(await screen.findByRole('button', { name: t('target.endpoints') }));
     expect(await screen.findByText('/users/{id}')).toBeTruthy();
     expect(screen.getByText('7')).toBeTruthy();
     expect(screen.getByText('page')).toBeTruthy();
@@ -215,16 +216,16 @@ describe('TargetTab', () => {
   it('adds and removes scope rules in the editor', async () => {
     const user = userEvent.setup();
     render(<TargetTab />);
-    await user.click(await screen.findByRole('button', { name: /Scope/ }));
+    await user.click(await screen.findByRole('button', { name: new RegExp(t('target.scope')) }));
 
     await user.type(
-      screen.getByLabelText('scope url'),
+      screen.getByLabelText(t('scope.url')),
       'https://target.com/app',
     );
-    await user.click(screen.getByRole('button', { name: '규칙 추가' }));
+    await user.click(screen.getByRole('button', { name: t('scope.addRule') }));
     expect(await screen.findByText('https://target.com/*')).toBeTruthy();
 
-    await user.click(screen.getByLabelText('delete https://target.com/*'));
+    await user.click(screen.getByLabelText(t('scope.delete', { rule: 'https://target.com/*' })));
     await waitFor(() =>
       expect(screen.queryByText('https://target.com/*')).toBeNull(),
     );
@@ -233,8 +234,8 @@ describe('TargetTab', () => {
   it('toggles capture restriction', async () => {
     const user = userEvent.setup();
     render(<TargetTab />);
-    await user.click(await screen.findByRole('button', { name: /Scope/ }));
-    await user.click(screen.getByLabelText(/캡처 안 함/));
+    await user.click(await screen.findByRole('button', { name: new RegExp(t('target.scope')) }));
+    await user.click(screen.getByLabelText(t('scope.restrictCapture')));
     await waitFor(() =>
       expect(
         calls.some(
@@ -250,9 +251,9 @@ describe('TargetTab', () => {
   it('explains that an empty include set means everything is in scope', async () => {
     const user = userEvent.setup();
     render(<TargetTab />);
-    await user.click(await screen.findByRole('button', { name: /Scope/ }));
+    await user.click(await screen.findByRole('button', { name: new RegExp(t('target.scope')) }));
     expect(
-      await screen.findByText(/include 규칙이 없으면 전부 스코프/),
+      await screen.findByText(new RegExp(t('scope.noIncludeHint').trim())),
     ).toBeTruthy();
   });
 });

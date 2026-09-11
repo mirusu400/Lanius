@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { listEvents, type LogEvent } from '../api/client';
 import { connectStream } from '../api/stream';
 import { formatTime } from './proxyModel';
+import { useT } from '../i18n';
 
 const MAX_LIVE = 500;
 
@@ -14,6 +15,7 @@ interface LiveEntry {
 }
 
 export function LoggerTab() {
+  const t = useT();
   const [stored, setStored] = useState<LogEvent[]>([]);
   const [live, setLive] = useState<LiveEntry[]>([]);
   const [paused, setPaused] = useState(false);
@@ -69,30 +71,33 @@ export function LoggerTab() {
     <div className="logger-tab">
       <div className="logger-controls">
         <input
-          aria-label="log filter"
-          placeholder="이벤트 필터"
+          aria-label={t('logger.filter')}
+          placeholder={t('logger.filterPlaceholder')}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
         <button onClick={() => setPaused((p) => !p)}>
-          {paused ? '▶ 재개' : '⏸ 일시정지'}
+          {paused ? t('common.resume') : t('common.pause')}
         </button>
-        <button onClick={() => setLive([])}>지우기</button>
-        <button onClick={() => void refresh()}>저장된 이벤트 새로고침</button>
+        <button onClick={() => setLive([])}>{t('common.clear')}</button>
+        <button onClick={() => void refresh()}>{t('logger.reloadStored')}</button>
         <span className="spacer" />
         <span className="muted">
-          live {visible.length} · 저장 {stored.length}
+          {t('logger.counts', {
+            live: visible.length,
+            stored: stored.length,
+          })}
         </span>
       </div>
 
       <div className="logger-split">
         <div className="logger-live">
-          <h4>실시간 이벤트</h4>
+          <h4>{t('logger.liveEvents')}</h4>
           <table className="flow-table">
             <tbody>
               {visible.length === 0 && (
                 <tr>
-                  <td className="empty">아직 이벤트가 없습니다.</td>
+                  <td className="empty">{t('logger.noEvents')}</td>
                 </tr>
               )}
               {visible.map((entry) => (
@@ -106,7 +111,7 @@ export function LoggerTab() {
           </table>
         </div>
         <div className="logger-stored">
-          <h4>저장된 이벤트</h4>
+          <h4>{t('logger.storedEvents')}</h4>
           <table className="flow-table">
             <tbody>
               {stored.map((event) => (

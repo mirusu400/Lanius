@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Flat Dark Squircle -->
+  <rect width="512" height="512" rx="112" fill="#0d1117"/>
+  
+  <!-- Outer Neck & Rear Feathers (Deep Slate) -->
+  <polygon points="170,390 145,340 185,290 160,285 205,225 185,220 230,165 205,160 255,120 295,190 260,260 220,330" fill="#1e293b"/>
+  <polygon points="255,120 320,125 365,165 295,190" fill="#334155"/>
+
+  <!-- Main Head Cap & Crown (Mid Slate) -->
+  <polygon points="320,125 385,165 350,195 295,190" fill="#475569"/>
+
+  <!-- Signature Shrike Bandit Eye Mask (Solid Matte Black) -->
+  <polygon points="260,205 345,195 410,215 390,265 325,255 250,230" fill="#020617"/>
+
+  <!-- Cheeks & Throat (Crisp Pure White) -->
+  <polygon points="220,330 260,260 325,255 355,295 315,355 240,380" fill="#f8fafc"/>
+  <polygon points="325,255 355,295 385,280 375,260" fill="#cbd5e1"/>
+
+  <!-- Predatory Hooked Beak (Flame Orange & Tangerine) -->
+  <!-- Upper Beak Base -->
+  <polygon points="375,195 425,210 405,250 370,240" fill="#ea580c"/>
+  <!-- Sharp Overhanging Hook (Main Beak Blade) -->
+  <path d="M 410,210 C 440,220 465,245 470,275 C 472,292 462,310 448,322 C 445,305 440,290 425,275 C 410,260 390,250 370,245 L 410,210 Z" fill="#f97316"/>
+  <!-- Beak Cutting Edge Highlight -->
+  <polygon points="425,275 448,322 435,285" fill="#fbbf24"/>
+  <!-- Lower Beak (Under Jaw) -->
+  <polygon points="370,245 405,255 420,275 385,278" fill="#c2410c"/>
+
+  <!-- Piercing Cyber Eye (Electric Cyan) -->
+  <circle cx="335" cy="225" r="16" fill="#020617"/>
+  <circle cx="335" cy="225" r="11" fill="#00e5ff"/>
+  <circle cx="338" cy="222" r="4" fill="#ffffff"/>
+</svg>

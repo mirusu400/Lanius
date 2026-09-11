@@ -1,100 +1,99 @@
-# Lanius (라니우스) 앱 아이콘 디자인 견본 5선
+# Lanius (라니우스) 앱 아이콘 디자인 견본
 
-[CODEX.MD](file:///Users/seongjinkim/lab/Lanius/CODEX.MD)에 명시된 **Lanius(때까치 속명, Butcher Bird)**의 상징성과 **웹 보안 프록시(Mitmproxy 임베드, 인터셉트/브레이크포인트, Burp 대안)**의 정체성을 바탕으로 제작된 5가지 컨셉의 아이콘 견본입니다.
-
----
-
-## 🧭 디자인 컨셉 개요
-
-> **Lanius 네이밍의 핵심 모티브 (CODEX.MD)**
-> - **때까치(Butcher bird):** 먹이를 매복해 낚아채(Intercept) 가시에 꽂아두는(Hold / Breakpoint) 포식성 새.
-> - **도구의 본질:** 클라이언트와 서버 사이(Man-in-the-Middle)에서 트래픽을 가로채고 붙잡아 두며 수정하는 웹 보안 테스트 도구.
+이 문서는 [CODEX.MD](../../CODEX.MD)의 Lanius(때까치 / Butcher Bird) 상징성을 바탕으로 제작된 아이콘 모음입니다.
 
 ---
 
-## 🎨 아이콘 견본 슬라이드 (Carousel)
+## 🐦 [NEW] 퍼핀 브라우저 감성의 반실사/현실적(Realistic) 시안 6종
+> **디자인 원칙:**
+> - 사용자가 제공한 실제 때까치(Great Grey Shrike, *Lanius excubitor*)의 고해상도 실물 사진을 기반으로 제작
+> - **퍼핀 브라우저(Puffin Browser) 스타일:** 실제 새의 자연스러운 깃털 질감, 흑백 마스크, 은빛 그레이와 갈고리 부리를 살려 친근하면서도 날카로운 데스크톱 마스코트 앱 아이콘으로 완성
+> - Apple macOS Big Sur/Sequoia 표준 스퀘어클(Squircle, rx=115) 및 미세 림 라이트 적용
 
-````carousel
-![Cyber Shrike Profile](./icon_shrike_beak_1789115872128.jpg)
-<!-- slide -->
-![The Impaled Packet](./icon_packet_thorn_1789115889469.jpg)
-<!-- slide -->
-![Shrike Shield Crest](./icon_shrike_shield_1789115909250.jpg)
-<!-- slide -->
-![MITM Intercept Stream](./icon_concept4_mitm.svg.png)
-<!-- slide -->
-![Lanius Monogram L](./icon_concept5_monogram.svg.png)
-````
+### 1. `puffin_01_studio_portrait` (스튜디오 다크 슬레이트 포트레이트)
+![puffin_01_studio_portrait](./puffin_01_studio_portrait.png)
+- **파일:** [`puffin_01_studio_portrait.png`](./puffin_01_studio_portrait.png)
+- **배경:** 딥 슬레이트 네이비 스튜디오 그라데이션 + 소프트 백라이트 헤일로
+- **특징:** 때까치의 상반신을 기품 있게 배치하고 머리 뒤편에 은은한 조명을 주어 도크(Dock) 위에서 묵직하고 세련된 인상을 주는 대표 시안.
 
 ---
 
-## 🔍 견본별 상세 분석
-
-### 1. Cyber Shrike (사이버 때까치 프로필)
-![Cyber Shrike Profile](./icon_shrike_beak_1789115872128.jpg)
-
-- **디자인 모티브:** 사냥감을 꿰뚫는 특유의 **갈고리형 부리**와 매복 사냥꾼의 **날카로운 눈빛**, 그리고 네트워크 회로(PCB) 트레이스를 매트한 옵시디언 다크 스퀘어클 위에 결합했습니다.
-- **키워드:** `사냥꾼`, `매복 인터셉션`, `하이테크 다크모드`
-- **컬러 팔레트:** 옵시디언 블랙 (`#0E1117`), 네온 앰버 (`#FF9500`), 사이버 크림슨 (`#FF2D55`)
-- **적합한 용도:** macOS Dock 아이콘, 데스크톱 셸 브랜딩 대표 비주얼
+### 2. `puffin_06_cyan_sky` (퍼핀 시그니처 오션 스카이)
+![puffin_06_cyan_sky](./puffin_06_cyan_sky.png)
+- **파일:** [`puffin_06_cyan_sky.png`](./puffin_06_cyan_sky.png)
+- **배경:** 퍼핀 브라우저 고유의 청명한 시안/오션 블루 (`#0EA5E9` → `#0369A1`)
+- **특징:** 퍼핀 브라우저의 컬러 아이덴티티를 가장 직접적으로 오마주한 시안. 푸른 하늘 배경과 때까치의 흑백 깃털이 강렬한 대비를 이뤄 시인성이 가장 뛰어남.
 
 ---
 
-### 2. The Impaled Packet (가시에 꽂힌 데이터 패킷)
-![The Impaled Packet](./icon_packet_thorn_1789115889469.jpg)
-
-- **디자인 모티브:** 때까치가 잡은 먹이를 가시에 꽂아두는 실제 습성을 소프트웨어의 **HTTP 패킷 인터셉트 및 브레이크포인트(Breakpoint / Hold)**로 가장 직관적으로 치환한 컨셉입니다.
-- **키워드:** `브레이크포인트`, `가시(Thorn)`, `패킷 가로채기`, `홀로그램 큐브`
-- **컬러 팔레트:** 딥 네이비 (`#0A1128`), 일렉트릭 시안 (`#00F2FE`), 네온 바이올렛 (`#7928CA`)
-- **적합한 용도:** Burp Suite나 Wireshark처럼 직관적인 상징성을 중시하는 보안 분석가 타깃
+### 3. `puffin_02_circular_badge` (서큘러 뱃지 & 팝아웃 3D)
+![puffin_02_circular_badge](./puffin_02_circular_badge.png)
+- **파일:** [`puffin_02_circular_badge.png`](./puffin_02_circular_badge.png)
+- **배경:** 스페이스 네이비 + 앰비언트 글로우가 감도는 원형 링(Ring) 뱃지
+- **특징:** 원형 뱃지 밖으로 때까치의 머리와 부리가 살짝 튀어나오는(Pop-out) 입체적 3D 엠블럼 구조. 모던 브라우저 및 유틸리티 앱의 정통 스타일.
 
 ---
 
-### 3. Shrike Shield (기하학 실드 & 대칭 엠블럼)
-![Shrike Shield Crest](./icon_shrike_shield_1789115909250.jpg)
-
-- **디자인 모티브:** 때까치의 날개와 꼬리 깃털이 모여 보안 방패(Shield)를 형성하는 미니멀리스트 벡터 엠블럼입니다. 과도한 입체감 대신 Linear, Raycast 감성의 모던 개발자 도구 룩앤필을 구현했습니다.
-- **키워드:** `보안 방패(Shield)`, `모던 미니멀리즘`, `깃털 지오메트리`
-- **컬러 팔레트:** 매트 차콜 (`#18191C`), 사이버 에메랄드 (`#10B981`), 민트 시안 (`#34D399`)
-- **적합한 용도:** 기업용/오픈소스 보안 도구의 정갈하고 신뢰성 높은 브랜딩
+### 4. `puffin_03_macro_focus` (클로즈업 매크로 & 관측 렌즈)
+![puffin_03_macro_focus](./puffin_03_macro_focus.png)
+- **파일:** [`puffin_03_macro_focus.png`](./puffin_03_macro_focus.png)
+- **배경:** 오리지널 아웃포커스 보케 + 가장자리 비네팅(Vignette)
+- **특징:** 때까치의 가장 결정적인 무기인 '갈고리 부리(Hooked beak with tooth)'와 '사냥꾼 눈매'에 초근접 포커스를 맞춘 매크로 아이콘. 트래픽을 정밀하게 가로채고 관측하는 도구의 성격을 극대화.
 
 ---
 
-### 4. MITM Intercept Stream (네트워크 플로우 & 인터셉트 후크)
-![MITM Intercept Stream](./icon_concept4_mitm.svg.png)
-
-- **디자인 모티브:** 좌측(클라이언트)에서 우측(서버)으로 전달되는 HTTP 데이터 스트림을 한가운데서 때까치 부리 형상의 갈고리(Hook)가 낚아채어 브레이크포인트 다이아몬드 노드를 고정하고 있는 mitmproxy 아키텍처 그 자체의 도식화입니다.
-- **키워드:** `Mitmproxy 엔진`, `양방향 플로우`, `가로채기 갈고리`, `다이내믹 브레이크포인트`
-- **컬러 팔레트:** 스페이스 네이비 (`#0E131F`), 프록시 오렌지 (`#FF3D00`), 플로우 시안 (`#00F2FE`)
-- **적합한 용도:** 프록시 동작 원리를 가장 직접적으로 표현, SVG 포맷으로 앱 내 벡터 렌더링에 적합
+### 5. `puffin_04_perched_natural` (가시나무 위의 전신 실물)
+![puffin_04_perched_natural](./puffin_04_perched_natural.png)
+- **파일:** [`puffin_04_perched_natural.png`](./puffin_04_perched_natural.png)
+- **배경:** 황혼(Twilight) 웜 앰버 백라이트 + 다크 흑갈색 슬레이트
+- **특징:** 원본 사진 속 가시 나뭇가지에 앉은 때까치 전신과 긴 꼬리를 그대로 살려낸 내추럴 마스코트. Lanius("가시에 먹이를 꽂는 도축자 새")의 생태적 유래를 가장 정직하게 담아냄.
 
 ---
 
-### 5. Lanius Monogram "L" (모노그램 타이포 & 포식자 가시)
-![Lanius Monogram L](./icon_concept5_monogram.svg.png)
-
-- **디자인 모티브:** 대문자 **'L'**의 상단 크레스트가 때까치의 날카로운 갈고리 부리로 꺾여 내려오고, 하단 베이스가 가시(Thorn) 블레이드로 뻗어나가며 내부에 가로챈 데이터 보석을 품은 테크 모노그램 심볼입니다.
-- **키워드:** `모노그램 로고마크`, `이니셜 L`, `네온 그라디언트`, `현대적 SaaS 아이콘`
-- **컬러 팔레트:** 딥 바이올렛 블랙 (`#0E0C17`), 일렉트릭 퍼플 (`#A855F7`), 플레임 오렌지 (`#F97316`)
-- **적합한 용도:** 앱 파비콘([favicon.svg](file:///Users/seongjinkim/lab/Lanius/ui/public/favicon.svg)), CLI 심볼, 다양한 해상도 축소 시에도 형태가 무너지지 않는 컴팩트 로고
+### 6. `puffin_05_painterly_mascot` (페인터리 일러스트레이션)
+![puffin_05_painterly_mascot](./puffin_05_painterly_mascot.png)
+- **파일:** [`puffin_05_painterly_mascot.png`](./puffin_05_painterly_mascot.png)
+- **배경:** 딥 나이트 바이올렛 슬레이트 + 앰버 림 라이트
+- **특징:** 실사 사진의 깃털 결을 엣지 보존 유화/페인팅 필터로 부드럽게 정돈하여, 사진보다는 정교하게 그려진 디지털 일러스트레이션 마스코트 같은 질감을 연출.
 
 ---
 
-## 📊 5개 견본 비교 매트릭스
+## 🎨 퍼핀 스타일 현실적 시안 비교 요약
 
-| 견본 | 컨셉 | 상징 메타포 | 시인성 (작은 크기/Favicon) | 데스크톱 앱 일체감 |
-|:---:|:---|:---|:---:|:---:|
-| **1** | **Cyber Shrike** | 매복 포식자 때까치의 날카로운 관측 | 중 | ⭐⭐⭐⭐⭐ (macOS Dock 최적) |
-| **2** | **Impaled Packet** | 먹이를 가시에 꽂아두는 습성 (Breakpoint) | 중 | ⭐⭐⭐⭐⭐ (보안 툴 정체성 명확) |
-| **3** | **Shrike Shield** | 보안 실드 + 기하학 날개 엠블럼 | 상 | ⭐⭐⭐⭐ (신뢰감, 미니멀리즘) |
-| **4** | **MITM Stream** | 클라이언트-서버 간 트래픽 인터셉트 파이프 | 중상 | ⭐⭐⭐⭐ (엔지니어링 친화적) |
-| **5** | **Monogram "L"** | 알파벳 L + 날카로운 갈고리 부리 | ⭐⭐⭐⭐⭐ (최상) | ⭐⭐⭐⭐⭐ (Favicon/CLI/다용도) |
+| 번호 | 시안명 | 배경 스타일 | 구도 특징 | 추천 분위기 |
+|:---:|:---|:---|:---|:---|
+| **01** | `puffin_01_studio_portrait` | 다크 슬레이트 + 소프트 헤일로 | 상반신 포트레이트 | 클래식 프리미엄 macOS 앱 |
+| **02** | `puffin_06_cyan_sky` | 퍼핀 오션 시안 블루 | 상반신 + 고대비 | 밝고 경쾌한 모던 브라우저 스타일 |
+| **03** | `puffin_02_circular_badge` | 다크 링 뱃지 + 팝아웃 | 전신 뱃지 인/아웃 | 브랜드 엠블럼, 트레이/스토어 |
+| **04** | `puffin_03_macro_focus` | 보케 비네팅 매크로 | 헤드 & 갈고리 부리 초근접 | 날카로운 보안/분석 도구 포커스 |
+| **05** | `puffin_04_perched_natural` | 황혼 앰버 백라이트 | 가시나무 전신 | 자연스럽고 진중한 내추럴 룩 |
+| **06** | `puffin_05_painterly_mascot` | 나이트 슬레이트 페인터리 | 유화풍 디지털 일러스트 | 부드럽고 친근한 마스코트 일러스트 |
 
 ---
 
-## 💡 프로젝트 적용 추천 방식
+## 📁 아카이브 (이전 시안)
+<details>
+<summary>이전 벡터 / 3D 시안 목록 접기/펼치기</summary>
 
-1. **데스크톱 앱 아이콘 ([shell/src-tauri/icons/](file:///Users/seongjinkim/lab/Lanius/shell/src-tauri/icons)):**
-   - **견본 1(Cyber Shrike)** 또는 **견본 2(Impaled Packet)** 추천: macOS 도크 및 Windows 작업표시줄에서 강렬한 인상을 줌.
-2. **웹 GUI 파비콘 및 상단 로고 ([ui/public/favicon.svg](file:///Users/seongjinkim/lab/Lanius/ui/public/favicon.svg)):**
-   - **견본 5(Monogram "L")** 또는 **견본 3(Shrike Shield)** 추천: 16x16, 32x32 크기에서도 실루엣이 선명함.
+### 모던 플랫 컬러 시안 5종
+- `modern_01_cyber_shrike.png`
+- `modern_02_shield_crest.png`
+- `modern_03_minimal_origami.png`
+- `modern_04_intercept_swift.png`
+- `modern_05_masked_hunter.png`
+
+### 흑백 단색(Pure Monochrome) 5종
+- `mono_01_shrike_head.png`
+- `mono_02_shrike_shield.png`
+- `mono_03_diving_interceptor.png`
+- `mono_04_geometric_faceted.png`
+- `mono_05_shrike_perch_thorn.png`
+
+### 초기 3D/네온 시안 5종
+- `icon_shrike_beak_1789115872128.jpg`
+- `icon_packet_thorn_1789115889469.jpg`
+- `icon_shrike_shield_1789115909250.jpg`
+- `icon_concept4_mitm.svg.png`
+- `icon_concept5_monogram.svg.png`
+
+</details>

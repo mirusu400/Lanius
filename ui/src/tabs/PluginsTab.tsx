@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { listPlugins, reloadPlugin, setPluginEnabled } from '../api/client';
 import type { PluginInfo } from '../api/types';
+import { useT } from '../i18n';
 
 export function PluginsTab() {
+  const t = useT();
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [directory, setDirectory] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +18,7 @@ export function PluginsTab() {
       setPlugins(data.items);
       setDirectory(data.directory);
     } catch (err) {
-      setError(`플러그인 목록을 불러오지 못했습니다: ${(err as Error).message}`);
+      setError(t('plugins.listFailed', { message: (err as Error).message }));
     }
   }, []);
 
@@ -49,24 +51,23 @@ export function PluginsTab() {
       <div className="plugins-header">
         <span className="muted mono">{directory}</span>
         <span className="spacer" />
-        <button onClick={() => void refresh()}>다시 검색</button>
+        <button onClick={() => void refresh()}>{t('plugins.rescan')}</button>
       </div>
       {error && <div className="banner error">{error}</div>}
 
       {plugins.length === 0 ? (
         <p className="muted pad">
-          플러그인이 없습니다. 위 디렉터리에 <code>*.py</code> 파일을 넣고 다시
-          검색하세요.
+          {t('plugins.none')}
         </p>
       ) : (
         <table className="flow-table plugins-table">
           <thead>
             <tr>
-              <th className="col-size">사용</th>
-              <th className="col-host">이름</th>
-              <th>설명</th>
-              <th className="col-host">훅</th>
-              <th className="col-size">상태</th>
+              <th className="col-size">{t('plugins.use')}</th>
+              <th className="col-host">{t('common.name')}</th>
+              <th>{t('common.description')}</th>
+              <th className="col-host">{t('plugins.hooks')}</th>
+              <th className="col-size">{t('common.status')}</th>
               <th className="col-size" />
             </tr>
           </thead>
@@ -76,7 +77,7 @@ export function PluginsTab() {
                 <td>
                   <input
                     type="checkbox"
-                    aria-label={`toggle ${plugin.name}`}
+                    aria-label={t('plugins.toggleLabel', { name: plugin.name })}
                     checked={plugin.enabled}
                     onChange={() => void toggle(plugin)}
                   />
@@ -102,19 +103,19 @@ export function PluginsTab() {
                 </td>
                 <td className="mono">
                   {plugin.loaded ? (
-                    <span className="status-2xx">loaded</span>
+                    <span className="status-2xx">{t('plugins.loaded')}</span>
                   ) : plugin.error ? (
-                    <span className="status-5xx">error</span>
+                    <span className="status-5xx">{t('common.error')}</span>
                   ) : (
-                    <span className="muted">idle</span>
+                    <span className="muted">{t('plugins.idle')}</span>
                   )}
                 </td>
                 <td>
                   <button
-                    aria-label={`reload ${plugin.name}`}
+                    aria-label={t('plugins.reloadLabel', { name: plugin.name })}
                     onClick={() => void reload(plugin)}
                   >
-                    reload
+                    {t('plugins.reload')}
                   </button>
                 </td>
               </tr>

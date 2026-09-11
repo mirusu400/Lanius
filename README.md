@@ -20,7 +20,8 @@ Lanius는 **mitmproxy를 엔진으로 임베드**하고 그 위에 Burp Suite �
 - ✅ **M6** Decoder(인/디코드 체인) · Comparer(diff) · 원시 TCP 캡처와 헥스 뷰
 - ✅ **M7** 플러그인: Python 애드온 로더 + Plugins 탭 + 예시 플러그인 2개
 - ✅ **M8** MCP 연동: 에이전트용 툴 13종 (리댁션 기본)
-- ✅ Logger(실시간·저장 이벤트) · Settings(엔진 상태, CA 내보내기)
+- ✅ Logger(실시간·저장 이벤트) · Settings(엔진 상태, CA 내보내기, 언어 설정)
+- ✅ **i18n**: 영어/한국어, Settings에서 즉시 전환·기기에 기억
 
 - ✅ **데스크톱 셸(Tauri)**: 엔진을 사이드카로 자동 기동하는 `Lanius.app`
 
@@ -119,11 +120,26 @@ cd engine
 .venv/bin/python -m mypy          # 타입 체크
 
 cd ../ui
-npm test                          # UI 테스트 (141, jsdom 렌더 포함)
+npm test                          # UI 테스트 (181, jsdom 렌더 포함)
 npx tsc -b                        # 타입 체크
 
 cd ../shell/src-tauri
 cargo test                        # 셸 테스트 (8)
+```
+
+## 언어 (i18n)
+
+Settings 탭에서 인터페이스 언어를 바꿀 수 있다(영어·한국어). 선택은 즉시 적용되고
+`localStorage`에 저장되며, 저장된 값이 없으면 브라우저 언어를 따른다.
+
+번역 문자열은 `ui/src/i18n/catalogue.ts` 한 곳에 모여 있다. 영어가 기준이고 다른
+언어는 그 타입에 맞춰지므로, 키가 빠지거나 오타가 나면 `tsc`가 실패한다.
+
+언어를 추가하려면 `LOCALES`에 코드를 넣고 카탈로그를 하나 더 작성하면 된다.
+
+```bash
+cd ui
+npm run test:locales    # 전체 테스트를 영어와 한국어로 각각 실행
 ```
 
 ## 데스크톱 앱 빌드
