@@ -4,6 +4,7 @@ import { getFlow } from '../api/client';
 import type { FlowDetail, FlowSummary } from '../api/types';
 import { formatUrl } from '../tabs/proxyModel';
 import { sendToRepeater } from '../tabs/repeaterStore';
+import { sendToIntruder } from '../tabs/intruderStore';
 
 interface Props {
   flow: FlowSummary | null;
@@ -91,6 +92,12 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
           }}
         >
           Send to Repeater
+        </button>
+        <button
+          className="to-repeater"
+          onClick={() => sendToIntruder(flow, detail)}
+        >
+          Send to Intruder
         </button>
         <label className="reveal">
           <input

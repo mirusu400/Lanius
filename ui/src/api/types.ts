@@ -83,7 +83,13 @@ export type EngineEvent =
   | { type: 'intercept.paused'; data: PausedFlow }
   | { type: 'intercept.resolved'; data: { id: string; action: string } }
   | { type: 'intercept.rules'; data: InterceptRules }
-  | { type: 'engine.started' | 'engine.stopped'; data: Record<string, unknown> };
+  | { type: 'engine.started' | 'engine.stopped'; data: Record<string, unknown> }
+  | { type: 'scope.changed'; data: ScopeState }
+  | { type: 'intruder.started' | 'intruder.finished'; data: AttackSummary }
+  | {
+      type: 'intruder.result';
+      data: { attack_id: string; result: AttackResult };
+    };
 
 export interface FlowFilters {
   host?: string;
@@ -143,4 +149,38 @@ export interface EndpointGroup {
   statuses: number[];
   examples: string[];
   last_seen: number | null;
+}
+
+// --- intruder (M5) --------------------------------------------------------
+
+export type AttackType =
+  | 'sniper'
+  | 'battering_ram'
+  | 'pitchfork'
+  | 'cluster_bomb';
+
+export interface AttackResult {
+  index: number;
+  payloads: string[];
+  status_code: number | null;
+  length: number;
+  duration_ms: number | null;
+  error: string | null;
+  flow_id: string | null;
+}
+
+export interface AttackSummary {
+  id: string;
+  attack_type: AttackType;
+  url: string;
+  status: 'pending' | 'running' | 'completed' | 'stopped' | 'failed';
+  total: number;
+  completed: number;
+  started_at: number;
+  finished_at: number | null;
+  error: string | null;
+}
+
+export interface Attack extends AttackSummary {
+  results: AttackResult[];
 }

@@ -16,6 +16,7 @@ from .. import __version__
 from ..addons.intercept import InterceptError
 from ..addons.repeater import RepeaterError, build_flow, render_raw
 from ..addons.endpoints import build_endpoints
+from ..addons.intruder import IntruderError, find_positions, strip_markers
 from ..addons.scope import ScopeError, rule_from_url
 from ..config import Settings
 from ..db.store import FlowStore
@@ -84,6 +85,17 @@ class ScopeFromUrl(BaseModel):
 
 class CaptureRestriction(BaseModel):
     restrict_capture: bool
+
+
+class AttackBody(BaseModel):
+    url: str
+    template: str
+    attack_type: str = "sniper"
+    payload_sets: list[list[str]] = []
+
+
+class PositionsBody(BaseModel):
+    template: str
 
 
 def redact_headers(
@@ -341,6 +353,67 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "items": [e.as_dict() for e in grouped],
             "count": len(grouped),
         }
+
+    # --- intruder (M5) ----------------------------------------------------
+    @app.post("/api/intruder/positions")
+    async def intruder_positions(body: PositionsBody) -> dict[str, Any]:
+        try:
+            positions = find_positions(body.template)
+            return {
+                "positions": [
+                    {"start": p.start, "end": p.end, "value": p.value}
+                    for p in positions
+                ],
+                "count": len(positions),
+                "preview": strip_markers(body.template),
+            }
+        except IntruderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/intruder/plan")
+    async def intruder_plan(body: AttackBody) -> dict[str, Any]:
+        try:
+            total = engine.intruder.plan(
+                attack_type=body.attack_type,  # type: ignore[arg-type]
+                template=body.template,
+                payload_sets=body.payload_sets,
+            )
+        except IntruderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"total": total}
+
+    @app.post("/api/intruder/attacks")
+    async def intruder_start(body: AttackBody) -> dict[str, Any]:
+        try:
+            attack = await engine.intruder.start(
+                url=body.url,
+                template=body.template,
+                attack_type=body.attack_type,  # type: ignore[arg-type]
+                payload_sets=body.payload_sets,
+            )
+        except IntruderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return attack.summary()
+
+    @app.get("/api/intruder/attacks")
+    async def intruder_list() -> dict[str, Any]:
+        return {
+            "items": [a.summary() for a in engine.intruder.attacks.values()],
+        }
+
+    @app.get("/api/intruder/attacks/{attack_id}")
+    async def intruder_get(attack_id: str) -> dict[str, Any]:
+        try:
+            return engine.intruder.get(attack_id).as_dict()
+        except IntruderError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/intruder/attacks/{attack_id}/stop")
+    async def intruder_stop(attack_id: str) -> dict[str, Any]:
+        try:
+            return engine.intruder.stop(attack_id).summary()
+        except IntruderError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.websocket("/ws")
     async def ws_stream(websocket: WebSocket) -> None:

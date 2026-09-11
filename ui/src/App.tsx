@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ProxyTab } from './tabs/ProxyTab';
 import { RepeaterTabView } from './tabs/RepeaterTab';
 import { TargetTab } from './tabs/TargetTab';
+import { IntruderTab } from './tabs/IntruderTab';
 import './App.css';
 
 const TABS = [
@@ -20,7 +21,6 @@ const TABS = [
 type Tab = (typeof TABS)[number];
 
 const ROADMAP: Record<string, string> = {
-  Intruder: 'M5 — 페이로드 퍼징',
   Decoder: 'M6 — 인/디코드 체인',
   Comparer: 'M6 — 요청·응답 비교',
   Logger: 'M1+ — 전체 이벤트 로그',
@@ -54,6 +54,8 @@ export default function App() {
           <TargetTab />
         ) : tab === 'Repeater' ? (
           <RepeaterTabView />
+        ) : tab === 'Intruder' ? (
+          <IntruderTab />
         ) : (
           <div className="placeholder">
             <h2>{tab}</h2>

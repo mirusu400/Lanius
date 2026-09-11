@@ -13,6 +13,7 @@ from mitmproxy.tools.dump import DumpMaster
 from .addons.capture import CaptureAddon
 from .addons.intercept import InterceptAddon
 from .addons.repeater import RepeaterAddon
+from .addons.intruder import IntruderAddon
 from .addons.scope import ScopeManager
 from .config import Settings
 from .db.store import FlowStore
@@ -41,6 +42,7 @@ class ProxyEngine:
         self.capture = CaptureAddon(store, broker, self.scope)
         self.intercept = InterceptAddon(broker)
         self.repeater = RepeaterAddon(store)
+        self.intruder = IntruderAddon(self.repeater, broker)
         self._task: asyncio.Task[None] | None = None
 
     @property

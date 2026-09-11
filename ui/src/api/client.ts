@@ -185,3 +185,50 @@ export function getEndpoints(
   if (host) params.set('host', host);
   return request(`/api/endpoints?${params}`);
 }
+
+// --- intruder (M5) --------------------------------------------------------
+
+export function getPositions(
+  template: string,
+): Promise<{ count: number; preview: string }> {
+  return request('/api/intruder/positions', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ template }),
+  });
+}
+
+export interface AttackConfig {
+  url: string;
+  template: string;
+  attack_type: import('./types').AttackType;
+  payload_sets: string[][];
+}
+
+export function planAttack(config: AttackConfig): Promise<{ total: number }> {
+  return request('/api/intruder/plan', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(config),
+  });
+}
+
+export function startAttack(
+  config: AttackConfig,
+): Promise<import('./types').AttackSummary> {
+  return request('/api/intruder/attacks', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(config),
+  });
+}
+
+export function getAttack(id: string): Promise<import('./types').Attack> {
+  return request(`/api/intruder/attacks/${id}`);
+}
+
+export function stopAttack(
+  id: string,
+): Promise<import('./types').AttackSummary> {
+  return request(`/api/intruder/attacks/${id}/stop`, { method: 'POST' });
+}

@@ -152,7 +152,7 @@
 - **M2 — 인터셉트 ✅ 완료:** 브레이크포인트 on/off(요청·응답·host 필터), 원시 HTTP 텍스트 편집 후 Forward/Drop/Forward all.
 - **M3 — Repeater ✅ 완료:** 히스토리에서 'Send to Repeater' → 다중 탭 편집·재전송, 응답 확인. (응답 diff는 후속)
 - **M4 — Target/Scope/엔드포인트 ✅ 완료:** 사이트맵 트리, Scope include/exclude 영구 규칙(+캡처 제한), 엔드포인트 그룹핑·파라미터 식별.
-- **M5 — Intruder:** 페이로드 위치 지정 + 워드리스트 퍼징(워커 오프로드), 결과 테이블/정렬.
+- **M5 — Intruder ✅ 완료:** 페이로드 위치(§) 지정 + 워드리스트 퍼징 4종(sniper/battering ram/pitchfork/cluster bomb), 결과 테이블 + 길이 이상치 하이라이트.
 - **M6 — 유틸 & 원시 TCP:** Decoder/Comparer, 원시 TCP 바이트 뷰(`tcp_message`).
 - **M7 — 플러그인 시스템:** Python 애드온 로더 + UI JS 플러그인 API + 예시 플러그인 1~2개.
 - **M8 — MCP 연동:** mitmproxy-MCP 포크 통합, 히스토리 조회·인터셉트·replay 툴 노출(시크릿 리댁션 포함).
@@ -240,6 +240,10 @@ cd shell && npm run tauri dev
 | M4 | 스코프 캡처 제한은 기본 off, 옵트인 | 기본값이 on이면 초기 사용자가 아무것도 못 보게 됨 |
 | M4 | 사이트의 in_scope는 "기록된 경로 중 하나라도 매칭" | `/users/*` 같은 규칙에서도 호스트가 타깃으로 표시되어야 함(실측으로 발견) |
 | M4 | 경로 파라미터는 휴리스틱 분류(id/uuid/date/hash/token) | 숫자·UUID 등 동적 세그먼트를 `{id}`로 묶어 실제 API 표면을 노출 |
+| M5 | Intruder 공격 유형 4종 모두 구현 | 열린 질문(§13) 해소: sniper/battering ram/pitchfork/cluster bomb. Burp 무료판보다 넓은 범위 |
+| M5 | 요청 생성은 `asyncio.to_thread`, 전송은 Repeater 경로 | 템플릿 치환(CPU)이 루프를 막지 않고, 전송은 검증된 엔진 경로를 재사용 |
+| M5 | 동시 요청 수 5로 제한(세마포어) + 최대 10만 요청 가드 | 대상 서버와 로컬 리소스를 보호. 오폭 방지 |
+| M5 | 길이 이상치 자동 하이라이트 | 브루트포스 결과에서 "성공" 응답을 눈으로 찾지 않아도 됨 |
 
 ---
 
@@ -247,7 +251,7 @@ cd shell && npm run tauri dev
 
 - GUI 셸: **Tauri vs Electron** 최종 선택 (권장: Tauri).
 - 프로젝트 파일 포맷: SQLite 단일 파일 vs 폴더 번들.
-- Intruder 공격 유형 범위(스나이퍼/클러스터밤 등 어디까지).
+- ~~Intruder 공격 유형 범위~~ → **해결: 4종 모두 구현**(sniper/battering ram/pitchfork/cluster bomb).
 - 플러그인 배포 방식(로컬 폴더 vs 간이 레지스트리).
 - 라이선스(오픈소스로 공개할지, 공개 시 라이선스 선택).
 - 네임스페이스: 보안 분야엔 동명 충돌 없음(확인 완료). 단 bare `lanius`는 무관한 휴면 프로젝트가 선점(PyPI 마크다운 뷰어·GitHub 개인 계정·npm `@lanius` 스코프) → 패키지/org 핸들은 `lanius-proxy` · `getlanius` 등으로 확보. 도메인(`lanius.dev`/`getlanius.com` 등) 가용성 확인 필요.

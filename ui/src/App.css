@@ -792,3 +792,122 @@ pre.body {
   border-color: #c0392b;
   color: #e74c3c;
 }
+
+/* --- intruder --- */
+.intruder-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.intruder-controls {
+  align-items: center;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+
+.intruder-controls input.target {
+  flex: 1;
+}
+
+.intruder-controls input,
+.intruder-controls select,
+.intruder-controls button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  padding: 5px 8px;
+}
+
+.intruder-controls button {
+  cursor: pointer;
+}
+
+.intruder-controls button.send {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #14161a;
+  font-weight: 600;
+  padding: 5px 16px;
+}
+
+.intruder-controls button.send:disabled {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+  cursor: default;
+}
+
+.intruder-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.intruder-left {
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  width: 46%;
+}
+
+.intruder-left h4 {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  margin: 6px 0;
+  text-transform: uppercase;
+}
+
+.intruder-editor {
+  background: #16181c;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  flex: 1;
+  min-height: 160px;
+  outline: none;
+  padding: 8px;
+  resize: none;
+  white-space: pre;
+}
+
+.payload-sets {
+  display: flex;
+  gap: 8px;
+  height: 180px;
+}
+
+.payload-input {
+  background: #16181c;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  flex: 1;
+  outline: none;
+  padding: 8px;
+  resize: none;
+}
+
+.intruder-results {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: auto;
+}
+
+.results-header {
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 10px;
+}
+
+.flow-table tr.outlier td {
+  color: var(--accent);
+  font-weight: 600;
+}

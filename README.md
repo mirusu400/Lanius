@@ -16,7 +16,8 @@ Lanius는 **mitmproxy를 엔진으로 임베드**하고 그 위에 Burp Suite �
 - ✅ **M2** 인터셉트: 브레이크포인트, 원시 HTTP 편집, Forward / Drop / Forward all
 - ✅ **M3** Repeater: 히스토리에서 보내기, 다중 탭 편집·재전송, 응답 뷰
 - ✅ **M4** Target: 사이트맵 트리, Scope 편집기(영구 저장·캡처 제한), 엔드포인트 그룹핑
-- ⬜ M5 이후: Intruder, Decoder/Comparer, 플러그인, MCP
+- ✅ **M5** Intruder: § 페이로드 위치, 공격 유형 4종, 실시간 결과 테이블
+- ⬜ M6 이후: Decoder/Comparer, 원시 TCP, 플러그인, MCP
 
 ## 빠른 시작
 
@@ -79,7 +80,10 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 | GET | `/api/scope/check?url=` | URL 스코프 판정 |
 | GET | `/api/sitemap`, `/api/sitemap/paths` | 사이트 목록 / 사이트별 경로 |
 | GET | `/api/endpoints` | 엔드포인트 그룹(경로 템플릿 + 파라미터) |
-| WS | `/ws` | 실시간 이벤트 (`flow.*`, `intercept.*`, `scope.*`, `engine.*`) |
+| POST | `/api/intruder/positions`, `/api/intruder/plan` | 위치 파싱 / 요청 수 예측 |
+| POST/GET | `/api/intruder/attacks` | 공격 시작 / 목록 |
+| GET/POST | `/api/intruder/attacks/{id}`, `/stop` | 결과 조회 / 중단 |
+| WS | `/ws` | 실시간 이벤트 (`flow.*`, `intercept.*`, `scope.*`, `intruder.*`, `engine.*`) |
 
 모든 엔드포인트는 기본적으로 `127.0.0.1`에만 바인딩된다.
 
@@ -87,11 +91,11 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 
 ```bash
 cd engine
-.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (126)
+.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (154)
 .venv/bin/python -m mypy          # 타입 체크
 
 cd ../ui
-npm test                          # UI 테스트 (83, jsdom 렌더 포함)
+npm test                          # UI 테스트 (109, jsdom 렌더 포함)
 npx tsc -b                        # 타입 체크
 ```
 
