@@ -168,8 +168,8 @@ describe('ComparerTab', () => {
     await screen.findByTestId('diff');
     const call = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } })
       .mock.calls.at(-1);
-    expect(JSON.parse(String((call?.[1] as RequestInit).body)).mode).toBe(
-      'byte',
-    );
+    expect(call, 'compareTexts should have been called').toBeTruthy();
+    const init = call![1] as RequestInit;
+    expect(JSON.parse(String(init.body)).mode).toBe('byte');
   });
 });

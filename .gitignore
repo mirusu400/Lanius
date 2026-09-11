@@ -43,3 +43,5 @@ shell/src-tauri/gen/
 # PyInstaller
 engine/build/
 engine/dist/
+
+# CI artifact staging (top-level dist/ is covered above)

@@ -9,7 +9,9 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:locales": "vitest run && VITE_TEST_LOCALE=ko vitest run"
+    "test:locales": "npm run test && npm run test:ko",
+    "test:ko": "cross-env VITE_TEST_LOCALE=ko vitest run",
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "react": "^19.2.8",
@@ -23,6 +25,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "cross-env": "^10.1.0",
     "jsdom": "^29.1.1",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",

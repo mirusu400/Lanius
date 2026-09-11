@@ -1,0 +1,270 @@
+name: Nightly
+
+on:
+  schedule:
+    # 03:00 UTC every day (12:00 KST).
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a prerelease instead of only uploading artifacts'
+        type: boolean
+        default: true
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Never ship a build that does not pass the suite.
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  # Skip the whole build when nothing landed since the last nightly.
+  changes:
+    name: Check for new commits
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      sha: ${{ steps.check.outputs.sha }}
+      date: ${{ steps.check.outputs.date }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: check
+        env:
+          FORCED: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+          if [ "$FORCED" = "true" ]; then
+            echo "manual run: building"
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Anything committed in the last 24h?
+          recent="$(git log --since='24 hours ago' --oneline | wc -l | tr -d ' ')"
+          echo "commits in the last 24h: $recent"
+          if [ "$recent" -gt 0 ]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build ${{ matrix.label }}
+    needs: [verify, changes]
+    if: needs.changes.outputs.should_build == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: macos-arm64
+            bundles: app,dmg
+          - os: macos-15-intel
+            label: macos-x86_64
+            bundles: app,dmg
+          - os: ubuntu-22.04
+            label: linux-x86_64
+            bundles: appimage,deb
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shell/src-tauri
+          key: ${{ matrix.label }}
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libfuse2
+
+      - name: Install engine dependencies
+        working-directory: engine
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Freeze the engine
+        working-directory: engine
+        run: pyinstaller --clean --noconfirm lanius-engine.spec
+
+      - name: Smoke-test the frozen engine
+        shell: bash
+        env:
+          LANIUS_DATA_DIR: ${{ runner.temp }}/lanius-smoke
+        run: |
+          set -euo pipefail
+          ./engine/dist/lanius-engine --proxy-port 18080 --api-port 18081 &
+          engine_pid=$!
+          trap 'kill "$engine_pid" 2>/dev/null || true' EXIT
+
+          # The frozen binary needs a moment to unpack and bind.
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18081/api/status >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+
+          status="$(curl -fsS http://127.0.0.1:18081/api/status)"
+          echo "$status"
+          echo "$status" | grep -q '"running":true'
+
+          # Prove the proxy actually captures traffic. The upstream status
+          # does not matter (example.com/ci-smoke is a 404); what matters is
+          # that the flow was recorded, so do not use curl -f here.
+          curl -sS -x http://127.0.0.1:18080 http://example.com/ci-smoke -o /dev/null
+          sleep 1
+          curl -fsS 'http://127.0.0.1:18081/api/flows?search=ci-smoke' | grep -q ci-smoke
+          echo 'engine smoke test passed'
+
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Install Tauri CLI
+        working-directory: shell
+        run: npm ci
+
+      - name: Build the desktop bundle
+        working-directory: shell
+        shell: bash
+        # macOS dmg bundling drives Finder over AppleScript and occasionally
+        # loses a race with disk arbitration, so retry before failing the run.
+        run: |
+          set -euo pipefail
+          build() {
+            for attempt in 1 2 3; do
+              if npx tauri build --bundles "$1"; then
+                return 0
+              fi
+              echo "::warning::bundling '$1' failed (attempt $attempt), retrying"
+              sleep 15
+            done
+            echo "::error::bundling '$1' failed after 3 attempts"
+            return 1
+          }
+
+          # One target at a time, archiving each result immediately: macOS
+          # dmg bundling deletes the .app it was built from, so anything left
+          # for later would disappear.
+          staging="${{ runner.temp }}/bundles"
+          mkdir -p "$staging"
+          bundle="src-tauri/target/release/bundle"
+
+          IFS=',' read -ra targets <<< "${{ matrix.bundles }}"
+          for target in "${targets[@]}"; do
+            build "$target"
+            if [ "$target" = "app" ]; then
+              for app in "$bundle"/macos/*.app; do
+                [ -d "$app" ] || continue
+                name="$(basename "$app" .app)"
+                tar -czf "$staging/${name}-${{ matrix.label }}.app.tar.gz" \
+                  -C "$bundle/macos" "$(basename "$app")"
+              done
+            fi
+          done
+
+      - name: Collect artifacts
+        id: collect
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="dist/${{ matrix.label }}"
+          mkdir -p "$out"
+          bundle="shell/src-tauri/target/release/bundle"
+
+          # .app archives were staged during the build step, because dmg
+          # bundling deletes the .app directory it was built from.
+          staging="${{ runner.temp }}/bundles"
+          if [ -d "$staging" ]; then
+            find "$staging" -name '*.app.tar.gz' -exec cp {} "$out"/ \;
+          fi
+
+          # `rw.*.dmg` are create-dmg scratch images, not release artifacts.
+          find "$bundle" -maxdepth 2 -type f \
+            \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) \
+            ! -name 'rw.*.dmg' \
+            -exec cp {} "$out"/ \;
+
+          echo "--- collected ---"
+          ls -la "$out"
+          test -n "$(ls -A "$out")" || { echo 'no artifacts produced'; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lanius-nightly-${{ matrix.label }}
+          path: dist/${{ matrix.label }}/*
+          retention-days: 14
+          if-no-files-found: error
+
+  release:
+    name: Publish prerelease
+    needs: [changes, build]
+    if: >-
+      needs.changes.outputs.should_build == 'true' &&
+      (github.event_name == 'schedule' || inputs.publish)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly-${{ needs.changes.outputs.date }}
+          name: Nightly ${{ needs.changes.outputs.date }}
+          body: |
+            Automated nightly build of `${{ needs.changes.outputs.sha }}`.
+
+            These builds are unsigned. On macOS remove the quarantine flag
+            before the first launch:
+
+            ```bash
+            xattr -dr com.apple.quarantine /Applications/Lanius.app
+            ```
+
+            Lanius is for security testing of systems you are authorised to
+            test. Verifying that authorisation is your responsibility.
+          prerelease: true
+          files: dist/*
+          fail_on_unmatched_files: true

@@ -1,5 +1,8 @@
 # Lanius
 
+[![CI](https://github.com/mirusu400/Lanius/actions/workflows/ci.yml/badge.svg)](https://github.com/mirusu400/Lanius/actions/workflows/ci.yml)
+[![Nightly](https://github.com/mirusu400/Lanius/actions/workflows/nightly.yml/badge.svg)](https://github.com/mirusu400/Lanius/actions/workflows/nightly.yml)
+
 > 때까치(*Lanius*) — 매복해 먹이를 가로채는 새. 클라이언트와 서버 사이 트래픽을 가로채는 도구.
 
 Lanius는 **mitmproxy를 엔진으로 임베드**하고 그 위에 Burp Suite 유사 워크플로우를 올린 웹 보안 테스트 도구다.
@@ -141,6 +144,30 @@ Settings 탭에서 인터페이스 언어를 바꿀 수 있다(영어·한국어
 cd ui
 npm run test:locales    # 전체 테스트를 영어와 한국어로 각각 실행
 ```
+
+## 내려받기 (나이틀리)
+
+매일 자동 빌드된 프리릴리스를 [Releases](https://github.com/mirusu400/Lanius/releases)에서 받을 수 있다.
+macOS는 `.dmg`/`.app.tar.gz`, Linux는 `.AppImage`/`.deb`를 제공한다.
+
+서명하지 않은 빌드이므로 macOS에서는 첫 실행 전에 격리 속성을 해제해야 한다:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Lanius.app
+```
+
+## CI
+
+| 워크플로 | 트리거 | 내용 |
+|---|---|---|
+| `ci.yml` | push(main) · PR | 엔진(mypy+pytest, Linux/macOS), UI(타입·린트·2개 언어 테스트·빌드), 셸(fmt·clippy·test, Linux/macOS) |
+| `nightly.yml` | 매일 03:00 UTC · 수동 | CI 통과 후 엔진 동결 → 스모크 테스트 → 데스크톱 번들 → 프리릴리스 발행 |
+
+나이틀리는 최근 24시간 내 커밋이 없으면 건너뛴다. 수동 실행(`workflow_dispatch`)은 항상 빌드하며,
+`publish` 입력으로 릴리스 발행 여부를 고를 수 있다.
+
+빌드된 엔진 바이너리는 번들 전에 스모크 테스트를 거친다. 실제로 기동해 `/api/status`를 확인하고,
+프록시로 요청을 흘려 히스토리에 기록되는지까지 확인한 뒤에만 패키징한다.
 
 ## 데스크톱 앱 빌드
 

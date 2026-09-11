@@ -60,7 +60,8 @@ fn engine_command(app: &tauri::AppHandle) -> Option<Command> {
     let venv_python = repo.join("engine/.venv/bin/python");
     if venv_python.exists() {
         let mut cmd = Command::new(venv_python);
-        cmd.args(["-m", "app.main"]).current_dir(repo.join("engine"));
+        cmd.args(["-m", "app.main"])
+            .current_dir(repo.join("engine"));
         return Some(cmd);
     }
     None
@@ -185,12 +186,18 @@ fn start_engine(app: &tauri::AppHandle, state: &EngineProcess) -> EngineInfo {
             while Instant::now() < deadline {
                 if port_open(DEFAULT_API_PORT) {
                     log::info!("engine ready on {DEFAULT_API_PORT}");
-                    return EngineInfo { managed: true, ..info };
+                    return EngineInfo {
+                        managed: true,
+                        ..info
+                    };
                 }
                 std::thread::sleep(Duration::from_millis(150));
             }
             log::error!("engine did not become ready within {STARTUP_TIMEOUT:?}");
-            EngineInfo { managed: true, ..info }
+            EngineInfo {
+                managed: true,
+                ..info
+            }
         }
         Err(err) => {
             log::error!("failed to spawn engine: {err}");
