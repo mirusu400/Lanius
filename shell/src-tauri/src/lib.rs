@@ -93,8 +93,11 @@ fn find_engine_binary(root: &std::path::Path) -> Option<PathBuf> {
 /// Candidate resource directories.
 ///
 /// `resource_dir()` reports "unknown path" for a bundle that has not been
-/// installed/signed, so also derive `Contents/Resources` from the running
-/// executable.
+/// installed/signed, so also derive the platform's resource layout from the
+/// running executable:
+///   macOS  `.../Lanius.app/Contents/MacOS/lanius` -> `../Resources`
+///   Linux  `/usr/bin/lanius`                      -> `/usr/lib/lanius`
+///          (AppImage mounts the same tree under `$APPDIR`)
 fn resource_dirs(app: &tauri::AppHandle) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     match app.path().resource_dir() {
@@ -102,13 +105,29 @@ fn resource_dirs(app: &tauri::AppHandle) -> Vec<PathBuf> {
         Err(err) => log::debug!("resource_dir unavailable: {err}"),
     }
     if let Ok(exe) = std::env::current_exe() {
-        // .../Lanius.app/Contents/MacOS/lanius -> .../Contents/Resources
-        if let Some(macos_dir) = exe.parent() {
-            if let Some(contents) = macos_dir.parent() {
-                dirs.push(contents.join("Resources"));
+        let exe_name = exe
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "lanius".to_string());
+
+        if let Some(exe_dir) = exe.parent() {
+            if let Some(parent) = exe_dir.parent() {
+                // macOS bundle
+                dirs.push(parent.join("Resources"));
+                // Linux install prefix: bin/ -> lib/<name>/
+                dirs.push(parent.join("lib").join(&exe_name));
+                dirs.push(parent.join("lib"));
             }
-            dirs.push(macos_dir.to_path_buf());
+            // Portable layout: resources next to the executable.
+            dirs.push(exe_dir.to_path_buf());
         }
+    }
+    // AppImage exposes its mounted tree here.
+    if let Ok(appdir) = std::env::var("APPDIR") {
+        let root = PathBuf::from(appdir);
+        dirs.push(root.join("usr/lib").join("lanius"));
+        dirs.push(root.join("usr/lib"));
+        dirs.push(root);
     }
     dirs.retain(|d| d.exists());
     dirs
@@ -366,6 +385,29 @@ mod tests {
     fn find_engine_binary_returns_none_when_absent() {
         let base = std::env::temp_dir().join("lanius-res-empty");
         std::fs::create_dir_all(&base).expect("mkdir");
+        assert!(find_engine_binary(&base).is_none());
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn find_engine_binary_handles_a_linux_install_prefix() {
+        // deb installs to /usr/bin/lanius with resources under /usr/lib/lanius.
+        let base = std::env::temp_dir().join("lanius-linux-prefix");
+        let lib = base.join("usr/lib/lanius");
+        std::fs::create_dir_all(&lib).expect("mkdir");
+        let target = lib.join("lanius-engine");
+        std::fs::write(&target, b"#!/bin/sh\n").expect("write");
+
+        assert_eq!(find_engine_binary(&lib).as_ref(), Some(&target));
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn find_engine_binary_ignores_similar_names() {
+        let base = std::env::temp_dir().join("lanius-res-similar");
+        std::fs::create_dir_all(&base).expect("mkdir");
+        std::fs::write(base.join("lanius-engine.txt"), b"x").expect("write");
+        std::fs::write(base.join("engine"), b"x").expect("write");
         assert!(find_engine_binary(&base).is_none());
         std::fs::remove_dir_all(&base).ok();
     }

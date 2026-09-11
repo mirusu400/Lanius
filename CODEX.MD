@@ -276,6 +276,7 @@ cd shell && npm run tauri dev
 | CI | `rw.*.dmg`는 수집에서 제외 | create-dmg의 중간 이미지(78MB)가 릴리스에 섞여 올라감(실측으로 발견) |
 | CI | dmg 번들링은 3회 재시도 | Finder/AppleScript·디스크 중재와 경합해 간헐적으로 실패(로컬에서 재현) |
 | CI | 동결 엔진은 번들 전에 스모크 테스트 | PyInstaller 산출물은 임포트·데이터파일 누락이 실행 시점에야 드러나므로, 실제 기동 + 트래픽 캡처까지 확인 |
+| 셸 | 리소스 탐색은 macOS·Linux·AppImage 레이아웃을 모두 후보로 | `Contents/Resources`만 보면 deb(`/usr/bin` → `/usr/lib/<name>`)와 AppImage(`$APPDIR`)에서 번들 엔진을 못 찾음(Linux 잡 추가 시 발견) |
 
 ---
 
