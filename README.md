@@ -22,7 +22,9 @@ Lanius는 **mitmproxy를 엔진으로 임베드**하고 그 위에 Burp Suite �
 - ✅ **M8** MCP 연동: 에이전트용 툴 13종 (리댁션 기본)
 - ✅ Logger(실시간·저장 이벤트) · Settings(엔진 상태, CA 내보내기)
 
-9개 탭 모두 구현 완료 — 남은 항목은 데스크톱 셸(Tauri) 번들링이다.
+- ✅ **데스크톱 셸(Tauri)**: 엔진을 사이드카로 자동 기동하는 `Lanius.app`
+
+9개 탭 + 데스크톱 앱까지 완료. 남은 항목은 UI측 JS 플러그인 API다.
 
 ## 빠른 시작
 
@@ -113,12 +115,35 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 
 ```bash
 cd engine
-.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (259)
+.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (264)
 .venv/bin/python -m mypy          # 타입 체크
 
 cd ../ui
 npm test                          # UI 테스트 (141, jsdom 렌더 포함)
 npx tsc -b                        # 타입 체크
+
+cd ../shell/src-tauri
+cargo test                        # 셸 테스트 (8)
+```
+
+## 데스크톱 앱 빌드
+
+엔진을 단일 실행파일로 굳힌 뒤 `.app`으로 번들한다.
+
+```bash
+cd engine && .venv/bin/pyinstaller --clean --noconfirm lanius-engine.spec   # 엔진 바이너리
+cd ../ui && npm run build                                                   # 프론트 정적 빌드
+cd ../shell && npx tauri build --bundles app                                # Lanius.app
+```
+
+결과물은 `shell/src-tauri/target/release/bundle/macos/Lanius.app` (약 49MB, Python 설치 불필요).
+앱을 실행하면 엔진이 사이드카로 자동 기동되고, 창을 닫거나 앱이 강제 종료돼도
+엔진이 함께 정리된다. 이미 `python -m app.main`으로 엔진을 띄워 둔 경우 그 인스턴스를 재사용한다.
+
+개발 중에는 셸이 저장소의 가상환경을 그대로 사용한다:
+
+```bash
+cd shell && npx tauri dev
 ```
 
 ## MCP (에이전트 연동)

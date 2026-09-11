@@ -10,8 +10,24 @@ import type {
   PausedFlow,
 } from './types';
 
+/** Engine base URL.
+ *
+ * In the Tauri shell the engine runs as a sidecar on the default port; in the
+ * browser dev setup VITE_LANIUS_API can point elsewhere.
+ */
 export const API_BASE =
-  import.meta.env.VITE_LANIUS_API ?? 'http://127.0.0.1:8081';
+  (typeof window !== 'undefined' &&
+    (window as { __LANIUS_API__?: string }).__LANIUS_API__) ||
+  import.meta.env.VITE_LANIUS_API ||
+  'http://127.0.0.1:8081';
+
+/** True when running inside the desktop shell. */
+export function isDesktop(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    '__TAURI_INTERNALS__' in (window as unknown as Record<string, unknown>)
+  );
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, init);

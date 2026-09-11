@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import asyncio
 import socket
 
@@ -55,3 +58,120 @@ async def test_start_raises_when_port_is_taken(tmp_path) -> None:
     finally:
         blocker.close()
         eng.store.close()
+
+
+# --- CLI / watchdog -------------------------------------------------------
+
+
+def test_parse_args_defaults() -> None:
+    from app.main import parse_args
+
+    settings, watch = parse_args([])
+    assert settings.proxy_port == 8080
+    assert settings.api_port == 8081
+    assert watch is False
+
+
+def test_parse_args_overrides() -> None:
+    from app.main import parse_args
+
+    settings, watch = parse_args(
+        ["--proxy-port", "9090", "--api-port", "9091", "--watch-parent"]
+    )
+    assert settings.proxy_port == 9090
+    assert settings.api_port == 9091
+    assert watch is True
+
+
+def test_watchdog_exits_when_the_parent_dies(tmp_path) -> None:
+    """The sidecar must not outlive the desktop shell (verified for real)."""
+    import subprocess
+    import sys
+    import time as _time
+
+    engine_dir = str(Path(__file__).resolve().parents[1])
+    child_code = (
+        "import os, sys, time\n"
+        f"sys.path.insert(0, {engine_dir!r})\n"
+        "from app.main import watch_parent\n"
+        "watch_parent(os.getppid())\n"
+        "time.sleep(30)\n"
+    )
+    pid_file = tmp_path / "child.pid"
+    launcher_code = (
+        "import os, subprocess, sys, time\n"
+        f"child = subprocess.Popen([sys.executable, '-c', {child_code!r}])\n"
+        f"open({str(pid_file)!r}, 'w').write(str(child.pid))\n"
+        "time.sleep(1)\n"
+        "os._exit(0)\n"  # die hard: no cleanup, like a crashed shell
+    )
+    subprocess.run([sys.executable, "-c", launcher_code], timeout=30, check=False)
+    child_pid = int(pid_file.read_text())
+
+    deadline = _time.time() + 15
+    while _time.time() < deadline:
+        try:
+            os.kill(child_pid, 0)
+        except OSError:
+            return  # child exited: watchdog worked
+        _time.sleep(0.25)
+
+    os.kill(child_pid, 9)
+    raise AssertionError("watchdog did not stop the orphaned engine")
+
+
+def test_pid_alive_detects_a_dead_process() -> None:
+    from app.main import _pid_alive
+
+    assert _pid_alive(os.getpid()) is True
+    # PID 1 is treated as "no supervisor" and never triggers a shutdown.
+    assert _pid_alive(1) is True
+
+    import subprocess
+    import sys
+
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    # Reap, then a definitely-unused PID must read as dead.
+    assert _pid_alive(999_999) is False
+
+
+def test_watchdog_uses_an_explicit_supervisor_pid(tmp_path) -> None:
+    """Regression: PyInstaller's bootloader stays as the direct parent, so
+    getppid() never changed and the engine outlived a SIGKILLed shell."""
+    import subprocess
+    import sys
+    import time as _time
+
+    engine_dir = str(Path(__file__).resolve().parents[1])
+    pid_file = tmp_path / "child.pid"
+
+    # A supervisor that is NOT the child's direct parent: the launcher spawns
+    # a middleman, mirroring the bootloader arrangement.
+    child_code = (
+        "import os, sys, time\n"
+        f"sys.path.insert(0, {engine_dir!r})\n"
+        "from app.main import watch_parent\n"
+        "watch_parent(int(os.environ['SUPERVISOR']))\n"
+        "time.sleep(30)\n"
+    )
+    launcher_code = (
+        "import os, subprocess, sys, time\n"
+        "env = dict(os.environ, SUPERVISOR=str(os.getpid()))\n"
+        f"child = subprocess.Popen([sys.executable, '-c', {child_code!r}], env=env)\n"
+        f"open({str(pid_file)!r}, 'w').write(str(child.pid))\n"
+        "time.sleep(1)\n"
+        "os._exit(0)\n"
+    )
+    subprocess.run([sys.executable, "-c", launcher_code], timeout=30, check=False)
+    child_pid = int(pid_file.read_text())
+
+    deadline = _time.time() + 15
+    while _time.time() < deadline:
+        try:
+            os.kill(child_pid, 0)
+        except OSError:
+            return
+        _time.sleep(0.25)
+    os.kill(child_pid, 9)
+    raise AssertionError("watchdog ignored the explicit supervisor pid")

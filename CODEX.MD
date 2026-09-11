@@ -88,7 +88,7 @@
 | 엔진 임베드 | **`DumpMaster`** | mitmproxy를 앱 내부 엔진으로 구동, 런타임에 애드온 추가/제거 가능. |
 | 백엔드 | **FastAPI + asyncio** | mitmproxy가 asyncio 기반이라 동일 루프에 자연스럽게 통합. WS/REST 제공 용이. |
 | 영속화 | **SQLite** | 단일 파일, 프로젝트 단위 저장에 적합. 초기 의존성 최소. |
-| GUI 셸 | **Tauri**(권장) 또는 Electron | Tauri = 작은 바이너리·낮은 메모리. Electron = 러닝커브 낮음. Python 백엔드는 **사이드카 프로세스**로 번들. |
+| GUI 셸 | **Tauri** (확정) | 작은 바이너리·낮은 메모리. Python 엔진은 PyInstaller로 굳혀 **사이드카**로 번들(`Lanius.app` 약 49MB). |
 | 프론트 | **React + TypeScript** | 탭/테이블/에디터 UI 생태계 성숙. Monaco 에디터로 요청 편집. |
 | 플러그인 | 엔진측 **Python 애드온** + UI측 **JS 플러그인** | Caido 방식. BApp 호환 대신 자체 API로 필요한 것만 포팅. |
 | MCP | **자체 MCP 서버**(`mcp` SDK) | 우리 스토어/애드온을 직접 감싸 Lanius 고유 기능(스코프·인터셉트·Intruder)까지 노출. |
@@ -159,8 +159,8 @@
 
 > DoD(완료 정의): 각 마일스톤은 문서화 + 테스트 + GUI에서 수동 검증 가능해야 한다.
 
-**M0~M8 전부 완료.** 9개 탭 모두 동작하며(placeholder 없음), 엔진 259 + UI 141 테스트를 통과한다.
-남은 큰 항목은 데스크톱 셸(Tauri) 번들링과 UI측 JS 플러그인 API다.
+**M0~M8 전부 완료 + 데스크톱 셸(Tauri) 완료.** 9개 탭 모두 동작하며(placeholder 없음),
+엔진 264 + UI 141 + 셸 8 테스트를 통과한다. 남은 항목은 UI측 JS 플러그인 API다.
 
 ---
 
@@ -261,12 +261,16 @@ cd shell && npm run tauri dev
 | M8 | MCP DNS 리바인딩 보호는 켜두되 localhost 임의 포트 허용 | 기본값은 MCP 자체 포트만 허용해 설정 가능한 API 포트에서 421을 반환(실측으로 발견) |
 | 마무리 | CA는 공개 인증서 3종(pem/cer/p12)만 라우팅 | 개인키 파일은 엔드포인트 자체가 없어 노출 불가(§10). 테스트로 회귀 방지 |
 | 마무리 | Logger는 flow 단위 이벤트를 DB에 남기지 않음 | flow는 이미 `flows` 테이블에 있음. 이벤트 로그는 엔진·스코프·플러그인 등 상태 변화만 기록 |
+| 셸 | 엔진을 PyInstaller 단일 실행파일로 번들 | 사용자 기기에 Python·의존성 설치를 요구하지 않음. 진입점은 `engine_main.py`(프리즈 시 상대 import가 깨지므로) |
+| 셸 | 이미 떠 있는 엔진이 있으면 재사용 | 개발 중 `python -m app.main`을 띄워 둔 상태에서 앱을 열어도 포트 충돌이 없음 |
+| 셸 | 엔진이 감독 프로세스(PID)를 감시해 자살 | 셸이 SIGKILL/크래시로 죽으면 정리 코드가 돌지 않아 프록시가 포트를 붙잡고 남음(실측으로 발견). PyInstaller 부트로더가 직계 부모라 `getppid()` 대신 명시적 PID를 감시 |
+| 셸 | 번들 리소스는 실행파일 기준 경로로도 탐색 | 서명/설치되지 않은 `.app`에서는 Tauri `resource_dir()`이 "unknown path"를 반환(실측으로 발견) |
 
 ---
 
 ## 13. 열린 질문 (착수 전 확정 권장)
 
-- GUI 셸: **Tauri vs Electron** 최종 선택 (권장: Tauri).
+- ~~GUI 셸: Tauri vs Electron~~ → **해결: Tauri 채택, `.app` 번들 동작 확인.**
 - 프로젝트 파일 포맷: SQLite 단일 파일 vs 폴더 번들.
 - ~~Intruder 공격 유형 범위~~ → **해결: 4종 모두 구현**(sniper/battering ram/pitchfork/cluster bomb).
 - 플러그인 배포 방식(로컬 폴더 vs 간이 레지스트리).

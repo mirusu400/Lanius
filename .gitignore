@@ -35,3 +35,11 @@ build/
 
 # Vite
 ui/dist/
+
+# Rust / Tauri
+shell/src-tauri/target/
+shell/src-tauri/gen/
+
+# PyInstaller
+engine/build/
+engine/dist/
