@@ -148,7 +148,7 @@
 각 마일스톤은 "실제로 동작하는 세로 슬라이스"를 목표로 한다.
 
 - **M0 — 엔진 부트스트랩 ✅ 완료:** `DumpMaster` 임베드, HTTP flow 캡처 → SQLite 기록, 이벤트 브로커 + WS 스트림, REST 히스토리 API, 헤더 리댁션. (GUI 없음, CLI/curl 검증 완료)
-- **M1 — 라이브 히스토리:** 백엔드 WS 스트림 + GUI 셸 + 프록시 히스토리 테이블(실시간). 요청/응답 상세 뷰.
+- **M1 — 라이브 히스토리 ✅ 완료:** 백엔드 WS 스트림 + React/TS GUI + 프록시 히스토리 테이블(실시간). 요청/응답 상세 뷰, 필터/검색. (Tauri 셸 번들은 M2 이후)
 - **M2 — 인터셉트:** 브레이크포인트 on/off, 요청/응답 편집 후 resume/kill/drop.
 - **M3 — Repeater:** 히스토리/인터셉트에서 요청을 Repeater로 보내 편집·재전송, 응답 확인.
 - **M4 — Target/Scope/엔드포인트:** 사이트맵 트리, Scope include/exclude 영구 규칙, 엔드포인트 그룹핑·파라미터 식별.
@@ -225,6 +225,9 @@ cd shell && npm run tauri dev
 | M0 | uvicorn 단일 프로세스에 mitmproxy 공존 | `DumpMaster.run()`을 FastAPI lifespan에서 asyncio 태스크로 기동 → 동일 루프 공유, IPC 불필요 |
 | M0 | DB 쓰기는 `asyncio.to_thread` 오프로드 | 애드온 훅이 이벤트 루프를 블로킹하지 않도록(§5 동시성 제약). 브로커 publish는 논블로킹 |
 | M0 | 브로커 큐는 바운디드 + 최신 우선 | 느린 WS 구독자가 엔진을 스톨시키지 않도록 가장 오래된 이벤트를 드롭 |
+| M1 | 초기 GUI는 브라우저(Vite dev server) | 셸(Tauri) 선택 전에도 UI 반복 개발 가능. 셸은 이 정적 번들을 그대로 로드하면 됨 |
+| M1 | 엔진에 localhost 전용 CORS 허용 | UI dev server(5173)와 엔진(8081) 포트가 달라 필요. `127.0.0.1`/`localhost` origin만 허용 |
+| M1 | UI 로직은 순수 함수로 분리(`proxyModel.ts`) | 머지/필터/포맷을 DOM 없이 단위 테스트. 컴포넌트는 jsdom + RTL로 검증 |
 
 ---
 

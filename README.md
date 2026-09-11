@@ -12,7 +12,8 @@ Lanius는 **mitmproxy를 엔진으로 임베드**하고 그 위에 Burp Suite �
 - ✅ 이벤트 브로커 + WebSocket 실시간 flow 스트림
 - ✅ REST API: 히스토리 조회/필터/상세/초기화
 - ✅ 민감 헤더 기본 리댁션 (`Authorization`, `Cookie`, `Set-Cookie`)
-- ⬜ M1 이후: GUI 셸, 인터셉트, Repeater, Target/Scope, Intruder
+- ✅ **M1** React+TS GUI: 실시간 프록시 히스토리 테이블, 필터/검색, 요청·응답 상세 뷰
+- ⬜ M2 이후: 인터셉트, Repeater, Target/Scope, Intruder
 
 ## 빠른 시작
 
@@ -44,6 +45,17 @@ CA는 최초 실행 시 `~/.mitmproxy`에 자동 생성되며, **절대 커밋�
 | `--db` | `LANIUS_DATA_DIR` | `~/.lanius/lanius.sqlite` |
 | `--log-level` | `LANIUS_LOG_LEVEL` | `info` |
 
+## UI (M1)
+
+```bash
+cd ui && npm install && npm run dev     # http://127.0.0.1:5173
+```
+
+엔진 주소가 기본값(`http://127.0.0.1:8081`)과 다르면 `VITE_LANIUS_API`로 지정한다.
+
+Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/status/검색 필터,
+일시정지·비우기, 요청/응답 헤더·바디 상세 뷰, 민감 헤더 표시 토글.
+
 ## API
 
 | 메서드 | 경로 | 설명 |
@@ -60,8 +72,12 @@ CA는 최초 실행 시 `~/.mitmproxy`에 자동 생성되며, **절대 커밋�
 
 ```bash
 cd engine
-.venv/bin/python -m pytest -q     # 단위 테스트
+.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (27)
 .venv/bin/python -m mypy          # 타입 체크
+
+cd ../ui
+npm test                          # UI 테스트 (22, jsdom 렌더 포함)
+npx tsc -b                        # 타입 체크
 ```
 
 ## 주의

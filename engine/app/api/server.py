@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 
 from .. import __version__
 from ..config import Settings
@@ -51,6 +52,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             store.close()
 
     app = FastAPI(title="Lanius Engine", version=__version__, lifespan=lifespan)
+    # Local dev UI (vite) runs on a different port; stay localhost-only.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"http://(127\.0\.0\.1|localhost)(:\d+)?",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     app.state.settings = settings
     app.state.store = store
     app.state.broker = broker
