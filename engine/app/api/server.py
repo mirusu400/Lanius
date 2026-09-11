@@ -142,16 +142,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     broker = EventBroker()
     engine = ProxyEngine(settings, store, broker)
 
+    # Built below, then started by the lifespan (its session manager needs a
+    # running task group before it can serve requests).
+    mcp_app: Any | None = None
+
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await engine.start()
-        try:
-            yield
-        finally:
-            await engine.stop()
-            store.close()
+        async with contextlib.AsyncExitStack() as stack:
+            if mcp_app is not None and hasattr(mcp_app, "router"):
+                await stack.enter_async_context(mcp_app.router.lifespan_context(mcp_app))
+            try:
+                yield
+            finally:
+                await engine.stop()
+                store.close()
 
     app = FastAPI(title="Lanius Engine", version=__version__, lifespan=lifespan)
+
+    # MCP over streamable HTTP, on the same local-only port (codex.md §10).
+    try:
+        from ..mcp import build_server as build_mcp
+        from ..mcp import transport_security
+
+        mcp_server = build_mcp(store, engine)
+        mcp_app = mcp_server.streamable_http_app(
+            transport_security=transport_security()
+        )
+        app.mount("/mcp", mcp_app)
+        app.state.mcp = mcp_server
+    except Exception:  # pragma: no cover - MCP is optional
+        logger.warning("MCP server unavailable", exc_info=True)
+        app.state.mcp = None
     # Local dev UI (vite) runs on a different port; stay localhost-only.
     app.add_middleware(
         CORSMiddleware,

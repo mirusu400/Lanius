@@ -19,7 +19,7 @@ Lanius는 **mitmproxy를 엔진으로 임베드**하고 그 위에 Burp Suite �
 - ✅ **M5** Intruder: § 페이로드 위치, 공격 유형 4종, 실시간 결과 테이블
 - ✅ **M6** Decoder(인/디코드 체인) · Comparer(diff) · 원시 TCP 캡처와 헥스 뷰
 - ✅ **M7** 플러그인: Python 애드온 로더 + Plugins 탭 + 예시 플러그인 2개
-- ⬜ M8: MCP 연동
+- ✅ **M8** MCP 연동: 에이전트용 툴 13종 (리댁션 기본)
 
 ## 빠른 시작
 
@@ -108,13 +108,39 @@ Proxy 탭 기능: 실시간 flow 테이블(WS 자동 재연결), host/method/sta
 
 ```bash
 cd engine
-.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (226)
+.venv/bin/python -m pytest -q     # 엔진 단위 테스트 (252)
 .venv/bin/python -m mypy          # 타입 체크
 
 cd ../ui
 npm test                          # UI 테스트 (133, jsdom 렌더 포함)
 npx tsc -b                        # 타입 체크
 ```
+
+## MCP (에이전트 연동)
+
+에이전트가 히스토리 조회·스코프 관리·인터셉트·replay를 할 수 있다.
+
+```jsonc
+// MCP 클라이언트 설정 예시 (stdio, 읽기 전용)
+{
+  "mcpServers": {
+    "lanius": {
+      "command": "/path/to/Lanius/engine/.venv/bin/python",
+      "args": ["-m", "app.mcp"],
+      "cwd": "/path/to/Lanius/engine"
+    }
+  }
+}
+```
+
+엔진이 실행 중이면 `http://127.0.0.1:8081/mcp/mcp` (streamable HTTP)로 붙을 수 있으며,
+이 경우 인터셉트·replay 등 쓰기 툴까지 사용할 수 있다.
+
+**툴:** `list_flows`, `get_flow`, `list_sites`, `list_endpoints`, `get_scope`,
+`add_scope_rule`, `list_intercepted`, `set_intercept`, `forward_intercepted`,
+`drop_intercepted`, `send_request`, `replay_flow`, `decode_value`.
+
+민감 헤더는 기본 리댁션되며, `reveal_secrets=true`를 명시할 때만 실제 값이 나온다.
 
 ## 플러그인
 
