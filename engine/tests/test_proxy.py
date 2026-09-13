@@ -175,3 +175,60 @@ def test_watchdog_uses_an_explicit_supervisor_pid(tmp_path) -> None:
         _time.sleep(0.25)
     os.kill(child_pid, 9)
     raise AssertionError("watchdog ignored the explicit supervisor pid")
+
+
+# --- cross-platform helpers -----------------------------------------------
+
+
+def test_request_shutdown_picks_the_right_signal(monkeypatch) -> None:
+    """Windows cannot deliver SIGTERM to itself, so SIGINT is used there."""
+    import signal as signal_module
+
+    from app import main as main_module
+
+    sent: list[int] = []
+    monkeypatch.setattr(main_module.os, "kill", lambda _pid, sig: sent.append(sig))
+
+    monkeypatch.setattr(main_module.os, "name", "posix")
+    main_module._request_shutdown()
+    assert sent == [signal_module.SIGTERM]
+
+    sent.clear()
+    monkeypatch.setattr(main_module.os, "name", "nt")
+    main_module._request_shutdown()
+    assert sent == [signal_module.SIGINT]
+
+
+def test_request_shutdown_survives_a_failing_kill(monkeypatch) -> None:
+    from app import main as main_module
+
+    def boom(_pid, _sig):
+        raise OSError("not permitted")
+
+    monkeypatch.setattr(main_module.os, "kill", boom)
+    main_module._request_shutdown()  # must not raise
+
+
+def test_pid_alive_uses_the_windows_probe(monkeypatch) -> None:
+    """On Windows os.kill(pid, 0) is unreliable, so a different path is taken."""
+    from app import main as main_module
+
+    called: list[int] = []
+    monkeypatch.setattr(main_module.os, "name", "nt")
+    monkeypatch.setattr(
+        main_module, "_pid_alive_windows", lambda pid: called.append(pid) or True
+    )
+    assert main_module._pid_alive(4321) is True
+    assert called == [4321]
+
+
+def test_pid_alive_still_short_circuits_on_windows(monkeypatch) -> None:
+    from app import main as main_module
+
+    monkeypatch.setattr(main_module.os, "name", "nt")
+    monkeypatch.setattr(
+        main_module,
+        "_pid_alive_windows",
+        lambda _pid: pytest.fail("should not probe pid 1"),
+    )
+    assert main_module._pid_alive(1) is True

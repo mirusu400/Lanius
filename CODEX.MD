@@ -276,6 +276,9 @@ cd shell && npm run tauri dev
 | CI | `rw.*.dmg`는 수집에서 제외 | create-dmg의 중간 이미지(78MB)가 릴리스에 섞여 올라감(실측으로 발견) |
 | CI | dmg 번들링은 3회 재시도 | Finder/AppleScript·디스크 중재와 경합해 간헐적으로 실패(로컬에서 재현) |
 | CI | 동결 엔진은 번들 전에 스모크 테스트 | PyInstaller 산출물은 임포트·데이터파일 누락이 실행 시점에야 드러나므로, 실제 기동 + 트래픽 캡처까지 확인 |
+| 셸 | 윈도우 지원: venv는 `Scripts/python.exe`, 엔진은 `.exe`, 종료는 `taskkill /T` | 경로·파일명·프로세스 트리 정리 방식이 유닉스와 달라 그대로 두면 윈도우에서 엔진을 못 찾거나 고아 프로세스가 남음 |
+| 셸 | `libc`는 `[target.'cfg(unix)'.dependencies]`로 분리 | 윈도우 빌드에서 불필요한 의존성이 걸리지 않도록 |
+| 엔진 | 워치독은 `os.name`으로 분기 | 윈도우는 자기 자신에게 SIGTERM을 못 보내 SIGINT를 쓰고, `os.kill(pid,0)` 대신 `OpenProcess`로 생존 확인 |
 | 셸 | 리소스 탐색은 macOS·Linux·AppImage 레이아웃을 모두 후보로 | `Contents/Resources`만 보면 deb(`/usr/bin` → `/usr/lib/<name>`)와 AppImage(`$APPDIR`)에서 번들 엔진을 못 찾음(Linux 잡 추가 시 발견) |
 
 ---

@@ -57,15 +57,29 @@ fn engine_command(app: &tauri::AppHandle) -> Option<Command> {
 
     // 3. Development: run the engine from the repo's virtualenv.
     let repo = repo_root()?;
-    let venv_python = repo.join("engine/.venv/bin/python");
-    if venv_python.exists() {
-        let mut cmd = Command::new(venv_python);
-        cmd.args(["-m", "app.main"])
-            .current_dir(repo.join("engine"));
-        return Some(cmd);
+    for relative in VENV_PYTHON {
+        let venv_python = repo.join(relative);
+        if venv_python.exists() {
+            let mut cmd = Command::new(venv_python);
+            cmd.args(["-m", "app.main"])
+                .current_dir(repo.join("engine"));
+            return Some(cmd);
+        }
     }
     None
 }
+
+/// Where a virtualenv keeps its interpreter, per platform.
+#[cfg(windows)]
+const VENV_PYTHON: &[&str] = &["engine/.venv/Scripts/python.exe"];
+#[cfg(not(windows))]
+const VENV_PYTHON: &[&str] = &["engine/.venv/bin/python"];
+
+/// Name of the frozen engine produced by PyInstaller.
+#[cfg(windows)]
+const ENGINE_BINARY: &str = "lanius-engine.exe";
+#[cfg(not(windows))]
+const ENGINE_BINARY: &str = "lanius-engine";
 
 /// Tauri rewrites resource paths that come from outside the crate (e.g.
 /// `../../engine/dist/lanius-engine` becomes `_up_/_up_/engine/dist/...`),
@@ -81,7 +95,7 @@ fn find_engine_binary(root: &std::path::Path) -> Option<PathBuf> {
             let path = entry.path();
             if path.is_dir() {
                 subdirs.push(path);
-            } else if path.file_name().and_then(|n| n.to_str()) == Some("lanius-engine") {
+            } else if path.file_name().and_then(|n| n.to_str()) == Some(ENGINE_BINARY) {
                 return Some(path);
             }
         }
@@ -118,7 +132,8 @@ fn resource_dirs(app: &tauri::AppHandle) -> Vec<PathBuf> {
                 dirs.push(parent.join("lib").join(&exe_name));
                 dirs.push(parent.join("lib"));
             }
-            // Portable layout: resources next to the executable.
+            // Windows installs, and any portable layout, keep resources
+            // next to the executable.
             dirs.push(exe_dir.to_path_buf());
         }
     }
@@ -232,6 +247,16 @@ fn stop_engine(state: &EngineProcess) {
         #[cfg(unix)]
         unsafe {
             libc::killpg(child.id() as i32, libc::SIGTERM);
+        }
+        // On Windows a frozen PyInstaller binary spawns a child of its own, so
+        // kill the whole tree rather than just the process we launched.
+        #[cfg(windows)]
+        {
+            let _ = Command::new("taskkill")
+                .args(["/PID", &child.id().to_string(), "/T", "/F"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
         }
         let _ = child.kill();
         let _ = child.wait();
@@ -373,7 +398,7 @@ mod tests {
         let base = std::env::temp_dir().join("lanius-res-test");
         let nested = base.join("_up_/_up_/engine/dist");
         std::fs::create_dir_all(&nested).expect("mkdir");
-        let target = nested.join("lanius-engine");
+        let target = nested.join(ENGINE_BINARY);
         std::fs::write(&target, b"#!/bin/sh\n").expect("write");
 
         let found = find_engine_binary(&base).expect("engine found");
@@ -395,7 +420,7 @@ mod tests {
         let base = std::env::temp_dir().join("lanius-linux-prefix");
         let lib = base.join("usr/lib/lanius");
         std::fs::create_dir_all(&lib).expect("mkdir");
-        let target = lib.join("lanius-engine");
+        let target = lib.join(ENGINE_BINARY);
         std::fs::write(&target, b"#!/bin/sh\n").expect("write");
 
         assert_eq!(find_engine_binary(&lib).as_ref(), Some(&target));
@@ -403,10 +428,23 @@ mod tests {
     }
 
     #[test]
+    fn engine_binary_name_matches_the_platform() {
+        // PyInstaller appends .exe on Windows; discovery must look for the
+        // right name or a Windows install would never find its engine.
+        if cfg!(windows) {
+            assert_eq!(ENGINE_BINARY, "lanius-engine.exe");
+            assert!(VENV_PYTHON[0].contains("Scripts"));
+        } else {
+            assert_eq!(ENGINE_BINARY, "lanius-engine");
+            assert!(VENV_PYTHON[0].ends_with("bin/python"));
+        }
+    }
+
+    #[test]
     fn find_engine_binary_ignores_similar_names() {
         let base = std::env::temp_dir().join("lanius-res-similar");
         std::fs::create_dir_all(&base).expect("mkdir");
-        std::fs::write(base.join("lanius-engine.txt"), b"x").expect("write");
+        std::fs::write(base.join(format!("{ENGINE_BINARY}.txt")), b"x").expect("write");
         std::fs::write(base.join("engine"), b"x").expect("write");
         assert!(find_engine_binary(&base).is_none());
         std::fs::remove_dir_all(&base).ok();

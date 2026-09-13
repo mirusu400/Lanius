@@ -31,6 +31,7 @@ Grab the latest build from the [Releases page](https://github.com/mirusu400/Lani
 | macOS (Apple Silicon) | `Lanius_*_aarch64.dmg` |
 | macOS (Intel) | `Lanius_*_x64.dmg` |
 | Linux | `lanius_*.AppImage` or `lanius_*.deb` |
+| Windows | `Lanius_*_x64_en-US.msi` or `Lanius_*-setup.exe` |
 
 Builds are not code signed yet. On macOS, clear the quarantine flag once after
 installing:
@@ -38,6 +39,9 @@ installing:
 ```bash
 xattr -dr com.apple.quarantine /Applications/Lanius.app
 ```
+
+On Windows, SmartScreen will warn about an unrecognised publisher. Choose
+**More info** then **Run anyway**.
 
 ## Getting started
 
@@ -169,7 +173,8 @@ them, so tokens do not leak into a transcript by accident.
 
 ## Building from source
 
-You need Python 3.12, Node 22 and a Rust toolchain.
+You need Python 3.12, Node 22 and a Rust toolchain. Builds run on macOS,
+Linux and Windows.
 
 ```bash
 # Engine
@@ -179,7 +184,7 @@ pip install -r requirements-dev.txt
 
 # Desktop app
 .venv/bin/pyinstaller --clean --noconfirm lanius-engine.spec
-cd ../shell && npm ci && npx tauri build --bundles app,dmg
+cd ../shell && npm ci && npx tauri build
 ```
 
 To run the pieces separately while developing:

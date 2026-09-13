@@ -78,6 +78,9 @@ jobs:
           - os: ubuntu-22.04
             label: linux-x86_64
             bundles: appimage,deb
+          - os: windows-latest
+            label: windows-x86_64
+            bundles: msi,nsis
     steps:
       - uses: actions/checkout@v4
 
@@ -127,7 +130,12 @@ jobs:
           LANIUS_DATA_DIR: ${{ runner.temp }}/lanius-smoke
         run: |
           set -euo pipefail
-          ./engine/dist/lanius-engine --proxy-port 18080 --api-port 18081 &
+
+          # PyInstaller appends .exe on Windows.
+          engine=./engine/dist/lanius-engine
+          [ -x "$engine" ] || engine=./engine/dist/lanius-engine.exe
+
+          "$engine" --proxy-port 18080 --api-port 18081 &
           engine_pid=$!
           trap 'kill "$engine_pid" 2>/dev/null || true' EXIT
 
@@ -216,7 +224,8 @@ jobs:
 
           # `rw.*.dmg` are create-dmg scratch images, not release artifacts.
           find "$bundle" -maxdepth 2 -type f \
-            \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) \
+            \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \
+               -o -name '*.msi' -o -name '*-setup.exe' \) \
             ! -name 'rw.*.dmg' \
             -exec cp {} "$out"/ \;
 
