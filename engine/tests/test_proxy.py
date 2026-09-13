@@ -31,6 +31,38 @@ def engine(tmp_path, port: int) -> ProxyEngine:
     return ProxyEngine(settings, FlowStore(settings.db_path), EventBroker())
 
 
+def _await_exit(pid: int, timeout: float = 15.0) -> bool:
+    """Wait for a pid to disappear. Uses the engine's own liveness probe so
+    the check works on Windows as well as POSIX."""
+    import time as _time
+
+    from app.main import _pid_alive
+
+    deadline = _time.time() + timeout
+    while _time.time() < deadline:
+        if not _pid_alive(pid):
+            return True
+        _time.sleep(0.25)
+    return False
+
+
+def _force_kill(pid: int) -> None:
+    """Best-effort cleanup of a test child on any platform."""
+    import subprocess
+
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            capture_output=True,
+            check=False,
+        )
+        return
+    try:
+        os.kill(pid, 9)
+    except OSError:
+        pass
+
+
 @pytest.mark.asyncio
 async def test_start_binds_and_accepts_connections(tmp_path) -> None:
     port = free_port()
@@ -108,15 +140,9 @@ def test_watchdog_exits_when_the_parent_dies(tmp_path) -> None:
     subprocess.run([sys.executable, "-c", launcher_code], timeout=30, check=False)
     child_pid = int(pid_file.read_text())
 
-    deadline = _time.time() + 15
-    while _time.time() < deadline:
-        try:
-            os.kill(child_pid, 0)
-        except OSError:
-            return  # child exited: watchdog worked
-        _time.sleep(0.25)
-
-    os.kill(child_pid, 9)
+    if _await_exit(child_pid):
+        return  # child exited: watchdog worked
+    _force_kill(child_pid)
     raise AssertionError("watchdog did not stop the orphaned engine")
 
 
@@ -166,14 +192,9 @@ def test_watchdog_uses_an_explicit_supervisor_pid(tmp_path) -> None:
     subprocess.run([sys.executable, "-c", launcher_code], timeout=30, check=False)
     child_pid = int(pid_file.read_text())
 
-    deadline = _time.time() + 15
-    while _time.time() < deadline:
-        try:
-            os.kill(child_pid, 0)
-        except OSError:
-            return
-        _time.sleep(0.25)
-    os.kill(child_pid, 9)
+    if _await_exit(child_pid):
+        return
+    _force_kill(child_pid)
     raise AssertionError("watchdog ignored the explicit supervisor pid")
 
 
