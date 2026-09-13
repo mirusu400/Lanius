@@ -41,7 +41,7 @@
       "debugApplicationIdSuffix": ".debug"
     },
     "resources": [
-      "../../engine/dist/lanius-engine"
+      "../../engine/dist/lanius-engine*"
     ]
   }
 }
