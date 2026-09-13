@@ -253,3 +253,91 @@ def test_pid_alive_still_short_circuits_on_windows(monkeypatch) -> None:
         lambda _pid: pytest.fail("should not probe pid 1"),
     )
     assert main_module._pid_alive(1) is True
+
+
+def test_windows_probe_reports_a_running_process(monkeypatch) -> None:
+    """The Win32 branch never runs on CI's POSIX hosts, so drive it with a
+    stand-in kernel32 to prove the logic and the declared signatures."""
+    import ctypes
+
+    from app import main as main_module
+
+    closed: list[int] = []
+
+    class FakeKernel32:
+        def __init__(self) -> None:
+            self.OpenProcess = _Fn(lambda _access, _inherit, pid: 0x1234 if pid == 42 else 0)
+            self.GetExitCodeProcess = _Fn(self._exit_code)
+            self.CloseHandle = _Fn(lambda handle: closed.append(handle) or 1)
+
+        @staticmethod
+        def _exit_code(_handle, out) -> int:
+            out._obj.value = 259  # STILL_ACTIVE
+            return 1
+
+    monkeypatch.setattr(main_module, "_kernel32", FakeKernel32)
+
+    assert main_module._pid_alive_windows(42) is True
+    assert closed == [0x1234], "the handle must be released"
+
+    # OpenProcess returning NULL means the pid is gone.
+    assert main_module._pid_alive_windows(99) is False
+
+    del ctypes
+
+
+class _Fn:
+    """Mimics a ctypes foreign function, which carries restype/argtypes."""
+
+    def __init__(self, impl) -> None:
+        self._impl = impl
+        self.restype = None
+        self.argtypes = None
+
+    def __call__(self, *args):
+        return self._impl(*args)
+
+
+def test_windows_probe_treats_an_exited_process_as_dead(monkeypatch) -> None:
+    """A pid whose handle still opens but has an exit code is not alive.
+    This is the case os.kill(pid, 0) gets wrong on Windows."""
+    from app import main as main_module
+
+    class FakeKernel32:
+        def __init__(self) -> None:
+            self.OpenProcess = _Fn(lambda *_: 0x1234)
+            self.GetExitCodeProcess = _Fn(self._exit_code)
+            self.CloseHandle = _Fn(lambda _handle: 1)
+
+        @staticmethod
+        def _exit_code(_handle, out) -> int:
+            out._obj.value = 0  # exited normally
+            return 1
+
+    monkeypatch.setattr(main_module, "_kernel32", FakeKernel32)
+    assert main_module._pid_alive_windows(42) is False
+
+
+def test_windows_probe_declares_pointer_sized_handles(monkeypatch) -> None:
+    """ctypes defaults return values to c_int, which truncates a 64-bit
+    HANDLE and makes CloseHandle close the wrong thing."""
+    import ctypes
+
+    from app import main as main_module
+
+    fake = type(
+        "K",
+        (),
+        {
+            "OpenProcess": _Fn(lambda *_: 0),
+            "GetExitCodeProcess": _Fn(lambda *_: 1),
+            "CloseHandle": _Fn(lambda *_: 1),
+        },
+    )
+    instance = fake()
+    monkeypatch.setattr(main_module, "_kernel32", lambda: instance)
+
+    main_module._pid_alive_windows(1)
+
+    assert instance.OpenProcess.restype is ctypes.c_void_p
+    assert instance.CloseHandle.argtypes == [ctypes.c_void_p]

@@ -81,6 +81,22 @@ const ENGINE_BINARY: &str = "lanius-engine.exe";
 #[cfg(not(windows))]
 const ENGINE_BINARY: &str = "lanius-engine";
 
+/// Arguments that terminate a process *tree* on Windows.
+///
+/// `/T` includes children, which matters because a frozen PyInstaller binary
+/// re-executes itself: killing only the pid we spawned would strand the real
+/// engine and leave the proxy port bound. Defined for every platform so the
+/// argument order stays under test on POSIX CI too.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn taskkill_args(pid: u32) -> [String; 4] {
+    [
+        "/PID".to_string(),
+        pid.to_string(),
+        "/T".to_string(),
+        "/F".to_string(),
+    ]
+}
+
 /// Tauri rewrites resource paths that come from outside the crate (e.g.
 /// `../../engine/dist/lanius-engine` becomes `_up_/_up_/engine/dist/...`),
 /// so search the resource directory instead of assuming a fixed location.
@@ -253,7 +269,7 @@ fn stop_engine(state: &EngineProcess) {
         #[cfg(windows)]
         {
             let _ = Command::new("taskkill")
-                .args(["/PID", &child.id().to_string(), "/T", "/F"])
+                .args(taskkill_args(child.id()))
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .status();
@@ -455,5 +471,13 @@ mod tests {
         let state = EngineProcess::default();
         stop_engine(&state); // must not panic
         assert!(state.0.lock().expect("lock").is_none());
+    }
+
+    #[test]
+    fn taskkill_targets_the_whole_process_tree() {
+        // /T is the part that matters: the frozen engine re-executes itself,
+        // so killing only the spawned pid would leave the proxy port bound.
+        let args = taskkill_args(4321);
+        assert_eq!(args, ["/PID", "4321", "/T", "/F"]);
     }
 }

@@ -86,13 +86,25 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def _pid_alive_windows(pid: int) -> bool:  # pragma: no cover - Windows only
+def _pid_alive_windows(pid: int) -> bool:
     import ctypes
 
     PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
     STILL_ACTIVE = 259
 
-    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    kernel32 = _kernel32()
+
+    # A HANDLE is pointer-sized. ctypes defaults every return value to
+    # c_int, which would truncate it on 64-bit Windows and leave us closing
+    # a bogus handle, so the signatures are declared explicitly.
+    kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel32.GetExitCodeProcess.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_ulong),
+    ]
+
     handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
     if not handle:
         return False
@@ -103,6 +115,13 @@ def _pid_alive_windows(pid: int) -> bool:  # pragma: no cover - Windows only
         return code.value == STILL_ACTIVE
     finally:
         kernel32.CloseHandle(handle)
+
+
+def _kernel32():  # pragma: no cover - trivial, and Windows only
+    """Indirection so the Win32 probe can be tested on any platform."""
+    import ctypes
+
+    return ctypes.windll.kernel32  # type: ignore[attr-defined]
 
 
 def parse_args(argv: list[str] | None = None) -> tuple[Settings, bool]:
