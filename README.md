@@ -248,13 +248,13 @@ them, so tokens do not leak into a transcript by accident.
 
 ## Building from source
 
-You need Python 3.12, Node 22 and a Rust toolchain. Builds run on macOS,
+You need Python 3.13 or newer, Node 22 and a Rust toolchain. Builds run on macOS,
 Linux and Windows.
 
 ```bash
 # Engine
 cd engine
-python3.12 -m venv .venv && . .venv/bin/activate
+python3.13 -m venv .venv && . .venv/bin/activate
 pip install -r requirements-dev.txt
 
 # Desktop app

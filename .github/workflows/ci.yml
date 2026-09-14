@@ -15,7 +15,10 @@ permissions:
   contents: read
 
 env:
-  PYTHON_VERSION: '3.12'
+  # 3.13 or newer. On 3.12 mitmproxy pins typing-extensions<=4.14, which
+  # collides with the pydantic that mcp requires, and pip spends minutes
+  # searching before giving up.
+  PYTHON_VERSION: '3.13'
   NODE_VERSION: '22'
 
 jobs:
@@ -115,6 +118,22 @@ jobs:
             patchelf \
             libglib2.0-dev \
             libgtk-3-dev
+
+      # tauri's build script resolves bundle resources at compile time and
+      # fails when the frozen engine is missing, so clippy and the tests
+      # cannot run without one. Freezing the real engine here would add
+      # several minutes to every push; the Rust code only ever looks the
+      # binary up at runtime, so an empty file of the right name is enough.
+      # The nightly workflow builds and ships the genuine engine.
+      - name: Placeholder engine binary
+        shell: bash
+        run: |
+          mkdir -p engine/dist
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            : > engine/dist/lanius-engine.exe
+          else
+            : > engine/dist/lanius-engine
+          fi
 
       - name: Format check
         working-directory: shell/src-tauri

@@ -1,4 +1,9 @@
-mitmproxy>=11.0
-fastapi>=0.115
-uvicorn[standard]>=0.30
-mcp>=2.0
+# Lower bounds are the versions this project is developed and tested against,
+# not the oldest that might work. Loose bounds made pip walk the whole release
+# history of mitmproxy and its transitive dependencies, which on Python 3.12
+# ends in 'resolution-too-deep' after several minutes. There is no upper bound,
+# so security updates still come through.
+mitmproxy>=12.2.3
+fastapi>=0.141
+uvicorn[standard]>=0.52
+mcp>=2.2
