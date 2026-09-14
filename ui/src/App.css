@@ -2056,3 +2056,13 @@ pre.body {
 .import-button input {
   display: none;
 }
+
+.rule-list input.invalid {
+  border-color: #b55353;
+}
+
+.field-error {
+  color: #e07a7a;
+  font-size: 12px;
+  margin: 4px 0;
+}

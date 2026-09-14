@@ -1,5 +1,5 @@
 /** Renders the real Intruder tab against a mocked engine. */
-import {cleanup, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -226,5 +226,45 @@ describe('IntruderTab', () => {
     render(<IntruderTab />);
     await user.click(screen.getByRole('button', { name: t('intruder.start') }));
     expect(await screen.findByRole('button', { name: t('intruder.stop') })).toBeTruthy();
+  });
+});
+
+describe('result context menu', () => {
+  it('offers to resend a result, which is the point of finding one', async () => {
+    render(<IntruderTab />);
+    await userEvent.click(screen.getByRole('button', { name: t('intruder.start') }));
+    const row = await screen.findByText('letmein');
+
+    fireEvent.contextMenu(row.closest('tr')!);
+
+    expect(
+      screen.getByRole('menuitem', { name: t('menu.sendToRepeater') }),
+    ).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: t('menu.copyPayload') })).toBeTruthy();
+  });
+
+  it('cannot resend a result that has no request behind it', async () => {
+    results = [
+      {
+        index: 0,
+        payloads: ['x'],
+        status_code: null,
+        length: 0,
+        duration_ms: null,
+        error: 'timeout',
+        flow_id: null,
+      },
+    ];
+    render(<IntruderTab />);
+    await userEvent.click(screen.getByRole('button', { name: t('intruder.start') }));
+    const row = await screen.findByText('x');
+
+    fireEvent.contextMenu(row.closest('tr')!);
+
+    expect(
+      (screen.getByRole('menuitem', {
+        name: t('menu.sendToRepeater'),
+      }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 });

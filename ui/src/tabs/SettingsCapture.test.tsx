@@ -184,6 +184,25 @@ describe('system capture', () => {
     expect(screen.getByLabelText(t('capture.ruleValue', { index: '2' }))).toBeTruthy();
   });
 
+  it('refuses a rule with a comma rather than splitting it in two', async () => {
+    // The comma is the spec separator, so 'a,b' would silently become two
+    // rules. The engine refuses it too.
+    render(<SettingsTab />);
+    await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
+    await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
+    await userEvent.type(
+      screen.getByLabelText(t('capture.ruleValue', { index: '1' })),
+      'chrome,firefox',
+    );
+
+    expect(screen.getByText(t('capture.ruleComma'))).toBeTruthy();
+    expect(
+      (screen.getByRole('button', { name: t('capture.apply') }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(posted).toEqual([]);
+  });
+
   it('removes a rule', async () => {
     render(<SettingsTab />);
     await userEvent.click(await screen.findByLabelText(t('capture.filtered')));

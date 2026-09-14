@@ -14,7 +14,12 @@ import {
   type CaInfo,
 } from '../api/client';
 import type { EngineStatus, LocalCaptureState, TlsState } from '../api/types';
-import { rulesToSpec, specToRules, type CaptureRule } from './captureRules';
+import {
+  ruleIsValid,
+  rulesToSpec,
+  specToRules,
+  type CaptureRule,
+} from './captureRules';
 import { LOCALES, LOCALE_NAMES, useI18n, type Locale } from '../i18n';
 
 /** Sentinel used to place a React node inside a translated sentence. */
@@ -279,7 +284,9 @@ function CaptureSection() {
                     <option value="exclude">{t('capture.exclude')}</option>
                   </select>
                   <input
-                    className="mono"
+                    className={
+                      rule.value.includes(',') ? 'mono invalid' : 'mono'
+                    }
                     aria-label={t('capture.ruleValue', { index: String(index + 1) })}
                     placeholder={t('capture.rulePlaceholder')}
                     value={rule.value}
@@ -303,6 +310,10 @@ function CaptureSection() {
             </ul>
           )}
 
+          {rules.some((rule) => rule.value.includes(',')) && (
+            <p className="field-error">{t('capture.ruleComma')}</p>
+          )}
+
           <div className="row">
             <button
               type="button"
@@ -317,7 +328,13 @@ function CaptureSection() {
             </button>
             <button
               type="button"
-              disabled={busy || rules.every((r) => !r.value.trim())}
+              disabled={
+                busy ||
+                rules.every((r) => !r.value.trim()) ||
+                // A comma would silently split one rule into two, and the
+                // engine refuses it anyway.
+                rules.some((r) => r.value.trim() && !ruleIsValid(r))
+              }
               onClick={() => void apply('filtered', rules)}
             >
               {t('capture.apply')}

@@ -190,6 +190,9 @@ const en = {
   'menu.closeOthers': 'Close other tabs',
   'menu.duplicate': 'Duplicate',
   'menu.rename': 'Rename',
+  'menu.copyPayload': 'Copy payload',
+  'menu.copyResponse': 'Copy response body',
+  'menu.openInProxy': 'Show in Proxy history',
   'capture.rules': 'Rules',
   'capture.rulesHelp':
     'Each rule matches part of the executable path, so "chrome" catches Google Chrome and "/Applications/" catches everything installed there.',
@@ -203,6 +206,7 @@ const en = {
   'capture.noRules': 'No rules yet. Add one, or pick a running app.',
   'capture.ruleValue': 'Rule {index}',
   'capture.ruleAction': 'Rule {index} action',
+  'capture.ruleComma': 'A rule cannot contain a comma; add a second rule instead.',
   'project.section': 'Project',
   'project.help':
     'Your capture, scope and open requests are saved as you work. Export a project to share it or keep a copy.',
@@ -505,6 +509,9 @@ const ko: Catalogue = {
   'menu.closeOthers': '다른 탭 닫기',
   'menu.duplicate': '복제',
   'menu.rename': '이름 변경',
+  'menu.copyPayload': '페이로드 복사',
+  'menu.copyResponse': '응답 본문 복사',
+  'menu.openInProxy': 'Proxy 기록에서 보기',
   'capture.rules': '규칙',
   'capture.rulesHelp':
     '각 규칙은 실행 파일 경로의 일부와 일치합니다. "chrome"은 Google Chrome을, "/Applications/"는 그 아래 설치된 모든 앱을 잡습니다.',
@@ -518,6 +525,7 @@ const ko: Catalogue = {
   'capture.noRules': '규칙이 없습니다. 추가하거나 실행 중인 앱에서 고르세요.',
   'capture.ruleValue': '규칙 {index}',
   'capture.ruleAction': '규칙 {index} 동작',
+  'capture.ruleComma': '규칙에 쉼표를 넣을 수 없습니다. 규칙을 하나 더 추가하세요.',
   'project.section': '프로젝트',
   'project.help':
     '캡처, 범위, 열어 둔 요청은 작업하는 동안 자동 저장됩니다. 공유하거나 사본을 남기려면 프로젝트를 내보내세요.',

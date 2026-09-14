@@ -7,7 +7,7 @@ import {
   type AttackConfig,
 } from '../api/client';
 import { connectStream } from '../api/stream';
-import type { Attack, AttackType } from '../api/types';
+import type { Attack, AttackResult, AttackType } from '../api/types';
 import {
   ATTACK_TYPES,
   addMarker,
@@ -19,6 +19,9 @@ import {
   requiredSets,
 } from './intruderModel';
 import { subscribeTarget } from './intruderStore';
+import { ContextMenu, useContextMenu } from '../components/ContextMenu';
+import { sendToRepeater } from './repeaterStore';
+import { getFlow } from '../api/client';
 import { errorText, useT } from '../i18n';
 
 const DEFAULT_TEMPLATE = 'GET /?q=\u00a7test\u00a7 HTTP/1.1\nHost: example.com\n\n';
@@ -125,6 +128,8 @@ export function IntruderTab() {
     await stopAttack(attack.id);
     void refresh(attack.id);
   };
+
+  const menu = useContextMenu<AttackResult>();
 
   const outliers = useMemo(
     () => markOutliers(attack?.results ?? []),
@@ -242,6 +247,7 @@ export function IntruderTab() {
                 <tr
                   key={result.index}
                   className={outliers.has(result.index) ? 'outlier' : undefined}
+                  onContextMenu={(event) => menu.open(event, result)}
                 >
                   <td className="mono num">{result.index}</td>
                   <td className="mono">{result.payloads.join(' , ')}</td>
@@ -258,6 +264,38 @@ export function IntruderTab() {
               ))}
             </tbody>
           </table>
+          <ContextMenu
+            position={menu.position}
+            items={
+              menu.target
+                ? [
+                    {
+                      label: t('menu.sendToRepeater'),
+                      // A result only carries a flow id, so the request
+                      // has to be fetched before it can be resent.
+                      disabled: !menu.target.flow_id,
+                      onSelect: () => {
+                        const id = menu.target?.flow_id;
+                        if (!id) return;
+                        void getFlow(id)
+                          .then((detail) => sendToRepeater(detail, detail))
+                          .catch(() => undefined);
+                      },
+                    },
+                    {
+                      label: t('menu.copyPayload'),
+                      separator: true,
+                      onSelect: () => {
+                        void navigator.clipboard?.writeText(
+                          (menu.target?.payloads ?? []).join(', '),
+                        );
+                      },
+                    },
+                  ]
+                : []
+            }
+            onClose={menu.close}
+          />
         </div>
       </div>
     </div>
