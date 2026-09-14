@@ -9,6 +9,7 @@ import re
 import socket
 import subprocess
 import sys
+from typing import Any
 
 from mitmproxy import options
 from mitmproxy.tools.dump import DumpMaster
@@ -23,6 +24,13 @@ from .addons.scope import ScopeManager
 from .config import Settings
 from .db.store import FlowStore
 from .events import EventBroker
+from .tls import (
+    DEFAULT_PROFILE,
+    PROFILES as TLS_PROFILES,
+    options_for,
+    patch_version_probe,
+    validate_ciphers,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +147,14 @@ class ProxyEngine:
             tcp_hosts=list(self.settings.tcp_hosts),
         )
         master = DumpMaster(opts, with_termlog=False, with_dumper=False)
+        # Applying a TLS option makes mitmproxy probe which versions this
+        # OpenSSL supports, which raises rather than returning False here.
+        patch_version_probe()
+        # The TLS options only exist once the addons are loaded, so they
+        # cannot go into Options() above.
+        profile = self.store.get_setting(self.TLS_PROFILE_SETTING) or DEFAULT_PROFILE
+        custom = self.store.get_setting(self.TLS_CIPHERS_SETTING) or None
+        master.options.update(**options_for(profile, custom))
         # mitmproxy's errorcheck addon calls sys.exit() on startup errors, which
         # would tear down the host application. We surface errors ourselves.
         if (errorcheck := master.addons.get("errorcheck")) is not None:
@@ -185,6 +201,51 @@ class ProxyEngine:
         self._report_mode_failures()
 
     CAPTURE_SETTING = "local_capture_spec"
+    TLS_PROFILE_SETTING = "tls_profile"
+    TLS_CIPHERS_SETTING = "tls_ciphers"
+
+    def tls_state(self) -> dict[str, Any]:
+        """The upstream TLS profile in use, and what is available."""
+        profile = self.store.get_setting(self.TLS_PROFILE_SETTING) or DEFAULT_PROFILE
+        custom = self.store.get_setting(self.TLS_CIPHERS_SETTING) or None
+        applied = options_for(profile, custom)
+        return {
+            "profile": profile,
+            "custom_ciphers": custom,
+            "ciphers": applied["ciphers_server"],
+            "available": [
+                {"id": key, "label": value["label"]}
+                for key, value in TLS_PROFILES.items()
+            ],
+        }
+
+    async def set_tls_profile(
+        self, profile: str, custom_ciphers: str | None = None
+    ) -> dict[str, Any]:
+        """Change the TLS profile used for connections to the server.
+
+        mitmproxy terminates TLS, so without this every request carries
+        mitmproxy's own handshake and is trivially fingerprinted.
+        """
+        if profile not in TLS_PROFILES:
+            raise ValueError(f"unknown TLS profile: {profile!r}")
+        custom = (custom_ciphers or "").strip() or None
+        if custom is not None:
+            validate_ciphers(custom)
+
+        self.store.set_setting(self.TLS_PROFILE_SETTING, profile)
+        if custom is None:
+            self.store.delete_setting(self.TLS_CIPHERS_SETTING)
+        else:
+            self.store.set_setting(self.TLS_CIPHERS_SETTING, custom)
+
+        if self.master is not None:
+            self.master.options.update(**options_for(profile, custom))
+
+        state = self.tls_state()
+        logger.info("upstream TLS profile set to %s", profile)
+        self.broker.publish("engine.tls_changed", state)
+        return state
 
     def local_capture_spec(self) -> str | None:
         """The saved local-capture target.

@@ -275,6 +275,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @app.get("/api/tls")
+    async def tls_state() -> dict[str, Any]:
+        return engine.tls_state()
+
+    @app.post("/api/tls")
+    async def set_tls(payload: dict[str, Any]) -> dict[str, Any]:
+        """Change the TLS profile used towards the server.
+
+        ``profile`` selects a preset; ``ciphers`` optionally overrides its
+        cipher list with an OpenSSL cipher string.
+        """
+        profile = payload.get("profile")
+        if not isinstance(profile, str):
+            raise HTTPException(status_code=422, detail="profile must be a string")
+        ciphers = payload.get("ciphers")
+        if ciphers is not None and not isinstance(ciphers, str):
+            raise HTTPException(status_code=422, detail="ciphers must be a string")
+        try:
+            return await engine.set_tls_profile(profile, ciphers)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     @app.get("/api/flows")
     async def list_flows(
         limit: int = Query(100, ge=1, le=1000),

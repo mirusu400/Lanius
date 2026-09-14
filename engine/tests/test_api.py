@@ -349,3 +349,57 @@ def test_a_spec_mitmproxy_rejects_returns_422(client) -> None:
     refused too, or it would be stored and break the next startup."""
     assert client.post("/api/capture/local", json={"spec": ",,,"}).status_code == 422
     assert client.get("/api/status").json()["local_capture"]["spec"] is None
+
+
+# --- upstream TLS profile ----------------------------------------------------
+
+
+def test_tls_defaults_to_mitmproxys_own_handshake(client) -> None:
+    data = client.get("/api/tls").json()
+    assert data["profile"] == "default"
+    assert data["ciphers"] is None
+    assert [p["id"] for p in data["available"]][0] == "default"
+
+
+def test_selecting_a_browser_profile_changes_the_ciphers(client) -> None:
+    body = client.post("/api/tls", json={"profile": "chrome"}).json()
+    assert body["profile"] == "chrome"
+    assert body["ciphers"] and "TLS_AES_128_GCM_SHA256" in body["ciphers"]
+    assert client.get("/api/tls").json()["profile"] == "chrome"
+
+
+def test_custom_ciphers_override_the_profile(client) -> None:
+    body = client.post(
+        "/api/tls", json={"profile": "chrome", "ciphers": "ECDHE-RSA-AES128-GCM-SHA256"}
+    ).json()
+    assert body["ciphers"] == "ECDHE-RSA-AES128-GCM-SHA256"
+    assert body["custom_ciphers"] == "ECDHE-RSA-AES128-GCM-SHA256"
+
+
+def test_clearing_custom_ciphers_restores_the_profile(client) -> None:
+    client.post("/api/tls", json={"profile": "chrome", "ciphers": "AES256-SHA"})
+    body = client.post("/api/tls", json={"profile": "chrome", "ciphers": ""}).json()
+    assert body["custom_ciphers"] is None
+    assert "TLS_AES_128_GCM_SHA256" in body["ciphers"]
+
+
+def test_an_unusable_cipher_list_is_refused(client) -> None:
+    """Storing one would make every upstream request fail with a 502."""
+    assert (
+        client.post(
+            "/api/tls", json={"profile": "chrome", "ciphers": "NOT-A-CIPHER"}
+        ).status_code
+        == 422
+    )
+    assert client.get("/api/tls").json()["custom_ciphers"] is None
+
+
+def test_an_unknown_profile_is_refused(client) -> None:
+    assert client.post("/api/tls", json={"profile": "netscape"}).status_code == 422
+
+
+def test_tls_profile_survives_a_restart(client, tmp_path) -> None:
+    """The setting is stored, not just held in the running options."""
+    client.post("/api/tls", json={"profile": "firefox"})
+    store = client.app.state.store
+    assert store.get_setting("tls_profile") == "firefox"
