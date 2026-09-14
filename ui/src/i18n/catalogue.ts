@@ -216,6 +216,23 @@ const en = {
   'project.imported': 'Imported {flows} requests and {scope} scope rules.',
   'project.importFailed': 'Could not import: {message}',
   'project.confirmImport': 'Importing replaces what is currently open. Continue?',
+  'mcp.section': 'AI agents (MCP)',
+  'mcp.help':
+    'Lanius exposes captured traffic to AI coding agents over the Model Context Protocol. An agent can read what you captured, manage scope, and replay requests.',
+  'mcp.enable': 'Allow agents to connect',
+  'mcp.enabled': 'Agents can connect.',
+  'mcp.disabled': 'Turned off. Agents are refused.',
+  'mcp.unavailable':
+    'The MCP server could not start, so agents cannot connect. The rest of Lanius is unaffected.',
+  'mcp.endpoint': 'Endpoint',
+  'mcp.copy': 'Copy client config',
+  'mcp.copied': 'Configuration copied.',
+  'mcp.toolsHeading': 'What an agent can do ({count} tools)',
+  'mcp.readOnly': 'reads',
+  'mcp.writes': 'acts',
+  'mcp.writesWarning':
+    'Some tools act rather than look: they can send requests through the proxy, change your scope, and release held requests. Connect agents you trust.',
+  'mcp.localOnly': 'Reachable from this machine only, like the rest of the API.',
   'listener.section': 'Proxy listener',
   'listener.help':
     'Where the proxy accepts connections. Change the port when another tool already holds it, and the address to let other devices reach the proxy.',
@@ -552,6 +569,23 @@ const ko: Catalogue = {
   'project.imported': '요청 {flows}건과 범위 규칙 {scope}건을 가져왔습니다.',
   'project.importFailed': '가져오지 못했습니다: {message}',
   'project.confirmImport': '가져오면 현재 열린 내용이 대체됩니다. 계속할까요?',
+  'mcp.section': 'AI 에이전트 (MCP)',
+  'mcp.help':
+    'Lanius는 Model Context Protocol로 캡처한 트래픽을 AI 코딩 에이전트에 제공합니다. 에이전트는 캡처 내용을 읽고, 스코프를 관리하고, 요청을 다시 보낼 수 있습니다.',
+  'mcp.enable': '에이전트 연결 허용',
+  'mcp.enabled': '에이전트가 연결할 수 있습니다.',
+  'mcp.disabled': '꺼져 있습니다. 에이전트 연결이 거부됩니다.',
+  'mcp.unavailable':
+    'MCP 서버를 시작하지 못해 에이전트가 연결할 수 없습니다. 나머지 기능에는 영향이 없습니다.',
+  'mcp.endpoint': '엔드포인트',
+  'mcp.copy': '클라이언트 설정 복사',
+  'mcp.copied': '설정을 복사했습니다.',
+  'mcp.toolsHeading': '에이전트가 할 수 있는 일 (도구 {count}개)',
+  'mcp.readOnly': '읽기',
+  'mcp.writes': '실행',
+  'mcp.writesWarning':
+    '보기만 하지 않고 실제로 동작하는 도구가 있습니다. 프록시로 요청을 보내고, 스코프를 바꾸고, 멈춰 둔 요청을 내보낼 수 있습니다. 신뢰하는 에이전트만 연결하세요.',
+  'mcp.localOnly': '나머지 API와 마찬가지로 이 컴퓨터에서만 접속할 수 있습니다.',
   'listener.section': '프록시 리스너',
   'listener.help':
     '프록시가 연결을 받는 위치입니다. 다른 도구가 포트를 쓰고 있으면 포트를 바꾸고, 다른 기기에서 접속하게 하려면 주소를 바꾸세요.',

@@ -1211,6 +1211,30 @@ pre.body {
   text-transform: uppercase;
 }
 
+/* MCP tool list: a name, what it does, and whether it only looks. */
+.mcp-tools {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+}
+
+.mcp-tools li {
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 180px 56px 1fr;
+  padding: 6px 0;
+}
+
+.mcp-tools li:last-child {
+  border-bottom: none;
+}
+
+.mcp-tools code {
+  color: var(--text);
+}
+
 .settings-grid {
   display: grid;
   gap: 4px 16px;

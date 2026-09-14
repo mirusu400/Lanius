@@ -602,3 +602,50 @@ def test_cors_still_refuses_a_remote_origin(client) -> None:
         assert response.headers.get("access-control-allow-origin") is None, (
             f"{origin} must not be allowed to read the engine"
         )
+
+
+def test_mcp_reports_where_to_connect_and_what_it_offers(client) -> None:
+    body = client.get("/api/mcp").json()
+    assert body["available"] is True
+    assert body["enabled"] is True
+    # Not just any /mcp string: the transport mounts its own path beneath
+    # ours, so the URL a client needs is doubled. Advertising the wrong one
+    # means every agent fails to connect, which a substring check missed.
+    assert body["url"].endswith("/mcp/mcp")
+    posted = client.post(
+        "/mcp/mcp",
+        headers={"Accept": "text/event-stream, application/json"},
+        json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
+    )
+    assert posted.status_code != 404, "the advertised URL is not mounted"
+    # The tool list is read from the server, so it cannot drift from what
+    # an agent is actually given.
+    names = [tool["name"] for tool in body["tools"]]
+    assert "list_flows" in names
+    assert "send_request" in names
+    # Tools that act, rather than look, are flagged so the UI can say so.
+    writes = {tool["name"] for tool in body["tools"] if tool["writes"]}
+    assert "send_request" in writes
+    assert "list_flows" not in writes
+
+
+def test_turning_mcp_off_actually_refuses_agents(client) -> None:
+    """An off switch that only greys out a checkbox would be worse than
+    none: the point is to stop an agent reaching the proxy."""
+    before = client.post("/mcp/", headers={"Accept": "text/event-stream"})
+    assert before.status_code != 403
+
+    assert client.post("/api/mcp", json={"enabled": False}).json()["enabled"] is False
+
+    blocked = client.post("/mcp/", headers={"Accept": "text/event-stream"})
+    assert blocked.status_code == 403
+    assert "Settings" in blocked.json()["detail"]
+
+    # And back on again.
+    assert client.post("/api/mcp", json={"enabled": True}).json()["enabled"] is True
+    assert client.post("/mcp/", headers={"Accept": "text/event-stream"}).status_code != 403
+
+
+def test_mcp_toggle_rejects_nonsense(client) -> None:
+    assert client.post("/api/mcp", json={"enabled": "yes"}).status_code == 422
+    assert client.post("/api/mcp", json={}).status_code == 422

@@ -305,6 +305,40 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
     return server
 
 
+# Tools that change something: traffic sent, scope edited, a held request
+# released. Worth naming so the UI can say what an agent could do, rather
+# than presenting thirteen names as if they were all harmless lookups.
+WRITING_TOOLS = frozenset(
+    {
+        "add_scope_rule",
+        "drop_intercepted",
+        "forward_intercepted",
+        "replay_flow",
+        "send_request",
+        "set_intercept",
+    }
+)
+
+
+def describe_tools(server: Any) -> list[dict[str, Any]]:
+    """Name and description of every tool this server exposes.
+
+    Read from the server rather than written out again, so the Settings
+    list cannot drift from what an agent actually gets.
+    """
+    manager = getattr(server, "_tool_manager", None)
+    tools: list[Any] = getattr(manager, "list_tools", lambda: [])() if manager else []
+    described: list[dict[str, Any]] = [
+        {
+            "name": getattr(tool, "name", ""),
+            "description": (getattr(tool, "description", "") or "").strip(),
+            "writes": getattr(tool, "name", "") in WRITING_TOOLS,
+        }
+        for tool in tools
+    ]
+    return sorted(described, key=lambda entry: entry["name"])
+
+
 def transport_security() -> Any:
     """DNS-rebinding protection that allows any localhost port.
 

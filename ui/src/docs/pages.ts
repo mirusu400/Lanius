@@ -27,6 +27,77 @@ export interface DocPage {
 
 const en: DocPage[] = [
   {
+    id: 'mcp',
+    title: 'AI agents (MCP)',
+    summary: 'Let a coding agent read your captured traffic and replay requests.',
+    sections: [
+      {
+        heading: 'What this is',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Lanius speaks the Model Context Protocol, so an AI coding agent can work with what you have captured instead of you pasting requests into a chat window. The agent connects to the running engine and gets a set of tools.',
+          },
+          {
+            kind: 'text',
+            body: 'Settings shows the endpoint and a configuration you can copy straight into your client. The address carries the port this engine is actually on, so it stays right even after you move the listener.',
+          },
+        ],
+      },
+      {
+        heading: 'What an agent can do',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Reading: list_flows and get_flow for captured traffic, list_sites and list_endpoints to see the shape of an application, get_scope for the current scope, list_intercepted for requests held at a breakpoint, and decode_value for encoded strings.',
+          },
+          {
+            kind: 'text',
+            body: 'Acting: send_request puts a new request through the proxy, replay_flow repeats a captured one with edits, add_scope_rule changes the scope, set_intercept turns interception on and off, and forward_intercepted and drop_intercepted decide what happens to a held request.',
+          },
+          {
+            kind: 'note',
+            body: 'Sensitive headers such as Authorization and Cookie are redacted unless the agent asks for them with reveal_secrets.',
+          },
+        ],
+      },
+      {
+        heading: 'Connecting a client',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Copy the configuration from Settings and paste it into your agent. For a client that speaks HTTP it looks like this:',
+          },
+          {
+            kind: 'code',
+            body: '{\n  "mcpServers": {\n    "lanius": {\n      "url": "http://127.0.0.1:8081/mcp/mcp"\n    }\n  }\n}',
+          },
+          {
+            kind: 'text',
+            body: 'A client that only speaks stdio can run the server directly against the project database, which works without the desktop app open, though only the reading tools are available that way:',
+          },
+          {
+            kind: 'code',
+            body: 'python -m app.mcp',
+          },
+        ],
+      },
+      {
+        heading: 'Turning it off',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'An agent with these tools can send traffic through your proxy, change your scope and release held requests. Untick "Allow agents to connect" in Settings and connections are refused; the rest of Lanius is unaffected.',
+          },
+          {
+            kind: 'note',
+            body: 'The endpoint listens on this machine only, like the rest of the API, so it is not reachable from the network even when the proxy itself is.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: 'listener',
     title: 'Proxy listener',
     summary:
@@ -272,6 +343,77 @@ const en: DocPage[] = [
 ];
 
 const ko: DocPage[] = [
+  {
+    id: 'mcp',
+    title: 'AI 에이전트 (MCP)',
+    summary: '코딩 에이전트가 캡처한 트래픽을 읽고 요청을 다시 보낼 수 있게 합니다.',
+    sections: [
+      {
+        heading: '무엇인가',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Lanius는 Model Context Protocol을 지원합니다. 요청을 채팅창에 복사해 붙여넣는 대신, AI 코딩 에이전트가 캡처한 내용을 직접 다룰 수 있습니다. 에이전트는 실행 중인 엔진에 연결해 도구 모음을 받습니다.',
+          },
+          {
+            kind: 'text',
+            body: '설정에 엔드포인트와 클라이언트에 그대로 붙여넣을 수 있는 설정이 있습니다. 주소에는 이 엔진이 실제로 쓰는 포트가 들어가므로, 리스너를 옮겨도 계속 맞습니다.',
+          },
+        ],
+      },
+      {
+        heading: '에이전트가 할 수 있는 일',
+        blocks: [
+          {
+            kind: 'text',
+            body: '읽기: 캡처한 트래픽은 list_flows와 get_flow, 애플리케이션의 구조는 list_sites와 list_endpoints, 현재 스코프는 get_scope, 중단점에 멈춘 요청은 list_intercepted, 인코딩된 문자열은 decode_value로 봅니다.',
+          },
+          {
+            kind: 'text',
+            body: '실행: send_request는 새 요청을 프록시로 보내고, replay_flow는 캡처한 요청을 수정해 다시 보냅니다. add_scope_rule은 스코프를 바꾸고, set_intercept는 가로채기를 켜고 끄며, forward_intercepted와 drop_intercepted는 멈춰 둔 요청을 내보내거나 버립니다.',
+          },
+          {
+            kind: 'note',
+            body: 'Authorization, Cookie 같은 민감한 헤더는 에이전트가 reveal_secrets로 명시하지 않으면 가려집니다.',
+          },
+        ],
+      },
+      {
+        heading: '클라이언트 연결',
+        blocks: [
+          {
+            kind: 'text',
+            body: '설정에서 구성을 복사해 에이전트에 붙여넣으세요. HTTP를 쓰는 클라이언트라면 이런 모양입니다:',
+          },
+          {
+            kind: 'code',
+            body: '{\n  "mcpServers": {\n    "lanius": {\n      "url": "http://127.0.0.1:8081/mcp/mcp"\n    }\n  }\n}',
+          },
+          {
+            kind: 'text',
+            body: 'stdio만 지원하는 클라이언트는 프로젝트 데이터베이스를 직접 읽는 서버를 실행할 수 있습니다. 데스크톱 앱이 꺼져 있어도 되지만, 이 방식에서는 읽기 도구만 쓸 수 있습니다:',
+          },
+          {
+            kind: 'code',
+            body: 'python -m app.mcp',
+          },
+        ],
+      },
+      {
+        heading: '끄는 방법',
+        blocks: [
+          {
+            kind: 'text',
+            body: '이 도구를 가진 에이전트는 프록시로 트래픽을 보내고, 스코프를 바꾸고, 멈춰 둔 요청을 내보낼 수 있습니다. 설정에서 "에이전트 연결 허용"을 끄면 연결이 거부되며, 나머지 기능에는 영향이 없습니다.',
+          },
+          {
+            kind: 'note',
+            body: '엔드포인트는 나머지 API와 마찬가지로 이 컴퓨터에서만 대기합니다. 프록시 자체를 네트워크에 열어도 이쪽은 외부에서 접속할 수 없습니다.',
+          },
+        ],
+      },
+    ],
+  },
   {
     id: 'listener',
     title: '프록시 리스너',

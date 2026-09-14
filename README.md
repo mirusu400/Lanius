@@ -253,12 +253,18 @@ requests, and replay them.
 }
 ```
 
-While the app is running you can also connect over HTTP at
-`http://127.0.0.1:8081/mcp/mcp`, which additionally exposes the interception
-and replay tools.
+While the app is running you can also connect over HTTP, which additionally
+exposes the interception and replay tools. **Settings > AI agents** shows the
+endpoint, lists every tool with whether it only reads or actually acts, and
+has a configuration you can copy straight into your client.
 
 Secrets are redacted in every response unless the agent explicitly asks for
 them, so tokens do not leak into a transcript by accident.
+
+An agent with these tools can send traffic through your proxy, change your
+scope and release held requests. Untick **Allow agents to connect** and
+connections are refused. The endpoint listens on this machine only, even when
+the proxy itself is bound to the network.
 
 ## Building from source
 

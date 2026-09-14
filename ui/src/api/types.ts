@@ -275,6 +275,22 @@ export interface TlsProfileOption {
   label: string;
 }
 
+export interface McpTool {
+  name: string;
+  description: string;
+  /** True when the tool changes something rather than just reading. */
+  writes: boolean;
+}
+
+export interface McpState {
+  available: boolean;
+  enabled: boolean;
+  url: string;
+  host: string;
+  port: number;
+  tools: McpTool[];
+}
+
 export interface BindAddress {
   host: string;
   label: string;

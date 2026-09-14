@@ -372,6 +372,20 @@ export function setLocalCapture(
   });
 }
 
+export function getMcpState(): Promise<import('./types').McpState> {
+  return request('/api/mcp');
+}
+
+export function setMcpEnabled(
+  enabled: boolean,
+): Promise<import('./types').McpState> {
+  return request('/api/mcp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 export function getListener(): Promise<import('./types').ListenerState> {
   return request('/api/listener');
 }

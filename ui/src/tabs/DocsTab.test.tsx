@@ -14,6 +14,13 @@ afterEach(cleanup);
 
 /** Open the capture page: these assertions are about its content, and it
  * is no longer the page the tab opens on. */
+async function openPage(englishTitle: string, koreanTitle: string) {
+  const title = TEST_LOCALE === 'ko' ? koreanTitle : englishTitle;
+  await userEvent.click(
+    screen.getByRole('button', { name: new RegExp(`^${title}`) }),
+  );
+}
+
 async function openCapturePage() {
   const title = TEST_LOCALE === 'ko' ? '시스템 캡처' : 'System capture';
   // The nav button's accessible name includes the summary, so match a prefix.
@@ -59,10 +66,27 @@ describe('DocsTab', () => {
     expect(body).toContain('Mitmproxy Redirector');
   });
 
-  it('explains binding beyond this machine, and the risk', () => {
+  it('documents what an agent can actually do, including acting', () => {
+    // The MCP page opens the docs, so it needs no navigation. It must name
+    // the tools and be honest that some of them act rather than look.
+    render(<DocsTab />);
+    const body = document.querySelector('.docs-body')!.textContent ?? '';
+    expect(body).toContain('list_flows');
+    expect(body).toContain('send_request');
+    expect(body).toContain('reveal_secrets');
+    // And carry a config a reader can paste.
+    const code = document.querySelector('.docs-code')?.textContent ?? '';
+    expect(code).toContain('mcpServers');
+    // The doubled path is what a client actually needs; /mcp alone fails
+    // to connect, so the sample must not teach the short one.
+    expect(code).toContain('/mcp/mcp');
+  });
+
+  it('explains binding beyond this machine, and the risk', async () => {
     // The listener page is what a user reaches for when a phone cannot
     // use the proxy, so it has to cover the address and say what it costs.
     render(<DocsTab />);
+    await openPage('Proxy listener', '프록시 리스너');
     const body = document.querySelector('.docs-body')!.textContent ?? '';
     expect(body).toContain('0.0.0.0');
     expect(body).toContain('127.0.0.1');

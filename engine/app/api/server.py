@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from .. import __version__
@@ -201,6 +201,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.mount("/mcp", mcp_app)
         app.state.mcp = mcp_server
+
+        @app.middleware("http")
+        async def refuse_mcp_when_disabled(request: Any, call_next: Any) -> Any:
+            """Honour the off switch without rebuilding the app.
+
+            Turning MCP off has to actually stop agents reaching it, not
+            just grey out a checkbox, so the request is refused here.
+            """
+            if request.url.path.startswith("/mcp") and (
+                store.get_setting("mcp_enabled") == "0"
+            ):
+                return JSONResponse(
+                    {"detail": "MCP is turned off in Settings"}, status_code=403
+                )
+            return await call_next(request)
     except Exception:  # pragma: no cover - MCP is optional
         logger.warning("MCP server unavailable", exc_info=True)
         app.state.mcp = None
@@ -379,6 +394,54 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return await engine.set_tls_profile(profile, ciphers)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    MCP_ENABLED_SETTING = "mcp_enabled"
+
+    def mcp_enabled() -> bool:
+        # On unless explicitly turned off, which is how it has always
+        # behaved; the setting only exists so it can be turned off.
+        return store.get_setting(MCP_ENABLED_SETTING) != "0"
+
+    def mcp_state() -> dict[str, Any]:
+        server = getattr(app.state, "mcp", None)
+        tools: list[dict[str, Any]] = []
+        if server is not None:
+            try:
+                from ..mcp import describe_tools
+
+                tools = describe_tools(server)
+            except Exception:  # pragma: no cover - depends on the mcp package
+                logger.debug("could not list MCP tools", exc_info=True)
+        return {
+            "available": server is not None,
+            "enabled": mcp_enabled(),
+            # What a client connects to. The mount is at /mcp and the
+            # transport adds its own /mcp beneath it, so the path a client
+            # needs really is doubled; giving out /mcp alone fails to
+            # connect. Local-only, like the rest of the API.
+            "url": f"http://{settings.api_host}:{settings.api_port}/mcp/mcp",
+            "host": settings.api_host,
+            "port": settings.api_port,
+            "tools": tools,
+        }
+
+    @app.get("/api/mcp")
+    async def mcp_status() -> dict[str, Any]:
+        return mcp_state()
+
+    @app.post("/api/mcp")
+    async def set_mcp(payload: dict[str, Any]) -> dict[str, Any]:
+        """Turn the MCP server on or off.
+
+        The mount stays in place either way; requests are refused while it
+        is off, which avoids rebuilding the app to change one setting.
+        """
+        enabled = payload.get("enabled")
+        if not isinstance(enabled, bool):
+            raise HTTPException(status_code=422, detail="enabled must be true or false")
+        store.set_setting(MCP_ENABLED_SETTING, "1" if enabled else "0")
+        broker.publish("mcp.toggled", {"enabled": enabled})
+        return mcp_state()
 
     @app.get("/api/listener")
     async def listener() -> dict[str, Any]:
