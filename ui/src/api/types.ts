@@ -259,4 +259,6 @@ export interface Dashboard {
   intercept_enabled: boolean;
   paused: number;
   version: string;
+  modes: ProxyModeStatus[];
+  local_capture: LocalCaptureState;
 }

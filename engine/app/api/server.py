@@ -245,6 +245,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "intercept_enabled": engine.intercept.rules.enabled,
             "paused": len(engine.intercept.paused),
             "version": __version__,
+            # A mode can be down, or local capture can be waiting for
+            # approval, while the engine itself looks healthy. The
+            # dashboard is where a user would notice.
+            "modes": engine.mode_status(),
+            "local_capture": local_capture_state(),
         }
 
     @app.get("/api/flows")

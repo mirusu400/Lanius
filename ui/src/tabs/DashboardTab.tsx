@@ -55,6 +55,13 @@ export function DashboardTab({ onOpenTab }: { onOpenTab?: (tab: string) => void 
   const totalStatus = Object.values(data.status_groups).reduce((a, b) => a + b, 0);
   const failures = (data.status_groups['4xx'] ?? 0) + (data.status_groups['5xx'] ?? 0);
 
+  const downModes = (data.modes ?? []).filter((m) => !m.running);
+  // Local capture reports itself as running while it waits for approval,
+  // so an unapproved extension is a separate signal from a dead mode.
+  const capture = data.local_capture;
+  const captureBlocked =
+    capture && !capture.approved && (data.modes ?? []).some((m) => m.spec.startsWith('local'));
+
   return (
     <div className="dash">
       <header className="dash-head">
@@ -78,6 +85,30 @@ export function DashboardTab({ onOpenTab }: { onOpenTab?: (tab: string) => void 
           )}
         </div>
       </header>
+
+      {(downModes.length > 0 || captureBlocked) && (
+        <section className="dash-alerts">
+          {captureBlocked && (
+            <div className="dash-alert">
+              <strong>
+                {capture.detail === 'not installed' ||
+                capture.supported === false
+                  ? t('dash.captureUnavailable', {
+                      detail: capture.detail ?? '',
+                    })
+                  : t('dash.captureWaiting')}
+              </strong>
+              <span>{t('dash.captureWaitingHelp')}</span>
+            </div>
+          )}
+          {downModes.map((mode) => (
+            <div className="dash-alert" key={mode.spec}>
+              <strong>{t('dash.modeDown', { spec: mode.spec })}</strong>
+              {mode.error && <span className="mono">{mode.error}</span>}
+            </div>
+          ))}
+        </section>
+      )}
 
       {data.flows === 0 ? (
         <div className="dash-empty">

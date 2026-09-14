@@ -27,6 +27,8 @@ const empty: Dashboard = {
   intercept_enabled: false,
   paused: 0,
   version: '0.1.0',
+  modes: [{ spec: 'regular', running: true, listening: true, error: null }],
+  local_capture: { supported: true, approved: true, detail: null },
 };
 
 const populated: Dashboard = {
@@ -189,6 +191,91 @@ describe('DashboardTab', () => {
     // Must not throw: the tab is the landing screen, so it renders before
     // the engine has finished starting.
     expect(() => render(<DashboardTab />)).not.toThrow();
+  });
+});
+
+describe('warnings', () => {
+  it('says nothing when every mode is healthy', async () => {
+    payload = populated;
+    render(<DashboardTab />);
+    await screen.findByText(t('dash.title'));
+    expect(screen.queryByText(t('dash.captureWaiting'))).toBeNull();
+  });
+
+  it('reports a mode that is not running, with its cause', async () => {
+    payload = {
+      ...populated,
+      modes: [
+        { spec: 'regular', running: true, listening: true, error: null },
+        {
+          spec: 'reverse:http://x@9',
+          running: false,
+          listening: false,
+          error: 'address already in use',
+        },
+      ],
+    };
+    render(<DashboardTab />);
+
+    expect(
+      await screen.findByText(t('dash.modeDown', { spec: 'reverse:http://x@9' })),
+    ).toBeTruthy();
+    expect(screen.getByText('address already in use')).toBeTruthy();
+  });
+
+  it('tells the user to approve local capture when it is waiting', async () => {
+    // The engine cannot see this through mitmproxy: the mode claims to be
+    // running while the OS extension is unapproved.
+    payload = {
+      ...populated,
+      modes: [
+        { spec: 'local:curl', running: true, listening: false, error: null },
+      ],
+      local_capture: {
+        supported: true,
+        approved: false,
+        detail: 'activated waiting for user',
+      },
+    };
+    render(<DashboardTab />);
+
+    expect(await screen.findByText(t('dash.captureWaiting'))).toBeTruthy();
+    expect(screen.getByText(t('dash.captureWaitingHelp'))).toBeTruthy();
+  });
+
+  it('does not nag about approval when no local mode is configured', async () => {
+    payload = {
+      ...populated,
+      local_capture: {
+        supported: true,
+        approved: false,
+        detail: 'activated waiting for user',
+      },
+    };
+    render(<DashboardTab />);
+    await screen.findByText(t('dash.title'));
+    expect(screen.queryByText(t('dash.captureWaiting'))).toBeNull();
+  });
+
+  it('distinguishes an uninstalled extension from one awaiting approval', async () => {
+    payload = {
+      ...populated,
+      modes: [
+        { spec: 'local:curl', running: true, listening: false, error: null },
+      ],
+      local_capture: {
+        supported: true,
+        approved: false,
+        detail: 'not installed',
+      },
+    };
+    render(<DashboardTab />);
+
+    expect(
+      await screen.findByText(
+        t('dash.captureUnavailable', { detail: 'not installed' }),
+      ),
+    ).toBeTruthy();
   });
 });
 

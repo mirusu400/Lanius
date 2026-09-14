@@ -252,6 +252,11 @@ const en = {
   'dash.status3xx': 'Redirect',
   'dash.status4xx': 'Client error',
   'dash.status5xx': 'Server error',
+  'dash.modeDown': '{spec} is not running',
+  'dash.captureWaiting': 'System capture needs approval',
+  'dash.captureWaitingHelp':
+    'Approve the Mitmproxy Redirector extension in System Settings > General > Login Items & Extensions > Network Extensions. Until then, traffic from other apps is not captured.',
+  'dash.captureUnavailable': 'System capture unavailable: {detail}',
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -481,6 +486,11 @@ const ko: Catalogue = {
   'dash.status3xx': '리다이렉트',
   'dash.status4xx': '클라이언트 오류',
   'dash.status5xx': '서버 오류',
+  'dash.modeDown': '{spec} 이(가) 실행되지 않았습니다',
+  'dash.captureWaiting': '시스템 캡처 승인 필요',
+  'dash.captureWaitingHelp':
+    '시스템 설정 > 일반 > 로그인 항목 및 확장 프로그램 > 네트워크 확장에서 Mitmproxy Redirector를 허용하세요. 그 전까지는 다른 앱의 트래픽이 캡처되지 않습니다.',
+  'dash.captureUnavailable': '시스템 캡처 사용 불가: {detail}',
 };
 
 export const CATALOGUES: Record<Locale, Catalogue> = { en, ko };

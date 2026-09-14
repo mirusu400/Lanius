@@ -1653,3 +1653,33 @@ pre.body {
 .dash-num.dim {
   color: var(--muted);
 }
+
+/* Warnings that would otherwise be invisible: a mode that is down, or
+   local capture waiting for the user to approve it. */
+.dash-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.dash-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-dim);
+  border-left-width: 3px;
+  border-radius: 4px;
+  background: rgba(226, 112, 58, 0.07);
+}
+
+.dash-alert strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.dash-alert span {
+  color: var(--muted);
+  font-size: 12px;
+}

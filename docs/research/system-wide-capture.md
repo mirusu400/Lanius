@@ -104,9 +104,19 @@ for user); traffic will not be intercepted until the system extension is
 approved
 ```
 
-and `/api/status` carries `local_capture: {supported, approved, detail}`
-alongside the per-mode list. Windows and Linux elevate per run rather
-than holding a persistent approval, so they report `approved: true`.
+`/api/status` and `/api/dashboard` both carry
+`local_capture: {supported, approved, detail}` alongside the per-mode
+list, and the Dashboard shows a banner naming the exact place to click:
+
+> **System capture needs approval**
+> Approve the Mitmproxy Redirector extension in System Settings >
+> General > Login Items & Extensions > Network Extensions. Until then,
+> traffic from other apps is not captured.
+
+An extension that is missing entirely reads differently from one waiting
+for consent, because those need different actions from the user. Windows
+and Linux elevate per run rather than holding a persistent approval, so
+they report `approved: true` and no banner appears.
 
 This turned out to be much cheaper than first assumed: the earlier draft
 of this note listed it as a prerequisite needing new platform code.
@@ -158,8 +168,9 @@ Suggested order:
 2. ~~Detect the macOS approval state.~~ Done: `/api/status` reports
    `local_capture`, and the engine warns when a local mode is started
    unapproved.
-3. A Settings toggle for "capture this machine", macOS first. The UI can
-   now key off `local_capture.approved` to tell the user what to click.
+3. A Settings toggle for "capture this machine", macOS first. The
+   approval banner already exists; what is missing is the control that
+   turns the mode on without editing `LANIUS_EXTRA_MODES`.
 4. The per-app picker.
 5. Then Windows, which additionally needs the elevation story.
 

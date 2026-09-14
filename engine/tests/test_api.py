@@ -276,3 +276,11 @@ def test_status_reports_local_capture_readiness(client) -> None:
     assert set(state) == {"supported", "approved", "detail"}
     assert isinstance(state["supported"], bool)
     assert isinstance(state["approved"], bool)
+
+
+def test_dashboard_carries_mode_and_capture_state(client) -> None:
+    """The dashboard is where a user would notice a mode being down, so it
+    must not need a second call to /api/status to find out."""
+    data = client.get("/api/dashboard").json()
+    assert [m["spec"] for m in data["modes"]] == ["regular"]
+    assert set(data["local_capture"]) == {"supported", "approved", "detail"}
