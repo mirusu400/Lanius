@@ -10,27 +10,32 @@ where it stops working.
 
 > **Scope note.** This started as a research question, but the answer
 > turned out to be close enough to working that it was built: Settings >
-> System capture now switches it on. If that was not wanted, the feature
-> lives in its own commits and can be dropped without touching anything
-> else:
+> System capture now switches it on. That was more than was asked for.
 >
-> ```
-> cc2dae1  per-mode state + this document
-> b829bbc  corrections and limitation tests
-> 8a20888  engine.mode_failed event type
-> 719f4e7  approval detection
-> 94feb3e  dashboard banners
-> a500b73  README section
-> 6d65dfd  Settings toggle
-> a95a2f8  persistence tests
+> If the feature is not wanted, restore the files to their state at
+> `5bd6e0f`, the commit before this work began. Reverting the commits
+> one by one does *not* work cleanly, because each revert resurrects the
+> previous step's README and conflicts with the next:
+>
+> ```bash
+> git checkout 5bd6e0f -- \
+>   engine/app/proxy.py engine/app/api/server.py engine/tests/ \
+>   ui/src/api/types.ts ui/src/api/client.ts ui/src/App.css \
+>   ui/src/i18n/catalogue.ts ui/src/tabs/DashboardTab.tsx \
+>   ui/src/tabs/DashboardTab.test.tsx ui/src/tabs/SettingsTab.tsx \
+>   README.md
+> rm ui/src/tabs/SettingsCapture.test.tsx
 > ```
 >
-> Two fixes found along the way are worth keeping either way, because
-> they affect the proxy modes we already had: `4b0cf3c` (the app could
-> not start while another tool held port 8080) and `535bc4f` (mode
-> errors were unreadable). Note that `535bc4f` touches the dashboard
-> banner added in `94feb3e`, so dropping the feature means dropping that
-> one too.
+> Verified: the suite goes back to 284 engine tests, which is what it was
+> before this work. This document survives, since the research stands on
+> its own.
+>
+> Two fixes are worth keeping either way, because they affect the proxy
+> modes we already had: `4b0cf3c` (the app could not start while another
+> tool held port 8080) and `535bc4f` (mode errors were unreadable). Both
+> are outside the file list above, except that `535bc4f` also touches
+> `dashboardModel.ts`, whose formatting helpers predate this work.
 
 ## What was actually checked
 
