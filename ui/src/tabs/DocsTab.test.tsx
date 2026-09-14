@@ -1,14 +1,15 @@
 /** Docs tab. */
 import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import App from '../App';
-import { DocsTab } from './DocsTab';
+import { DocsTab, resetDocsPage } from './DocsTab';
 import { docPages } from '../docs/pages';
 import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import { LOCALES } from '../i18n';
 
+beforeEach(resetDocsPage);
 afterEach(cleanup);
 
 describe('DocsTab', () => {
@@ -49,6 +50,26 @@ describe('DocsTab', () => {
     const body = document.querySelector('.docs-body')!.textContent ?? '';
     const expected = TEST_LOCALE === 'ko' ? '피닝' : 'pin';
     expect(body.toLowerCase()).toContain(expected);
+  });
+});
+
+describe('reading position', () => {
+  it('keeps your place when the tab is unmounted and shown again', async () => {
+    // Switching to Proxy and back unmounts this component; losing your
+    // place mid-article makes in-app docs annoying to use.
+    const pages = docPages(TEST_LOCALE);
+    const target = pages[pages.length - 1];
+
+    const view = render(<DocsTab />);
+    await userEvent.click(
+      screen.getByRole('button', { name: new RegExp(target.title) }),
+    );
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(target.title);
+
+    view.unmount();
+    render(<DocsTab />);
+
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(target.title);
   });
 });
 

@@ -3,10 +3,25 @@ import { useMemo, useState } from 'react';
 import { docPages, type DocBlock } from '../docs/pages';
 import { useI18n } from '../i18n';
 
+/** The page you were reading, kept outside the component: React unmounts
+ *  this tab when you switch away, and losing your place mid-article is
+ *  the sort of thing that makes in-app docs annoying to use. */
+let lastPageId = '';
+
+/** Test helper: the remembered page deliberately outlives the component. */
+export function resetDocsPage(): void {
+  lastPageId = '';
+}
+
 export function DocsTab() {
   const { t, locale } = useI18n();
   const pages = useMemo(() => docPages(locale), [locale]);
-  const [activeId, setActiveId] = useState(pages[0]?.id ?? '');
+  const [activeId, setActiveId] = useState(() => lastPageId || (pages[0]?.id ?? ''));
+
+  const selectPage = (id: string) => {
+    lastPageId = id;
+    setActiveId(id);
+  };
 
   // The locale can change while this tab is open, and ids are stable
   // across locales, so the selection survives.
@@ -21,7 +36,7 @@ export function DocsTab() {
           <button
             key={page.id}
             className={page.id === active.id ? 'active' : undefined}
-            onClick={() => setActiveId(page.id)}
+            onClick={() => selectPage(page.id)}
           >
             <strong>{page.title}</strong>
             <span>{page.summary}</span>
