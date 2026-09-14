@@ -275,6 +275,23 @@ export interface TlsProfileOption {
   label: string;
 }
 
+export interface BrowserState {
+  available: boolean;
+  name: string | null;
+  profile: string;
+  /** True when HTTPS will work without installing the CA by hand. */
+  ca_trusted: boolean;
+}
+
+export interface LaunchedBrowser {
+  name: string;
+  path: string;
+  pid: number;
+  profile: string;
+  proxy: string;
+  ca_trusted: boolean;
+}
+
 export interface McpTool {
   name: string;
   description: string;

@@ -28,6 +28,7 @@ from ..addons.codecs import (
 from ..addons.intruder import IntruderError, find_positions, strip_markers
 from ..addons.plugins import PluginError
 from ..addons.scope import ScopeError, rule_from_url
+from .. import browser
 from ..config import Settings
 from ..db.store import FlowStore
 from ..events import EventBroker
@@ -394,6 +395,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return await engine.set_tls_profile(profile, ciphers)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/api/browser")
+    async def browser_state() -> dict[str, Any]:
+        return browser.state(settings.data_dir, settings.confdir)
+
+    @app.post("/api/browser")
+    async def open_browser(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Open a browser already pointed at this proxy.
+
+        Saves configuring a browser and installing the CA by hand, and
+        leaves the user's own browser alone.
+        """
+        url = (payload or {}).get("url")
+        if url is not None and not isinstance(url, str):
+            raise HTTPException(status_code=422, detail="url must be a string")
+        try:
+            return await asyncio.to_thread(
+                browser.launch,
+                proxy_host=settings.proxy_host,
+                proxy_port=settings.proxy_port,
+                data_dir=settings.data_dir,
+                confdir=settings.confdir,
+                url=url,
+            )
+        except browser.BrowserError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.delete("/api/browser/profile")
+    async def clear_browser_profile() -> dict[str, Any]:
+        """Throw away the browser profile: cookies, logins and history."""
+        try:
+            removed = await asyncio.to_thread(browser.clear_profile, settings.data_dir)
+        except browser.BrowserError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"cleared": removed}
 
     MCP_ENABLED_SETTING = "mcp_enabled"
 

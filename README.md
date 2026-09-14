@@ -50,15 +50,20 @@ On Windows, SmartScreen will warn about an unrecognised publisher. Choose
 
 **1. Open Lanius.** The proxy starts automatically on `127.0.0.1:8080`.
 
-**2. Point your browser at the proxy.** Set the HTTP and HTTPS proxy to
+**2. Click Open browser.** It is next to the history in the **Proxy** tab.
+A Chromium browser starts already pointed at the proxy and already trusting
+the CA, in a profile of its own, so your usual browser is untouched. Requests
+appear live as you browse.
+
+Needs Chrome, Chromium, Edge or Brave. To use your own browser instead:
+
+**2a. Point your browser at the proxy.** Set the HTTP and HTTPS proxy to
 `127.0.0.1` port `8080` in your system or browser network settings.
 
-**3. Install the CA certificate.** This is what lets Lanius read HTTPS. Open
+**2b. Install the CA certificate.** This is what lets Lanius read HTTPS. Open
 the **Settings** tab and download the certificate, or visit
 <http://mitm.it> from the device you configured and follow the instructions
 for your platform. You only do this once.
-
-**4. Browse.** Requests appear live in the **Proxy** tab.
 
 To check it is working without touching your browser settings:
 

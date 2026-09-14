@@ -216,6 +216,22 @@ const en = {
   'project.imported': 'Imported {flows} requests and {scope} scope rules.',
   'project.importFailed': 'Could not import: {message}',
   'project.confirmImport': 'Importing replaces what is currently open. Continue?',
+  'browser.open': 'Open browser',
+  'browser.opening': 'Opening...',
+  'browser.opened': 'Opened {name} through the proxy.',
+  'browser.failed': 'Could not open a browser: {message}',
+  'browser.unavailable':
+    'No Chromium browser found. Install Chrome, Chromium, Edge or Brave, or point your own browser at the proxy.',
+  'browser.section': 'Browser',
+  'browser.help':
+    'Opens a browser already pointed at the proxy and already trusting the CA, in its own profile. Your usual browser and its history are untouched.',
+  'browser.noCa':
+    'The CA certificate is not ready, so HTTPS pages will warn until it is.',
+  'browser.profile': 'Profile',
+  'browser.clearProfile': 'Clear browsing data',
+  'browser.cleared': 'Browsing data cleared.',
+  'browser.confirmClear':
+    'This deletes the cookies, logins and history of the Lanius browser. Continue?',
   'mcp.section': 'AI agents (MCP)',
   'mcp.help':
     'Lanius exposes captured traffic to AI coding agents over the Model Context Protocol. An agent can read what you captured, manage scope, and replay requests.',
@@ -569,6 +585,22 @@ const ko: Catalogue = {
   'project.imported': '요청 {flows}건과 범위 규칙 {scope}건을 가져왔습니다.',
   'project.importFailed': '가져오지 못했습니다: {message}',
   'project.confirmImport': '가져오면 현재 열린 내용이 대체됩니다. 계속할까요?',
+  'browser.open': '브라우저 열기',
+  'browser.opening': '여는 중...',
+  'browser.opened': '{name} 을(를) 프록시로 열었습니다.',
+  'browser.failed': '브라우저를 열지 못했습니다: {message}',
+  'browser.unavailable':
+    'Chromium 계열 브라우저를 찾지 못했습니다. Chrome, Chromium, Edge, Brave 중 하나를 설치하거나 쓰던 브라우저를 프록시로 지정하세요.',
+  'browser.section': '브라우저',
+  'browser.help':
+    '프록시가 이미 설정되고 CA를 신뢰하는 브라우저를 별도 프로필로 엽니다. 평소 쓰는 브라우저와 기록은 건드리지 않습니다.',
+  'browser.noCa':
+    'CA 인증서가 아직 준비되지 않아, 준비될 때까지 HTTPS 페이지에 경고가 표시됩니다.',
+  'browser.profile': '프로필',
+  'browser.clearProfile': '브라우징 데이터 지우기',
+  'browser.cleared': '브라우징 데이터를 지웠습니다.',
+  'browser.confirmClear':
+    'Lanius 브라우저의 쿠키, 로그인, 기록을 삭제합니다. 계속할까요?',
   'mcp.section': 'AI 에이전트 (MCP)',
   'mcp.help':
     'Lanius는 Model Context Protocol로 캡처한 트래픽을 AI 코딩 에이전트에 제공합니다. 에이전트는 캡처 내용을 읽고, 스코프를 관리하고, 요청을 다시 보낼 수 있습니다.',

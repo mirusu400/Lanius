@@ -16,9 +16,14 @@ afterEach(cleanup);
  * is no longer the page the tab opens on. */
 async function openPage(englishTitle: string, koreanTitle: string) {
   const title = TEST_LOCALE === 'ko' ? koreanTitle : englishTitle;
-  await userEvent.click(
-    screen.getByRole('button', { name: new RegExp(`^${title}`) }),
-  );
+  // The nav button's accessible name is the title followed by the summary,
+  // so match on the start of the text rather than building a regex out of
+  // a title that may contain regex characters.
+  const button = screen
+    .getAllByRole('button')
+    .find((node) => (node.textContent ?? '').startsWith(title));
+  if (!button) throw new Error(`no docs page named ${title}`);
+  await userEvent.click(button);
 }
 
 async function openCapturePage() {
@@ -66,10 +71,21 @@ describe('DocsTab', () => {
     expect(body).toContain('Mitmproxy Redirector');
   });
 
-  it('documents what an agent can actually do, including acting', () => {
-    // The MCP page opens the docs, so it needs no navigation. It must name
-    // the tools and be honest that some of them act rather than look.
+  it('explains the browser, including what it does not cover', () => {
+    // The browser page opens the docs. It has to say Firefox is out and
+    // why, or a Firefox user is left wondering what they did wrong.
     render(<DocsTab />);
+    const body = document.querySelector('.docs-body')!.textContent ?? '';
+    expect(body).toContain('Firefox');
+    expect(body).toContain('localhost');
+    const store = TEST_LOCALE === 'ko' ? '인증서 저장소' : 'certificate store';
+    expect(body).toContain(store);
+  });
+
+  it('documents what an agent can actually do, including acting', async () => {
+    // Must name the tools and be honest that some act rather than look.
+    render(<DocsTab />);
+    await openPage('AI agents \(MCP\)', 'AI 에이전트 \(MCP\)');
     const body = document.querySelector('.docs-body')!.textContent ?? '';
     expect(body).toContain('list_flows');
     expect(body).toContain('send_request');

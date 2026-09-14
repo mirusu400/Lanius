@@ -3,6 +3,8 @@ from __future__ import annotations
 import socket
 import time
 
+from unittest import mock
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -649,3 +651,50 @@ def test_turning_mcp_off_actually_refuses_agents(client) -> None:
 def test_mcp_toggle_rejects_nonsense(client) -> None:
     assert client.post("/api/mcp", json={"enabled": "yes"}).status_code == 422
     assert client.post("/api/mcp", json={}).status_code == 422
+
+
+def test_browser_state_describes_what_is_available(client) -> None:
+    body = client.get("/api/browser").json()
+    assert "available" in body
+    assert body["profile"].endswith("browser-profile")
+
+
+def test_opening_a_browser_uses_the_current_listener(client) -> None:
+    """The port is movable, so the browser must follow it rather than
+    assume 8080."""
+    from app import browser as browser_module
+
+    target = free_port()
+    client.post("/api/listener", json={"port": target})
+
+    with mock.patch.object(browser_module, "find_browser") as find:
+        find.return_value = browser_module.Browser("Google Chrome", "/fake/chrome")
+        with mock.patch.object(browser_module, "_spawn", return_value=99) as spawn:
+            response = client.post("/api/browser", json={"url": "https://example.com/"})
+
+    assert response.status_code == 200
+    assert response.json()["pid"] == 99
+    args = spawn.call_args[0][0]
+    assert f"--proxy-server=http://127.0.0.1:{target}" in args
+
+
+def test_opening_a_browser_without_one_installed_explains(client) -> None:
+    from app import browser as browser_module
+
+    with mock.patch.object(browser_module, "find_browser", return_value=None):
+        response = client.post("/api/browser", json={})
+    assert response.status_code == 409
+    assert "Chrome" in response.json()["detail"]
+
+
+def test_the_browser_profile_can_be_thrown_away(client) -> None:
+    from app import browser as browser_module
+
+    settings = client.app.state.settings
+    profile = browser_module.profile_dir(settings.data_dir)
+    profile.mkdir(parents=True, exist_ok=True)
+    (profile / "Cookies").write_text("session")
+
+    assert client.delete("/api/browser/profile").json()["cleared"] is True
+    assert not profile.exists()
+    assert client.delete("/api/browser/profile").json()["cleared"] is False

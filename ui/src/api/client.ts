@@ -32,9 +32,27 @@ export function isDesktop(): boolean {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, init);
   if (!res.ok) {
-    throw new Error(`${res.status} ${res.statusText}`);
+    // The engine explains refusals in `detail`: which port was busy, that
+    // no browser is installed. Reporting only the status threw that away
+    // and left the user with "409 Conflict", or worse "409 undefined"
+    // where the runtime has no statusText.
+    throw new Error(await errorDetail(res));
   }
   return (await res.json()) as T;
+}
+
+/** The server's explanation, falling back to whatever the status says. */
+async function errorDetail(res: Response): Promise<string> {
+  try {
+    // clone() where available, since the body can only be read once; some
+    // environments hand back a plain object without it.
+    const source = typeof res.clone === 'function' ? res.clone() : res;
+    const body = (await source.json()) as { detail?: unknown };
+    if (typeof body?.detail === 'string' && body.detail) return body.detail;
+  } catch {
+    // Not JSON, or already consumed: fall through to the status.
+  }
+  return res.statusText ? `${res.status} ${res.statusText}` : `HTTP ${res.status}`;
 }
 
 export function buildFlowQuery(filters: FlowFilters, limit = 200): string {
@@ -370,6 +388,24 @@ export function setLocalCapture(
     // two must stay distinct on the wire.
     body: JSON.stringify({ spec }),
   });
+}
+
+export function getBrowserState(): Promise<import('./types').BrowserState> {
+  return request('/api/browser');
+}
+
+export function openBrowser(
+  url?: string,
+): Promise<import('./types').LaunchedBrowser> {
+  return request('/api/browser', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(url ? { url } : {}),
+  });
+}
+
+export function clearBrowserProfile(): Promise<{ cleared: boolean }> {
+  return request('/api/browser/profile', { method: 'DELETE' });
 }
 
 export function getMcpState(): Promise<import('./types').McpState> {

@@ -116,7 +116,8 @@ describe('PluginsTab', () => {
     const user = userEvent.setup();
     render(<PluginsTab />);
     await user.click(await screen.findByLabelText(t('plugins.toggleLabel', { name: 'broken' })));
-    expect(await screen.findByText(/broken: 400/)).toBeTruthy();
+    // The engine says why the plugin failed; that is what a user needs.
+    expect(await screen.findByText(/broken: RuntimeError: boom/)).toBeTruthy();
   });
 
   it('reloads a plugin', async () => {

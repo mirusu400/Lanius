@@ -27,6 +27,65 @@ export interface DocPage {
 
 const en: DocPage[] = [
   {
+    id: 'browser',
+    title: 'Browser',
+    summary: 'Open a browser that is already pointed at the proxy.',
+    sections: [
+      {
+        heading: 'Why',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Testing a site normally starts with two chores: point a browser at the proxy, and install the CA certificate so HTTPS does not warn. Both change your machine, and the proxy setting is easy to leave switched on afterwards.',
+          },
+          {
+            kind: 'text',
+            body: 'Open browser, next to the history and in Settings, starts a Chromium browser configured for this proxy alone. Your usual browser, its history and its logins are untouched.',
+          },
+        ],
+      },
+      {
+        heading: 'What it does differently',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'The browser runs in a profile of its own under the Lanius data directory, so cookies and logins from your testing do not mix with your own browsing. They persist between launches, so a session you logged into is still there tomorrow.',
+          },
+          {
+            kind: 'text',
+            body: 'Requests to localhost go through the proxy too. Chromium normally bypasses the proxy for loopback addresses, which is exactly where an application under test usually lives.',
+          },
+          {
+            kind: 'note',
+            body: 'The CA is trusted by its public key hash, so only the Lanius certificate is accepted. A genuine certificate error on another site still stops the page, which matters when noticing such things is the point.',
+          },
+        ],
+      },
+      {
+        heading: 'Requirements',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Chrome, Chromium, Edge or Brave. Firefox is not used because it keeps its own certificate store, which would need the CA installed properly rather than trusted for one browser session.',
+          },
+          {
+            kind: 'text',
+            body: 'If none is installed, Lanius says so rather than offering a button that cannot work. Point your own browser at the proxy address shown in Settings and install the CA from http://mitm.it instead.',
+          },
+        ],
+      },
+      {
+        heading: 'Clearing up',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Clear browsing data in Settings deletes the profile: cookies, logins and history of the Lanius browser only.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: 'mcp',
     title: 'AI agents (MCP)',
     summary: 'Let a coding agent read your captured traffic and replay requests.',
@@ -343,6 +402,65 @@ const en: DocPage[] = [
 ];
 
 const ko: DocPage[] = [
+  {
+    id: 'browser',
+    title: '브라우저',
+    summary: '프록시가 이미 설정된 브라우저를 엽니다.',
+    sections: [
+      {
+        heading: '왜 필요한가',
+        blocks: [
+          {
+            kind: 'text',
+            body: '사이트를 테스트하려면 보통 두 가지를 먼저 해야 합니다. 브라우저를 프록시로 지정하고, HTTPS 경고가 뜨지 않도록 CA 인증서를 설치하는 일입니다. 둘 다 컴퓨터 설정을 바꾸고, 프록시 설정은 나중에 끄는 것을 잊기 쉽습니다.',
+          },
+          {
+            kind: 'text',
+            body: '기록 옆과 설정에 있는 브라우저 열기는 이 프록시만 바라보는 Chromium 브라우저를 띄웁니다. 평소 쓰는 브라우저와 기록, 로그인은 그대로 둡니다.',
+          },
+        ],
+      },
+      {
+        heading: '무엇이 다른가',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Lanius 데이터 디렉터리 아래 별도 프로필로 실행되므로, 테스트하며 생긴 쿠키와 로그인이 평소 사용 기록과 섞이지 않습니다. 종료해도 남으므로 로그인해 둔 세션은 다음에도 유지됩니다.',
+          },
+          {
+            kind: 'text',
+            body: 'localhost 요청도 프록시를 지나갑니다. Chromium은 보통 루프백 주소에 프록시를 쓰지 않는데, 테스트 대상 애플리케이션이 있는 곳이 대개 거기입니다.',
+          },
+          {
+            kind: 'note',
+            body: 'CA는 공개키 해시로 신뢰하므로 Lanius 인증서만 통과합니다. 다른 사이트의 진짜 인증서 오류는 그대로 페이지를 막습니다. 그런 것을 알아차리는 게 이 도구의 목적이기 때문입니다.',
+          },
+        ],
+      },
+      {
+        heading: '필요한 것',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Chrome, Chromium, Edge, Brave 중 하나가 필요합니다. Firefox는 자체 인증서 저장소를 쓰기 때문에 사용하지 않습니다. 한 번의 실행에만 신뢰시키는 방식이 통하지 않고 CA를 정식으로 설치해야 합니다.',
+          },
+          {
+            kind: 'text',
+            body: '하나도 없으면 동작하지 않을 버튼을 보여주는 대신 그 사실을 알려줍니다. 그때는 설정에 표시된 프록시 주소를 쓰던 브라우저에 지정하고 http://mitm.it 에서 CA를 설치하세요.',
+          },
+        ],
+      },
+      {
+        heading: '정리하기',
+        blocks: [
+          {
+            kind: 'text',
+            body: '설정의 브라우징 데이터 지우기는 프로필을 삭제합니다. Lanius 브라우저의 쿠키, 로그인, 기록만 지워집니다.',
+          },
+        ],
+      },
+    ],
+  },
   {
     id: 'mcp',
     title: 'AI 에이전트 (MCP)',

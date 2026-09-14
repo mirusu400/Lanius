@@ -6,11 +6,14 @@ import {
   importProject,
   listProcesses,
   type ProcessInfo,
+  clearBrowserProfile,
+  getBrowserState,
   getCaInfo,
   getListener,
   getMcpState,
   getStatus,
   getTlsState,
+  openBrowser,
   setListener,
   setMcpEnabled,
   setLocalCapture,
@@ -18,6 +21,7 @@ import {
   type CaInfo,
 } from '../api/client';
 import type {
+  BrowserState,
   EngineStatus,
   ListenerState,
   McpState,
@@ -83,6 +87,8 @@ export function SettingsTab() {
       {error && <div className="banner error">{error}</div>}
 
       <ListenerSection />
+
+      <BrowserSection />
 
       <McpSection />
 
@@ -198,6 +204,88 @@ export function SettingsTab() {
 
 /** Turns OS-level capture on and off. Kept separate because it owns its
  *  own request state and does not share anything with the rest of the tab. */
+function BrowserSection() {
+  const { t } = useI18n();
+  const [state, setState] = useState<BrowserState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<Message | null>(null);
+  const [error, setError] = useState<Message | null>(null);
+
+  useEffect(() => {
+    getBrowserState()
+      .then(setState)
+      .catch((err) => setError(rawMsg((err as Error).message)));
+  }, []);
+
+  if (!state) return null;
+
+  const open = async () => {
+    setBusy(true);
+    setNote(null);
+    setError(null);
+    try {
+      const launched = await openBrowser();
+      setNote(msg('browser.opened', { name: launched.name }));
+    } catch (err) {
+      setError(msg('browser.failed', { message: (err as Error).message }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clear = async () => {
+    if (!window.confirm(t('browser.confirmClear'))) return;
+    setBusy(true);
+    setNote(null);
+    setError(null);
+    try {
+      await clearBrowserProfile();
+      setNote(msg('browser.cleared'));
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      <h3>{t('browser.section')}</h3>
+      <p className="muted">{t('browser.help')}</p>
+
+      {!state.available ? (
+        <div className="banner warn">{t('browser.unavailable')}</div>
+      ) : (
+        <>
+          {!state.ca_trusted && (
+            <div className="banner warn">{t('browser.noCa')}</div>
+          )}
+          <dl className="settings-grid mono">
+            <dt>{t('browser.profile')}</dt>
+            <dd>{state.profile}</dd>
+          </dl>
+          <div className="settings-row">
+            <button type="button" disabled={busy} onClick={() => void open()}>
+              {busy ? t('browser.opening') : t('browser.open')}
+            </button>
+            <button
+              type="button"
+              className="danger"
+              disabled={busy}
+              onClick={() => void clear()}
+            >
+              {t('browser.clearProfile')}
+            </button>
+          </div>
+        </>
+      )}
+
+      {note && <p className="muted">{renderMessage(note, t)}</p>}
+      {error && <div className="banner error">{renderMessage(error, t)}</div>}
+    </section>
+  );
+}
+
 function McpSection() {
   const { t } = useI18n();
   const [state, setState] = useState<McpState | null>(null);

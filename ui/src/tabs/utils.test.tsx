@@ -142,7 +142,9 @@ describe('DecoderTab', () => {
     render(<DecoderTab />);
     failNext = true;
     await user.click(screen.getByRole('button', { name: t('decoder.addStep') }));
-    expect(await screen.findByText(/400/)).toBeTruthy();
+    // The engine's reason, not a bare status code: 'invalid base64' tells
+    // the user what to fix, '400' does not.
+    expect(await screen.findByText(/invalid base64/)).toBeTruthy();
   });
 });
 
