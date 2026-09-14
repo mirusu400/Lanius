@@ -65,8 +65,10 @@ export function ProxyTab() {
   useEffect(() => {
     getInterceptState()
       .then((state) => {
-        setRules(state.rules);
-        setQueue(state.paused);
+        // Guard the shape: rendering reads .length on the queue, so a
+        // response without it would take the whole tab down.
+        if (state?.rules) setRules(state.rules);
+        setQueue(state?.paused ?? []);
       })
       .catch(() => undefined);
   }, []);

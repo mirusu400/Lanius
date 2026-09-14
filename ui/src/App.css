@@ -60,6 +60,18 @@ body {
   letter-spacing: 0.06em;
   color: var(--accent);
   padding: 8px 0;
+  /* It is a button now (it opens the dashboard), so drop the chrome. */
+  background: none;
+  border: none;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.brand:hover,
+.brand.active {
+  opacity: 1;
 }
 
 .tabs {
@@ -1340,4 +1352,261 @@ pre.body {
 
 .site-summary .site:hover {
   background: transparent;
+}
+
+/* --- dashboard --- */
+.dash {
+  padding: 16px;
+  overflow: auto;
+  height: 100%;
+}
+
+.dash-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.dash-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.dash-sub {
+  margin: 2px 0 0;
+  color: var(--muted);
+}
+
+.dash-engine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.pill.ok {
+  border-color: #2f6b45;
+  color: #6fcf97;
+}
+
+.pill.bad {
+  border-color: #7a3030;
+  color: #e07a7a;
+}
+
+.pill.warn {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.dash-empty {
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 32px;
+  text-align: center;
+}
+
+.dash-empty p {
+  margin: 0 0 4px;
+}
+
+.dash-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.dash-card {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dash-card-label {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dash-card-value {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.dash-note {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.dash-note.bad,
+.dash-table .bad {
+  color: #e07a7a;
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.dash-panel {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+.dash-panel h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dash-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-bars li {
+  display: grid;
+  grid-template-columns: 90px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+}
+
+.dash-bar-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dash-bar-track {
+  background: var(--bg-row);
+  border-radius: 3px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.dash-bar {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  min-width: 2px;
+}
+
+.dash-bar.s2xx {
+  background: #4f9d69;
+}
+
+.dash-bar.s3xx {
+  background: #4a7fb5;
+}
+
+.dash-bar.s4xx {
+  background: #c8913c;
+}
+
+.dash-bar.s5xx {
+  background: #b55353;
+}
+
+.dash-bar-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dash-chips li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  background: var(--bg-row);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+.dash-chip-name {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.dash-chip-count {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.dash-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dash-table tr:last-child td {
+  border-bottom: none;
+}
+
+.dash-table tr.clickable {
+  cursor: pointer;
+}
+
+.dash-table tr.clickable:hover td {
+  background: var(--bg-row);
+}
+
+.dash-host,
+.dash-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.dash-method {
+  color: var(--muted);
+  width: 48px;
+}
+
+.dash-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dash-num.dim {
+  color: var(--muted);
 }

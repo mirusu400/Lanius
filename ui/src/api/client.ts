@@ -59,7 +59,10 @@ export async function listFlows(
   const data = await request<{ items: FlowSummary[]; count: number }>(
     `/api/flows?${buildFlowQuery(filters, limit)}`,
   );
-  return data.items;
+  // An unexpected shape (an older engine, or a proxy returning something
+  // else) must not hand back undefined: callers treat this as a list and
+  // would crash on the first .find().
+  return data?.items ?? [];
 }
 
 export function getFlow(id: string, reveal = false): Promise<FlowDetail> {
@@ -351,4 +354,8 @@ export function getCaInfo(): Promise<CaInfo> {
 
 export function caDownloadUrl(format: string): string {
   return `${API_BASE}/api/ca/${format}`;
+}
+
+export function getDashboard(top = 8): Promise<import('./types').Dashboard> {
+  return request(`/api/dashboard?top=${top}`);
 }

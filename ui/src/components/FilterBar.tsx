@@ -81,7 +81,7 @@ export function FilterBar({
           ? t('proxy.live')
           : t('proxy.connState', { state: connection })}
       </span>
-      {status && (
+      {status?.proxy && (
         <span className="engine-info mono">
           proxy {status.proxy.host}:{status.proxy.port}
         </span>

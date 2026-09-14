@@ -198,3 +198,46 @@ export interface PluginInfo {
   author: string | null;
   hooks: string[];
 }
+
+// --- dashboard ------------------------------------------------------------
+
+export interface DashboardHost {
+  host: string;
+  scheme: string | null;
+  port: number | null;
+  flows: number;
+  errors: number;
+  bytes: number;
+  last_seen: number | null;
+}
+
+export interface DashboardSlowFlow {
+  id: string;
+  method: string | null;
+  host: string | null;
+  path: string | null;
+  status_code: number | null;
+  duration_ms: number;
+}
+
+export interface Dashboard {
+  flows: number;
+  hosts: number;
+  bytes: number;
+  avg_duration_ms: number | null;
+  errors: number;
+  pending: number;
+  first_seen: number | null;
+  last_seen: number | null;
+  span_seconds: number;
+  recent_flows: number;
+  recent_window_seconds: number;
+  status_groups: Record<string, number>;
+  methods: { method: string; count: number }[];
+  top_hosts: DashboardHost[];
+  slowest: DashboardSlowFlow[];
+  proxy: { running: boolean; host: string; port: number };
+  intercept_enabled: boolean;
+  paused: number;
+  version: string;
+}

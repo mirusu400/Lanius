@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { DashboardTab } from './tabs/DashboardTab';
 import { ProxyTab } from './tabs/ProxyTab';
 import { RepeaterTabView } from './tabs/RepeaterTab';
 import { TargetTab } from './tabs/TargetTab';
@@ -9,9 +10,11 @@ import { ComparerTab } from './tabs/ComparerTab';
 import { PluginsTab } from './tabs/PluginsTab';
 import { LoggerTab } from './tabs/LoggerTab';
 import { SettingsTab } from './tabs/SettingsTab';
+import { useT } from './i18n';
 import './App.css';
 
 const TABS = [
+  'Dashboard',
   'Proxy',
   'Target',
   'Repeater',
@@ -23,15 +26,23 @@ const TABS = [
   'Settings',
 ] as const;
 
-type Tab = (typeof TABS)[number];
+export type Tab = (typeof TABS)[number];
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('Proxy');
+  const t = useT();
+  const [tab, setTab] = useState<Tab>('Dashboard');
 
   return (
     <div className="app">
       <header className="titlebar">
-        <span className="brand">Lanius</span>
+        <button
+          type="button"
+          className={tab === 'Dashboard' ? 'brand active' : 'brand'}
+          onClick={() => setTab('Dashboard')}
+          aria-label={t('dash.home')}
+        >
+          Lanius
+        </button>
         <nav className="tabs">
           {TABS.map((name) => (
             <button
@@ -39,13 +50,15 @@ export default function App() {
               className={name === tab ? 'tab active' : 'tab'}
               onClick={() => setTab(name)}
             >
-              {name}
+              {name === 'Dashboard' ? t('dash.title') : name}
             </button>
           ))}
         </nav>
       </header>
       <main className="content">
-        {tab === 'Proxy' ? (
+        {tab === 'Dashboard' ? (
+          <DashboardTab onOpenTab={(next) => setTab(next as Tab)} />
+        ) : tab === 'Proxy' ? (
           <ProxyTab />
         ) : tab === 'Target' ? (
           <TargetTab />
