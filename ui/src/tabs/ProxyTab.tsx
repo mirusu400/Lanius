@@ -16,6 +16,11 @@ import type {
   PausedFlow,
 } from '../api/types';
 import { FlowTable } from '../components/FlowTable';
+import { ContextMenu, useContextMenu } from '../components/ContextMenu';
+import { flowMenuItems, flowUrl } from './flowMenu';
+import { sendToRepeater } from './repeaterStore';
+import { sendToIntruder } from './intruderStore';
+import { addScopeFromUrl } from '../api/client';
 import { FlowDetailView } from '../components/FlowDetail';
 import { FilterBar } from '../components/FilterBar';
 import { InterceptPanel } from '../components/InterceptPanel';
@@ -152,6 +157,8 @@ export function ProxyTab() {
     setSelected(null);
   }, []);
 
+  const menu = useContextMenu<FlowSummary>();
+
   const selectedFlow = useMemo(
     () => flows.find((f) => f.id === selected) ?? null,
     [flows, selected],
@@ -201,9 +208,28 @@ export function ProxyTab() {
               flows={flows}
               selectedId={selected}
               onSelect={setSelected}
+              onContextMenu={menu.open}
             />
             <FlowDetailView flow={selectedFlow} />
           </div>
+          <ContextMenu
+            position={menu.position}
+            items={
+              menu.target
+                ? flowMenuItems(menu.target, t, {
+                    sendToRepeater: (flow) => sendToRepeater(flow),
+                    sendToIntruder: (flow) => sendToIntruder(flow),
+                    addToScope: (flow) => {
+                      void addScopeFromUrl(flowUrl(flow)).catch(() => undefined);
+                    },
+                    copy: (text) => {
+                      void navigator.clipboard?.writeText(text);
+                    },
+                  })
+                : []
+            }
+            onClose={menu.close}
+          />
         </>
       )}
     </div>

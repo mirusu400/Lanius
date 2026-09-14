@@ -12,9 +12,11 @@ interface Props {
   flows: FlowSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Right-click on a row, for the Proxy tab to build a menu from. */
+  onContextMenu?: (event: React.MouseEvent, flow: FlowSummary) => void;
 }
 
-export function FlowTable({ flows, selectedId, onSelect }: Props) {
+export function FlowTable({ flows, selectedId, onSelect, onContextMenu }: Props) {
   const t = useT();
   return (
     <div className="flow-table-wrap">
@@ -43,6 +45,12 @@ export function FlowTable({ flows, selectedId, onSelect }: Props) {
               key={flow.id}
               className={flow.id === selectedId ? 'selected' : undefined}
               onClick={() => onSelect(flow.id)}
+              onContextMenu={(event) => {
+                // Right-clicking a row should act on that row, not on
+                // whatever happened to be selected.
+                onSelect(flow.id);
+                onContextMenu?.(event, flow);
+              }}
             >
               <td className="mono">{formatTime(flow.started_at)}</td>
               <td className="mono">{flow.method}</td>

@@ -13,6 +13,7 @@ import {
 } from '../api/client';
 import type {
   EndpointGroup,
+  FlowDetail,
   FlowSummary,
   ScopeState,
   Site,
@@ -20,11 +21,15 @@ import type {
 } from '../api/types';
 import { ScopeEditor } from '../components/ScopeEditor';
 import { SitemapTree } from '../components/SitemapTree';
+import { ContextMenu, useContextMenu, type MenuItem } from '../components/ContextMenu';
+import { sendToRepeater } from './repeaterStore';
+import { sendToIntruder } from './intruderStore';
 import {
   buildTree,
   endpointHost,
   siteLabel,
   type SiteTree,
+  type TreeNode,
 } from './targetModel';
 import { FlowDetailView } from '../components/FlowDetail';
 import { connectStream } from '../api/stream';
@@ -46,6 +51,8 @@ export function TargetTab() {
   });
   const [inScopeOnly, setInScopeOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const menu = useContextMenu<TreeMenuTarget>();
 
   const refreshScope = useCallback(async () => {
     try {
@@ -265,6 +272,17 @@ export function TargetTab() {
               trees={trees}
               selectedFlowId={selectedFlow?.id ?? null}
               onSelectFlow={setSelectedFlow}
+              onFlowContextMenu={(event, flow) =>
+                menu.open(event, { kind: 'flow', flow })
+              }
+              onNodeContextMenu={(event, node) =>
+                menu.open(event, { kind: 'node', node })
+              }
+            />
+            <ContextMenu
+              position={menu.position}
+              items={menu.target ? treeMenuItems(menu.target, t, refreshScope) : []}
+              onClose={menu.close}
             />
           </div>
           <div className="site-detail">
@@ -303,4 +321,70 @@ export function TargetTab() {
       )}
     </div>
   );
+}
+
+type TreeMenuTarget =
+  | { kind: 'flow'; flow: SitePath }
+  | { kind: 'node'; node: TreeNode };
+
+/** What right-clicking the site map offers.
+ *
+ * A folder in the tree stands for a path prefix, so scoping it is the
+ * action people reach for; a request row behaves like one in the history.
+ */
+function treeMenuItems(
+  target: TreeMenuTarget,
+  t: ReturnType<typeof useT>,
+  onScopeChanged: () => void,
+): MenuItem[] {
+  const copy = (text: string) => {
+    void navigator.clipboard?.writeText(text);
+  };
+
+  if (target.kind === 'node') {
+    const { node } = target;
+    const site = node.site;
+    const url = site
+      ? `${site.scheme}://${site.host}${node.path.startsWith('/') ? node.path : ''}`
+      : node.path;
+    return [
+      {
+        label: t('menu.addToScope'),
+        onSelect: () => {
+          void addScopeFromUrl(url)
+            .then(onScopeChanged)
+            .catch(() => undefined);
+        },
+      },
+      { label: t('menu.copyPath'), separator: true, onSelect: () => copy(node.path) },
+      ...(site
+        ? [{ label: t('menu.copyHost'), onSelect: () => copy(site.host) }]
+        : []),
+    ];
+  }
+
+  const { flow } = target;
+  // The tree only carries a summary, so fetch the request before sending
+  // it on; otherwise Repeater would open with no headers or body.
+  const withDetail = (send: (detail: FlowDetail) => void) => () => {
+    void getFlow(flow.id)
+      .then(send)
+      .catch(() => undefined);
+  };
+
+  return [
+    {
+      label: t('menu.sendToRepeater'),
+      onSelect: withDetail((detail) => sendToRepeater(detail, detail)),
+    },
+    {
+      label: t('menu.sendToIntruder'),
+      onSelect: withDetail((detail) => sendToIntruder(detail)),
+    },
+    {
+      label: t('menu.copyPath'),
+      separator: true,
+      onSelect: () => copy(flow.path ?? ''),
+    },
+  ];
 }

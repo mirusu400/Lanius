@@ -16,6 +16,10 @@ interface Props {
   trees: SiteTree[];
   selectedFlowId: string | null;
   onSelectFlow: (flow: SitePath) => void;
+  /** Right-click on a request row. */
+  onFlowContextMenu?: (event: React.MouseEvent, flow: SitePath) => void;
+  /** Right-click on a folder, which stands for a path prefix. */
+  onNodeContextMenu?: (event: React.MouseEvent, node: TreeNode) => void;
 }
 
 /** Requests attached to a node, one row per method + query combination. */
@@ -24,11 +28,13 @@ function FlowRows({
   depth,
   selectedFlowId,
   onSelectFlow,
+  onFlowContextMenu,
 }: {
   flows: SitePath[];
   depth: number;
   selectedFlowId: string | null;
   onSelectFlow: (flow: SitePath) => void;
+  onFlowContextMenu?: (event: React.MouseEvent, flow: SitePath) => void;
 }) {
   return (
     <>
@@ -40,6 +46,11 @@ function FlowRows({
           }
           style={{ paddingLeft: `${depth * 14 + 22}px` }}
           onClick={() => onSelectFlow(flow)}
+          onContextMenu={(event) => {
+            // Act on the row that was clicked, not the current selection.
+            onSelectFlow(flow);
+            onFlowContextMenu?.(event, flow);
+          }}
         >
           <span className="tree-method mono">{flow.method}</span>
           <span className="tree-query mono">
@@ -61,6 +72,8 @@ function Node({
   toggle,
   selectedFlowId,
   onSelectFlow,
+  onFlowContextMenu,
+  onNodeContextMenu,
 }: {
   node: TreeNode;
   depth: number;
@@ -68,6 +81,8 @@ function Node({
   toggle: (path: string) => void;
   selectedFlowId: string | null;
   onSelectFlow: (flow: SitePath) => void;
+  onFlowContextMenu?: (event: React.MouseEvent, flow: SitePath) => void;
+  onNodeContextMenu?: (event: React.MouseEvent, node: TreeNode) => void;
 }) {
   const hasChildren = node.children.length > 0;
   // A leaf has nothing to fold, so its requests are always visible; only
@@ -82,6 +97,7 @@ function Node({
         className="tree-row"
         style={{ paddingLeft: `${depth * 14}px` }}
         onClick={() => hasChildren && toggle(node.path)}
+        onContextMenu={(event) => onNodeContextMenu?.(event, node)}
       >
         <span className="twisty">
           {hasChildren ? (open ? '\u25be' : '\u25b8') : '\u00b7'}
@@ -106,6 +122,7 @@ function Node({
             depth={depth}
             selectedFlowId={selectedFlowId}
             onSelectFlow={onSelectFlow}
+            onFlowContextMenu={onFlowContextMenu}
           />
           {node.children.map((child) => (
             <Node
@@ -116,6 +133,8 @@ function Node({
               toggle={toggle}
               selectedFlowId={selectedFlowId}
               onSelectFlow={onSelectFlow}
+              onFlowContextMenu={onFlowContextMenu}
+              onNodeContextMenu={onNodeContextMenu}
             />
           ))}
         </>
@@ -124,7 +143,13 @@ function Node({
   );
 }
 
-export function SitemapTree({ trees, selectedFlowId, onSelectFlow }: Props) {
+export function SitemapTree({
+  trees,
+  selectedFlowId,
+  onSelectFlow,
+  onFlowContextMenu,
+  onNodeContextMenu,
+}: Props) {
   const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [touched, setTouched] = useState(false);
@@ -178,6 +203,8 @@ export function SitemapTree({ trees, selectedFlowId, onSelectFlow }: Props) {
             toggle={toggle}
             selectedFlowId={selectedFlowId}
             onSelectFlow={onSelectFlow}
+            onFlowContextMenu={onFlowContextMenu}
+            onNodeContextMenu={onNodeContextMenu}
           />
         );
       })}

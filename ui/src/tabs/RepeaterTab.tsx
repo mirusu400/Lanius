@@ -13,12 +13,15 @@ import {
   subscribe,
   updateTab,
 } from './repeaterStore';
+import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { errorText, useT } from '../i18n';
 
 export function RepeaterTabView() {
   const t = useT();
   const [tabs, setTabs] = useState<RepeaterTab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  const menu = useContextMenu<string>();
 
   useEffect(() => subscribe(setTabs), []);
 
@@ -54,6 +57,7 @@ export function RepeaterTabView() {
             key={tab.id}
             className={tab.id === activeId ? 'active' : ''}
             onClick={() => setActiveId(tab.id)}
+            onContextMenu={(event) => menu.open(event, tab.id)}
           >
             {tab.title}
             <span
@@ -72,6 +76,39 @@ export function RepeaterTabView() {
         <button className="new-tab" onClick={() => addTab(emptyTab())}>
           +
         </button>
+        <ContextMenu
+          position={menu.position}
+          items={
+            menu.target
+              ? [
+                  {
+                    label: t('menu.duplicate'),
+                    onSelect: () => {
+                      const source = tabs.find((tab) => tab.id === menu.target);
+                      // Copying a request to try a variation without
+                      // losing the original is the common Repeater move.
+                      if (source) addTab({ ...source, id: `r${Date.now()}` });
+                    },
+                  },
+                  {
+                    label: t('menu.closeTab'),
+                    separator: true,
+                    onSelect: () => removeTab(menu.target as string),
+                  },
+                  {
+                    label: t('menu.closeOthers'),
+                    disabled: tabs.length < 2,
+                    onSelect: () => {
+                      for (const tab of tabs) {
+                        if (tab.id !== menu.target) removeTab(tab.id);
+                      }
+                    },
+                  },
+                ]
+              : []
+          }
+          onClose={menu.close}
+        />
       </div>
 
       {active ? (
