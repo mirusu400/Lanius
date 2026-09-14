@@ -397,8 +397,8 @@ function TlsSection() {
   const [state, setState] = useState<TlsState | null>(null);
   const [custom, setCustom] = useState('');
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<Message | null>(null);
+  const [error, setError] = useState<Message | null>(null);
 
   useEffect(() => {
     getTlsState()
@@ -422,9 +422,9 @@ function TlsSection() {
         setState(next);
         setCustom(next.custom_ciphers ?? '');
       }
-      setNote(t('tls.applied'));
+      setNote(msg('tls.applied'));
     } catch (err) {
-      setError((err as Error).message);
+      setError(rawMsg((err as Error).message));
     } finally {
       setBusy(false);
     }
@@ -483,8 +483,8 @@ function TlsSection() {
         </div>
       </div>
 
-      {note && <p className="muted">{note}</p>}
-      {error && <div className="banner error">{error}</div>}
+      {note && <p className="muted">{renderMessage(note, t)}</p>}
+      {error && <div className="banner error">{renderMessage(error, t)}</div>}
       <p className="muted">{t('tls.limitation')}</p>
     </section>
   );

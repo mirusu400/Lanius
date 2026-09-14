@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SettingsTab } from './SettingsTab';
-import { renderWithI18n as render, t } from '../test-utils';
+import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
+import { useI18n, type Locale } from '../i18n';
 
 const CHROME = 'TLS_AES_128_GCM_SHA256:ECDHE-RSA-AES128-GCM-SHA256:AES256-SHA';
 
@@ -105,6 +106,33 @@ describe('TLS fingerprint', () => {
 
     await userEvent.selectOptions(profileSelect(), 'chrome');
     await waitFor(() => expect(posted).toEqual([{ profile: 'chrome', ciphers: '' }]));
+  });
+
+  it('re-translates the confirmation when the language changes', async () => {
+    // The note is raised once and then sits there. Stored as a sentence it
+    // would keep the language it was raised in.
+    const other: Locale = TEST_LOCALE === 'en' ? 'ko' : 'en';
+
+    function Harness() {
+      const { setLocale } = useI18n();
+      return (
+        <>
+          <button type="button" onClick={() => setLocale(other)}>
+            switch
+          </button>
+          <SettingsTab />
+        </>
+      );
+    }
+
+    render(<Harness />);
+    await waitFor(() => expect(profileSelect()).toBeTruthy());
+    await userEvent.selectOptions(profileSelect(), 'chrome');
+    expect(await screen.findByText(t('tls.applied'))).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: 'switch' }));
+    expect(await screen.findByText(tk(other)('tls.applied'))).toBeTruthy();
+    expect(screen.queryByText(t('tls.applied'))).toBeNull();
   });
 
   it('reports how many ciphers are offered, so the change is visible', async () => {
