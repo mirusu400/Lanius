@@ -110,6 +110,42 @@ class ProxyEngine:
             self.settings.proxy_host,
             self.settings.proxy_port,
         )
+        self._report_mode_failures()
+
+    def mode_status(self) -> list[dict[str, object]]:
+        """Per-mode state, so a mode that did not come up is visible.
+
+        mitmproxy keeps running when one of several modes fails, and we
+        remove its ``errorcheck`` addon (it calls ``sys.exit``), so without
+        this a failed mode is indistinguishable from a working one.
+        """
+        if self.master is None:
+            return []
+        server = self.master.addons.get("proxyserver")
+        if server is None:
+            return []
+        out: list[dict[str, object]] = []
+        for spec, instance in server.servers._instances.items():
+            error = getattr(instance, "last_exception", None)
+            # Listening modes bind an address; local capture does not, so an
+            # empty tuple only means failure for the former.
+            addrs = tuple(getattr(instance, "listen_addrs", ()) or ())
+            out.append(
+                {
+                    "spec": getattr(spec, "full_spec", str(spec)),
+                    "running": bool(instance.is_running),
+                    "listening": bool(addrs),
+                    "error": str(error) if error else None,
+                }
+            )
+        return out
+
+    def _report_mode_failures(self) -> None:
+        for mode in self.mode_status():
+            if mode["running"]:
+                continue
+            logger.error("mode %s did not start: %s", mode["spec"], mode["error"])
+            self.broker.publish("engine.mode_failed", mode)
 
     def _check_port_available(self) -> None:
         """Fail fast with a clear message when the listen port is taken."""

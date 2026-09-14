@@ -341,3 +341,57 @@ def test_windows_probe_declares_pointer_sized_handles(monkeypatch) -> None:
 
     assert instance.OpenProcess.restype is ctypes.c_void_p
     assert instance.CloseHandle.argtypes == [ctypes.c_void_p]
+
+
+# --- mode status -------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_mode_status_reports_the_regular_proxy(tmp_path) -> None:
+    port = free_port()
+    eng = engine(tmp_path, port)
+    await eng.start()
+    try:
+        modes = eng.mode_status()
+        assert [m["spec"] for m in modes] == ["regular"]
+        assert modes[0]["running"] is True
+        assert modes[0]["listening"] is True, "a regular proxy binds an address"
+        assert modes[0]["error"] is None
+    finally:
+        await eng.stop()
+
+
+def test_mode_status_is_empty_before_start(tmp_path) -> None:
+    """The API reads this during startup, so it must not blow up."""
+    assert engine(tmp_path, free_port()).mode_status() == []
+
+
+@pytest.mark.asyncio
+async def test_failed_modes_are_logged_and_published(tmp_path, caplog) -> None:
+    """mitmproxy keeps running when one mode fails, and we removed its
+    errorcheck addon, so a failure would otherwise be invisible."""
+    port = free_port()
+    eng = engine(tmp_path, port)
+    await eng.start()
+    try:
+        published: list[tuple[str, object]] = []
+        eng.broker.publish = lambda topic, data: published.append((topic, data))
+
+        eng.mode_status = lambda: [  # type: ignore[method-assign]
+            {"spec": "regular", "running": True, "listening": True, "error": None},
+            {
+                "spec": "local:curl",
+                "running": False,
+                "listening": False,
+                "error": "boom",
+            },
+        ]
+        with caplog.at_level("ERROR"):
+            eng._report_mode_failures()
+
+        assert "local:curl" in caplog.text
+        assert "boom" in caplog.text
+        assert [t for t, _ in published] == ["engine.mode_failed"]
+        assert published[0][1]["spec"] == "local:curl"  # type: ignore[index]
+    finally:
+        await eng.stop()

@@ -258,3 +258,12 @@ def test_dashboard_top_limit_is_bounded(client) -> None:
 def test_dashboard_window_must_be_positive(client) -> None:
     assert client.get("/api/dashboard?window=0").status_code == 422
     assert client.get("/api/dashboard?window=60").status_code == 200
+
+
+def test_status_exposes_per_mode_state(client) -> None:
+    """A mode can fail while the engine stays up, so the UI needs to see
+    each one rather than a single healthy/unhealthy flag."""
+    modes = client.get("/api/status").json()["modes"]
+    assert [m["spec"] for m in modes] == ["regular"]
+    assert modes[0]["running"] is True
+    assert modes[0]["error"] is None

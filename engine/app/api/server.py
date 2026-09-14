@@ -223,6 +223,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "db_path": str(settings.db_path),
             "intercept": engine.intercept.rules.as_dict(),
             "paused": len(engine.intercept.paused),
+            # Per-mode state: a mode can fail while the engine stays up.
+            "modes": engine.mode_status(),
         }
 
     @app.get("/api/dashboard")
