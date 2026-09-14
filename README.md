@@ -30,8 +30,8 @@ Grab the latest build from the [Releases page](https://github.com/mirusu400/Lani
 |---|---|
 | macOS (Apple Silicon) | `Lanius_*_aarch64.dmg` |
 | macOS (Intel) | `Lanius_*_x64.dmg` |
-| Linux | `lanius_*.AppImage` or `lanius_*.deb` |
-| Windows | `Lanius_*_x64_en-US.msi` or `Lanius_*-setup.exe` |
+| Linux | `Lanius_*_amd64.AppImage` or `Lanius_*_amd64.deb` |
+| Windows | `Lanius_*_x64_en-US.msi` or `Lanius_*_x64-setup.exe` |
 
 Builds are not code signed yet. On macOS, clear the quarantine flag once after
 installing:
