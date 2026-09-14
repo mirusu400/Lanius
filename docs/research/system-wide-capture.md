@@ -8,13 +8,13 @@ dependency we ship. mitmproxy calls it **local capture mode**. This
 document records what was verified on this machine, what it costs, and
 where it stops working.
 
-> **Scope note.** This started as a research question, but the answer
-> turned out to be close enough to working that it was built: Settings >
-> System capture now switches it on. That was more than was asked for.
+> **Status.** This began as a research question. The answer turned out to
+> be close enough to working that it was implemented: Settings > System
+> capture switches it on.
 >
-> If the feature is not wanted, restore the files to their state at
-> `5bd6e0f`, the commit before this work began. Reverting the commits
-> one by one does *not* work cleanly, because each revert resurrects the
+> To remove the feature, restore the files to their state at `5bd6e0f`,
+> the commit before the implementation landed. Reverting the commits one
+> by one does *not* apply cleanly, because each revert resurrects the
 > previous step's README and conflicts with the next:
 >
 > ```bash
@@ -27,15 +27,15 @@ where it stops working.
 > rm ui/src/tabs/SettingsCapture.test.tsx
 > ```
 >
-> Verified: the suite goes back to 284 engine tests, which is what it was
-> before this work. This document survives, since the research stands on
-> its own.
+> Verified: the suite returns to 284 engine tests, matching the state
+> before the implementation. This document stands on its own.
 >
 > Two fixes are worth keeping either way, because they affect the proxy
-> modes we already had: `4b0cf3c` (the app could not start while another
-> tool held port 8080) and `535bc4f` (mode errors were unreadable). Both
-> are outside the file list above, except that `535bc4f` also touches
-> `dashboardModel.ts`, whose formatting helpers predate this work.
+> modes that already existed: `4b0cf3c` (the app could not start while
+> another tool held port 8080) and `535bc4f` (mode errors were
+> unreadable). Both fall outside the file list above, except that
+> `535bc4f` also touches `dashboardModel.ts`, whose formatting helpers
+> predate the implementation.
 
 ## What was actually checked
 
