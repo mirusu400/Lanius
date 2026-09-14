@@ -54,9 +54,20 @@ const en: DocPage[] = [
           },
           {
             kind: 'text',
-            body: 'Names are process names or PIDs, comma separated. Prefix one with ! to exclude it instead:',
+            body: 'Selected applications gives you a list. Add a rule and type part of a name, or use Pick a running app to choose from what is running and have its full path filled in.',
           },
-          { kind: 'code', body: 'curl, firefox\n!Slack\npid:4123' },
+          {
+            kind: 'text',
+            body: 'Each rule matches part of the executable path, so a fragment is enough:',
+          },
+          {
+            kind: 'code',
+            body: 'chrome            Google Chrome, and anything else with chrome in its path\n/Applications/    everything installed there\npid:4123          one process',
+          },
+          {
+            kind: 'text',
+            body: 'Set a rule to Exclude to leave something out, and untick one to switch it off without deleting it. Rules take effect when you press Apply.',
+          },
         ],
       },
       {
@@ -169,6 +180,44 @@ const en: DocPage[] = [
       },
     ],
   },
+  {
+    id: 'project',
+    title: 'Projects',
+    summary: 'Your work is saved as you go, and can be exported.',
+    sections: [
+      {
+        heading: 'What is saved',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Captured traffic, your scope, and the tabs you have open in Repeater and Decoder are written to the project database as you work. Closing Lanius and opening it again puts you back where you were; there is nothing to remember to save.',
+          },
+        ],
+      },
+      {
+        heading: 'Export and import',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Settings > Project exports everything as one file. A long capture dwarfs the rest, so there is a second button that leaves it out when you only want to pass on a scope and a set of requests.',
+          },
+          {
+            kind: 'note',
+            body: 'Importing replaces what is currently open, so Lanius asks first.',
+          },
+        ],
+      },
+      {
+        heading: 'Where it lives',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'The database sits in ~/.lanius, and Settings shows the exact path. An exported project is plain JSON, so it can be read, diffed and kept in version control.',
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 const ko: DocPage[] = [
@@ -196,9 +245,20 @@ const ko: DocPage[] = [
           },
           {
             kind: 'text',
-            body: '이름은 프로세스 이름이나 PID이며 쉼표로 구분합니다. 앞에 !를 붙이면 제외됩니다.',
+            body: '선택한 앱을 고르면 목록이 나옵니다. 규칙을 추가해 이름 일부를 입력하거나, 실행 중인 앱에서 고르기로 선택하면 전체 경로가 채워집니다.',
           },
-          { kind: 'code', body: 'curl, firefox\n!Slack\npid:4123' },
+          {
+            kind: 'text',
+            body: '각 규칙은 실행 파일 경로의 일부와 일치하므로 조각만 넣어도 됩니다.',
+          },
+          {
+            kind: 'code',
+            body: 'chrome            Google Chrome 등 경로에 chrome이 든 것\n/Applications/    그 아래 설치된 모든 앱\npid:4123          특정 프로세스',
+          },
+          {
+            kind: 'text',
+            body: '제외로 바꾸면 해당 항목을 빼고, 체크를 해제하면 삭제하지 않고 잠시 끕니다. 적용을 눌러야 반영됩니다.',
+          },
         ],
       },
       {
@@ -306,6 +366,44 @@ const ko: DocPage[] = [
           {
             kind: 'text',
             body: '결과 창은 최종 값을 텍스트로 보여주고, 바이트가 필요하면 Hex로 전환할 수 있습니다. 디코딩 결과가 바이너리인 경우가 많은데, 그럴 때는 읽을 수 없는 문자로 채우는 대신 그렇다고 알려줍니다.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'project',
+    title: '프로젝트',
+    summary: '작업은 자동으로 저장되고, 내보낼 수 있습니다.',
+    sections: [
+      {
+        heading: '무엇이 저장되는가',
+        blocks: [
+          {
+            kind: 'text',
+            body: '캡처한 트래픽, 범위, Repeater와 Decoder에 열어 둔 탭이 작업하는 동안 프로젝트 데이터베이스에 기록됩니다. Lanius를 닫았다 열면 하던 곳으로 돌아오며, 따로 저장할 것이 없습니다.',
+          },
+        ],
+      },
+      {
+        heading: '내보내기와 가져오기',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Settings > Project에서 전체를 한 파일로 내보냅니다. 긴 캡처는 나머지보다 훨씬 크므로, 범위와 요청만 전달하고 싶을 때 쓰는 캡처 제외 버튼도 있습니다.',
+          },
+          {
+            kind: 'note',
+            body: '가져오면 현재 열린 내용이 대체되므로 Lanius가 먼저 확인합니다.',
+          },
+        ],
+      },
+      {
+        heading: '어디에 있는가',
+        blocks: [
+          {
+            kind: 'text',
+            body: '데이터베이스는 ~/.lanius에 있고 정확한 경로는 Settings에 표시됩니다. 내보낸 프로젝트는 평범한 JSON이므로 열어 보고 비교하고 버전 관리에 넣을 수 있습니다.',
           },
         ],
       },

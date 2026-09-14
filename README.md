@@ -75,13 +75,20 @@ the operating system level instead, so they do not need to be configured at
 all. This is experimental.
 
 Open the **Settings** tab, find **System capture**, and choose whether to
-capture every application or only the ones you name. Names are process names
-or PIDs, comma separated, and a `!` prefix excludes one instead:
+capture every application or only the ones you name. Selected applications
+gives you a list: add a rule and type part of a name, or pick from what is
+running and have its path filled in.
+
+Each rule matches part of the executable path, so a fragment is enough:
 
 ```
-curl, firefox      only these
-!Slack             everything except Slack
+chrome            Google Chrome, and anything with chrome in its path
+/Applications/    everything installed there
+pid:4123          one process
 ```
+
+Set a rule to exclude to leave something out, or untick it to switch it off
+without deleting it.
 
 On macOS this installs a network extension the first time, and macOS will ask
 you to approve it in **System Settings > General > Login Items & Extensions >
@@ -113,6 +120,14 @@ ports before launching:
 LANIUS_PROXY_PORT=8090 LANIUS_API_PORT=8091 open -a Lanius
 ```
 
+### Projects
+
+Captured traffic, your scope and the tabs you have open are saved as you
+work, so closing Lanius and opening it again puts you back where you were.
+**Settings > Project** exports the lot as one JSON file, with a second button
+that leaves the capture out when you only want to pass on a scope and a set
+of requests.
+
 ## Features
 
 ### Proxy
@@ -121,6 +136,10 @@ Every request and response, live. Filter by host, method, status or free text,
 pause the stream while you read, and inspect headers and bodies. Sensitive
 headers such as `Authorization` and `Cookie` are masked by default; reveal them
 with one click when you need to.
+
+Right-click a request to send it to Repeater or Intruder, add it to the scope,
+or copy it as a URL or a curl command. The site map, Repeater tabs and Intruder
+results have their own menus.
 
 ### Intercept
 

@@ -31,9 +31,11 @@ describe('DocsTab', () => {
 
   it('renders code samples verbatim', async () => {
     render(<DocsTab />);
-    // The capture page documents the spec syntax; it must be copyable.
-    // The sample is literal, so it reads the same in every locale.
-    expect(document.querySelector('.docs-code')?.textContent).toContain('curl');
+    // The capture page documents the rule syntax; it must be copyable.
+    // The samples are literal, so they read the same in every locale.
+    const code = document.querySelector('.docs-code')?.textContent ?? '';
+    expect(code).toContain('/Applications/');
+    expect(code).toContain('pid:');
   });
 
   it('documents the approval step, which is the usual sticking point', () => {
