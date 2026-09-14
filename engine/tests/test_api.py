@@ -568,3 +568,37 @@ def test_the_api_survives_a_proxy_port_that_is_already_taken(tmp_path) -> None:
             assert client.get("/api/status").json()["proxy"]["running"] is True
     finally:
         blocker.close()
+
+
+def test_the_desktop_window_is_allowed_by_cors(client) -> None:
+    """The shipped app talks to the engine from a tauri:// origin, not from
+    a localhost URL. Without it every panel showed 'Load failed' while the
+    server was answering 200, because the webview refused the response.
+
+    This went unnoticed because the browser dev server runs on a localhost
+    port, which was allowed, so testing there could not see it.
+    """
+    for origin in (
+        "tauri://localhost",  # macOS and Linux
+        "https://tauri.localhost",  # Windows
+        "http://127.0.0.1:5173",  # the dev server
+        "http://localhost:5173",
+    ):
+        response = client.get("/api/status", headers={"Origin": origin})
+        assert response.status_code == 200
+        assert response.headers.get("access-control-allow-origin") == origin, (
+            f"{origin} is not allowed, so the UI cannot read the response"
+        )
+
+
+def test_cors_still_refuses_a_remote_origin(client) -> None:
+    """Widening the rule must not open the engine to a web page."""
+    for origin in (
+        "http://evil.test",
+        "https://tauri.localhost.evil.test",
+        "http://127.0.0.1.evil.test",
+    ):
+        response = client.get("/api/status", headers={"Origin": origin})
+        assert response.headers.get("access-control-allow-origin") is None, (
+            f"{origin} must not be allowed to read the engine"
+        )

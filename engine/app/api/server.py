@@ -204,10 +204,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     except Exception:  # pragma: no cover - MCP is optional
         logger.warning("MCP server unavailable", exc_info=True)
         app.state.mcp = None
-    # Local dev UI (vite) runs on a different port; stay localhost-only.
+    # Two callers, both local. The dev UI (vite) is served over http on a
+    # localhost port. The desktop window is not: its documents come from the
+    # bundle, so the webview sends "tauri://localhost" on macOS and Linux and
+    # "https://tauri.localhost" on Windows. Without those the shipped app
+    # gets a 200 the webview then refuses to hand over, which surfaces as
+    # "Load failed" with nothing wrong on the server.
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r"http://(127\.0\.0\.1|localhost)(:\d+)?",
+        allow_origin_regex=(
+            r"(http://(127\.0\.0\.1|localhost)(:\d+)?"
+            r"|tauri://localhost"
+            r"|https://tauri\.localhost)"
+        ),
         allow_methods=["*"],
         allow_headers=["*"],
     )
