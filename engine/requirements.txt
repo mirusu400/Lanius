@@ -1,3 +1,6 @@
+# Needs Python 3.13 or newer: on 3.12 mitmproxy pins typing-extensions<=4.14,
+# which conflicts with the pydantic that mcp requires.
+#
 # Lower bounds are the versions this project is developed and tested against,
 # not the oldest that might work. Loose bounds made pip walk the whole release
 # history of mitmproxy and its transitive dependencies, which on Python 3.12

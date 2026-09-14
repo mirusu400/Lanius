@@ -5,6 +5,7 @@ from pathlib import Path
 
 import asyncio
 import socket
+from unittest import mock
 
 import pytest
 
@@ -122,17 +123,23 @@ def test_watchdog_exits_when_the_parent_dies(tmp_path) -> None:
     import time as _time
 
     engine_dir = str(Path(__file__).resolve().parents[1])
+    # The pid to watch is passed in rather than read with getppid(): on a
+    # slow machine the launcher can die before the child reaches this line,
+    # and getppid() would then report the reaper instead of the launcher.
+    # That is the shell's real arrangement, which passes its own pid.
     child_code = (
         "import os, sys, time\n"
         f"sys.path.insert(0, {engine_dir!r})\n"
         "from app.main import watch_parent\n"
-        "watch_parent(os.getppid())\n"
+        "watch_parent(int(sys.argv[1]))\n"
         "time.sleep(30)\n"
     )
     pid_file = tmp_path / "child.pid"
     launcher_code = (
         "import os, subprocess, sys, time\n"
-        f"child = subprocess.Popen([sys.executable, '-c', {child_code!r}])\n"
+        "child = subprocess.Popen(\n"
+        f"    [sys.executable, '-c', {child_code!r}, str(os.getpid())]\n"
+        ")\n"
         f"open({str(pid_file)!r}, 'w').write(str(child.pid))\n"
         "time.sleep(1)\n"
         "os._exit(0)\n"  # die hard: no cleanup, like a crashed shell
@@ -143,7 +150,34 @@ def test_watchdog_exits_when_the_parent_dies(tmp_path) -> None:
     if _await_exit(child_pid):
         return  # child exited: watchdog worked
     _force_kill(child_pid)
-    raise AssertionError("watchdog did not stop the orphaned engine")
+    raise AssertionError(
+        f"watchdog did not stop the orphaned engine (pid {child_pid} still "
+        "alive after 15s)"
+    )
+
+
+def test_supervisor_pid_treats_a_reparented_engine_as_orphaned() -> None:
+    """An engine that has already lost its parent must not watch the reaper.
+
+    Without this, getppid() returns 1 after reparenting, _pid_alive treats
+    pid 1 as "no supervisor" and answers True forever, and the watchdog
+    sleeps while the proxy keeps holding its ports.
+    """
+    from app.main import _supervisor_pid
+
+    with mock.patch.dict(os.environ, {}, clear=True):
+        with mock.patch("os.getppid", return_value=1):
+            assert _supervisor_pid() is None
+        with mock.patch("os.getppid", return_value=4242):
+            assert _supervisor_pid() == 4242
+
+    with mock.patch.dict(os.environ, {"LANIUS_SUPERVISOR_PID": "99"}):
+        assert _supervisor_pid() == 99
+
+    # A malformed value must not crash the engine on startup.
+    with mock.patch.dict(os.environ, {"LANIUS_SUPERVISOR_PID": "nonsense"}):
+        with mock.patch("os.getppid", return_value=7):
+            assert _supervisor_pid() == 7
 
 
 def test_pid_alive_detects_a_dead_process() -> None:

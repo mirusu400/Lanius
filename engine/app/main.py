@@ -51,6 +51,30 @@ def watch_parent(parent_pid: int) -> None:
     thread.start()
 
 
+def _supervisor_pid() -> int | None:
+    """Which process are we meant to outlive, if any?
+
+    ``LANIUS_SUPERVISOR_PID`` is what the desktop shell passes. Falling back
+    to ``os.getppid()`` is racy: if the supervisor dies before we get here,
+    the kernel has already reparented us and getppid() reports the reaper
+    (pid 1 on macOS, or an arbitrary subreaper on Linux). Watching that pid
+    would mean watching a process that never exits, so the watchdog would
+    sleep forever and the engine would outlive the shell it was meant to
+    follow. Treat a missing parent as "already orphaned" instead.
+    """
+    explicit = os.environ.get("LANIUS_SUPERVISOR_PID")
+    if explicit:
+        try:
+            return int(explicit)
+        except ValueError:
+            logger.warning("ignoring malformed LANIUS_SUPERVISOR_PID %r", explicit)
+
+    parent = os.getppid()
+    if parent <= 1:
+        return None  # reparented already: nothing meaningful left to watch
+    return parent
+
+
 def _request_shutdown() -> None:
     """Ask the server to stop, then let the caller hard-exit if it stalls.
 
@@ -157,8 +181,11 @@ def main(argv: list[str] | None = None) -> None:
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
     )
     if watch or os.environ.get("LANIUS_WATCH_PARENT") == "1":
-        supervisor = int(os.environ.get("LANIUS_SUPERVISOR_PID", os.getppid()))
-        watch_parent(supervisor)
+        supervisor = _supervisor_pid()
+        if supervisor is None:
+            logger.warning("no supervisor to watch; continuing unsupervised")
+        else:
+            watch_parent(supervisor)
     app = create_app(settings)
     uvicorn.run(
         app,
