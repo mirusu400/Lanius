@@ -395,3 +395,76 @@ async def test_failed_modes_are_logged_and_published(tmp_path, caplog) -> None:
         assert published[0][1]["spec"] == "local:curl"  # type: ignore[index]
     finally:
         await eng.stop()
+
+
+def test_mode_status_cannot_detect_a_hung_mode(tmp_path) -> None:
+    """Documents a real limitation rather than asserting a feature.
+
+    mitmproxy marks a mode as running once its task is spawned. Local
+    capture on macOS then blocks forever waiting for the user to approve
+    the system extension, so it reports running with no error, and it
+    never binds an address even when healthy. Nothing in mode_status can
+    distinguish that from success; detecting it needs the platform's own
+    extension state.
+    """
+    eng = engine(tmp_path, free_port())
+    eng.master = _FakeMaster(
+        [("local:curl", True, (), None)],
+    )
+    (mode,) = eng.mode_status()
+    assert mode["running"] is True
+    assert mode["error"] is None
+    assert mode["listening"] is False  # also true of a healthy local mode
+
+
+class _FakeSpec:
+    def __init__(self, spec: str) -> None:
+        self.full_spec = spec
+
+
+class _FakeInstance:
+    def __init__(self, running: bool, addrs: tuple, error: object) -> None:
+        self.is_running = running
+        self.listen_addrs = addrs
+        self.last_exception = error
+
+
+class _FakeServers:
+    def __init__(self, rows: list) -> None:
+        self._instances = {
+            _FakeSpec(spec): _FakeInstance(running, addrs, error)
+            for spec, running, addrs, error in rows
+        }
+
+
+class _FakeMaster:
+    """Stands in for DumpMaster so mode combinations can be exercised
+    without starting a real proxy for each one."""
+
+    def __init__(self, rows: list) -> None:
+        self._servers = _FakeServers(rows)
+        self.addons = self
+
+    def get(self, name: str):
+        if name != "proxyserver":
+            return None
+        return self
+
+    @property
+    def servers(self):
+        return self._servers
+
+
+def test_mode_status_surfaces_a_bind_failure(tmp_path) -> None:
+    """The case the API change does cover: a mode that failed to listen."""
+    eng = engine(tmp_path, free_port())
+    eng.master = _FakeMaster(
+        [
+            ("regular", True, (("127.0.0.1", 8080),), None),
+            ("reverse:http://x@9", False, (), OSError("address already in use")),
+        ]
+    )
+    regular, reverse = eng.mode_status()
+    assert regular["running"] is True and regular["listening"] is True
+    assert reverse["running"] is False
+    assert "address already in use" in str(reverse["error"])

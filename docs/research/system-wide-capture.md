@@ -59,26 +59,50 @@ ran an unproxied `curl` captured nothing.
 This is expected and unavoidable. Any tool that reroutes another
 process's traffic needs explicit consent; Proxifier has the same prompt.
 
-## A real defect this surfaced
+## What the engine could not tell you about its own modes
 
 We pass `LANIUS_EXTRA_MODES` straight into mitmproxy's `mode` list, and
-we construct `DumpMaster(..., with_termlog=False)` while also removing
-the `errorcheck` addon. `errorcheck` was removed deliberately, because it
-calls `sys.exit(1)` and would kill the host app. The consequence is that
-**a mode that fails to start does so silently**: our log showed only
-`HTTP(S) proxy listening`, with nothing about `local` at all, and the API
-reported a healthy engine. The failure was only visible by enabling
-mitmproxy's own logger by hand.
+we remove the `errorcheck` addon because it calls `sys.exit(1)` and would
+kill the host app. Two distinct problems came out of this, and it is
+worth being precise about which is which.
 
-So before any of this is exposed in the UI, the engine needs to forward
-mitmproxy's log and report per-mode status. That is worth fixing
-regardless of whether we build this feature, since the same blind spot
-applies to the reverse/TCP modes we already support.
+**A mode that fails to bind was logged but not exposed.** Measured by
+running the engine with `reverse:...@<port>` against a port already in
+use, before and after the fix:
+
+| | before | after |
+|---|---|---|
+| mitmproxy's own error in the log | yes | yes |
+| `app.proxy` reports which mode failed | no | yes |
+| `modes` in `/api/status` | key absent | `running=false`, with the error |
+
+So the log was never truly silent here; what was missing was any
+machine-readable signal. A UI had no way to show that one of several
+modes was down.
+
+**A mode that hangs is still undetectable.** This is the case that
+matters for local capture, and the fix does *not* solve it. With the
+macOS extension awaiting approval, `/api/status` reports:
+
+```
+local:curl     running=True listening=False error=None
+```
+
+mitmproxy considers the mode started, because the redirector task was
+spawned; it is simply blocked forever waiting for consent. There is no
+exception to report. `listening=False` is not a reliable tell either,
+since local capture never binds an address even when healthy.
+
+Detecting this needs an explicit check of the extension's state (on
+macOS, `activated waiting for user` via the SystemExtensions API) rather
+than anything mitmproxy exposes. That work belongs to step 3 below and
+should not be assumed to come for free.
 
 ## What it would take to ship
 
-1. **Surface mitmproxy's log and per-mode state.** Prerequisite for
-   everything else, and a bug fix in its own right.
+1. ~~**Expose per-mode state.**~~ Done: `/api/status` now reports each
+   mode's `running`, `listening` and `error`. Covers modes that fail to
+   bind, not modes that hang.
 2. **A capture-mode control in Settings**: off / this machine / selected
    apps, mapping to no mode, `local`, `local:<spec>`.
 3. **Approval flow on macOS.** Detect `activated waiting for user`, and
@@ -117,12 +141,13 @@ own UX, permission handling, and error reporting.
 
 Suggested order:
 
-1. Fix the silent-mode-failure bug and expose mitmproxy's log. Small,
-   useful immediately.
-2. Add a Settings toggle for "capture this machine", macOS first, with a
-   clear approval prompt.
-3. Add the per-app picker.
-4. Then Windows, which additionally needs the elevation story.
+1. ~~Expose per-mode state.~~ Done.
+2. Detect the macOS approval state, so the UI can say "approve this in
+   System Settings" instead of appearing to work. This is the real
+   prerequisite, and it needs platform code we do not have yet.
+3. A Settings toggle for "capture this machine", macOS first.
+4. The per-app picker.
+5. Then Windows, which additionally needs the elevation story.
 
-Step 1 is worth doing now regardless. Steps 2 and beyond are a feature in
-their own right and should be scoped separately.
+Steps 2 onward are a feature in their own right and should be scoped
+separately.
