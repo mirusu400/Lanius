@@ -63,6 +63,11 @@ To check it is working without touching your browser settings:
 curl -x http://127.0.0.1:8080 http://example.com/
 ```
 
+### In-app documentation
+
+The **Docs** tab explains the features that need more than a tooltip, in the
+interface language you have selected.
+
 ### Capturing apps that ignore proxy settings
 
 Some applications never look at the system proxy. Lanius can capture them at
@@ -90,6 +95,14 @@ Lanius says so when that happens.
 Applications that pin their certificates will refuse the connection rather
 than be intercepted. That is a property of pinning, not something Lanius can
 work around.
+
+### Looking like a browser
+
+Lanius terminates TLS, so the server fingerprints the proxy rather than your
+client. **Settings > TLS fingerprint** reshapes the handshake to resemble
+Chrome, Firefox or Safari, or forces TLS 1.2, and accepts a custom OpenSSL
+cipher string. This covers the cipher list and TLS version, not a full JA3 or
+JA4 match.
 
 ### Using a different port
 
@@ -149,7 +162,13 @@ failures is hard to miss.
 ### Decoder and Comparer
 
 Chain encoders and decoders: URL, Base64, hex, HTML, gzip, JWT and common
-hashes. Compare two requests or responses word by word or byte by byte.
+hashes. Every step shows its own output, so you can see where a chain goes
+wrong, and the result pane shows the final value as text or as a hex dump.
+
+The Decoder keeps several payloads open at once, each with its own chain, so
+you can work through a handful of tokens without losing the one before.
+
+Compare two requests or responses word by word or byte by byte.
 
 ### Raw TCP
 
