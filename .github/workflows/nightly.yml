@@ -32,7 +32,7 @@ jobs:
       sha: ${{ steps.check.outputs.sha }}
       date: ${{ steps.check.outputs.date }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -82,13 +82,13 @@ jobs:
             label: windows-x86_64
             bundles: msi,nsis
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -233,7 +233,7 @@ jobs:
           ls -la "$out"
           test -n "$(ls -A "$out")" || { echo 'no artifacts produced'; exit 1; }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: lanius-nightly-${{ matrix.label }}
           path: dist/${{ matrix.label }}/*
@@ -250,7 +250,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
