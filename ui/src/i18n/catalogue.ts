@@ -175,6 +175,8 @@ const en = {
   'decoder.viewHex': 'Hex',
   'decoder.copy': 'Copy',
   'decoder.binaryHint': 'looks binary, try Hex',
+  'docs.title': 'Docs',
+  'docs.contents': 'Documentation contents',
 
   // --- comparer ---
   'comparer.mode': 'compare mode',
@@ -442,6 +444,8 @@ const ko: Catalogue = {
   'decoder.viewHex': 'Hex',
   'decoder.copy': '복사',
   'decoder.binaryHint': '바이너리로 보입니다. Hex로 확인하세요',
+  'docs.title': '문서',
+  'docs.contents': '문서 목차',
 
   'comparer.mode': '비교 단위',
   'comparer.word': '단어 단위',

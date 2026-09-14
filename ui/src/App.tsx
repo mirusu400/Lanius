@@ -10,6 +10,7 @@ import { ComparerTab } from './tabs/ComparerTab';
 import { PluginsTab } from './tabs/PluginsTab';
 import { LoggerTab } from './tabs/LoggerTab';
 import { SettingsTab } from './tabs/SettingsTab';
+import { DocsTab } from './tabs/DocsTab';
 import { useT } from './i18n';
 import './App.css';
 
@@ -24,6 +25,7 @@ const TABS = [
   'Logger',
   'Plugins',
   'Settings',
+  'Docs',
 ] as const;
 
 export type Tab = (typeof TABS)[number];
@@ -50,7 +52,7 @@ export default function App() {
               className={name === tab ? 'tab active' : 'tab'}
               onClick={() => setTab(name)}
             >
-              {name === 'Dashboard' ? t('dash.title') : name}
+              {name === 'Dashboard' ? t('dash.title') : name === 'Docs' ? t('docs.title') : name}
             </button>
           ))}
         </nav>
@@ -76,6 +78,8 @@ export default function App() {
           <LoggerTab />
         ) : tab === 'Settings' ? (
           <SettingsTab />
+        ) : tab === 'Docs' ? (
+          <DocsTab />
         ) : null}
       </main>
     </div>
