@@ -4,11 +4,19 @@ import { decodeChain, listCodecs } from '../api/client';
 import { useT } from '../i18n';
 import {
   decoderTabTitle,
-  emptyDecoderTab,
   looksBinary,
   toHexDump,
   type DecoderTabState,
 } from './decoderModel';
+import {
+  addDecoderTab,
+  getActiveId,
+  getDecoderTabs,
+  patchDecoderTab,
+  removeDecoderTab,
+  setActiveId,
+  subscribe,
+} from './decoderStore';
 
 interface StepOutput {
   codec: string;
@@ -20,8 +28,19 @@ type View = 'text' | 'hex';
 
 export function DecoderTab() {
   const t = useT();
-  const [tabs, setTabs] = useState<DecoderTabState[]>(() => [emptyDecoderTab()]);
-  const [activeId, setActiveId] = useState(() => tabs[0].id);
+  // Tabs live in a store so switching to another tab of the app does not
+  // discard every payload.
+  const [tabs, setTabs] = useState<DecoderTabState[]>(getDecoderTabs);
+  const [activeId, setCurrentId] = useState(getActiveId);
+
+  useEffect(
+    () =>
+      subscribe((next, id) => {
+        setTabs(next);
+        setCurrentId(id);
+      }),
+    [],
+  );
   const [outputs, setOutputs] = useState<StepOutput[]>([]);
   const [codecs, setCodecs] = useState<string[]>([]);
   const [hashes, setHashes] = useState<string[]>([]);
@@ -34,11 +53,7 @@ export function DecoderTab() {
   );
 
   const patchActive = useCallback(
-    (patch: Partial<DecoderTabState>) => {
-      setTabs((prev) =>
-        prev.map((tab) => (tab.id === active.id ? { ...tab, ...patch } : tab)),
-      );
-    },
+    (patch: Partial<DecoderTabState>) => patchDecoderTab(active.id, patch),
     [active.id],
   );
 
@@ -77,16 +92,6 @@ export function DecoderTab() {
   const finalValue = outputs.length > 0 ? outputs[outputs.length - 1].value : input;
   const binary = looksBinary(finalValue);
 
-  const closeTab = (id: string) => {
-    setTabs((prev) => {
-      const next = prev.filter((tab) => tab.id !== id);
-      // Never leave the tab with nothing to show.
-      const result = next.length > 0 ? next : [emptyDecoderTab()];
-      if (id === activeId) setActiveId(result[result.length - 1].id);
-      return result;
-    });
-  };
-
   return (
     <div className="decoder-tab">
       <div className="subtabs decoder-tabs">
@@ -103,7 +108,7 @@ export function DecoderTab() {
               aria-label={t('decoder.closeTab', {
                 title: decoderTabTitle(tab, t('decoder.untitled')),
               })}
-              onClick={() => closeTab(tab.id)}
+              onClick={() => removeDecoderTab(tab.id)}
             >
               ×
             </button>
@@ -112,11 +117,7 @@ export function DecoderTab() {
         <button
           className="new-tab"
           aria-label={t('decoder.newTab')}
-          onClick={() => {
-            const tab = emptyDecoderTab();
-            setTabs((prev) => [...prev, tab]);
-            setActiveId(tab.id);
-          }}
+          onClick={() => addDecoderTab()}
         >
           +
         </button>

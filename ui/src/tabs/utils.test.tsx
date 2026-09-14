@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DecoderTab } from './DecoderTab';
+import { resetDecoderTabs } from './decoderStore';
 import { ComparerTab } from './ComparerTab';
 
 let decodeCalls: { value: string; steps: { codec: string; direction: string }[] }[] =
@@ -74,6 +75,9 @@ afterEach(() => {
 });
 
 describe('DecoderTab', () => {
+  // Decoder tabs are held in a store that outlives the component.
+  beforeEach(() => resetDecoderTabs());
+
   it('starts with no chain steps', async () => {
     render(<DecoderTab />);
     expect(await screen.findByText(t('decoder.chainSteps', { count: 0 }))).toBeTruthy();

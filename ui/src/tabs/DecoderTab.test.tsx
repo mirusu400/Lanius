@@ -4,12 +4,15 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DecoderTab } from './DecoderTab';
+import { resetDecoderTabs } from './decoderStore';
 import { renderWithI18n as render, t } from '../test-utils';
 
 let lastChain: { value: string; steps: unknown[] } | null = null;
 let chainResult: { codec: string; direction: string; value: string }[] = [];
 
 beforeEach(() => {
+  // Tabs outlive the component by design, so each test starts clean.
+  resetDecoderTabs();
   lastChain = null;
   chainResult = [];
   vi.stubGlobal(
@@ -105,6 +108,38 @@ describe('decoder tabs', () => {
       await screen.findByLabelText(t('decoder.closeTab', { title: t('decoder.untitled') })),
     );
     expect(await screen.findByText(t('decoder.untitled'))).toBeTruthy();
+  });
+});
+
+describe('tabs outlive the view', () => {
+  it('keeps payloads when the tab is unmounted and shown again', async () => {
+    // Switching to Proxy and back unmounts this component. Holding tabs in
+    // component state threw away every payload at that moment.
+    const view = render(<DecoderTab />);
+    await userEvent.type(input(), 'my-token');
+    await userEvent.click(screen.getByLabelText(t('decoder.newTab')));
+    expect(document.querySelectorAll('.decoder-tabs .subtab').length).toBe(2);
+
+    view.unmount();
+    render(<DecoderTab />);
+
+    expect(await screen.findByRole('button', { name: 'my-token' })).toBeTruthy();
+    expect(document.querySelectorAll('.decoder-tabs .subtab').length).toBe(2);
+  });
+
+  it('remembers which tab was selected', async () => {
+    const view = render(<DecoderTab />);
+    await userEvent.type(input(), 'first');
+    await userEvent.click(screen.getByLabelText(t('decoder.newTab')));
+    await userEvent.type(input(), 'second');
+
+    view.unmount();
+    render(<DecoderTab />);
+
+    const field = (await screen.findByLabelText(
+      t('decoder.inputLabel'),
+    )) as HTMLTextAreaElement;
+    expect(field.value).toBe('second');
   });
 });
 
