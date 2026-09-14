@@ -63,6 +63,33 @@ To check it is working without touching your browser settings:
 curl -x http://127.0.0.1:8080 http://example.com/
 ```
 
+### Capturing apps that ignore proxy settings
+
+Some applications never look at the system proxy. Lanius can capture them at
+the operating system level instead, so they do not need to be configured at
+all. This is experimental and is currently switched on with an environment
+variable:
+
+```bash
+# every application on this machine
+LANIUS_EXTRA_MODES=local open -a Lanius
+
+# only one, by process name or PID
+LANIUS_EXTRA_MODES=local:curl open -a Lanius
+
+# everything except one
+LANIUS_EXTRA_MODES='local:!Slack' open -a Lanius
+```
+
+On macOS this installs a network extension the first time, and macOS will
+ask you to approve it in **System Settings > General > Login Items &
+Extensions > Network Extensions**. The Dashboard tells you when it is
+waiting. On Windows the helper needs to run with administrator rights.
+
+Applications that pin their certificates will refuse the connection rather
+than be intercepted. That is a property of pinning, not something Lanius can
+work around.
+
 ## Features
 
 ### Proxy
