@@ -31,6 +31,7 @@ from ..addons.scope import ScopeError, rule_from_url
 from ..config import Settings
 from ..db.store import FlowStore
 from ..events import EventBroker
+from ..processes import list_processes
 from ..proxy import ProxyEngine, local_capture_state
 
 logger = logging.getLogger(__name__)
@@ -257,6 +258,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "spec": engine.local_capture_spec(),
             },
         }
+
+    @app.get("/api/processes")
+    async def processes(visible_only: bool = True) -> dict[str, Any]:
+        """Running executables, so capture rules can be picked not typed."""
+        items = await asyncio.to_thread(list_processes, visible_only)
+        return {"items": items, "count": len(items)}
 
     @app.post("/api/capture/local")
     async def set_local_capture(payload: dict[str, Any]) -> dict[str, Any]:

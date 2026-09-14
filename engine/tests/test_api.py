@@ -403,3 +403,19 @@ def test_tls_profile_survives_a_restart(client, tmp_path) -> None:
     client.post("/api/tls", json={"profile": "firefox"})
     store = client.app.state.store
     assert store.get_setting("tls_profile") == "firefox"
+
+
+def test_processes_can_be_listed_for_picking(client) -> None:
+    """Rules match substrings of the executable path, so picking from a
+    list beats typing a name and hoping."""
+    data = client.get("/api/processes").json()
+    assert data["count"] == len(data["items"])
+    if data["items"]:
+        first = data["items"][0]
+        assert set(first) == {"name", "path", "visible", "system"}
+
+
+def test_the_full_process_list_is_larger_than_the_visible_one(client) -> None:
+    visible = client.get("/api/processes?visible_only=true").json()["count"]
+    every = client.get("/api/processes?visible_only=false").json()["count"]
+    assert every >= visible
