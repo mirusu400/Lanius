@@ -23,7 +23,6 @@ const empty: Dashboard = {
   status_groups: {},
   methods: [],
   top_hosts: [],
-  slowest: [],
   proxy: { running: true, host: '127.0.0.1', port: 8080 },
   intercept_enabled: false,
   paused: 0,
@@ -62,16 +61,6 @@ const populated: Dashboard = {
       errors: 0,
       bytes: 1024 * 100,
       last_seen: 1,
-    },
-  ],
-  slowest: [
-    {
-      id: 'f1',
-      method: 'POST',
-      host: 'api.example.com',
-      path: '/slow/report',
-      status_code: 200,
-      duration_ms: 2400,
     },
   ],
 };
@@ -162,14 +151,6 @@ describe('DashboardTab', () => {
     expect(await screen.findByText('api.example.com')).toBeTruthy();
     expect(screen.getByText('cdn.example.com')).toBeTruthy();
     expect(screen.getByText(t('dash.errorsShort', { count: '5' }))).toBeTruthy();
-  });
-
-  it('lists the slowest responses', async () => {
-    payload = populated;
-    render(<DashboardTab />);
-
-    expect(await screen.findByText('/slow/report')).toBeTruthy();
-    expect(screen.getByText('2.40 s')).toBeTruthy();
   });
 
   it('reports proxy and intercept state', async () => {

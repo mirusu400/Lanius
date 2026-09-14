@@ -160,7 +160,7 @@ export function DashboardTab({ onOpenTab }: { onOpenTab?: (tab: string) => void 
               </ul>
             </Panel>
 
-            <Panel title={t('dash.hostsTitle')}>
+            <Panel title={t('dash.hostsTitle')} wide>
               <table className="dash-table">
                 <tbody>
                   {data.top_hosts.map((h) => (
@@ -179,23 +179,6 @@ export function DashboardTab({ onOpenTab }: { onOpenTab?: (tab: string) => void 
                           </span>
                         )}
                       </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Panel>
-
-            <Panel title={t('dash.slowestTitle')}>
-              <table className="dash-table">
-                <tbody>
-                  {data.slowest.map((f) => (
-                    <tr key={f.id}>
-                      <td className="dash-method">{f.method}</td>
-                      <td className="dash-path" title={`${f.host ?? ''}${f.path ?? ''}`}>
-                        {f.path || '/'}
-                      </td>
-                      <td className="dash-num dim">{f.status_code ?? ''}</td>
-                      <td className="dash-num">{formatMillis(f.duration_ms)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -226,9 +209,17 @@ function Card({
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({
+  title,
+  children,
+  wide = false,
+}: {
+  title: string;
+  children: React.ReactNode;
+  wide?: boolean;
+}) {
   return (
-    <section className="dash-panel">
+    <section className={wide ? 'dash-panel wide' : 'dash-panel'}>
       <h3>{title}</h3>
       {children}
     </section>

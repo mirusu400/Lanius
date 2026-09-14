@@ -238,7 +238,6 @@ def test_dashboard_aggregates_captured_flows(client) -> None:
     assert data["hosts"] == 2
     assert data["status_groups"] == {"2xx": 1, "4xx": 1, "5xx": 1}
     assert data["top_hosts"][0]["host"] == "a.com"
-    assert data["slowest"][0]["id"] == "b"
 
 
 def test_dashboard_includes_engine_state(client) -> None:

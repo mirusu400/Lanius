@@ -1494,8 +1494,14 @@ pre.body {
 
 @media (min-width: 1400px) {
   .dash-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
+}
+
+/* The host list is the only panel that grows with the capture, so let it
+   span the row rather than sitting half-width beside empty space. */
+.dash-panel.wide {
+  grid-column: 1 / -1;
 }
 
 .dash-panel {
@@ -1605,11 +1611,9 @@ pre.body {
   table-layout: auto;
 }
 
-/* The slack goes to the column carrying the name, so the numeric columns
-   stay grouped on the right instead of drifting apart on a wide panel.
-   In the slowest table that is the path, not the leading method. */
-.dash-host,
-.dash-path {
+/* The slack goes to the column carrying the host name, so the numeric
+   columns stay grouped on the right instead of drifting apart. */
+.dash-host {
   width: 100%;
 }
 
@@ -1630,20 +1634,14 @@ pre.body {
   background: var(--bg-row);
 }
 
-.dash-host,
-.dash-path {
+.dash-host {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  /* A long path must not push the timings off the panel, but the cell is
+  /* A long host must not push the figures off the panel, but this cell is
      also what absorbs the table's slack, so cap the content rather than
      the column. */
   max-width: 0;
-}
-
-.dash-method {
-  color: var(--muted);
-  width: 48px;
 }
 
 .dash-num {

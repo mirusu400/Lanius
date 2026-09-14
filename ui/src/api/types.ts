@@ -211,15 +211,6 @@ export interface DashboardHost {
   last_seen: number | null;
 }
 
-export interface DashboardSlowFlow {
-  id: string;
-  method: string | null;
-  host: string | null;
-  path: string | null;
-  status_code: number | null;
-  duration_ms: number;
-}
-
 export interface Dashboard {
   flows: number;
   hosts: number;
@@ -235,7 +226,6 @@ export interface Dashboard {
   status_groups: Record<string, number>;
   methods: { method: string; count: number }[];
   top_hosts: DashboardHost[];
-  slowest: DashboardSlowFlow[];
   proxy: { running: boolean; host: string; port: number };
   intercept_enabled: boolean;
   paused: number;

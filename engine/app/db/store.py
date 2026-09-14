@@ -358,13 +358,6 @@ class FlowStore:
                 (top, ),
             ).fetchall()
 
-            slow_rows = self._conn.execute(
-                "SELECT id, method, host, path, status_code, duration_ms"
-                " FROM flows WHERE duration_ms IS NOT NULL"
-                " ORDER BY duration_ms DESC LIMIT ?",
-                (top, ),
-            ).fetchall()
-
             cutoff = (totals["last_seen"] or 0.0) - recent_window
             recent = int(
                 self._conn.execute(
@@ -413,17 +406,6 @@ class FlowStore:
                     "last_seen": row["last_seen"],
                 }
                 for row in host_rows
-            ],
-            "slowest": [
-                {
-                    "id": row["id"],
-                    "method": row["method"],
-                    "host": row["host"],
-                    "path": row["path"],
-                    "status_code": row["status_code"],
-                    "duration_ms": round(float(row["duration_ms"]), 2),
-                }
-                for row in slow_rows
             ],
         }
 

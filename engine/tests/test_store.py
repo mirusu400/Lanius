@@ -179,12 +179,6 @@ def test_dashboard_ranks_hosts_by_volume() -> None:
     assert top[1]["errors"] == 0
 
 
-def test_dashboard_lists_the_slowest_requests_first() -> None:
-    data = _dashboard_fixture().dashboard()
-    assert [f["duration_ms"] for f in data["slowest"]] == [300.0, 20.0, 10.0, 5.0]
-    assert data["slowest"][0]["method"] == "POST"
-
-
 def test_dashboard_reports_methods_by_frequency() -> None:
     data = _dashboard_fixture().dashboard()
     assert data["methods"] == [{"method": "GET", "count": 3},
