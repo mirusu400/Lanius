@@ -2,6 +2,7 @@
 
 import type { FlowDetail, FlowSummary } from '../api/types';
 import { ParseError } from '../i18n/ParseError';
+import type { Message } from '../i18n/message';
 
 export interface RepeaterResponse {
   id: string;
@@ -21,7 +22,9 @@ export interface RepeaterTab {
   text: string;
   response: RepeaterResponse | null;
   sending: boolean;
-  error: string | null;
+  // A message rather than a sentence: these tabs are saved to the project
+  // and restored later, possibly in another language.
+  error: Message | null;
 }
 
 export interface SendPayload {

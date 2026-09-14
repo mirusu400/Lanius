@@ -25,7 +25,7 @@ import { FlowDetailView } from '../components/FlowDetail';
 import { FilterBar } from '../components/FilterBar';
 import { InterceptPanel } from '../components/InterceptPanel';
 import { matchesFilters, mergeFlow } from './proxyModel';
-import { useT } from '../i18n';
+import { msg, renderMessage, useT, type Message } from '../i18n';
 
 const DEFAULT_RULES: InterceptRules = {
   enabled: false,
@@ -45,7 +45,7 @@ export function ProxyTab() {
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [paused, setPaused] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Message | null>(null);
   const [rules, setRules] = useState<InterceptRules>(DEFAULT_RULES);
   const [queue, setQueue] = useState<PausedFlow[]>([]);
 
@@ -59,9 +59,9 @@ export function ProxyTab() {
       setFlows(await listFlows(filtersRef.current));
       setError(null);
     } catch (err) {
-      setError(t('proxy.engineUnreachable', { message: (err as Error).message }));
+      setError(msg('proxy.engineUnreachable', { message: (err as Error).message }));
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     void reload();
@@ -138,13 +138,13 @@ export function ProxyTab() {
         setRules(await patchInterceptRules(patch));
       } catch (err) {
         setError(
-          t('proxy.interceptToggleFailed', {
+          msg('proxy.interceptToggleFailed', {
             message: (err as Error).message,
           }),
         );
       }
     },
-    [t],
+    [],
   );
 
   const onResolved = useCallback((id: string) => {
@@ -202,7 +202,7 @@ export function ProxyTab() {
             status={status}
             count={flows.length}
           />
-          {error && <div className="banner error">{error}</div>}
+          {error && <div className="banner error">{renderMessage(error, t)}</div>}
           <div className="proxy-split">
             <FlowTable
               flows={flows}

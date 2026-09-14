@@ -13,4 +13,6 @@ export {
   translate,
 } from './locale';
 export type { Translator } from './locale';
-export { ParseError, errorText } from './ParseError';
+export { ParseError } from './ParseError';
+export { asMessage, errorMessage, msg, rawMsg, renderMessage } from './message';
+export type { Message } from './message';

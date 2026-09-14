@@ -14,7 +14,7 @@ import {
   updateTab,
 } from './repeaterStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
-import { errorText, useT } from '../i18n';
+import { errorMessage, renderMessage, useT } from '../i18n';
 
 export function RepeaterTabView() {
   const t = useT();
@@ -45,7 +45,7 @@ export function RepeaterTabView() {
       const response = await sendRepeaterRequest(payload);
       updateTab(active.id, { response, sending: false });
     } catch (err) {
-      updateTab(active.id, { sending: false, error: errorText(err, t) });
+      updateTab(active.id, { sending: false, error: errorMessage(err) });
     }
   };
 
@@ -137,7 +137,9 @@ export function RepeaterTabView() {
               </span>
             )}
           </div>
-          {active.error && <div className="banner error">{active.error}</div>}
+          {active.error && (
+            <div className="banner error">{renderMessage(active.error, t)}</div>
+          )}
           <div className="repeater-split">
             <textarea
               className="repeater-editor mono"

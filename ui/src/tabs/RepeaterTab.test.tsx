@@ -1,11 +1,12 @@
 /** Renders the real Repeater tab against a mocked engine. */
 import {cleanup, screen, waitFor } from '@testing-library/react';
-import { renderWithI18n as render, t } from '../test-utils';
+import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
+import type { Locale } from '../i18n';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RepeaterTabView } from './RepeaterTab';
-import { resetTabs, sendToRepeater, getTabs } from './repeaterStore';
+import { resetTabs, sendToRepeater, getTabs, setTabs } from './repeaterStore';
 import type { FlowSummary } from '../api/types';
 
 const flow: FlowSummary = {
@@ -122,6 +123,58 @@ describe('RepeaterTab', () => {
     await user.click(screen.getByRole('button', { name: t('repeater.send') }));
     expect(await screen.findByText(t('parse.badRequestLine'))).toBeTruthy();
     expect(sent).toHaveLength(0);
+  });
+
+  it('keeps a saved error translatable across a restart in another language', async () => {
+    // Repeater tabs are autosaved into the project and restored later,
+    // possibly with a different language selected. Storing the translated
+    // sentence would pin the old language into the saved file, so the tab
+    // holds the key instead.
+    const user = userEvent.setup();
+    const other: Locale = TEST_LOCALE === 'en' ? 'ko' : 'en';
+
+    const { unmount } = render(<RepeaterTabView />);
+    sendToRepeater(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    await user.clear(editor());
+    await user.type(editor(), 'OOPS');
+    await user.click(screen.getByRole('button', { name: t('repeater.send') }));
+    await screen.findByText(t('parse.badRequestLine'));
+
+    // Round-trip through the same JSON the autosave writes.
+    const saved = JSON.parse(JSON.stringify(getTabs()));
+    unmount();
+    cleanup();
+    resetTabs();
+    setTabs(saved);
+
+    // Reopen in the other language: the banner must be in that language.
+    render(<RepeaterTabView />, { locale: other });
+    expect(await screen.findByText(tk(other)('parse.badRequestLine'))).toBeTruthy();
+    expect(screen.queryByText(t('parse.badRequestLine'))).toBeNull();
+  });
+
+  it('restores a project saved before errors became messages', async () => {
+    // Those files hold the translated sentence as a bare string. It cannot
+    // be re-translated, but it must still render rather than appear as
+    // '[object Object]'.
+    resetTabs();
+    setTabs([
+      {
+        id: 'old',
+        title: 'old tab',
+        url: 'http://legacy.test/',
+        text: 'GET / HTTP/1.1',
+        response: null,
+        sending: false,
+        error: 'a sentence saved by an older build' as unknown as never,
+      },
+    ]);
+
+    render(<RepeaterTabView />);
+    expect(
+      await screen.findByText('a sentence saved by an older build'),
+    ).toBeTruthy();
   });
 
   it('supports multiple independent tabs', async () => {

@@ -2,13 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { listPlugins, reloadPlugin, setPluginEnabled } from '../api/client';
 import type { PluginInfo } from '../api/types';
-import { useT } from '../i18n';
+import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 
 export function PluginsTab() {
   const t = useT();
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [directory, setDirectory] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Message | null>(null);
 
   // `refresh` must not clear `error`: it runs right after a failed
   // enable/reload, and wiping the banner would hide why it failed.
@@ -18,9 +18,9 @@ export function PluginsTab() {
       setPlugins(data.items);
       setDirectory(data.directory);
     } catch (err) {
-      setError(t('plugins.listFailed', { message: (err as Error).message }));
+      setError(msg('plugins.listFailed', { message: (err as Error).message }));
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -31,7 +31,7 @@ export function PluginsTab() {
       await setPluginEnabled(plugin.name, !plugin.enabled);
       setError(null);
     } catch (err) {
-      setError(`${plugin.name}: ${(err as Error).message}`);
+      setError(rawMsg(`${plugin.name}: ${(err as Error).message}`));
     }
     await refresh();
   };
@@ -41,7 +41,7 @@ export function PluginsTab() {
       await reloadPlugin(plugin.name);
       setError(null);
     } catch (err) {
-      setError(`${plugin.name}: ${(err as Error).message}`);
+      setError(rawMsg(`${plugin.name}: ${(err as Error).message}`));
     }
     await refresh();
   };
@@ -53,7 +53,7 @@ export function PluginsTab() {
         <span className="spacer" />
         <button onClick={() => void refresh()}>{t('plugins.rescan')}</button>
       </div>
-      {error && <div className="banner error">{error}</div>}
+      {error && <div className="banner error">{renderMessage(error, t)}</div>}
 
       {plugins.length === 0 ? (
         <p className="muted pad">

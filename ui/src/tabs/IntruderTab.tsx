@@ -22,7 +22,7 @@ import { subscribeTarget } from './intruderStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { sendToRepeater } from './repeaterStore';
 import { getFlow } from '../api/client';
-import { errorText, useT } from '../i18n';
+import { errorMessage, renderMessage, useT, type Message } from '../i18n';
 
 const DEFAULT_TEMPLATE = 'GET /?q=\u00a7test\u00a7 HTTP/1.1\nHost: example.com\n\n';
 
@@ -33,7 +33,7 @@ export function IntruderTab() {
   const [attackType, setAttackType] = useState<AttackType>('sniper');
   const [payloadText, setPayloadText] = useState(['a\nb\nc']);
   const [attack, setAttack] = useState<Attack | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Message | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const attackIdRef = useRef<string | null>(null);
 
@@ -119,7 +119,7 @@ export function IntruderTab() {
       setAttack({ ...started, results: [] });
       void refresh(started.id);
     } catch (err) {
-      setError(errorText(err, t));
+      setError(errorMessage(err));
     }
   };
 
@@ -178,7 +178,7 @@ export function IntruderTab() {
       {positions < 0 && (
         <div className="banner error">{t('intercept.unbalancedMarker')}</div>
       )}
-      {error && <div className="banner error">{error}</div>}
+      {error && <div className="banner error">{renderMessage(error, t)}</div>}
 
       <div className="intruder-split">
         <div className="intruder-left">

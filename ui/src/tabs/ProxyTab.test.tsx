@@ -217,6 +217,42 @@ describe('ProxyTab', () => {
     expect(await screen.findByText(expected)).toBeTruthy();
   });
 
+  it('re-translates a banner that is already on screen', async () => {
+    // The first bug was raising the message in the wrong language. This is
+    // the other half: a banner raised before the switch keeps whatever it
+    // was worded in, because the translated string sits in state. Errors
+    // are stored as a key and translated at render instead.
+    const user = userEvent.setup();
+    const other: Locale = TEST_LOCALE === 'en' ? 'ko' : 'en';
+
+    function Harness() {
+      const { setLocale } = useI18n();
+      return (
+        <>
+          <button type="button" onClick={() => setLocale(other)}>
+            switch
+          </button>
+          <ProxyTab />
+        </>
+      );
+    }
+
+    render(<Harness />);
+    await screen.findByText('seeded.test');
+
+    // Raise the banner first, in the original language.
+    failListFlows = true;
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'x');
+    const before = t('proxy.engineUnreachable', { message: 'engine down' });
+    expect(await screen.findByText(before)).toBeTruthy();
+
+    // Now switch. The visible banner must follow.
+    await user.click(screen.getByRole('button', { name: 'switch' }));
+    const after = tk(other)('proxy.engineUnreachable', { message: 'engine down' });
+    expect(await screen.findByText(after)).toBeTruthy();
+    expect(screen.queryByText(before)).toBeNull();
+  });
+
   it('clears the table on flows.cleared', async () => {
     render(<ProxyTab />);
     await screen.findByText('seeded.test');

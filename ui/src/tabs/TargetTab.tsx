@@ -33,7 +33,7 @@ import {
 } from './targetModel';
 import { FlowDetailView } from '../components/FlowDetail';
 import { connectStream } from '../api/stream';
-import { useT } from '../i18n';
+import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 
 type View = 'sitemap' | 'endpoints' | 'scope';
 
@@ -50,7 +50,7 @@ export function TargetTab() {
     restrict_capture: false,
   });
   const [inScopeOnly, setInScopeOnly] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Message | null>(null);
 
   const menu = useContextMenu<TreeMenuTarget>();
 
@@ -58,7 +58,7 @@ export function TargetTab() {
     try {
       setScope(await getScope());
     } catch (err) {
-      setError((err as Error).message);
+      setError(rawMsg((err as Error).message));
     }
   }, []);
 
@@ -68,9 +68,9 @@ export function TargetTab() {
       setSites(data.sites);
       setError(null);
     } catch (err) {
-      setError(t('target.sitemapFailed', { message: (err as Error).message }));
+      setError(msg('target.sitemapFailed', { message: (err as Error).message }));
     }
-  }, [inScopeOnly, t]);
+  }, [inScopeOnly]);
 
   useEffect(() => {
     void refreshScope();
@@ -162,7 +162,7 @@ export function TargetTab() {
       await refreshScope();
       await refreshSites();
     } catch (err) {
-      setError((err as Error).message);
+      setError(rawMsg((err as Error).message));
     }
   };
 
@@ -202,7 +202,7 @@ export function TargetTab() {
         <button onClick={() => void refreshSites()}>{t('common.refresh')}</button>
       </div>
 
-      {error && <div className="banner error">{error}</div>}
+      {error && <div className="banner error">{renderMessage(error, t)}</div>}
 
       {view === 'scope' ? (
         <ScopeEditor

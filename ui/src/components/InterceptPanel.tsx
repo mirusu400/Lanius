@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { dropFlow, forwardAll, forwardFlow } from '../api/client';
 import type { InterceptRules, PausedFlow } from '../api/types';
 import { editsFromText, renderPaused } from '../tabs/interceptModel';
-import { errorText, useT } from '../i18n';
+import { errorMessage, renderMessage, useT, type Message } from '../i18n';
 
 interface Props {
   rules: InterceptRules;
@@ -21,7 +21,7 @@ export function InterceptPanel({
   const t = useT();
   const current = paused[0] ?? null;
   const [text, setText] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Message | null>(null);
   const original = useMemo(
     () => (current ? renderPaused(current) : ''),
     [current],
@@ -45,7 +45,7 @@ export function InterceptPanel({
       onResolved(current.id);
       setError(null);
     } catch (err) {
-      setError(errorText(err, t));
+      setError(errorMessage(err));
     }
   };
 
@@ -99,7 +99,7 @@ export function InterceptPanel({
           {t('intercept.forwardAll')}
         </button>
       </div>
-      {error && <div className="banner error">{error}</div>}
+      {error && <div className="banner error">{renderMessage(error, t)}</div>}
       {current ? (
         <>
           <div className="detail-url mono">

@@ -20,7 +20,16 @@ import {
   specToRules,
   type CaptureRule,
 } from './captureRules';
-import { LOCALES, LOCALE_NAMES, useI18n, type Locale } from '../i18n';
+import {
+  LOCALES,
+  LOCALE_NAMES,
+  msg,
+  rawMsg,
+  renderMessage,
+  useI18n,
+  type Locale,
+  type Message,
+} from '../i18n';
 
 /** Sentinel used to place a React node inside a translated sentence. */
 const MARKER = '\u0000link\u0000';
@@ -485,8 +494,8 @@ function TlsSection() {
 function ProjectSection() {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<Message | null>(null);
+  const [error, setError] = useState<Message | null>(null);
 
   const download = async (includeFlows: boolean) => {
     setBusy(true);
@@ -506,7 +515,7 @@ function ProjectSection() {
       // Revoking immediately can cancel the download in some browsers.
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
     } catch (err) {
-      setError((err as Error).message);
+      setError(rawMsg((err as Error).message));
     } finally {
       setBusy(false);
     }
@@ -519,13 +528,13 @@ function ProjectSection() {
     try {
       const result = await importProject(JSON.parse(await file.text()));
       setNote(
-        t('project.imported', {
+        msg('project.imported', {
           flows: String(result.flows ?? 0),
           scope: String(result.scope ?? 0),
         }),
       );
     } catch (err) {
-      setError(t('project.importFailed', { message: (err as Error).message }));
+      setError(msg('project.importFailed', { message: (err as Error).message }));
     } finally {
       setBusy(false);
     }
@@ -562,8 +571,8 @@ function ProjectSection() {
         </label>
       </div>
 
-      {note && <p className="muted">{note}</p>}
-      {error && <div className="banner error">{error}</div>}
+      {note && <p className="muted">{renderMessage(note, t)}</p>}
+      {error && <div className="banner error">{renderMessage(error, t)}</div>}
     </section>
   );
 }
