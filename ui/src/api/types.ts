@@ -84,6 +84,15 @@ export type EngineEvent =
   | { type: 'intercept.resolved'; data: { id: string; action: string } }
   | { type: 'intercept.rules'; data: InterceptRules }
   | { type: 'engine.started' | 'engine.stopped'; data: Record<string, unknown> }
+  | {
+      type: 'engine.mode_failed';
+      data: {
+        spec: string;
+        running: boolean;
+        listening: boolean;
+        error: string | null;
+      };
+    }
   | { type: 'scope.changed'; data: ScopeState }
   | { type: 'intruder.started' | 'intruder.finished'; data: AttackSummary }
   | {
