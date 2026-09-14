@@ -25,6 +25,9 @@ and the workflow tools on top.
 ## Download
 
 Grab the latest build from the [Releases page](https://github.com/mirusu400/Lanius/releases).
+Builds are published nightly whenever something changed, so the newest one
+may be a day behind `main`. To run the current code instead, see
+[Building from source](#building-from-source).
 
 | Platform | File |
 |---|---|
