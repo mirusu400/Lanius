@@ -14,6 +14,8 @@ export interface DecoderTabState {
   steps: ChainStep[];
   /** Untitled tabs follow their input until the user renames them. */
   renamed: boolean;
+  /** Per tab: one payload may be JSON while the next is a binary blob. */
+  view: 'text' | 'hex';
 }
 
 let counter = 0;
@@ -30,6 +32,7 @@ export function emptyDecoderTab(): DecoderTabState {
     input: '',
     steps: [],
     renamed: false,
+    view: 'text',
   };
 }
 

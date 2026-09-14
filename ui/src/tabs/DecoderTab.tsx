@@ -24,8 +24,6 @@ interface StepOutput {
   value: string;
 }
 
-type View = 'text' | 'hex';
-
 export function DecoderTab() {
   const t = useT();
   // Tabs live in a store so switching to another tab of the app does not
@@ -45,7 +43,6 @@ export function DecoderTab() {
   const [codecs, setCodecs] = useState<string[]>([]);
   const [hashes, setHashes] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<View>('text');
 
   const active = useMemo(
     () => tabs.find((tab) => tab.id === activeId) ?? tabs[0],
@@ -91,6 +88,7 @@ export function DecoderTab() {
   const all = [...codecs, ...hashes];
   const finalValue = outputs.length > 0 ? outputs[outputs.length - 1].value : input;
   const binary = looksBinary(finalValue);
+  const view = active.view;
 
   return (
     <div className="decoder-tab">
@@ -214,7 +212,7 @@ export function DecoderTab() {
                 <button
                   key={mode}
                   className={view === mode ? 'active' : undefined}
-                  onClick={() => setView(mode)}
+                  onClick={() => patchActive({ view: mode })}
                 >
                   {t(`decoder.view${mode === 'text' ? 'Text' : 'Hex'}` as const)}
                 </button>

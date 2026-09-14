@@ -30,6 +30,7 @@ describe('decoderTabTitle', () => {
     input: '',
     steps: [],
     renamed: false,
+    view: 'text',
   };
 
   it('falls back when there is nothing to show', () => {
@@ -107,5 +108,18 @@ describe('toHexDump', () => {
 
   it('returns nothing for an empty value', () => {
     expect(toHexDump('')).toBe('');
+  });
+});
+
+describe('per-tab view', () => {
+  it('starts on text', () => {
+    expect(emptyDecoderTab().view).toBe('text');
+  });
+
+  it('is part of the tab, so one payload can be hex while another is text', () => {
+    const a = emptyDecoderTab();
+    const b = { ...emptyDecoderTab(), view: 'hex' as const };
+    expect(a.view).toBe('text');
+    expect(b.view).toBe('hex');
   });
 });

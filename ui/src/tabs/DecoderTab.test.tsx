@@ -211,6 +211,25 @@ describe('raw view', () => {
     expect(document.querySelector('.decoder-raw')?.textContent).toContain('41 42');
   });
 
+  it('remembers the view per tab', async () => {
+    // One payload can be JSON while the next is a binary blob, so the
+    // choice belongs to the tab rather than the pane.
+    chainResult = [{ codec: 'base64', direction: 'decode', value: 'AB' }];
+    render(<DecoderTab />);
+    await userEvent.click(await screen.findByText(t('decoder.addStep')));
+    await userEvent.click(screen.getByRole('button', { name: t('decoder.viewHex') }));
+    await waitFor(() =>
+      expect(document.querySelector('.decoder-raw')?.textContent).toContain('41 42'),
+    );
+
+    await userEvent.click(screen.getByLabelText(t('decoder.newTab')));
+    // A fresh tab starts on text, not on the previous tab's choice.
+    expect(
+      (screen.getByRole('button', { name: t('decoder.viewText') }) as HTMLElement)
+        .className,
+    ).toContain('active');
+  });
+
   it('points at the hex view when the result is binary', async () => {
     chainResult = [
       { codec: 'hex', direction: 'decode', value: '\x00\x01\x02\x03\x04binary' },
