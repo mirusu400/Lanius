@@ -53,9 +53,12 @@ body {
   padding: 0 12px;
   background: var(--bg-alt);
   border-bottom: 1px solid var(--border);
+  /* The brand stays put while the tab strip takes the remaining width. */
+  min-width: 0;
 }
 
 .brand {
+  flex: none;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--accent);
@@ -77,6 +80,15 @@ body {
 .tabs {
   display: flex;
   gap: 2px;
+  /* With ten tabs the strip outgrows a narrow window; scroll it rather
+     than pushing the whole page sideways. */
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
@@ -87,6 +99,8 @@ body {
   padding: 10px 12px;
   cursor: pointer;
   font-size: 13px;
+  white-space: nowrap;
+  flex: none;
 }
 
 .tab:hover {
@@ -1461,8 +1475,27 @@ pre.body {
 
 .dash-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  /* Status and methods are short; the two tables carry most of the content,
+     so give them the room instead of letting every panel share a row and
+     leave the last one stranded on its own line. */
+  /* Single column by default: a min track wider than the viewport would
+     force a horizontal scrollbar on a narrow window. */
+  grid-template-columns: 1fr;
+  grid-auto-rows: min-content;
   gap: 12px;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .dash-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1400px) {
+  .dash-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 .dash-panel {
@@ -1569,6 +1602,15 @@ pre.body {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  table-layout: auto;
+}
+
+/* The slack goes to the column carrying the name, so the numeric columns
+   stay grouped on the right instead of drifting apart on a wide panel.
+   In the slowest table that is the path, not the leading method. */
+.dash-host,
+.dash-path {
+  width: 100%;
 }
 
 .dash-table td {
@@ -1593,7 +1635,10 @@ pre.body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 220px;
+  /* A long path must not push the timings off the panel, but the cell is
+     also what absorbs the table's slack, so cap the content rather than
+     the column. */
+  max-width: 0;
 }
 
 .dash-method {

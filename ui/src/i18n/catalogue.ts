@@ -467,7 +467,7 @@ const ko: Catalogue = {
   'dash.pending': '진행 중',
   'dash.failures': '실패',
   'dash.engine': '엔진',
-  'dash.proxyRunning': '{address} 에서 프록시 실행 중',
+  'dash.proxyRunning': '프록시 실행 중 {address}',
   'dash.proxyStopped': '프록시 중지됨',
   'dash.interceptOn': '가로채기 켜짐',
   'dash.interceptOff': '가로채기 꺼짐',
