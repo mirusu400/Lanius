@@ -272,6 +272,9 @@ jobs:
             xattr -dr com.apple.quarantine /Applications/Lanius.app
             ```
 
+            On Windows, SmartScreen warns about an unrecognised publisher:
+            choose **More info** then **Run anyway**.
+
             Lanius is for security testing of systems you are authorised to
             test. Verifying that authorisation is your responsibility.
           prerelease: true
