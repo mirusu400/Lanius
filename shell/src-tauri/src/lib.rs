@@ -37,6 +37,31 @@ fn port_open(port: u16) -> bool {
 }
 
 /// Locate the bundled engine binary, or fall back to the dev checkout.
+/// A port from the environment, falling back to the default. An
+/// unparseable value is ignored rather than taken as 0.
+fn port_override(var: &str, default: u16) -> u16 {
+    match std::env::var(var) {
+        Ok(value) => match value.trim().parse::<u16>() {
+            Ok(port) if port > 0 => port,
+            _ => {
+                log::warn!("{var} is not a valid port: {value:?}; using {default}");
+                default
+            }
+        },
+        Err(_) => default,
+    }
+}
+
+/// The API port this run should use.
+fn api_port() -> u16 {
+    port_override("LANIUS_API_PORT", DEFAULT_API_PORT)
+}
+
+/// The proxy port this run should use.
+fn proxy_port() -> u16 {
+    port_override("LANIUS_PROXY_PORT", DEFAULT_PROXY_PORT)
+}
+
 fn engine_command(app: &tauri::AppHandle) -> Option<Command> {
     // 1. Explicit override, useful for testing and custom installs.
     if let Ok(path) = std::env::var("LANIUS_ENGINE") {
@@ -186,14 +211,14 @@ fn repo_root() -> Option<PathBuf> {
 
 fn start_engine(app: &tauri::AppHandle, state: &EngineProcess) -> EngineInfo {
     let info = EngineInfo {
-        api_url: format!("http://{API_HOST}:{DEFAULT_API_PORT}"),
-        proxy: format!("{API_HOST}:{DEFAULT_PROXY_PORT}"),
+        api_url: format!("http://{API_HOST}:{}", api_port()),
+        proxy: format!("{API_HOST}:{}", proxy_port()),
         managed: false,
     };
 
     // Reuse an engine the user already started (e.g. `python -m app.main`).
-    if port_open(DEFAULT_API_PORT) {
-        log::info!("reusing engine already listening on {DEFAULT_API_PORT}");
+    if port_open(api_port()) {
+        log::info!("reusing engine already listening on {}", api_port());
         return info;
     }
 
@@ -203,8 +228,10 @@ fn start_engine(app: &tauri::AppHandle, state: &EngineProcess) -> EngineInfo {
     };
 
     command
-        .env("LANIUS_API_PORT", DEFAULT_API_PORT.to_string())
-        .env("LANIUS_PROXY_PORT", DEFAULT_PROXY_PORT.to_string())
+        // Ports are overridable: another tool may already hold 8080, and
+        // hardcoding it would leave the app unable to start at all.
+        .env("LANIUS_API_PORT", api_port().to_string())
+        .env("LANIUS_PROXY_PORT", proxy_port().to_string())
         // The engine watches us and exits if we die without cleanup
         // (SIGKILL, crash), so it can never orphan the proxy ports.
         .env("LANIUS_WATCH_PARENT", "1")
@@ -234,8 +261,8 @@ fn start_engine(app: &tauri::AppHandle, state: &EngineProcess) -> EngineInfo {
             *state.0.lock().expect("engine lock") = Some(child);
             let deadline = Instant::now() + STARTUP_TIMEOUT;
             while Instant::now() < deadline {
-                if port_open(DEFAULT_API_PORT) {
-                    log::info!("engine ready on {DEFAULT_API_PORT}");
+                if port_open(api_port()) {
+                    log::info!("engine ready on {}", api_port());
                     return EngineInfo {
                         managed: true,
                         ..info
@@ -304,15 +331,15 @@ fn install_signal_handlers(handle: tauri::AppHandle) {
 #[tauri::command]
 fn engine_info(state: State<'_, EngineProcess>) -> EngineInfo {
     EngineInfo {
-        api_url: format!("http://{API_HOST}:{DEFAULT_API_PORT}"),
-        proxy: format!("{API_HOST}:{DEFAULT_PROXY_PORT}"),
+        api_url: format!("http://{API_HOST}:{}", api_port()),
+        proxy: format!("{API_HOST}:{}", proxy_port()),
         managed: state.0.lock().expect("engine lock").is_some(),
     }
 }
 
 #[tauri::command]
 fn engine_running() -> bool {
-    port_open(DEFAULT_API_PORT)
+    port_open(api_port())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -479,5 +506,27 @@ mod tests {
         // so killing only the spawned pid would leave the proxy port bound.
         let args = taskkill_args(4321);
         assert_eq!(args, ["/PID", "4321", "/T", "/F"]);
+    }
+
+    #[test]
+    fn port_override_reads_the_environment() {
+        // Another proxy tool may already hold 8080, so the app must not be
+        // pinned to it.
+        let var = "LANIUS_TEST_PORT_OVERRIDE";
+        unsafe { std::env::set_var(var, "9999") };
+        assert_eq!(port_override(var, 8080), 9999);
+        unsafe { std::env::remove_var(var) };
+        assert_eq!(port_override(var, 8080), 8080);
+    }
+
+    #[test]
+    fn port_override_ignores_nonsense() {
+        // A bad value must fall back, not become port 0.
+        let var = "LANIUS_TEST_PORT_BAD";
+        for bad in ["", "0", "abc", "70000", "-1"] {
+            unsafe { std::env::set_var(var, bad) };
+            assert_eq!(port_override(var, 8080), 8080, "input {bad:?}");
+        }
+        unsafe { std::env::remove_var(var) };
     }
 }
