@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { decodeChain, listCodecs, type ChainStep } from '../api/client';
+import { decodeChain, listCodecs } from '../api/client';
 import { useT } from '../i18n';
+import {
+  decoderTabTitle,
+  emptyDecoderTab,
+  looksBinary,
+  toHexDump,
+  type DecoderTabState,
+} from './decoderModel';
 
 interface StepOutput {
   codec: string;
@@ -9,14 +16,31 @@ interface StepOutput {
   value: string;
 }
 
+type View = 'text' | 'hex';
+
 export function DecoderTab() {
   const t = useT();
-  const [input, setInput] = useState('');
-  const [steps, setSteps] = useState<ChainStep[]>([]);
+  const [tabs, setTabs] = useState<DecoderTabState[]>(() => [emptyDecoderTab()]);
+  const [activeId, setActiveId] = useState(() => tabs[0].id);
   const [outputs, setOutputs] = useState<StepOutput[]>([]);
   const [codecs, setCodecs] = useState<string[]>([]);
   const [hashes, setHashes] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<View>('text');
+
+  const active = useMemo(
+    () => tabs.find((tab) => tab.id === activeId) ?? tabs[0],
+    [tabs, activeId],
+  );
+
+  const patchActive = useCallback(
+    (patch: Partial<DecoderTabState>) => {
+      setTabs((prev) =>
+        prev.map((tab) => (tab.id === active.id ? { ...tab, ...patch } : tab)),
+      );
+    },
+    [active.id],
+  );
 
   useEffect(() => {
     listCodecs()
@@ -26,6 +50,8 @@ export function DecoderTab() {
       })
       .catch(() => undefined);
   }, []);
+
+  const { input, steps } = active;
 
   const run = useCallback(async () => {
     if (steps.length === 0) {
@@ -48,24 +74,73 @@ export function DecoderTab() {
   }, [run]);
 
   const all = [...codecs, ...hashes];
+  const finalValue = outputs.length > 0 ? outputs[outputs.length - 1].value : input;
+  const binary = looksBinary(finalValue);
+
+  const closeTab = (id: string) => {
+    setTabs((prev) => {
+      const next = prev.filter((tab) => tab.id !== id);
+      // Never leave the tab with nothing to show.
+      const result = next.length > 0 ? next : [emptyDecoderTab()];
+      if (id === activeId) setActiveId(result[result.length - 1].id);
+      return result;
+    });
+  };
 
   return (
     <div className="decoder-tab">
+      <div className="subtabs decoder-tabs">
+        {tabs.map((tab) => (
+          <span
+            key={tab.id}
+            className={tab.id === active.id ? 'subtab active' : 'subtab'}
+          >
+            <button onClick={() => setActiveId(tab.id)}>
+              {decoderTabTitle(tab, t('decoder.untitled'))}
+            </button>
+            <button
+              className="close"
+              aria-label={t('decoder.closeTab', {
+                title: decoderTabTitle(tab, t('decoder.untitled')),
+              })}
+              onClick={() => closeTab(tab.id)}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <button
+          className="new-tab"
+          aria-label={t('decoder.newTab')}
+          onClick={() => {
+            const tab = emptyDecoderTab();
+            setTabs((prev) => [...prev, tab]);
+            setActiveId(tab.id);
+          }}
+        >
+          +
+        </button>
+      </div>
+
       <div className="decoder-controls">
         <button
           onClick={() =>
-            setSteps((prev) => [
-              ...prev,
-              { codec: all[0] ?? 'base64', direction: 'decode' },
-            ])
+            patchActive({
+              steps: [...steps, { codec: all[0] ?? 'base64', direction: 'decode' }],
+            })
           }
         >
           {t('decoder.addStep')}
         </button>
-        <button onClick={() => setSteps([])}>{t('common.reset')}</button>
-        <span className="muted">
-          {t('decoder.chainSteps', { count: steps.length })}
-        </span>
+        <button onClick={() => patchActive({ steps: [] })}>{t('common.reset')}</button>
+        <input
+          className="decoder-name"
+          aria-label={t('decoder.tabName')}
+          placeholder={t('decoder.untitled')}
+          value={active.title}
+          onChange={(e) => patchActive({ title: e.target.value, renamed: true })}
+        />
+        <span className="muted">{t('decoder.chainSteps', { count: steps.length })}</span>
       </div>
       {error && <div className="banner error">{error}</div>}
 
@@ -77,7 +152,7 @@ export function DecoderTab() {
             className="mono"
             spellCheck={false}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => patchActive({ input: e.target.value })}
           />
         </label>
 
@@ -88,11 +163,11 @@ export function DecoderTab() {
                 aria-label={t('decoder.codec', { index: index + 1 })}
                 value={step.codec}
                 onChange={(e) =>
-                  setSteps((prev) =>
-                    prev.map((s, i) =>
+                  patchActive({
+                    steps: steps.map((s, i) =>
                       i === index ? { ...s, codec: e.target.value } : s,
                     ),
-                  )
+                  })
                 }
               >
                 {all.map((codec) => (
@@ -105,16 +180,13 @@ export function DecoderTab() {
                 aria-label={t('decoder.direction', { index: index + 1 })}
                 value={step.direction}
                 onChange={(e) =>
-                  setSteps((prev) =>
-                    prev.map((s, i) =>
+                  patchActive({
+                    steps: steps.map((s, i) =>
                       i === index
-                        ? {
-                            ...s,
-                            direction: e.target.value as 'encode' | 'decode',
-                          }
+                        ? { ...s, direction: e.target.value as 'encode' | 'decode' }
                         : s,
                     ),
-                  )
+                  })
                 }
               >
                 <option value="decode">decode</option>
@@ -123,17 +195,44 @@ export function DecoderTab() {
               <button
                 aria-label={t('decoder.removeStep', { index: index + 1 })}
                 onClick={() =>
-                  setSteps((prev) => prev.filter((_, i) => i !== index))
+                  patchActive({ steps: steps.filter((_, i) => i !== index) })
                 }
               >
                 ×
               </button>
             </div>
-            <pre className="mono chain-output">
-              {outputs[index]?.value ?? ''}
-            </pre>
+            <pre className="mono chain-output">{outputs[index]?.value ?? ''}</pre>
           </div>
         ))}
+
+        <div className="decoder-result">
+          <div className="decoder-result-head">
+            <span className="muted">{t('decoder.result')}</span>
+            <div className="view-toggle">
+              {(['text', 'hex'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  className={view === mode ? 'active' : undefined}
+                  onClick={() => setView(mode)}
+                >
+                  {t(`decoder.view${mode === 'text' ? 'Text' : 'Hex'}` as const)}
+                </button>
+              ))}
+            </div>
+            {binary && view === 'text' && (
+              <span className="muted">{t('decoder.binaryHint')}</span>
+            )}
+            <button
+              onClick={() => void navigator.clipboard?.writeText(finalValue)}
+              disabled={!finalValue}
+            >
+              {t('decoder.copy')}
+            </button>
+          </div>
+          <pre className="mono decoder-raw">
+            {view === 'hex' ? toHexDump(finalValue) : finalValue}
+          </pre>
+        </div>
       </div>
     </div>
   );

@@ -86,7 +86,10 @@ describe('DecoderTab', () => {
     await user.click(screen.getByRole('button', { name: t('decoder.addStep') }));
 
     await waitFor(() =>
-      expect(screen.getByText(/base64:decode\(aGk=\)/)).toBeTruthy(),
+      // The value also appears in the result pane, so look at the step.
+      expect(document.querySelector('.chain-output')?.textContent).toMatch(
+        /base64:decode\(aGk=\)/,
+      ),
     );
     expect(decodeCalls.at(-1)?.steps).toEqual([
       { codec: 'base64', direction: 'decode' },
@@ -103,8 +106,8 @@ describe('DecoderTab', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText(/url:decode\(base64:decode\(x\)\)/),
-      ).toBeTruthy(),
+        document.querySelectorAll('.chain-output')[1]?.textContent,
+      ).toMatch(/url:decode\(base64:decode\(x\)\)/),
     );
   });
 
@@ -115,7 +118,9 @@ describe('DecoderTab', () => {
     await user.click(screen.getByRole('button', { name: t('decoder.addStep') }));
     await user.selectOptions(screen.getByLabelText(t('decoder.direction', { index: 1 })), 'encode');
     await waitFor(() =>
-      expect(screen.getByText(/base64:encode\(x\)/)).toBeTruthy(),
+      expect(document.querySelector('.chain-output')?.textContent).toMatch(
+        /base64:encode\(x\)/,
+      ),
     );
   });
 
