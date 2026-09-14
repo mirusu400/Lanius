@@ -752,7 +752,8 @@ async def test_a_rejected_port_leaves_the_proxy_where_it_was(tmp_path) -> None:
 async def test_a_busy_port_is_refused_and_the_old_one_kept(tmp_path) -> None:
     port, taken = free_port(), free_port()
     blocker = socket.socket()
-    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # No SO_REUSEADDR: on Windows it would let the engine bind this port
+    # too, and the test would pass while the feature was broken.
     blocker.bind(("127.0.0.1", taken))
     blocker.listen(1)
     proxy = engine(tmp_path, port)

@@ -481,10 +481,18 @@ class ProxyEngine:
         self.broker.publish("engine.local_capture_blocked", state)
 
     def _check_port_available(self) -> None:
-        """Fail fast with a clear message when the listen port is taken."""
+        """Fail fast with a clear message when the listen port is taken.
+
+        SO_REUSEADDR is deliberately not set. On POSIX it only permits
+        reusing a port in TIME_WAIT, but on Windows it allows binding a
+        port another process is actively listening on, so the probe would
+        report every port as free and the check would do nothing there.
+        """
         probe = socket.socket()
         try:
-            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if sys.platform == "win32":  # pragma: no cover - platform specific
+                # Ask Windows for the POSIX meaning: refuse a port in use.
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
             probe.bind((self.settings.proxy_host, self.settings.proxy_port))
         except OSError as exc:
             raise ProxyStartError(

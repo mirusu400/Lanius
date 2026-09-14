@@ -521,7 +521,8 @@ def test_listener_can_be_moved_to_another_port(client) -> None:
 def test_listener_rejects_a_port_in_use_without_losing_the_proxy(client) -> None:
     before = client.get("/api/listener").json()["port"]
     blocker = socket.socket()
-    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # Deliberately without SO_REUSEADDR: with it, Windows allows a second
+    # bind to a listening port, so the port would not really be busy.
     blocker.bind(("127.0.0.1", 0))
     blocker.listen(1)
     taken = blocker.getsockname()[1]
@@ -546,7 +547,8 @@ def test_the_api_survives_a_proxy_port_that_is_already_taken(tmp_path) -> None:
     """The failure the released build showed: another tool holding the port
     took the whole app down, so the UI could not even offer a new one."""
     blocker = socket.socket()
-    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # Deliberately without SO_REUSEADDR: with it, Windows allows a second
+    # bind to a listening port, so the port would not really be busy.
     blocker.bind(("127.0.0.1", 0))
     blocker.listen(1)
     taken = blocker.getsockname()[1]
