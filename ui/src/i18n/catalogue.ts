@@ -177,6 +177,17 @@ const en = {
   'decoder.binaryHint': 'looks binary, try Hex',
   'docs.title': 'Docs',
   'docs.contents': 'Documentation contents',
+  'tls.section': 'TLS fingerprint',
+  'tls.help':
+    'Lanius terminates TLS, so the server fingerprints the proxy rather than your client. Pick a profile to make the handshake towards the server look like a browser.',
+  'tls.profile': 'Profile',
+  'tls.customLabel': 'Custom ciphers',
+  'tls.customPlaceholder': 'OpenSSL cipher string, leave blank to use the profile',
+  'tls.apply': 'Apply',
+  'tls.applied': 'TLS profile updated.',
+  'tls.active': 'Offering {count} ciphers',
+  'tls.limitation':
+    'This changes the cipher list and TLS version only. A full JA3 or JA4 match also needs extension ordering, which the TLS library does not expose.',
 
   // --- comparer ---
   'comparer.mode': 'compare mode',
@@ -446,6 +457,17 @@ const ko: Catalogue = {
   'decoder.binaryHint': '바이너리로 보입니다. Hex로 확인하세요',
   'docs.title': '문서',
   'docs.contents': '문서 목차',
+  'tls.section': 'TLS 지문',
+  'tls.help':
+    'Lanius가 TLS를 종단하므로 서버는 클라이언트가 아니라 프록시의 지문을 봅니다. 프로필을 고르면 서버로 가는 핸드셰이크가 브라우저처럼 보입니다.',
+  'tls.profile': '프로필',
+  'tls.customLabel': '사용자 cipher',
+  'tls.customPlaceholder': 'OpenSSL cipher 문자열, 비우면 프로필을 따릅니다',
+  'tls.apply': '적용',
+  'tls.applied': 'TLS 프로필을 변경했습니다.',
+  'tls.active': 'cipher {count}개 제시',
+  'tls.limitation':
+    'cipher 목록과 TLS 버전만 바꿉니다. 완전한 JA3/JA4 일치에는 확장 순서가 필요한데 TLS 라이브러리가 이를 제공하지 않습니다.',
 
   'comparer.mode': '비교 단위',
   'comparer.word': '단어 단위',

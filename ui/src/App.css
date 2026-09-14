@@ -1899,3 +1899,26 @@ pre.body {
     overflow-y: auto;
   }
 }
+
+/* --- tls settings --- */
+.tls-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.tls-custom {
+  max-width: 560px;
+  margin: 8px 0;
+}
+
+.tls-custom .row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.tls-custom input {
+  flex: 1;
+}

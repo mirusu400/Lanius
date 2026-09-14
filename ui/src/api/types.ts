@@ -267,3 +267,17 @@ export interface Dashboard {
   modes: ProxyModeStatus[];
   local_capture: LocalCaptureState;
 }
+
+// --- upstream TLS ---------------------------------------------------------
+
+export interface TlsProfileOption {
+  id: string;
+  label: string;
+}
+
+export interface TlsState {
+  profile: string;
+  custom_ciphers: string | null;
+  ciphers: string | null;
+  available: TlsProfileOption[];
+}

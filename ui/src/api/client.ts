@@ -371,3 +371,18 @@ export function setLocalCapture(
     body: JSON.stringify({ spec }),
   });
 }
+
+export function getTlsState(): Promise<import('./types').TlsState> {
+  return request('/api/tls');
+}
+
+export function setTlsProfile(
+  profile: string,
+  ciphers?: string | null,
+): Promise<import('./types').TlsState> {
+  return request('/api/tls', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profile, ciphers: ciphers ?? '' }),
+  });
+}

@@ -4,10 +4,12 @@ import {
   caDownloadUrl,
   getCaInfo,
   getStatus,
+  getTlsState,
   setLocalCapture,
+  setTlsProfile,
   type CaInfo,
 } from '../api/client';
-import type { EngineStatus, LocalCaptureState } from '../api/types';
+import type { EngineStatus, LocalCaptureState, TlsState } from '../api/types';
 import { LOCALES, LOCALE_NAMES, useI18n, type Locale } from '../i18n';
 
 /** Sentinel used to place a React node inside a translated sentence. */
@@ -38,6 +40,8 @@ export function SettingsTab() {
       {error && <div className="banner error">{error}</div>}
 
       <CaptureSection />
+
+      <TlsSection />
 
       <section>
         <h3>{t('settings.languageSection')}</h3>
@@ -246,6 +250,105 @@ function CaptureSection() {
       )}
 
       <p className="muted">{t('capture.pinningNote')}</p>
+    </section>
+  );
+}
+
+/** Reshapes the handshake Lanius makes towards the server. */
+function TlsSection() {
+  const { t } = useI18n();
+  const [state, setState] = useState<TlsState | null>(null);
+  const [custom, setCustom] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getTlsState()
+      .then((next) => {
+        // Guard the shape: rendering maps over `available`, so a response
+        // without it would take the whole Settings tab down.
+        if (!next || !Array.isArray(next.available)) return;
+        setState(next);
+        setCustom(next.custom_ciphers ?? '');
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const apply = async (profile: string, ciphers: string) => {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      const next = await setTlsProfile(profile, ciphers);
+      if (next && Array.isArray(next.available)) {
+        setState(next);
+        setCustom(next.custom_ciphers ?? '');
+      }
+      setNote(t('tls.applied'));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!state) return null;
+
+  // The count is what actually reaches the server, so it is the useful
+  // confirmation that a profile took effect.
+  const cipherCount = state.ciphers ? state.ciphers.split(':').length : 0;
+
+  return (
+    <section>
+      <h3>{t('tls.section')}</h3>
+      <p className="muted">{t('tls.help')}</p>
+
+      <div className="row tls-row">
+        <label htmlFor="tls-profile">{t('tls.profile')}</label>
+        <select
+          id="tls-profile"
+          value={state.profile}
+          disabled={busy}
+          onChange={(e) => void apply(e.target.value, custom)}
+        >
+          {state.available.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {cipherCount > 0 && (
+          <span className="muted">
+            {t('tls.active', { count: String(cipherCount) })}
+          </span>
+        )}
+      </div>
+
+      <div className="tls-custom">
+        <label htmlFor="tls-ciphers">{t('tls.customLabel')}</label>
+        <div className="row">
+          <input
+            id="tls-ciphers"
+            className="mono"
+            value={custom}
+            disabled={busy}
+            placeholder={t('tls.customPlaceholder')}
+            onChange={(e) => setCustom(e.target.value)}
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void apply(state.profile, custom)}
+          >
+            {t('tls.apply')}
+          </button>
+        </div>
+      </div>
+
+      {note && <p className="muted">{note}</p>}
+      {error && <div className="banner error">{error}</div>}
+      <p className="muted">{t('tls.limitation')}</p>
     </section>
   );
 }
