@@ -60,6 +60,14 @@ export function removeDecoderTab(id: string): void {
   emit();
 }
 
+/** Replace the whole list, for restoring a saved workspace. */
+export function setDecoderTabs(next: DecoderTabState[]): void {
+  if (!Array.isArray(next) || next.length === 0) return;
+  tabs = next;
+  activeId = tabs.some((tab) => tab.id === activeId) ? activeId : tabs[0].id;
+  emit();
+}
+
 /** Test helper. */
 export function resetDecoderTabs(): void {
   tabs = [emptyDecoderTab()];

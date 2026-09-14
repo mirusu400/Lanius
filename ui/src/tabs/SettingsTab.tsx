@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 
 import {
   caDownloadUrl,
+  exportProject,
+  importProject,
+  listProcesses,
+  type ProcessInfo,
   getCaInfo,
   getStatus,
   getTlsState,
@@ -10,6 +14,7 @@ import {
   type CaInfo,
 } from '../api/client';
 import type { EngineStatus, LocalCaptureState, TlsState } from '../api/types';
+import { rulesToSpec, specToRules, type CaptureRule } from './captureRules';
 import { LOCALES, LOCALE_NAMES, useI18n, type Locale } from '../i18n';
 
 /** Sentinel used to place a React node inside a translated sentence. */
@@ -38,6 +43,8 @@ export function SettingsTab() {
   return (
     <div className="settings-tab">
       {error && <div className="banner error">{error}</div>}
+
+      <ProjectSection />
 
       <CaptureSection />
 
@@ -152,11 +159,12 @@ export function SettingsTab() {
 function CaptureSection() {
   const { t } = useI18n();
   const [mode, setMode] = useState<'off' | 'all' | 'filtered'>('off');
-  const [filter, setFilter] = useState('');
+  const [rules, setRules] = useState<CaptureRule[]>([]);
   const [state, setState] = useState<LocalCaptureState | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [picker, setPicker] = useState<ProcessInfo[] | null>(null);
 
   useEffect(() => {
     getStatus()
@@ -169,27 +177,43 @@ function CaptureSection() {
         else if (spec === '') setMode('all');
         else {
           setMode('filtered');
-          setFilter(spec);
+          setRules(specToRules(spec));
         }
       })
       .catch(() => undefined);
   }, []);
 
-  const apply = async (next: 'off' | 'all' | 'filtered', spec: string) => {
+  const apply = async (next: typeof mode, nextRules: CaptureRule[]) => {
     setBusy(true);
     setError(null);
     setNote(null);
     try {
       // null is off; '' is on with no filter, i.e. every application.
-      const result = await setLocalCapture(
-        next === 'off' ? null : next === 'all' ? '' : spec,
-      );
+      const spec =
+        next === 'off' ? null : next === 'all' ? '' : rulesToSpec(nextRules);
+      const result = await setLocalCapture(spec);
       setState(result);
-      setNote(result.restart_required ? t('capture.restartNeeded') : t('capture.applied'));
+      setNote(
+        result.restart_required ? t('capture.restartNeeded') : t('capture.applied'),
+      );
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const updateRules = (next: CaptureRule[]) => {
+    setRules(next);
+    // Applying on every keystroke would restart capture mid-word, so the
+    // list is committed explicitly.
+  };
+
+  const openPicker = async () => {
+    try {
+      setPicker((await listProcesses(true)).items);
+    } catch (err) {
+      setError((err as Error).message);
     }
   };
 
@@ -208,7 +232,7 @@ function CaptureSection() {
               disabled={busy}
               onChange={() => {
                 setMode(option);
-                if (option !== 'filtered') void apply(option, '');
+                if (option !== 'filtered') void apply(option, rules);
               }}
             />
             {t(`capture.${option}` as 'capture.off')}
@@ -217,25 +241,112 @@ function CaptureSection() {
       </div>
 
       {mode === 'filtered' && (
-        <div className="capture-filter">
-          <label htmlFor="capture-filter">{t('capture.filterLabel')}</label>
+        <div className="capture-rules">
+          <p className="muted">{t('capture.rulesHelp')}</p>
+
+          {rules.length === 0 ? (
+            <p className="muted">{t('capture.noRules')}</p>
+          ) : (
+            <ul className="rule-list">
+              {rules.map((rule, index) => (
+                <li key={index}>
+                  <input
+                    type="checkbox"
+                    checked={rule.enabled}
+                    aria-label={t('capture.toggleRule', { value: rule.value })}
+                    onChange={(e) =>
+                      updateRules(
+                        rules.map((r, i) =>
+                          i === index ? { ...r, enabled: e.target.checked } : r,
+                        ),
+                      )
+                    }
+                  />
+                  <select
+                    aria-label={t('capture.ruleAction', { index: String(index + 1) })}
+                    value={rule.action}
+                    onChange={(e) =>
+                      updateRules(
+                        rules.map((r, i) =>
+                          i === index
+                            ? { ...r, action: e.target.value as CaptureRule['action'] }
+                            : r,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="include">{t('capture.include')}</option>
+                    <option value="exclude">{t('capture.exclude')}</option>
+                  </select>
+                  <input
+                    className="mono"
+                    aria-label={t('capture.ruleValue', { index: String(index + 1) })}
+                    placeholder={t('capture.rulePlaceholder')}
+                    value={rule.value}
+                    onChange={(e) =>
+                      updateRules(
+                        rules.map((r, i) =>
+                          i === index ? { ...r, value: e.target.value } : r,
+                        ),
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    aria-label={t('capture.removeRule', { value: rule.value })}
+                    onClick={() => updateRules(rules.filter((_, i) => i !== index))}
+                  >
+                    &times;
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
           <div className="row">
-            <input
-              id="capture-filter"
-              value={filter}
-              disabled={busy}
-              placeholder={t('capture.filterPlaceholder')}
-              onChange={(e) => setFilter(e.target.value)}
-            />
             <button
               type="button"
-              disabled={busy || !filter.trim()}
-              onClick={() => void apply('filtered', filter)}
+              onClick={() =>
+                updateRules([...rules, { value: '', action: 'include', enabled: true }])
+              }
+            >
+              {t('capture.addRule')}
+            </button>
+            <button type="button" onClick={() => void openPicker()}>
+              {t('capture.pick')}
+            </button>
+            <button
+              type="button"
+              disabled={busy || rules.every((r) => !r.value.trim())}
+              onClick={() => void apply('filtered', rules)}
             >
               {t('capture.apply')}
             </button>
           </div>
-          <p className="muted">{t('capture.filterHelp')}</p>
+
+          {picker && (
+            <ul className="process-picker">
+              {picker.map((process) => (
+                <li key={process.path}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Add the full path: two apps can share a name, and
+                      // the path is what the redirector matches on.
+                      updateRules([
+                        ...rules,
+                        { value: process.path, action: 'include', enabled: true },
+                      ]);
+                      setPicker(null);
+                    }}
+                  >
+                    <strong>{process.name}</strong>
+                    <span className="mono">{process.path}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
@@ -349,6 +460,93 @@ function TlsSection() {
       {note && <p className="muted">{note}</p>}
       {error && <div className="banner error">{error}</div>}
       <p className="muted">{t('tls.limitation')}</p>
+    </section>
+  );
+}
+
+/** Export and import, plus a reminder that work is saved as you go. */
+function ProjectSection() {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const download = async (includeFlows: boolean) => {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      const data = await exportProject(includeFlows);
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const stamp = new Date().toISOString().slice(0, 10);
+      link.download = `lanius-${stamp}.lanius.json`;
+      link.click();
+      // Revoking immediately can cancel the download in some browsers.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const upload = async (file: File) => {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      const result = await importProject(JSON.parse(await file.text()));
+      setNote(
+        t('project.imported', {
+          flows: String(result.flows ?? 0),
+          scope: String(result.scope ?? 0),
+        }),
+      );
+    } catch (err) {
+      setError(t('project.importFailed', { message: (err as Error).message }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      <h3>{t('project.section')}</h3>
+      <p className="muted">{t('project.help')}</p>
+
+      <div className="project-actions">
+        <button type="button" disabled={busy} onClick={() => void download(true)}>
+          {t('project.export')}
+        </button>
+        <button type="button" disabled={busy} onClick={() => void download(false)}>
+          {t('project.exportNoFlows')}
+        </button>
+        <label className="import-button">
+          {t('project.import')}
+          <input
+            type="file"
+            accept=".json,application/json"
+            aria-label={t('project.import')}
+            disabled={busy}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              // Importing throws away the open project, so ask first.
+              if (file && window.confirm(t('project.confirmImport'))) {
+                void upload(file);
+              }
+              event.target.value = '';
+            }}
+          />
+        </label>
+      </div>
+
+      {note && <p className="muted">{note}</p>}
+      {error && <div className="banner error">{error}</div>}
     </section>
   );
 }

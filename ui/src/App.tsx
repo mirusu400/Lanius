@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { DashboardTab } from './tabs/DashboardTab';
 import { ProxyTab } from './tabs/ProxyTab';
@@ -12,6 +12,13 @@ import { LoggerTab } from './tabs/LoggerTab';
 import { SettingsTab } from './tabs/SettingsTab';
 import { DocsTab } from './tabs/DocsTab';
 import { useT } from './i18n';
+import { autosave } from './tabs/autosave';
+import { getTabs, setTabs, subscribe as subscribeRepeater } from './tabs/repeaterStore';
+import {
+  getDecoderTabs,
+  setDecoderTabs,
+  subscribe as subscribeDecoder,
+} from './tabs/decoderStore';
 import './App.css';
 
 const TABS = [
@@ -33,6 +40,20 @@ export type Tab = (typeof TABS)[number];
 export default function App() {
   const t = useT();
   const [tab, setTab] = useState<Tab>('Dashboard');
+
+  // Persist what you were working on, so closing Lanius does not throw
+  // away your open requests.
+  useEffect(() => {
+    const stop = [
+      autosave('repeater', (listener) => subscribeRepeater(() => listener(getTabs())), setTabs),
+      autosave(
+        'decoder',
+        (listener) => subscribeDecoder(() => listener(getDecoderTabs())),
+        setDecoderTabs,
+      ),
+    ];
+    return () => stop.forEach((fn) => fn());
+  }, []);
 
   return (
     <div className="app">

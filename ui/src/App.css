@@ -1964,3 +1964,95 @@ pre.body {
   padding-top: 8px;
   border-radius: 0 0 3px 3px;
 }
+
+/* --- capture rules --- */
+.capture-rules {
+  max-width: 620px;
+  margin: 8px 0;
+}
+
+.rule-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rule-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rule-list li input[type='text'],
+.rule-list li input:not([type]) {
+  flex: 1;
+}
+
+.rule-list select {
+  width: 90px;
+}
+
+.process-picker {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.process-picker li + li {
+  border-top: 1px solid var(--border);
+}
+
+.process-picker button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 7px 10px;
+  cursor: pointer;
+  color: var(--fg);
+}
+
+.process-picker button:hover {
+  background: var(--bg-row);
+}
+
+.process-picker span {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- project --- */
+.project-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.import-button {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  background: var(--bg-row);
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.import-button input {
+  display: none;
+}

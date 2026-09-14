@@ -123,20 +123,78 @@ describe('system capture', () => {
     await waitFor(() => expect(posted).toEqual([{ spec: '' }]));
   });
 
-  it('sends the filter when specific applications are chosen', async () => {
+  it('sends the rules when specific applications are chosen', async () => {
     render(<SettingsTab />);
     await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
 
-    // Choosing the mode must not apply an empty filter on its own.
+    // Choosing the mode must not apply an empty list on its own.
     expect(posted).toEqual([]);
 
+    await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
     await userEvent.type(
-      screen.getByLabelText(t('capture.filterLabel')),
-      'curl, !Slack',
+      screen.getByLabelText(t('capture.ruleValue', { index: '1' })),
+      'curl',
     );
     await userEvent.click(screen.getByRole('button', { name: t('capture.apply') }));
 
-    await waitFor(() => expect(posted).toEqual([{ spec: 'curl, !Slack' }]));
+    await waitFor(() => expect(posted).toEqual([{ spec: 'curl' }]));
+  });
+
+  it('builds one spec from several rules', async () => {
+    render(<SettingsTab />);
+    await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
+
+    await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
+    await userEvent.type(
+      screen.getByLabelText(t('capture.ruleValue', { index: '1' })),
+      'chrome',
+    );
+    await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
+    await userEvent.type(
+      screen.getByLabelText(t('capture.ruleValue', { index: '2' })),
+      'Slack',
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText(t('capture.ruleAction', { index: '2' })),
+      'exclude',
+    );
+    await userEvent.click(screen.getByRole('button', { name: t('capture.apply') }));
+
+    await waitFor(() => expect(posted).toEqual([{ spec: 'chrome,!Slack' }]));
+  });
+
+  it('leaves a disabled rule out without deleting it', async () => {
+    render(<SettingsTab />);
+    await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
+    await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
+    await userEvent.type(
+      screen.getByLabelText(t('capture.ruleValue', { index: '1' })),
+      'chrome',
+    );
+    await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
+    await userEvent.type(
+      screen.getByLabelText(t('capture.ruleValue', { index: '2' })),
+      'firefox',
+    );
+    await userEvent.click(screen.getByLabelText(t('capture.toggleRule', { value: 'firefox' })));
+    await userEvent.click(screen.getByRole('button', { name: t('capture.apply') }));
+
+    await waitFor(() => expect(posted).toEqual([{ spec: 'chrome' }]));
+    // Still listed, just not applied.
+    expect(screen.getByLabelText(t('capture.ruleValue', { index: '2' }))).toBeTruthy();
+  });
+
+  it('removes a rule', async () => {
+    render(<SettingsTab />);
+    await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
+    await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
+    await userEvent.type(
+      screen.getByLabelText(t('capture.ruleValue', { index: '1' })),
+      'chrome',
+    );
+    await userEvent.click(screen.getByLabelText(t('capture.removeRule', { value: 'chrome' })));
+
+    expect(screen.queryByLabelText(t('capture.ruleValue', { index: '1' }))).toBeNull();
   });
 
   it('will not apply an empty filter', async () => {
@@ -148,14 +206,24 @@ describe('system capture', () => {
     ).toBe(true);
   });
 
-  it('restores the saved filter', async () => {
-    captureSpec = '!Slack';
+  it('restores the saved rules', async () => {
+    captureSpec = 'chrome,!Slack';
     render(<SettingsTab />);
+
     await waitFor(() =>
       expect(
-        (screen.getByLabelText(t('capture.filterLabel')) as HTMLInputElement).value,
-      ).toBe('!Slack'),
+        (screen.getByLabelText(t('capture.ruleValue', { index: '1' })) as HTMLInputElement)
+          .value,
+      ).toBe('chrome'),
     );
+    expect(
+      (screen.getByLabelText(t('capture.ruleValue', { index: '2' })) as HTMLInputElement)
+        .value,
+    ).toBe('Slack');
+    expect(
+      (screen.getByLabelText(t('capture.ruleAction', { index: '2' })) as HTMLSelectElement)
+        .value,
+    ).toBe('exclude');
   });
 
   it('warns that the extension still needs approval', async () => {
@@ -174,7 +242,11 @@ describe('system capture', () => {
     postFails = true;
     render(<SettingsTab />);
     await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
-    await userEvent.type(screen.getByLabelText(t('capture.filterLabel')), 'x');
+    await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
+    await userEvent.type(
+      screen.getByLabelText(t('capture.ruleValue', { index: '1' })),
+      'x',
+    );
     await userEvent.click(screen.getByRole('button', { name: t('capture.apply') }));
 
     expect(await screen.findByText(/bad spec|422/)).toBeTruthy();

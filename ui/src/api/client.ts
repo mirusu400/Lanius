@@ -386,3 +386,43 @@ export function setTlsProfile(
     body: JSON.stringify({ profile, ciphers: ciphers ?? '' }),
   });
 }
+
+export interface ProcessInfo {
+  name: string;
+  path: string;
+  visible: boolean;
+  system: boolean;
+}
+
+export function listProcesses(visibleOnly = true): Promise<{
+  items: ProcessInfo[];
+  count: number;
+}> {
+  return request(`/api/processes?visible_only=${visibleOnly}`);
+}
+
+export function getWorkspace<T>(key: string): Promise<{ key: string; value: T | null }> {
+  return request(`/api/workspace/${key}`);
+}
+
+export function putWorkspace(key: string, value: unknown): Promise<{ ok: boolean }> {
+  return request(`/api/workspace/${key}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value }),
+  });
+}
+
+export function exportProject(includeFlows = true): Promise<Record<string, unknown>> {
+  return request(`/api/project/export?include_flows=${includeFlows}`);
+}
+
+export function importProject(
+  document: unknown,
+): Promise<{ ok: boolean; flows: number; scope: number; workspace: number }> {
+  return request('/api/project/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(document),
+  });
+}
