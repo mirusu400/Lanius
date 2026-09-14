@@ -391,8 +391,10 @@ async def test_failed_modes_are_logged_and_published(tmp_path, caplog) -> None:
 
         assert "local:curl" in caplog.text
         assert "boom" in caplog.text
-        assert [t for t, _ in published] == ["engine.mode_failed"]
-        assert published[0][1]["spec"] == "local:curl"  # type: ignore[index]
+        # The local mode also raises the approval warning, which is a
+        # separate signal; this test is about the failure being reported.
+        failures = [d for t, d in published if t == "engine.mode_failed"]
+        assert [f["spec"] for f in failures] == ["local:curl"]  # type: ignore[index]
     finally:
         await eng.stop()
 
@@ -468,3 +470,137 @@ def test_mode_status_surfaces_a_bind_failure(tmp_path) -> None:
     assert regular["running"] is True and regular["listening"] is True
     assert reverse["running"] is False
     assert "address already in use" in str(reverse["error"])
+
+
+# --- local capture readiness -------------------------------------------------
+
+
+def test_local_capture_state_reads_the_extension_state(monkeypatch) -> None:
+    """On macOS the redirector only works once approved, and mitmproxy
+    cannot tell us, so the state is read from the OS."""
+    from app import proxy as proxy_module
+
+    def fake_run(*_args, **_kwargs):
+        class R:
+            stdout = (
+                "--- com.apple.system_extension.network_extension\n"
+                "\t*\tS8XHQB96PW\torg.mitmproxy.macos-redirector.network-extension"
+                " (2.0/1)\tnetwork-extension\t[activated waiting for user]\n"
+            )
+
+        return R()
+
+    monkeypatch.setattr(proxy_module.sys, "platform", "darwin")
+    monkeypatch.setattr(proxy_module.subprocess, "run", fake_run)
+
+    state = proxy_module.local_capture_state()
+    assert state["supported"] is True
+    assert state["approved"] is False
+    assert state["detail"] == "activated waiting for user"
+
+
+def test_local_capture_state_reports_an_approved_extension(monkeypatch) -> None:
+    from app import proxy as proxy_module
+
+    def fake_run(*_args, **_kwargs):
+        class R:
+            stdout = (
+                "\t*\t*\tS8XHQB96PW\torg.mitmproxy.macos-redirector"
+                ".network-extension (2.0/1)\tnet\t[activated enabled]\n"
+            )
+
+        return R()
+
+    monkeypatch.setattr(proxy_module.sys, "platform", "darwin")
+    monkeypatch.setattr(proxy_module.subprocess, "run", fake_run)
+    assert proxy_module.local_capture_state()["approved"] is True
+
+
+def test_local_capture_state_when_the_extension_is_absent(monkeypatch) -> None:
+    from app import proxy as proxy_module
+
+    def fake_run(*_args, **_kwargs):
+        class R:
+            stdout = "0 extension(s)\n"
+
+        return R()
+
+    monkeypatch.setattr(proxy_module.sys, "platform", "darwin")
+    monkeypatch.setattr(proxy_module.subprocess, "run", fake_run)
+    state = proxy_module.local_capture_state()
+    assert state["approved"] is False
+    assert state["detail"] == "not installed"
+
+
+def test_local_capture_state_survives_a_missing_tool(monkeypatch) -> None:
+    """systemextensionsctl is standard, but the engine must not fall over
+    if the call fails."""
+    from app import proxy as proxy_module
+
+    def boom(*_args, **_kwargs):
+        raise OSError("no such tool")
+
+    monkeypatch.setattr(proxy_module.sys, "platform", "darwin")
+    monkeypatch.setattr(proxy_module.subprocess, "run", boom)
+    state = proxy_module.local_capture_state()
+    assert state["approved"] is False
+    assert "no such tool" in str(state["detail"])
+
+
+def test_local_capture_needs_no_approval_off_macos(monkeypatch) -> None:
+    """Windows elevates per run and Linux uses sudo, so there is no
+    persistent approval state to read."""
+    from app import proxy as proxy_module
+
+    monkeypatch.setattr(proxy_module.sys, "platform", "win32")
+    assert proxy_module.local_capture_state() == {
+        "supported": True,
+        "approved": True,
+        "detail": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_blocked_local_capture_is_warned_about(tmp_path, caplog) -> None:
+    """The case mode_status cannot see: local mode claims to be running
+    while the extension waits for approval."""
+    eng = engine(tmp_path, free_port())
+    await eng.start()
+    try:
+        published: list[tuple[str, object]] = []
+        eng.broker.publish = lambda topic, data: published.append((topic, data))
+        eng.mode_status = lambda: [  # type: ignore[method-assign]
+            {"spec": "local:curl", "running": True, "listening": False, "error": None}
+        ]
+        import app.proxy as proxy_module
+
+        original = proxy_module.local_capture_state
+        proxy_module.local_capture_state = lambda: {  # type: ignore[assignment]
+            "supported": True,
+            "approved": False,
+            "detail": "activated waiting for user",
+        }
+        try:
+            with caplog.at_level("WARNING"):
+                eng._report_mode_failures()
+        finally:
+            proxy_module.local_capture_state = original  # type: ignore[assignment]
+
+        assert "not active yet" in caplog.text
+        assert "activated waiting for user" in caplog.text
+        assert [t for t, _ in published] == ["engine.local_capture_blocked"]
+    finally:
+        await eng.stop()
+
+
+@pytest.mark.asyncio
+async def test_no_local_capture_warning_without_a_local_mode(tmp_path, caplog) -> None:
+    """A regular proxy must not produce an approval warning."""
+    eng = engine(tmp_path, free_port())
+    await eng.start()
+    try:
+        with caplog.at_level("WARNING"):
+            eng._report_mode_failures()
+        assert "not active yet" not in caplog.text
+    finally:
+        await eng.stop()

@@ -31,7 +31,7 @@ from ..addons.scope import ScopeError, rule_from_url
 from ..config import Settings
 from ..db.store import FlowStore
 from ..events import EventBroker
-from ..proxy import ProxyEngine
+from ..proxy import ProxyEngine, local_capture_state
 
 logger = logging.getLogger(__name__)
 
@@ -225,6 +225,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "paused": len(engine.intercept.paused),
             # Per-mode state: a mode can fail while the engine stays up.
             "modes": engine.mode_status(),
+            "local_capture": local_capture_state(),
         }
 
     @app.get("/api/dashboard")

@@ -267,3 +267,12 @@ def test_status_exposes_per_mode_state(client) -> None:
     assert [m["spec"] for m in modes] == ["regular"]
     assert modes[0]["running"] is True
     assert modes[0]["error"] is None
+
+
+def test_status_reports_local_capture_readiness(client) -> None:
+    """The UI needs to distinguish 'not supported' from 'needs approval',
+    because mitmproxy reports a blocked local mode as running."""
+    state = client.get("/api/status").json()["local_capture"]
+    assert set(state) == {"supported", "approved", "detail"}
+    assert isinstance(state["supported"], bool)
+    assert isinstance(state["approved"], bool)

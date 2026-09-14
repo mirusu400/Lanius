@@ -80,23 +80,36 @@ So the log was never truly silent here; what was missing was any
 machine-readable signal. A UI had no way to show that one of several
 modes was down.
 
-**A mode that hangs is still undetectable.** This is the case that
-matters for local capture, and the fix does *not* solve it. With the
-macOS extension awaiting approval, `/api/status` reports:
+**A mode that hangs cannot be seen through mitmproxy at all.** This is
+the case that matters for local capture. With the macOS extension
+awaiting approval, mitmproxy still reports:
 
 ```
 local:curl     running=True listening=False error=None
 ```
 
-mitmproxy considers the mode started, because the redirector task was
-spawned; it is simply blocked forever waiting for consent. There is no
-exception to report. `listening=False` is not a reliable tell either,
-since local capture never binds an address even when healthy.
+It considers the mode started because the redirector task was spawned;
+it is simply blocked forever waiting for consent, so there is no
+exception to report. `listening=False` is not a tell either, since local
+capture never binds an address even when healthy.
 
-Detecting this needs an explicit check of the extension's state (on
-macOS, `activated waiting for user` via the SystemExtensions API) rather
-than anything mitmproxy exposes. That work belongs to step 3 below and
-should not be assumed to come for free.
+The state has to come from the OS instead. On macOS
+`systemextensionsctl list` reports it, needs no privileges and returns in
+about 15ms, so the engine now reads it directly. Starting with a local
+mode while the extension is unapproved logs:
+
+```
+WARNING app.proxy: local capture is not active yet (activated waiting
+for user); traffic will not be intercepted until the system extension is
+approved
+```
+
+and `/api/status` carries `local_capture: {supported, approved, detail}`
+alongside the per-mode list. Windows and Linux elevate per run rather
+than holding a persistent approval, so they report `approved: true`.
+
+This turned out to be much cheaper than first assumed: the earlier draft
+of this note listed it as a prerequisite needing new platform code.
 
 ## What it would take to ship
 
@@ -142,10 +155,11 @@ own UX, permission handling, and error reporting.
 Suggested order:
 
 1. ~~Expose per-mode state.~~ Done.
-2. Detect the macOS approval state, so the UI can say "approve this in
-   System Settings" instead of appearing to work. This is the real
-   prerequisite, and it needs platform code we do not have yet.
-3. A Settings toggle for "capture this machine", macOS first.
+2. ~~Detect the macOS approval state.~~ Done: `/api/status` reports
+   `local_capture`, and the engine warns when a local mode is started
+   unapproved.
+3. A Settings toggle for "capture this machine", macOS first. The UI can
+   now key off `local_capture.approved` to tell the user what to click.
 4. The per-app picker.
 5. Then Windows, which additionally needs the elevation story.
 

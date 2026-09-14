@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 import socket
+import subprocess
+import sys
 
 from mitmproxy import options
 from mitmproxy.tools.dump import DumpMaster
@@ -23,6 +26,57 @@ from .events import EventBroker
 logger = logging.getLogger(__name__)
 
 BIND_TIMEOUT_SECONDS = 5.0
+
+
+# macOS ships the local-capture redirector as a system extension. It only
+# takes effect once the user approves it, and until then mitmproxy reports
+# the mode as running with no error, so the state has to be read from the
+# OS instead. Reading it needs no privileges and takes milliseconds.
+MACOS_REDIRECTOR_EXTENSION = "org.mitmproxy.macos-redirector"
+
+
+def local_capture_state() -> dict[str, object]:
+    """Whether OS-level local capture is ready on this machine.
+
+    Returns ``supported`` (does this platform have it at all),
+    ``approved`` (may it actually run) and a ``detail`` string. On
+    platforms where approval is not a concept, ``approved`` mirrors
+    ``supported``.
+    """
+    if sys.platform != "darwin":
+        # Windows elevates a helper per run and Linux uses sudo, so there
+        # is no persistent approval state to read.
+        return {"supported": True, "approved": True, "detail": None}
+
+    try:
+        proc = subprocess.run(
+            ["systemextensionsctl", "list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"supported": True, "approved": False, "detail": str(exc)}
+
+    for line in proc.stdout.splitlines():
+        if MACOS_REDIRECTOR_EXTENSION not in line:
+            continue
+        state = ""
+        if (match := re.search(r"\[(.+?)\]", line)) is not None:
+            state = match.group(1).strip()
+        # "activated enabled" is the working state; anything else, most
+        # commonly "activated waiting for user", is not yet usable.
+        return {
+            "supported": True,
+            "approved": state == "activated enabled",
+            "detail": state or None,
+        }
+
+    return {
+        "supported": True,
+        "approved": False,
+        "detail": "not installed",
+    }
 
 
 class ProxyStartError(RuntimeError):
@@ -146,6 +200,24 @@ class ProxyEngine:
                 continue
             logger.error("mode %s did not start: %s", mode["spec"], mode["error"])
             self.broker.publish("engine.mode_failed", mode)
+        self._warn_if_local_capture_blocked()
+
+    def _warn_if_local_capture_blocked(self) -> None:
+        """Local capture reports itself as running while it waits for the
+        user to approve the OS extension, so warn explicitly."""
+        if not any(
+            str(mode["spec"]).startswith("local") for mode in self.mode_status()
+        ):
+            return
+        state = local_capture_state()
+        if state["approved"]:
+            return
+        logger.warning(
+            "local capture is not active yet (%s); traffic will not be "
+            "intercepted until the system extension is approved",
+            state["detail"],
+        )
+        self.broker.publish("engine.local_capture_blocked", state)
 
     def _check_port_available(self) -> None:
         """Fail fast with a clear message when the listen port is taken."""

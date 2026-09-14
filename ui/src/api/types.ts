@@ -74,6 +74,25 @@ export interface EngineStatus {
   db_path: string;
   intercept: InterceptRules;
   paused: number;
+  /** One entry per configured proxy mode. A mode can fail while the
+   *  engine as a whole stays up. */
+  modes?: ProxyModeStatus[];
+  /** Whether OS-level capture of this machine is usable. On macOS it
+   *  needs the user to approve a system extension first. */
+  local_capture?: LocalCaptureState;
+}
+
+export interface ProxyModeStatus {
+  spec: string;
+  running: boolean;
+  listening: boolean;
+  error: string | null;
+}
+
+export interface LocalCaptureState {
+  supported: boolean;
+  approved: boolean;
+  detail: string | null;
 }
 
 export type EngineEvent =
@@ -84,6 +103,7 @@ export type EngineEvent =
   | { type: 'intercept.resolved'; data: { id: string; action: string } }
   | { type: 'intercept.rules'; data: InterceptRules }
   | { type: 'engine.started' | 'engine.stopped'; data: Record<string, unknown> }
+  | { type: 'engine.local_capture_blocked'; data: LocalCaptureState }
   | {
       type: 'engine.mode_failed';
       data: {
