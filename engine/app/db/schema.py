@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -67,6 +67,18 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         CREATE TABLE IF NOT EXISTS settings (
             key         TEXT PRIMARY KEY,
             value       TEXT NOT NULL
+        )
+        """,
+    ),
+    3: (
+        # Workspace state: Repeater tabs, Decoder tabs, Intruder configs.
+        # These lived only in the browser, so closing Lanius threw away
+        # every request you had been working on.
+        """
+        CREATE TABLE IF NOT EXISTS workspace (
+            key         TEXT PRIMARY KEY,
+            value       TEXT NOT NULL,
+            updated_at  REAL NOT NULL
         )
         """,
     ),

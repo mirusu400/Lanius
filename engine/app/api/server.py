@@ -259,6 +259,64 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         }
 
+    # --- workspace: what you were working on ------------------------------
+
+    @app.get("/api/workspace/{key}")
+    async def get_workspace(key: str) -> dict[str, Any]:
+        """Saved state for one part of the UI, e.g. the Repeater tabs."""
+        return {"key": key, "value": await asyncio.to_thread(store.get_workspace, key)}
+
+    @app.put("/api/workspace/{key}")
+    async def put_workspace(key: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Autosave. The UI writes here as you work, so closing Lanius does
+        not throw away the requests you had open."""
+        if "value" not in payload:
+            raise HTTPException(status_code=422, detail="payload needs a value")
+        await asyncio.to_thread(store.set_workspace, key, payload["value"])
+        return {"ok": True, "key": key}
+
+    # --- project export and import ----------------------------------------
+
+    @app.get("/api/project/export")
+    async def export_project(include_flows: bool = True) -> dict[str, Any]:
+        """The whole project as one document.
+
+        Flows are optional because a long capture dwarfs everything else,
+        and sharing a scope and a set of Repeater requests is the common
+        case.
+        """
+        data: dict[str, Any] = {
+            "format": "lanius-project",
+            "version": 1,
+            "exported_at": time.time(),
+            "engine_version": __version__,
+            "scope": await asyncio.to_thread(store.list_scope_rules),
+            "workspace": await asyncio.to_thread(store.all_workspace),
+            "settings": await asyncio.to_thread(store.all_settings),
+        }
+        if include_flows:
+            flows = await asyncio.to_thread(lambda: store.list(limit=100000))
+            data["flows"] = [flow.detail() for flow in flows]
+        return data
+
+    @app.post("/api/project/import")
+    async def import_project(payload: dict[str, Any]) -> dict[str, Any]:
+        """Load a project document, replacing what is currently open."""
+        if payload.get("format") != "lanius-project":
+            raise HTTPException(status_code=422, detail="not a Lanius project")
+        version = payload.get("version")
+        if version != 1:
+            raise HTTPException(
+                status_code=422, detail=f"unsupported project version: {version!r}"
+            )
+        counts = await asyncio.to_thread(store.import_project, payload)
+        # The scope lives in memory once loaded, so without this the
+        # imported rules sit in the database and affect nothing.
+        scope = await asyncio.to_thread(engine.scope.reload)
+        broker.publish("scope.changed", scope.as_dict())
+        broker.publish("project.imported", counts)
+        return {"ok": True, **counts}
+
     @app.get("/api/processes")
     async def processes(visible_only: bool = True) -> dict[str, Any]:
         """Running executables, so capture rules can be picked not typed."""

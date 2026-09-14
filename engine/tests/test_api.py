@@ -419,3 +419,78 @@ def test_the_full_process_list_is_larger_than_the_visible_one(client) -> None:
     visible = client.get("/api/processes?visible_only=true").json()["count"]
     every = client.get("/api/processes?visible_only=false").json()["count"]
     assert every >= visible
+
+
+# --- workspace autosave and project export/import -----------------------------
+
+
+def test_workspace_starts_empty(client) -> None:
+    assert client.get("/api/workspace/repeater").json()["value"] is None
+
+
+def test_workspace_round_trips(client) -> None:
+    """Repeater and Decoder tabs lived only in the browser, so closing
+    Lanius threw away whatever you had open."""
+    tabs = [{"id": "r1", "title": "login"}]
+    client.put("/api/workspace/repeater", json={"value": tabs})
+    assert client.get("/api/workspace/repeater").json()["value"] == tabs
+
+
+def test_workspace_rejects_a_payload_with_no_value(client) -> None:
+    assert client.put("/api/workspace/x", json={}).status_code == 422
+
+
+def test_export_describes_itself(client) -> None:
+    data = client.get("/api/project/export").json()
+    assert data["format"] == "lanius-project"
+    assert data["version"] == 1
+    assert "scope" in data and "workspace" in data
+
+
+def test_export_can_leave_out_the_capture(client) -> None:
+    """A long capture dwarfs everything else, and sharing a scope plus a
+    set of Repeater requests is the common case."""
+    assert "flows" not in client.get(
+        "/api/project/export?include_flows=false"
+    ).json()
+
+
+def test_import_restores_scope_workspace_and_flows(client) -> None:
+    seed(client, "f1", host="imported.example")
+    client.put("/api/workspace/repeater", json={"value": [{"id": "r1"}]})
+    client.post("/api/scope/rules", json={"kind": "include", "host": "a.example"})
+    exported = client.get("/api/project/export").json()
+
+    client.delete("/api/flows")
+    client.put("/api/workspace/repeater", json={"value": []})
+
+    result = client.post("/api/project/import", json=exported).json()
+    assert result["ok"] is True
+    assert client.get("/api/workspace/repeater").json()["value"] == [{"id": "r1"}]
+    assert client.get("/api/flows").json()["count"] == 1
+
+
+def test_imported_scope_takes_effect_immediately(client) -> None:
+    """The scope is held in memory once loaded, so an import that only
+    wrote the database would leave the rules doing nothing."""
+    client.post("/api/scope/rules", json={"kind": "include", "host": "scoped.example"})
+    exported = client.get("/api/project/export?include_flows=false").json()
+
+    client.post("/api/project/import", json=exported)
+
+    rules = client.get("/api/scope").json()["rules"]
+    assert [r["host"] for r in rules] == ["scoped.example"]
+
+
+def test_import_refuses_a_document_that_is_not_a_project(client) -> None:
+    assert client.post("/api/project/import", json={"format": "junk"}).status_code == 422
+
+
+def test_import_refuses_a_future_version(client) -> None:
+    """Better to say so than to half-read it."""
+    assert (
+        client.post(
+            "/api/project/import", json={"format": "lanius-project", "version": 99}
+        ).status_code
+        == 422
+    )

@@ -10,10 +10,16 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
+from dataclasses import fields as dataclasses_fields
 from pathlib import Path
 from typing import Any, List
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 from .schema import migrate
 
@@ -66,6 +72,27 @@ class FlowRecord:
         data["request_body"] = _decode(self.request_body)
         data["response_body"] = _decode(self.response_body)
         return data
+
+
+def _record_from_export(data: dict[str, Any]) -> "FlowRecord":
+    """Rebuild a record from an exported flow.
+
+    ``detail()`` renders bodies as text so the export stays JSON, so they
+    have to be encoded back on the way in. Bytes that were not valid
+    UTF-8 were replaced on the way out and cannot be recovered; that is a
+    property of a readable export, not a bug to chase.
+    """
+    fields = {f.name for f in dataclasses_fields(FlowRecord)}
+    kwargs = {key: value for key, value in data.items() if key in fields}
+    for key in ("request_body", "response_body"):
+        value = kwargs.get(key)
+        if isinstance(value, str):
+            kwargs[key] = value.encode("utf-8")
+    for key in ("request_headers", "response_headers"):
+        value = kwargs.get(key)
+        if isinstance(value, list):
+            kwargs[key] = [tuple(pair) for pair in value]
+    return FlowRecord(**kwargs)
 
 
 def _decode(body: bytes | None) -> str | None:
@@ -296,6 +323,114 @@ class FlowStore:
                 (key, value),
             )
             self._conn.commit()
+
+    # --- workspace (Repeater/Decoder/Intruder state) ----------------------
+    def get_workspace(self, key: str) -> Any | None:
+        """Saved workspace state, or None if this key was never written."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT value FROM workspace WHERE key = ?", (key,)
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            return json.loads(row["value"])
+        except json.JSONDecodeError:
+            # Corrupt state must not stop the app from opening.
+            logger.warning("discarding unreadable workspace entry %r", key)
+            return None
+
+    def set_workspace(self, key: str, value: Any) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO workspace (key, value, updated_at)"
+                " VALUES (?, ?, ?)",
+                (key, json.dumps(value), time.time()),
+            )
+            self._conn.commit()
+
+    def all_workspace(self) -> dict[str, Any]:
+        """Everything saved, for export."""
+        with self._lock:
+            rows = self._conn.execute("SELECT key, value FROM workspace").fetchall()
+        out: dict[str, Any] = {}
+        for row in rows:
+            try:
+                out[row["key"]] = json.loads(row["value"])
+            except json.JSONDecodeError:
+                continue
+        return out
+
+    def clear_workspace(self) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM workspace")
+            self._conn.commit()
+
+    def all_settings(self) -> dict[str, str]:
+        with self._lock:
+            rows = self._conn.execute("SELECT key, value FROM settings").fetchall()
+        return {row["key"]: row["value"] for row in rows}
+
+    def import_project(self, data: dict[str, Any]) -> dict[str, int]:
+        """Replace the open project with an exported one.
+
+        Everything happens in one transaction: a half-imported project
+        would be worse than a failed import.
+        """
+        scope = data.get("scope") or []
+        workspace = data.get("workspace") or {}
+        settings = data.get("settings") or {}
+        flows = data.get("flows") or []
+
+        with self._lock:
+            with self._conn:  # transaction
+                self._conn.execute("DELETE FROM scope_rules")
+                self._conn.execute("DELETE FROM workspace")
+                if flows:
+                    self._conn.execute("DELETE FROM flows")
+
+                for rule in scope:
+                    self._conn.execute(
+                        "INSERT INTO scope_rules (kind, host, path, protocol,"
+                        " port, match_type, enabled) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            rule.get("kind", "include"),
+                            rule.get("host", "*"),
+                            rule.get("path", "*"),
+                            rule.get("protocol", "any"),
+                            rule.get("port"),
+                            rule.get("match_type", "glob"),
+                            int(bool(rule.get("enabled", True))),
+                        ),
+                    )
+                now = time.time()
+                for key, value in workspace.items():
+                    self._conn.execute(
+                        "INSERT OR REPLACE INTO workspace (key, value, updated_at)"
+                        " VALUES (?, ?, ?)",
+                        (key, json.dumps(value), now),
+                    )
+                for key, value in settings.items():
+                    self._conn.execute(
+                        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                        (key, str(value)),
+                    )
+
+        imported_flows = 0
+        for flow in flows:
+            try:
+                self.upsert(_record_from_export(flow))
+                imported_flows += 1
+            except Exception:
+                # One malformed flow must not abandon the rest.
+                logger.warning("skipping an unreadable flow during import")
+
+        return {
+            "scope": len(scope),
+            "workspace": len(workspace),
+            "settings": len(settings),
+            "flows": imported_flows,
+        }
 
     def delete_setting(self, key: str) -> None:
         """Remove a setting, so its absence is distinct from an empty value."""
