@@ -8,6 +8,30 @@ dependency we ship. mitmproxy calls it **local capture mode**. This
 document records what was verified on this machine, what it costs, and
 where it stops working.
 
+> **Scope note.** This started as a research question, but the answer
+> turned out to be close enough to working that it was built: Settings >
+> System capture now switches it on. If that was not wanted, the feature
+> lives in its own commits and can be dropped without touching anything
+> else:
+>
+> ```
+> cc2dae1  per-mode state + this document
+> b829bbc  corrections and limitation tests
+> 8a20888  engine.mode_failed event type
+> 719f4e7  approval detection
+> 94feb3e  dashboard banners
+> a500b73  README section
+> 6d65dfd  Settings toggle
+> a95a2f8  persistence tests
+> ```
+>
+> Two fixes found along the way are worth keeping either way, because
+> they affect the proxy modes we already had: `4b0cf3c` (the app could
+> not start while another tool held port 8080) and `535bc4f` (mode
+> errors were unreadable). Note that `535bc4f` touches the dashboard
+> banner added in `94feb3e`, so dropping the feature means dropping that
+> one too.
+
 ## What was actually checked
 
 Everything below was run against the engine's own virtualenv, not read

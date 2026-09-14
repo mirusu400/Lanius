@@ -63,15 +63,6 @@ To check it is working without touching your browser settings:
 curl -x http://127.0.0.1:8080 http://example.com/
 ```
 
-### Using a different port
-
-Port 8080 is a popular default and another tool may already have it. Set the
-ports before launching:
-
-```bash
-LANIUS_PROXY_PORT=8090 LANIUS_API_PORT=8091 open -a Lanius
-```
-
 ### Capturing apps that ignore proxy settings
 
 Some applications never look at the system proxy. Lanius can capture them at
@@ -99,6 +90,15 @@ Lanius says so when that happens.
 Applications that pin their certificates will refuse the connection rather
 than be intercepted. That is a property of pinning, not something Lanius can
 work around.
+
+### Using a different port
+
+Port 8080 is a popular default and another tool may already have it. Set the
+ports before launching:
+
+```bash
+LANIUS_PROXY_PORT=8090 LANIUS_API_PORT=8091 open -a Lanius
+```
 
 ## Features
 
