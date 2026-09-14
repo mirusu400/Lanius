@@ -20,7 +20,7 @@ export function PluginsTab() {
     } catch (err) {
       setError(t('plugins.listFailed', { message: (err as Error).message }));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void refresh();

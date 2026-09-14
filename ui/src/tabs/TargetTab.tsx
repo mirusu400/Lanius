@@ -70,7 +70,7 @@ export function TargetTab() {
     } catch (err) {
       setError(t('target.sitemapFailed', { message: (err as Error).message }));
     }
-  }, [inScopeOnly]);
+  }, [inScopeOnly, t]);
 
   useEffect(() => {
     void refreshScope();

@@ -61,7 +61,7 @@ export function ProxyTab() {
     } catch (err) {
       setError(t('proxy.engineUnreachable', { message: (err as Error).message }));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void reload();
@@ -144,7 +144,7 @@ export function ProxyTab() {
         );
       }
     },
-    [],
+    [t],
   );
 
   const onResolved = useCallback((id: string) => {

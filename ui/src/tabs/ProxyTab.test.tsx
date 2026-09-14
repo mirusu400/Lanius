@@ -3,7 +3,8 @@
  * asserts the live history table and detail pane behave as expected.
  */
 import {cleanup, screen, waitFor } from '@testing-library/react';
-import { renderWithI18n as render, t } from '../test-utils';
+import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
+import { useI18n, type Locale } from '../i18n';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -64,7 +65,11 @@ class MockSocket {
   close() {}
 }
 
+// Set by the locale test to make the next flow listing fail.
+let failListFlows = false;
+
 beforeEach(() => {
+  failListFlows = false;
   MockSocket.instances = [];
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
   vi.stubGlobal(
@@ -102,6 +107,9 @@ beforeEach(() => {
           response_headers: [['Content-Type', 'text/html']],
           response_body: '<h1>hello lanius</h1>',
         });
+      }
+      if (failListFlows) {
+        throw new Error('engine down');
       }
       return jsonResponse({ items: [seeded], count: 1 });
     }),
@@ -171,6 +179,42 @@ describe('ProxyTab', () => {
     MockSocket.instances[0].emit('flow.request', live);
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText('live.test')).toBeNull();
+  });
+
+  it('reports errors in the language currently selected', async () => {
+    // The error callbacks close over `t`, which is a new function whenever
+    // the locale changes. A callback frozen with an empty dependency array
+    // keeps the translator from the first render, so after switching
+    // language the user is told what went wrong in the language they just
+    // left. Render in one locale, switch, then force the error.
+    const user = userEvent.setup();
+    const other: Locale = TEST_LOCALE === 'en' ? 'ko' : 'en';
+
+    function Harness() {
+      const { setLocale } = useI18n();
+      return (
+        <>
+          <button type="button" onClick={() => setLocale(other)}>
+            switch
+          </button>
+          <ProxyTab />
+        </>
+      );
+    }
+
+    render(<Harness />);
+    await screen.findByText('seeded.test');
+
+    await user.click(screen.getByRole('button', { name: 'switch' }));
+
+    // Now make the next reload fail, and trigger one through the filter bar.
+    failListFlows = true;
+    await user.type(screen.getByPlaceholderText(tk(other)('proxy.searchPlaceholder')), 'x');
+
+    const expected = tk(other)('proxy.engineUnreachable', {
+      message: 'engine down',
+    });
+    expect(await screen.findByText(expected)).toBeTruthy();
   });
 
   it('clears the table on flows.cleared', async () => {
