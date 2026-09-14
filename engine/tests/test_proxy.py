@@ -605,3 +605,68 @@ async def test_no_local_capture_warning_without_a_local_mode(tmp_path, caplog) -
         assert "not active yet" not in caplog.text
     finally:
         await eng.stop()
+
+
+# --- capture setting survives a restart --------------------------------------
+
+
+def _reopen(tmp_path, port: int) -> ProxyEngine:
+    """A fresh engine over the same database, as a restart would be."""
+    settings = Settings(
+        proxy_port=port,
+        api_port=free_port(),
+        data_dir=tmp_path,
+        db_path=tmp_path / "p.sqlite",
+        confdir=tmp_path / "mitm",
+    )
+    return ProxyEngine(settings, FlowStore(settings.db_path), EventBroker())
+
+
+@pytest.mark.asyncio
+async def test_a_filter_is_restored_after_a_restart(tmp_path) -> None:
+    port = free_port()
+    eng = engine(tmp_path, port)
+    await eng.set_local_capture("curl")
+
+    restarted = _reopen(tmp_path, port)
+    assert restarted.local_capture_spec() == "curl"
+    assert restarted._modes() == [f"regular@{port}", "local:curl"]
+
+
+@pytest.mark.asyncio
+async def test_capture_everything_is_restored_as_everything(tmp_path) -> None:
+    """The empty spec must not come back as None, which would silently
+    switch the feature off."""
+    port = free_port()
+    eng = engine(tmp_path, port)
+    await eng.set_local_capture("")
+
+    restarted = _reopen(tmp_path, port)
+    assert restarted.local_capture_spec() == ""
+    assert restarted._modes() == [f"regular@{port}", "local"]
+
+
+@pytest.mark.asyncio
+async def test_switching_off_is_restored_as_off(tmp_path) -> None:
+    port = free_port()
+    eng = engine(tmp_path, port)
+    await eng.set_local_capture("curl")
+    await eng.set_local_capture(None)
+
+    restarted = _reopen(tmp_path, port)
+    assert restarted.local_capture_spec() is None
+    assert restarted._modes() == [f"regular@{port}"]
+
+
+@pytest.mark.asyncio
+async def test_an_invalid_spec_is_not_stored(tmp_path) -> None:
+    """A spec mitmproxy rejects must not be persisted, or the engine would
+    fail to start on every subsequent launch.
+
+    Note that process names are free-form, so almost anything parses;
+    an empty list entry is one of the few things that does not.
+    """
+    eng = engine(tmp_path, free_port())
+    with pytest.raises(ValueError):
+        await eng.set_local_capture(",,,")
+    assert eng.local_capture_spec() is None, "a rejected spec must not persist"

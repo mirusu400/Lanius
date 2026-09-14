@@ -342,3 +342,10 @@ def test_capture_change_reports_whether_a_restart_is_needed(client) -> None:
     body = client.post("/api/capture/local", json={"spec": "curl"}).json()
     assert "restart_required" in body
     assert isinstance(body["restart_required"], bool)
+
+
+def test_a_spec_mitmproxy_rejects_returns_422(client) -> None:
+    """Not just the wrong type: a string mitmproxy cannot parse must be
+    refused too, or it would be stored and break the next startup."""
+    assert client.post("/api/capture/local", json={"spec": ",,,"}).status_code == 422
+    assert client.get("/api/status").json()["local_capture"]["spec"] is None
