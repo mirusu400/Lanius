@@ -215,3 +215,47 @@ def test_events_are_newest_first(client) -> None:
     client.delete("/api/flows")
     items = client.get("/api/events").json()["items"]
     assert "flows.cleared" in items[0]["message"]
+
+
+# --- dashboard --------------------------------------------------------------
+
+
+def test_dashboard_is_empty_before_any_traffic(client) -> None:
+    data = client.get("/api/dashboard").json()
+    assert data["flows"] == 0
+    assert data["top_hosts"] == []
+    assert data["proxy"]["running"] is True
+
+
+def test_dashboard_aggregates_captured_flows(client) -> None:
+    seed(client, "a", host="a.com", status_code=200, duration_ms=5.0)
+    seed(client, "b", host="a.com", status_code=500, duration_ms=50.0)
+    seed(client, "c", host="b.com", status_code=404, duration_ms=1.0)
+
+    data = client.get("/api/dashboard").json()
+
+    assert data["flows"] == 3
+    assert data["hosts"] == 2
+    assert data["status_groups"] == {"2xx": 1, "4xx": 1, "5xx": 1}
+    assert data["top_hosts"][0]["host"] == "a.com"
+    assert data["slowest"][0]["id"] == "b"
+
+
+def test_dashboard_includes_engine_state(client) -> None:
+    """The tab shows proxy and intercept state, so one request must cover it."""
+    data = client.get("/api/dashboard").json()
+    assert data["proxy"]["port"] > 0
+    assert data["intercept_enabled"] is False
+    assert data["paused"] == 0
+    assert data["version"]
+
+
+def test_dashboard_top_limit_is_bounded(client) -> None:
+    assert client.get("/api/dashboard?top=0").status_code == 422
+    assert client.get("/api/dashboard?top=51").status_code == 422
+    assert client.get("/api/dashboard?top=5").status_code == 200
+
+
+def test_dashboard_window_must_be_positive(client) -> None:
+    assert client.get("/api/dashboard?window=0").status_code == 422
+    assert client.get("/api/dashboard?window=60").status_code == 200

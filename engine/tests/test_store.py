@@ -135,3 +135,95 @@ def test_persistence_across_reopen(tmp_path) -> None:
     assert reopened.count() == 1
     assert reopened.get("a") is not None
     reopened.close()
+
+
+# --- dashboard aggregates ---------------------------------------------------
+
+
+def _dashboard_fixture() -> FlowStore:
+    """A capture with a mix of statuses, hosts, methods and timings."""
+    store = FlowStore()
+    now = time.time()
+    store.upsert(make_record("a", host="a.com", status_code=200, duration_ms=10.0,
+                             request_size=100, response_size=200, started_at=now))
+    store.upsert(make_record("b", host="a.com", status_code=404, duration_ms=20.0,
+                             request_size=100, response_size=50, started_at=now))
+    store.upsert(make_record("c", host="a.com", method="POST", status_code=500,
+                             duration_ms=300.0, request_size=10, response_size=10,
+                             started_at=now))
+    store.upsert(make_record("d", host="b.com", status_code=301, duration_ms=5.0,
+                             request_size=1, response_size=1, started_at=now))
+    return store
+
+
+def test_dashboard_counts_by_status_group() -> None:
+    data = _dashboard_fixture().dashboard()
+    assert data["status_groups"] == {"2xx": 1, "3xx": 1, "4xx": 1, "5xx": 1}
+    assert data["flows"] == 4
+    assert data["hosts"] == 2
+
+
+def test_dashboard_sums_traffic_and_averages_duration() -> None:
+    data = _dashboard_fixture().dashboard()
+    assert data["bytes"] == 100 + 200 + 100 + 50 + 10 + 10 + 1 + 1
+    assert data["avg_duration_ms"] == round((10.0 + 20.0 + 300.0 + 5.0) / 4, 2)
+
+
+def test_dashboard_ranks_hosts_by_volume() -> None:
+    data = _dashboard_fixture().dashboard()
+    top = data["top_hosts"]
+    assert [h["host"] for h in top] == ["a.com", "b.com"]
+    assert top[0]["flows"] == 3
+    # 404 and 500 are failures; the 200 is not.
+    assert top[0]["errors"] == 2
+    assert top[1]["errors"] == 0
+
+
+def test_dashboard_lists_the_slowest_requests_first() -> None:
+    data = _dashboard_fixture().dashboard()
+    assert [f["duration_ms"] for f in data["slowest"]] == [300.0, 20.0, 10.0, 5.0]
+    assert data["slowest"][0]["method"] == "POST"
+
+
+def test_dashboard_reports_methods_by_frequency() -> None:
+    data = _dashboard_fixture().dashboard()
+    assert data["methods"] == [{"method": "GET", "count": 3},
+                               {"method": "POST", "count": 1}]
+
+
+def test_dashboard_counts_in_flight_flows_separately() -> None:
+    """A request with no response yet must not be counted as a success."""
+    store = _dashboard_fixture()
+    store.upsert(make_record("e", host="c.com", status_code=None,
+                             duration_ms=None))
+    data = store.dashboard()
+    assert data["pending"] == 1
+    assert sum(data["status_groups"].values()) == 4, "pending is not a status"
+    assert data["flows"] == 5
+
+
+def test_dashboard_honours_the_top_limit() -> None:
+    store = FlowStore()
+    for i in range(12):
+        store.upsert(make_record(f"h{i}", host=f"h{i}.com"))
+    assert len(store.dashboard(top=3)["top_hosts"]) == 3
+
+
+def test_dashboard_on_an_empty_capture_is_all_zeroes() -> None:
+    """The tab renders before any traffic arrives, so this must not blow up."""
+    data = FlowStore().dashboard()
+    assert data["flows"] == 0
+    assert data["avg_duration_ms"] is None
+    assert data["status_groups"] == {}
+    assert data["top_hosts"] == []
+    assert data["span_seconds"] == 0.0
+
+
+def test_dashboard_counts_recent_flows_within_the_window() -> None:
+    store = FlowStore()
+    now = time.time()
+    store.upsert(make_record("old", started_at=now - 1000))
+    store.upsert(make_record("new", started_at=now))
+    data = store.dashboard(recent_window=60.0)
+    assert data["recent_flows"] == 1, "the 1000s-old flow is outside the window"
+    assert data["span_seconds"] > 900

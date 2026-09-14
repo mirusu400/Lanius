@@ -307,6 +307,126 @@ class FlowStore:
         return [dict(row) for row in rows]
 
     # --- sitemap / endpoints (M4) -----------------------------------------
+    # --- dashboard aggregates --------------------------------------------
+    def dashboard(self, top: int = 8, recent_window: float = 300.0) -> dict[str, Any]:
+        """Counts for the dashboard, aggregated in SQL.
+
+        Doing this in the database keeps a large capture from being pulled
+        into memory just to be counted.
+        """
+        with self._lock:
+            totals = self._conn.execute(
+                "SELECT COUNT(*) AS flows,"
+                " COUNT(DISTINCT host) AS hosts,"
+                " SUM(COALESCE(request_size, 0) + COALESCE(response_size, 0))"
+                "   AS bytes,"
+                " AVG(duration_ms) AS avg_ms,"
+                " SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors,"
+                " MIN(started_at) AS first_seen,"
+                " MAX(started_at) AS last_seen"
+                " FROM flows"
+            ).fetchone()
+
+            # Group by hundreds so 2xx/3xx/4xx/5xx fall out directly. A flow
+            # still in flight has no status yet, so it is reported separately
+            # rather than silently counted as a success.
+            status_rows = self._conn.execute(
+                "SELECT status_code / 100 AS bucket, COUNT(*) AS count"
+                " FROM flows WHERE status_code IS NOT NULL"
+                " GROUP BY bucket ORDER BY bucket"
+            ).fetchall()
+            pending = int(
+                self._conn.execute(
+                    "SELECT COUNT(*) FROM flows WHERE status_code IS NULL"
+                ).fetchone()[0]
+            )
+
+            method_rows = self._conn.execute(
+                "SELECT method, COUNT(*) AS count FROM flows"
+                " WHERE method IS NOT NULL"
+                " GROUP BY method ORDER BY count DESC, method"
+            ).fetchall()
+
+            host_rows = self._conn.execute(
+                "SELECT host, scheme, port, COUNT(*) AS flows,"
+                " SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) AS errors,"
+                " SUM(COALESCE(request_size, 0) + COALESCE(response_size, 0))"
+                "   AS bytes,"
+                " MAX(started_at) AS last_seen"
+                " FROM flows WHERE host IS NOT NULL"
+                " GROUP BY host ORDER BY flows DESC, host LIMIT ?",
+                (top, ),
+            ).fetchall()
+
+            slow_rows = self._conn.execute(
+                "SELECT id, method, host, path, status_code, duration_ms"
+                " FROM flows WHERE duration_ms IS NOT NULL"
+                " ORDER BY duration_ms DESC LIMIT ?",
+                (top, ),
+            ).fetchall()
+
+            cutoff = (totals["last_seen"] or 0.0) - recent_window
+            recent = int(
+                self._conn.execute(
+                    "SELECT COUNT(*) FROM flows WHERE started_at >= ?",
+                    (cutoff, ),
+                ).fetchone()[0]
+            )
+
+        status_groups = {
+            f"{int(row['bucket'])}xx": int(row["count"])
+            for row in status_rows
+            if row["bucket"] is not None
+        }
+
+        first_seen = totals["first_seen"]
+        last_seen = totals["last_seen"]
+        span = (last_seen - first_seen) if (first_seen and last_seen) else 0.0
+
+        return {
+            "flows": int(totals["flows"] or 0),
+            "hosts": int(totals["hosts"] or 0),
+            "bytes": int(totals["bytes"] or 0),
+            "avg_duration_ms": (
+                round(float(totals["avg_ms"]), 2) if totals["avg_ms"] else None
+            ),
+            "errors": int(totals["errors"] or 0),
+            "pending": pending,
+            "first_seen": first_seen,
+            "last_seen": last_seen,
+            "span_seconds": round(span, 3),
+            "recent_flows": recent,
+            "recent_window_seconds": recent_window,
+            "status_groups": status_groups,
+            "methods": [
+                {"method": row["method"], "count": int(row["count"])}
+                for row in method_rows
+            ],
+            "top_hosts": [
+                {
+                    "host": row["host"],
+                    "scheme": row["scheme"],
+                    "port": row["port"],
+                    "flows": int(row["flows"]),
+                    "errors": int(row["errors"] or 0),
+                    "bytes": int(row["bytes"] or 0),
+                    "last_seen": row["last_seen"],
+                }
+                for row in host_rows
+            ],
+            "slowest": [
+                {
+                    "id": row["id"],
+                    "method": row["method"],
+                    "host": row["host"],
+                    "path": row["path"],
+                    "status_code": row["status_code"],
+                    "duration_ms": round(float(row["duration_ms"]), 2),
+                }
+                for row in slow_rows
+            ],
+        }
+
     def distinct_sites(self) -> List[dict[str, Any]]:
         """One row per (scheme, host, port) with flow counts."""
         with self._lock:

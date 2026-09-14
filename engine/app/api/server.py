@@ -225,6 +225,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "paused": len(engine.intercept.paused),
         }
 
+    @app.get("/api/dashboard")
+    async def dashboard(
+        top: int = Query(8, ge=1, le=50),
+        window: float = Query(300.0, gt=0),
+    ) -> dict[str, Any]:
+        """Everything the Dashboard tab needs, in one round trip."""
+        data = await asyncio.to_thread(store.dashboard, top, window)
+        return {
+            **data,
+            "proxy": {
+                "running": engine.running,
+                "host": settings.proxy_host,
+                "port": settings.proxy_port,
+            },
+            "intercept_enabled": engine.intercept.rules.enabled,
+            "paused": len(engine.intercept.paused),
+            "version": __version__,
+        }
+
     @app.get("/api/flows")
     async def list_flows(
         limit: int = Query(100, ge=1, le=1000),
