@@ -37,3 +37,18 @@ export function formatDuration(seconds: number): string {
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
 }
+
+/** Shorten mitmproxy's bind errors for display.
+ *
+ * They restate the errno and repeat the address, e.g. "[Errno 48] reverse
+ * proxy to X failed to listen on H:P with [Errno 48] error while attempting
+ * to bind on address ('H', P): address already in use", which wraps to two
+ * lines in a banner. The cause is the only part a reader needs.
+ */
+export function shortenModeError(error: string): string {
+  const cause = error.match(/:\s*([^:]+)$/);
+  const detail = (cause ? cause[1] : error).trim();
+  if (!detail || detail.length >= error.length) return error;
+  const port = error.match(/\b(\d{2,5})\)?:/);
+  return port ? `${detail} (port ${port[1]})` : detail;
+}

@@ -220,7 +220,7 @@ describe('warnings', () => {
     expect(
       await screen.findByText(t('dash.modeDown', { spec: 'reverse:http://x@9' })),
     ).toBeTruthy();
-    expect(screen.getByText('address already in use')).toBeTruthy();
+    expect(screen.getByText(/address already in use/)).toBeTruthy();
   });
 
   it('tells the user to approve local capture when it is waiting', async () => {

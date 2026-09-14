@@ -4,7 +4,13 @@ import { getDashboard } from '../api/client';
 import type { Dashboard } from '../api/types';
 import { connectStream } from '../api/stream';
 import { useT } from '../i18n';
-import { formatBytes, formatDuration, formatMillis, STATUS_ORDER } from './dashboardModel';
+import {
+  formatBytes,
+  formatDuration,
+  formatMillis,
+  shortenModeError,
+  STATUS_ORDER,
+} from './dashboardModel';
 
 /** Live traffic keeps arriving, so refreshes are coalesced into one call. */
 const REFRESH_MS = 1000;
@@ -104,7 +110,11 @@ export function DashboardTab({ onOpenTab }: { onOpenTab?: (tab: string) => void 
           {downModes.map((mode) => (
             <div className="dash-alert" key={mode.spec}>
               <strong>{t('dash.modeDown', { spec: mode.spec })}</strong>
-              {mode.error && <span className="mono">{mode.error}</span>}
+              {mode.error && (
+                <span className="mono" title={mode.error}>
+                  {shortenModeError(mode.error)}
+                </span>
+              )}
             </div>
           ))}
         </section>

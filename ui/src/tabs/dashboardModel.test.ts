@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatBytes, formatDuration, formatMillis } from './dashboardModel';
+import {
+  formatBytes,
+  formatDuration,
+  formatMillis,
+  shortenModeError,
+} from './dashboardModel';
 
 describe('formatBytes', () => {
   it('leaves whole bytes without a decimal', () => {
@@ -57,5 +62,24 @@ describe('formatDuration', () => {
 
   it('handles an empty capture', () => {
     expect(formatDuration(0)).toBe('0s');
+  });
+});
+
+describe('shortenModeError', () => {
+  it('keeps only the cause of a bind failure', () => {
+    const raw =
+      "[Errno 48] reverse proxy to http://example.com failed to listen on " +
+      "127.0.0.1:9399 with [Errno 48] error while attempting to bind on " +
+      "address ('127.0.0.1', 9399): address already in use";
+    expect(shortenModeError(raw)).toBe('address already in use (port 9399)');
+  });
+
+  it('leaves a message that is already short alone', () => {
+    expect(shortenModeError('boom')).toBe('boom');
+  });
+
+  it('does not mangle a message with no trailing cause', () => {
+    const raw = 'something went wrong';
+    expect(shortenModeError(raw)).toBe(raw);
   });
 });
