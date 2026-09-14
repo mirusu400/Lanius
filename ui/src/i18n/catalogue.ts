@@ -216,13 +216,30 @@ const en = {
   'project.imported': 'Imported {flows} requests and {scope} scope rules.',
   'project.importFailed': 'Could not import: {message}',
   'project.confirmImport': 'Importing replaces what is currently open. Continue?',
+  'listener.section': 'Proxy listener',
+  'listener.help':
+    'Where the proxy accepts connections. Change the port when another tool already holds it, and the address to let other devices reach the proxy.',
+  'listener.port': 'Port',
+  'listener.bind': 'Bind address',
+  'listener.apply': 'Apply listener',
+  'listener.applied': 'Now listening on {host}:{port}.',
+  'listener.failed': 'Could not listen on {host}:{port}: {message}',
+  'listener.kept': 'The proxy is still on its previous address.',
+  'listener.down': 'The proxy is not listening: {message}',
+  'listener.downHint':
+    'Pick a free port below to start it. The rest of Lanius keeps working meanwhile.',
+  'listener.exposed':
+    'Reachable from other machines on your network. Anyone who can reach this address can send traffic through your proxy.',
+  'listener.localOnly': 'Reachable from this machine only.',
+  'listener.hostOther': 'Other',
+  'listener.hostPlaceholder': 'Address to bind, e.g. 192.168.1.10',
   'tls.section': 'TLS fingerprint',
   'tls.help':
     'Lanius terminates TLS, so the server fingerprints the proxy rather than your client. Pick a profile to make the handshake towards the server look like a browser.',
   'tls.profile': 'Profile',
   'tls.customLabel': 'Custom ciphers',
   'tls.customPlaceholder': 'OpenSSL cipher string, leave blank to use the profile',
-  'tls.apply': 'Apply',
+  'tls.apply': 'Apply profile',
   'tls.applied': 'TLS profile updated.',
   'tls.active': 'Offering {count} ciphers',
   'tls.limitation':
@@ -330,7 +347,7 @@ const en = {
   'capture.filterPlaceholder': 'curl, firefox, or !Slack to exclude',
   'capture.filterHelp':
     'Comma separated. Prefix a name with ! to exclude it instead.',
-  'capture.apply': 'Apply',
+  'capture.apply': 'Apply capture rules',
   'capture.applied': 'System capture updated.',
   'capture.pinningNote':
     'Applications that pin their certificates will refuse the connection rather than be intercepted.',
@@ -535,13 +552,30 @@ const ko: Catalogue = {
   'project.imported': '요청 {flows}건과 범위 규칙 {scope}건을 가져왔습니다.',
   'project.importFailed': '가져오지 못했습니다: {message}',
   'project.confirmImport': '가져오면 현재 열린 내용이 대체됩니다. 계속할까요?',
+  'listener.section': '프록시 리스너',
+  'listener.help':
+    '프록시가 연결을 받는 위치입니다. 다른 도구가 포트를 쓰고 있으면 포트를 바꾸고, 다른 기기에서 접속하게 하려면 주소를 바꾸세요.',
+  'listener.port': '포트',
+  'listener.bind': '바인딩 주소',
+  'listener.apply': '리스너 적용',
+  'listener.applied': '이제 {host}:{port} 에서 대기합니다.',
+  'listener.failed': '{host}:{port} 에서 대기할 수 없습니다: {message}',
+  'listener.kept': '프록시는 이전 주소를 그대로 사용합니다.',
+  'listener.down': '프록시가 대기 중이 아닙니다: {message}',
+  'listener.downHint':
+    '아래에서 비어 있는 포트를 골라 시작하세요. 그동안 다른 기능은 계속 쓸 수 있습니다.',
+  'listener.exposed':
+    '네트워크의 다른 기기에서 접속할 수 있습니다. 이 주소에 닿는 누구나 프록시로 트래픽을 보낼 수 있습니다.',
+  'listener.localOnly': '이 컴퓨터에서만 접속할 수 있습니다.',
+  'listener.hostOther': '직접 입력',
+  'listener.hostPlaceholder': '바인딩할 주소, 예: 192.168.1.10',
   'tls.section': 'TLS 지문',
   'tls.help':
     'Lanius가 TLS를 종단하므로 서버는 클라이언트가 아니라 프록시의 지문을 봅니다. 프로필을 고르면 서버로 가는 핸드셰이크가 브라우저처럼 보입니다.',
   'tls.profile': '프로필',
   'tls.customLabel': '사용자 cipher',
   'tls.customPlaceholder': 'OpenSSL cipher 문자열, 비우면 프로필을 따릅니다',
-  'tls.apply': '적용',
+  'tls.apply': '프로필 적용',
   'tls.applied': 'TLS 프로필을 변경했습니다.',
   'tls.active': 'cipher {count}개 제시',
   'tls.limitation':
@@ -642,7 +676,7 @@ const ko: Catalogue = {
   'capture.filterLabel': '프로세스 이름 또는 PID',
   'capture.filterPlaceholder': 'curl, firefox, 제외하려면 !Slack',
   'capture.filterHelp': '쉼표로 구분합니다. 이름 앞에 !를 붙이면 제외됩니다.',
-  'capture.apply': '적용',
+  'capture.apply': '캡처 규칙 적용',
   'capture.applied': '시스템 캡처를 변경했습니다.',
   'capture.pinningNote':
     '인증서 피닝을 쓰는 앱은 가로채기 대신 연결을 거부합니다.',

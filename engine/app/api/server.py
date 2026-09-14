@@ -32,7 +32,7 @@ from ..config import Settings
 from ..db.store import FlowStore
 from ..events import EventBroker
 from ..processes import list_processes
-from ..proxy import ProxyEngine, local_capture_state
+from ..proxy import ProxyEngine, ProxyStartError, local_capture_state
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +171,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        await engine.start()
+        # A proxy that cannot bind must not take the API down with it.
+        # Otherwise a port already held by another tool leaves the user with
+        # a dead window and no way to change the port from inside the app.
+        try:
+            await engine.start()
+        except ProxyStartError as exc:
+            engine.start_error = str(exc)
+            logger.error("proxy did not start: %s", exc)
         async with contextlib.AsyncExitStack() as stack:
             if mcp_app is not None and hasattr(mcp_app, "router"):
                 await stack.enter_async_context(mcp_app.router.lifespan_context(mcp_app))
@@ -218,6 +225,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "running": engine.running,
                 "host": settings.proxy_host,
                 "port": settings.proxy_port,
+                # Why it is not running, when that is known.
+                "error": engine.start_error,
             },
             "flows": await asyncio.to_thread(store.count),
             "subscribers": broker.subscriber_count,
@@ -361,6 +370,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return await engine.set_tls_profile(profile, ciphers)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/api/listener")
+    async def listener() -> dict[str, Any]:
+        return engine.listener_state()
+
+    @app.post("/api/listener")
+    async def set_listener(payload: dict[str, Any]) -> dict[str, Any]:
+        """Move the proxy to a different address or port.
+
+        Needed when another tool already holds the port, and to expose the
+        proxy to other machines by binding beyond loopback.
+        """
+        host = payload.get("host", settings.proxy_host)
+        if not isinstance(host, str):
+            raise HTTPException(status_code=422, detail="host must be a string")
+        port = payload.get("port", settings.proxy_port)
+        if isinstance(port, str) and port.isdigit():
+            port = int(port)
+        if not isinstance(port, int) or isinstance(port, bool):
+            raise HTTPException(status_code=422, detail="port must be a number")
+        try:
+            return await engine.set_listener(host, port)
+        except ProxyStartError as exc:
+            # The old listener has been restored, so this is a rejection of
+            # the new address rather than an outage.
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.get("/api/flows")
     async def list_flows(

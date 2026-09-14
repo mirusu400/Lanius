@@ -494,3 +494,77 @@ def test_import_refuses_a_future_version(client) -> None:
         ).status_code
         == 422
     )
+
+
+def test_listener_reports_where_the_proxy_listens(client) -> None:
+    body = client.get("/api/listener").json()
+    assert body["running"] is True
+    assert body["host"] == "127.0.0.1"
+    assert body["exposed"] is False
+    assert body["error"] is None
+    # The UI offers these two without the user having to know an address.
+    hosts = [entry["host"] for entry in body["addresses"]]
+    assert "127.0.0.1" in hosts
+    assert "0.0.0.0" in hosts  # noqa: S104
+
+
+def test_listener_can_be_moved_to_another_port(client) -> None:
+    target = free_port()
+    body = client.post("/api/listener", json={"port": target}).json()
+    assert body["port"] == target
+    assert body["running"] is True
+    assert client.get("/api/status").json()["proxy"]["port"] == target
+
+
+def test_listener_rejects_a_port_in_use_without_losing_the_proxy(client) -> None:
+    before = client.get("/api/listener").json()["port"]
+    blocker = socket.socket()
+    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    taken = blocker.getsockname()[1]
+    try:
+        response = client.post("/api/listener", json={"port": taken})
+        assert response.status_code == 409
+        assert str(taken) in response.json()["detail"]
+        # Still serving on the original port.
+        assert client.get("/api/listener").json()["port"] == before
+        assert client.get("/api/status").json()["proxy"]["running"] is True
+    finally:
+        blocker.close()
+
+
+def test_listener_rejects_nonsense(client) -> None:
+    assert client.post("/api/listener", json={"port": "abc"}).status_code == 422
+    assert client.post("/api/listener", json={"port": 0}).status_code == 409
+    assert client.post("/api/listener", json={"host": ""}).status_code == 409
+
+
+def test_the_api_survives_a_proxy_port_that_is_already_taken(tmp_path) -> None:
+    """The failure the released build showed: another tool holding the port
+    took the whole app down, so the UI could not even offer a new one."""
+    blocker = socket.socket()
+    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    taken = blocker.getsockname()[1]
+    try:
+        settings = Settings(
+            proxy_port=taken,
+            api_port=free_port(),
+            data_dir=tmp_path,
+            db_path=tmp_path / "test.sqlite",
+            confdir=tmp_path / "mitm",
+        )
+        with TestClient(create_app(settings)) as client:
+            status = client.get("/api/status").json()
+            assert status["proxy"]["running"] is False
+            assert str(taken) in status["proxy"]["error"]
+
+            # And the way out works: move to a free port from the API alone.
+            moved = client.post("/api/listener", json={"port": free_port()})
+            assert moved.status_code == 200
+            assert moved.json()["running"] is True
+            assert client.get("/api/status").json()["proxy"]["running"] is True
+    finally:
+        blocker.close()

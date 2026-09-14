@@ -114,13 +114,24 @@ Chrome, Firefox or Safari, or forces TLS 1.2, and accepts a custom OpenSSL
 cipher string. This covers the cipher list and TLS version, not a full JA3 or
 JA4 match.
 
-### Using a different port
+### Where the proxy listens
 
-Port 8080 is a popular default and another tool may already have it. Set the
-ports before launching:
+Port 8080 is a popular default and another tool may already have it. Open
+**Settings > Proxy listener** and pick a free port. If the port was taken at
+launch, Lanius says so there and keeps running so you can change it; the rest
+of the app works meanwhile.
+
+The same section sets the bind address. By default the proxy accepts
+connections from this machine only. Choose **All interfaces** or a specific
+address to let a phone or a virtual machine point at it, then set their proxy
+to this machine's address and the port shown. Anyone who can reach that
+address can send traffic through your proxy, so prefer a specific address over
+all interfaces on a network you do not control.
+
+The API port can also be moved, though only before launching:
 
 ```bash
-LANIUS_PROXY_PORT=8090 LANIUS_API_PORT=8091 open -a Lanius
+LANIUS_API_PORT=8091 open -a Lanius
 ```
 
 ### Projects

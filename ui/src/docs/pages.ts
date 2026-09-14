@@ -27,6 +27,57 @@ export interface DocPage {
 
 const en: DocPage[] = [
   {
+    id: 'listener',
+    title: 'Proxy listener',
+    summary:
+      'Choose the port, and let other devices reach the proxy.',
+    sections: [
+      {
+        heading: 'Changing the port',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Port 8080 is a popular default, and another tool may already hold it. Open Settings, find Proxy listener, type a free port and apply. The change takes effect immediately and is remembered for next time.',
+          },
+          {
+            kind: 'text',
+            body: 'If the port was already taken when Lanius started, the same section says so and the rest of the app keeps working, so you can pick another port without restarting.',
+          },
+        ],
+      },
+      {
+        heading: 'Letting other devices through',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'By default the proxy accepts connections from this machine only, which is why a phone on the same network cannot use it. The bind address changes that:',
+          },
+          {
+            kind: 'text',
+            body: 'This machine only (127.0.0.1) is the default. All interfaces (0.0.0.0) is reachable on every network this machine is connected to. A specific address is reachable on that network alone.',
+          },
+          {
+            kind: 'text',
+            body: 'Then point the other device at this machine\u2019s address and the port shown. Install the CA certificate there as well, or HTTPS will fail.',
+          },
+          {
+            kind: 'note',
+            body: 'Anyone who can reach that address can send traffic through your proxy. On a network you do not control, prefer a specific address over all interfaces.',
+          },
+        ],
+      },
+      {
+        heading: 'If an address is refused',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'A port in use, or an address this machine does not have, is rejected and the proxy stays where it was. You do not lose a working proxy to a typo.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: 'capture',
     title: 'System capture',
     summary:
@@ -221,6 +272,56 @@ const en: DocPage[] = [
 ];
 
 const ko: DocPage[] = [
+  {
+    id: 'listener',
+    title: '프록시 리스너',
+    summary: '포트를 고르고, 다른 기기에서도 접속할 수 있게 합니다.',
+    sections: [
+      {
+        heading: '포트 바꾸기',
+        blocks: [
+          {
+            kind: 'text',
+            body: '8080은 흔한 기본값이라 다른 도구가 이미 쓰고 있을 수 있습니다. 설정에서 프록시 리스너를 찾아 비어 있는 포트를 입력하고 적용하세요. 바로 반영되고 다음 실행에도 유지됩니다.',
+          },
+          {
+            kind: 'text',
+            body: '시작할 때 이미 포트가 사용 중이었다면 같은 자리에 그 사실이 표시되고, 나머지 기능은 계속 동작합니다. 재시작 없이 다른 포트를 고르면 됩니다.',
+          },
+        ],
+      },
+      {
+        heading: '다른 기기에서 접속하기',
+        blocks: [
+          {
+            kind: 'text',
+            body: '기본값은 이 컴퓨터에서만 접속을 받습니다. 같은 네트워크의 휴대폰이 쓰지 못하는 이유가 이것입니다. 바인딩 주소를 바꾸면 됩니다:',
+          },
+          {
+            kind: 'text',
+            body: '이 컴퓨터만 (127.0.0.1) 이 기본값입니다. 모든 인터페이스 (0.0.0.0) 는 연결된 모든 네트워크에서 접속할 수 있고, 특정 주소는 그 네트워크에서만 접속할 수 있습니다.',
+          },
+          {
+            kind: 'text',
+            body: '그 다음 상대 기기의 프록시를 이 컴퓨터의 주소와 표시된 포트로 지정하세요. CA 인증서도 그 기기에 설치해야 HTTPS가 동작합니다.',
+          },
+          {
+            kind: 'note',
+            body: '그 주소에 닿을 수 있는 누구나 프록시로 트래픽을 보낼 수 있습니다. 신뢰할 수 없는 네트워크에서는 모든 인터페이스보다 특정 주소를 쓰세요.',
+          },
+        ],
+      },
+      {
+        heading: '주소가 거부되면',
+        blocks: [
+          {
+            kind: 'text',
+            body: '이미 쓰이는 포트나 이 컴퓨터에 없는 주소는 거부되고, 프록시는 원래 자리를 지킵니다. 오타 때문에 잘 돌던 프록시를 잃지 않습니다.',
+          },
+        ],
+      },
+    ],
+  },
   {
     id: 'capture',
     title: '시스템 캡처',

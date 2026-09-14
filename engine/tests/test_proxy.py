@@ -704,3 +704,120 @@ async def test_an_invalid_spec_is_not_stored(tmp_path) -> None:
     with pytest.raises(ValueError):
         await eng.set_local_capture(",,,")
     assert eng.local_capture_spec() is None, "a rejected spec must not persist"
+
+
+async def test_listener_moves_to_a_new_port(tmp_path) -> None:
+    """Changing the port is the way out when another tool holds the old one."""
+    first, second = free_port(), free_port()
+    proxy = engine(tmp_path, first)
+    await proxy.start()
+    try:
+        assert proxy.listener_state()["port"] == first
+
+        state = await proxy.set_listener("127.0.0.1", second)
+        assert state["port"] == second
+        assert state["running"] is True
+
+        # The proxy really is on the new port, and off the old one.
+        with socket.socket() as probe:
+            probe.settimeout(2)
+            assert probe.connect_ex(("127.0.0.1", second)) == 0
+        with socket.socket() as probe:
+            probe.settimeout(2)
+            assert probe.connect_ex(("127.0.0.1", first)) != 0
+    finally:
+        await proxy.stop()
+
+
+async def test_a_rejected_port_leaves_the_proxy_where_it_was(tmp_path) -> None:
+    """A typo must not cost the user their running proxy."""
+    port = free_port()
+    proxy = engine(tmp_path, port)
+    await proxy.start()
+    try:
+        with pytest.raises(ProxyStartError):
+            await proxy.set_listener("127.0.0.1", 70000)  # out of range
+        assert proxy.running
+        assert proxy.settings.proxy_port == port
+
+        # Same when the address itself cannot be bound.
+        with pytest.raises(ProxyStartError):
+            await proxy.set_listener("203.0.113.1", free_port())
+        assert proxy.running
+        assert proxy.settings.proxy_port == port
+    finally:
+        await proxy.stop()
+
+
+async def test_a_busy_port_is_refused_and_the_old_one_kept(tmp_path) -> None:
+    port, taken = free_port(), free_port()
+    blocker = socket.socket()
+    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    blocker.bind(("127.0.0.1", taken))
+    blocker.listen(1)
+    proxy = engine(tmp_path, port)
+    await proxy.start()
+    try:
+        with pytest.raises(ProxyStartError):
+            await proxy.set_listener("127.0.0.1", taken)
+        assert proxy.running
+        assert proxy.settings.proxy_port == port
+    finally:
+        await proxy.stop()
+        blocker.close()
+
+
+async def test_the_listener_choice_survives_a_restart(tmp_path) -> None:
+    """A port chosen in the UI must still be there next launch, otherwise
+    the app returns to the port that was blocked."""
+    first, second = free_port(), free_port()
+    proxy = engine(tmp_path, first)
+    await proxy.start()
+    try:
+        await proxy.set_listener("127.0.0.1", second)
+    finally:
+        await proxy.stop()
+
+    # A fresh engine over the same database, as a relaunch would build.
+    settings = Settings(
+        proxy_port=first,  # the default, which the saved choice must beat
+        api_port=free_port(),
+        data_dir=tmp_path,
+        db_path=tmp_path / "p.sqlite",
+        confdir=tmp_path / "mitm",
+    )
+    revived = ProxyEngine(settings, FlowStore(settings.db_path), EventBroker())
+    assert revived.settings.proxy_port == second
+
+
+def test_binding_beyond_loopback_is_reported_as_exposed(tmp_path) -> None:
+    """The UI warns on this, so the engine has to be honest about it."""
+    proxy = engine(tmp_path, free_port())
+    assert proxy.listener_state()["exposed"] is False
+
+    proxy.settings.proxy_host = "0.0.0.0"  # noqa: S104 - the case under test
+    assert proxy.listener_state()["exposed"] is True
+
+    addresses = [entry["host"] for entry in proxy.listener_state()["addresses"]]
+    assert "127.0.0.1" in addresses
+    assert "0.0.0.0" in addresses  # noqa: S104
+
+
+async def test_stop_releases_the_listening_port(tmp_path) -> None:
+    """Master.shutdown() does not close the servers, so a stopped proxy used
+    to keep accepting connections on its old port."""
+    port = free_port()
+    proxy = engine(tmp_path, port)
+    await proxy.start()
+    await proxy.stop()
+
+    with socket.socket() as probe:
+        probe.settimeout(2)
+        assert probe.connect_ex(("127.0.0.1", port)) != 0, (
+            "the port is still accepting after stop()"
+        )
+
+    # And the port can be taken by someone else, which is the practical test.
+    with socket.socket() as rebind:
+        rebind.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        rebind.bind(("127.0.0.1", port))

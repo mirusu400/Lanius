@@ -68,7 +68,7 @@ export interface FlowEdits {
 
 export interface EngineStatus {
   version: string;
-  proxy: { running: boolean; host: string; port: number };
+  proxy: { running: boolean; host: string; port: number; error?: string | null };
   flows: number;
   subscribers: number;
   db_path: string;
@@ -273,6 +273,22 @@ export interface Dashboard {
 export interface TlsProfileOption {
   id: string;
   label: string;
+}
+
+export interface BindAddress {
+  host: string;
+  label: string;
+}
+
+export interface ListenerState {
+  host: string;
+  port: number;
+  running: boolean;
+  /** Why the proxy is not listening, when it failed to start. */
+  error: string | null;
+  /** True when bound beyond loopback, so other machines can reach it. */
+  exposed: boolean;
+  addresses: BindAddress[];
 }
 
 export interface TlsState {

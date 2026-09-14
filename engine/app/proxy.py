@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import logging
 import re
+import ipaddress
 import socket
 import subprocess
 import sys
@@ -88,6 +89,42 @@ def local_capture_state() -> dict[str, object]:
     }
 
 
+# Bind addresses with a meaning worth naming in the UI.
+LOOPBACK = "127.0.0.1"
+ALL_INTERFACES = "0.0.0.0"  # noqa: S104 - deliberate, and warned about in the UI
+
+
+def _is_loopback(host: str) -> bool:
+    """Is this address reachable only from this machine?"""
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host in {"localhost", ""}
+
+
+def _bindable_addresses() -> list[dict[str, str]]:
+    """Addresses this machine can bind, for the UI to offer.
+
+    Includes the two that always make sense, then whatever the interfaces
+    report, so a user can pick the LAN address a phone would point at
+    rather than exposing every interface.
+    """
+    found: list[dict[str, str]] = [
+        {"host": LOOPBACK, "label": "This machine only"},
+        {"host": ALL_INTERFACES, "label": "All interfaces"},
+    ]
+    seen = {entry["host"] for entry in found}
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            host = str(info[4][0])
+            if host not in seen and not _is_loopback(host):
+                found.append({"host": host, "label": host})
+                seen.add(host)
+    except OSError:  # pragma: no cover - depends on the host's DNS
+        logger.debug("could not enumerate local addresses")
+    return found
+
+
 class ProxyStartError(RuntimeError):
     """The proxy could not bind its listen address."""
 
@@ -114,6 +151,26 @@ class ProxyEngine:
             on_chain_changed=self._reorder_capture_last,
         )
         self._task: asyncio.Task[None] | None = None
+        # Why the proxy is not listening, when it failed to start. The API
+        # stays up so the user can fix the listener from the app itself.
+        self.start_error: str | None = None
+        # A saved listener overrides the defaults and the environment, since
+        # it is the one a user chose deliberately.
+        self._apply_saved_listener()
+
+    LISTEN_HOST_SETTING = "listen_host"
+    LISTEN_PORT_SETTING = "listen_port"
+
+    def _apply_saved_listener(self) -> None:
+        host = self.store.get_setting(self.LISTEN_HOST_SETTING)
+        if host:
+            self.settings.proxy_host = host
+        port = self.store.get_setting(self.LISTEN_PORT_SETTING)
+        if port:
+            try:
+                self.settings.proxy_port = int(port)
+            except ValueError:
+                logger.warning("ignoring saved listener port %r", port)
 
     @property
     def running(self) -> bool:
@@ -185,7 +242,11 @@ class ProxyEngine:
     async def start(self) -> None:
         if self.running:
             return
-        self._check_port_available()
+        try:
+            self._check_port_available()
+        except ProxyStartError as exc:
+            self.start_error = str(exc)
+            raise
         self.master = self._build_master()
         self._task = asyncio.create_task(self.master.run(), name="lanius-proxy")
         await self._await_bind()
@@ -198,7 +259,59 @@ class ProxyEngine:
             self.settings.proxy_host,
             self.settings.proxy_port,
         )
+        self.start_error = None
         self._report_mode_failures()
+
+    def listener_state(self) -> dict[str, Any]:
+        """Where the proxy listens, and whether it managed to."""
+        return {
+            "host": self.settings.proxy_host,
+            "port": self.settings.proxy_port,
+            "running": self.running,
+            "error": self.start_error,
+            # Anything other than a loopback address is reachable from the
+            # network, which is what makes a phone or a VM able to use it.
+            "exposed": not _is_loopback(self.settings.proxy_host),
+            "addresses": _bindable_addresses(),
+        }
+
+    async def set_listener(self, host: str, port: int) -> dict[str, Any]:
+        """Move the proxy to a new address, keeping the old one on failure.
+
+        The engine is stopped first, because a port cannot be tested while
+        the current listener still holds it. If the new address turns out to
+        be unusable, the previous one is restored and restarted, so a typo
+        cannot leave the user without a proxy.
+        """
+        host = host.strip()
+        if not host:
+            raise ProxyStartError("bind address must not be empty")
+        if not 1 <= port <= 65535:
+            raise ProxyStartError(f"port {port} is out of range (1-65535)")
+
+        previous = (self.settings.proxy_host, self.settings.proxy_port)
+        if (host, port) == previous and self.running:
+            return self.listener_state()
+
+        was_running = self.running
+        if was_running:
+            await self.stop()
+
+        self.settings.proxy_host = host
+        self.settings.proxy_port = port
+        try:
+            await self.start()
+        except ProxyStartError:
+            self.settings.proxy_host, self.settings.proxy_port = previous
+            if was_running:
+                with contextlib.suppress(ProxyStartError):
+                    await self.start()
+            raise
+
+        self.store.set_setting(self.LISTEN_HOST_SETTING, host)
+        self.store.set_setting(self.LISTEN_PORT_SETTING, str(port))
+        self.broker.publish("engine.listener_changed", self.listener_state())
+        return self.listener_state()
 
     CAPTURE_SETTING = "local_capture_spec"
     TLS_PROFILE_SETTING = "tls_profile"
@@ -420,6 +533,7 @@ class ProxyEngine:
     async def stop(self) -> None:
         self.intercept.resume_all()
         if self.master is not None:
+            await self._stop_listeners()
             self.master.shutdown()
         if self._task is not None:
             try:
@@ -432,3 +546,23 @@ class ProxyEngine:
         self._task = None
         self.master = None
         self.broker.publish("engine.stopped", {})
+
+    async def _stop_listeners(self) -> None:
+        """Close the listening sockets before shutting the master down.
+
+        ``Master.shutdown()`` only asks the run loop to exit; it does not
+        close the servers, and mitmproxy's proxyserver addon has no ``done``
+        hook, so the port stays bound after the task has finished. That
+        leaks a listener on every restart and makes moving to a new port
+        look like it worked while the old one is still accepting.
+        """
+        if self.master is None:
+            return
+        proxyserver = self.master.addons.get("proxyserver")
+        if proxyserver is None:  # pragma: no cover - always present upstream
+            return
+        for server in list(getattr(proxyserver, "servers", []) or []):
+            try:
+                await server.stop()
+            except Exception:  # pragma: no cover - already going away
+                logger.debug("listener did not stop cleanly", exc_info=True)

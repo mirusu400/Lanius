@@ -372,6 +372,21 @@ export function setLocalCapture(
   });
 }
 
+export function getListener(): Promise<import('./types').ListenerState> {
+  return request('/api/listener');
+}
+
+export function setListener(
+  host: string,
+  port: number,
+): Promise<import('./types').ListenerState> {
+  return request('/api/listener', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ host, port }),
+  });
+}
+
 export function getTlsState(): Promise<import('./types').TlsState> {
   return request('/api/tls');
 }

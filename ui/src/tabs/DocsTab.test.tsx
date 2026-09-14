@@ -12,6 +12,16 @@ import { LOCALES } from '../i18n';
 beforeEach(resetDocsPage);
 afterEach(cleanup);
 
+/** Open the capture page: these assertions are about its content, and it
+ * is no longer the page the tab opens on. */
+async function openCapturePage() {
+  const title = TEST_LOCALE === 'ko' ? '시스템 캡처' : 'System capture';
+  // The nav button's accessible name includes the summary, so match a prefix.
+  await userEvent.click(
+    screen.getByRole('button', { name: new RegExp(`^${title}`) }),
+  );
+}
+
 describe('DocsTab', () => {
   it('opens on the first page', async () => {
     render(<DocsTab />);
@@ -31,6 +41,7 @@ describe('DocsTab', () => {
 
   it('renders code samples verbatim', async () => {
     render(<DocsTab />);
+    await openCapturePage();
     // The capture page documents the rule syntax; it must be copyable.
     // The samples are literal, so they read the same in every locale.
     const code = document.querySelector('.docs-code')?.textContent ?? '';
@@ -38,8 +49,9 @@ describe('DocsTab', () => {
     expect(code).toContain('pid:');
   });
 
-  it('documents the approval step, which is the usual sticking point', () => {
+  it('documents the approval step, which is the usual sticking point', async () => {
     render(<DocsTab />);
+    await openCapturePage();
     const body = document.querySelector('.docs-body')!.textContent ?? '';
     // macOS localises the pane name, so the docs do too.
     const expected = TEST_LOCALE === 'ko' ? '네트워크 확장' : 'Network Extensions';
@@ -47,8 +59,20 @@ describe('DocsTab', () => {
     expect(body).toContain('Mitmproxy Redirector');
   });
 
-  it('states the pinning limitation rather than overselling', () => {
+  it('explains binding beyond this machine, and the risk', () => {
+    // The listener page is what a user reaches for when a phone cannot
+    // use the proxy, so it has to cover the address and say what it costs.
     render(<DocsTab />);
+    const body = document.querySelector('.docs-body')!.textContent ?? '';
+    expect(body).toContain('0.0.0.0');
+    expect(body).toContain('127.0.0.1');
+    const risk = TEST_LOCALE === 'ko' ? '트래픽을 보낼 수 있습니다' : 'send traffic through your proxy';
+    expect(body).toContain(risk);
+  });
+
+  it('states the pinning limitation rather than overselling', async () => {
+    render(<DocsTab />);
+    await openCapturePage();
     const body = document.querySelector('.docs-body')!.textContent ?? '';
     const expected = TEST_LOCALE === 'ko' ? '피닝' : 'pin';
     expect(body.toLowerCase()).toContain(expected);
