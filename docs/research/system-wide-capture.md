@@ -168,11 +168,22 @@ Suggested order:
 2. ~~Detect the macOS approval state.~~ Done: `/api/status` reports
    `local_capture`, and the engine warns when a local mode is started
    unapproved.
-3. A Settings toggle for "capture this machine", macOS first. The
-   approval banner already exists; what is missing is the control that
-   turns the mode on without editing `LANIUS_EXTRA_MODES`.
-4. The per-app picker.
+3. ~~A Settings toggle.~~ Done: Settings > System capture switches
+   between off, every application, and a named list, over
+   `POST /api/capture/local`.
+4. ~~The per-app picker.~~ Done as a spec field. A list of running
+   processes to choose from would be nicer than typing names.
 5. Then Windows, which additionally needs the elevation story.
+
+### One thing worth knowing about switching it on
+
+The OS redirector is a process-wide singleton that mitmproxy starts once
+and will not respawn, so turning capture on works live, but *changing*
+the spec afterwards, or turning it off, does not always take effect on a
+running engine. The engine checks whether the mode list actually changed
+and returns `restart_required`, and the UI says so rather than claiming
+success. Measured on this machine: first enable applied live, a
+subsequent change to `curl` did not.
 
 Steps 2 onward are a feature in their own right and should be scoped
 separately.

@@ -93,6 +93,11 @@ export interface LocalCaptureState {
   supported: boolean;
   approved: boolean;
   detail: string | null;
+  /** The configured intercept spec, or null when capture is off. */
+  spec?: string | null;
+  /** The OS redirector is a process-wide singleton that cannot always be
+   *  reconfigured in place, so a change may only take effect on restart. */
+  restart_required?: boolean;
 }
 
 export type EngineEvent =

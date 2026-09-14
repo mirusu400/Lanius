@@ -67,24 +67,25 @@ curl -x http://127.0.0.1:8080 http://example.com/
 
 Some applications never look at the system proxy. Lanius can capture them at
 the operating system level instead, so they do not need to be configured at
-all. This is experimental and is currently switched on with an environment
-variable:
+all. This is experimental.
 
-```bash
-# every application on this machine
-LANIUS_EXTRA_MODES=local open -a Lanius
+Open the **Settings** tab, find **System capture**, and choose whether to
+capture every application or only the ones you name. Names are process names
+or PIDs, comma separated, and a `!` prefix excludes one instead:
 
-# only one, by process name or PID
-LANIUS_EXTRA_MODES=local:curl open -a Lanius
-
-# everything except one
-LANIUS_EXTRA_MODES='local:!Slack' open -a Lanius
+```
+curl, firefox      only these
+!Slack             everything except Slack
 ```
 
-On macOS this installs a network extension the first time, and macOS will
-ask you to approve it in **System Settings > General > Login Items &
-Extensions > Network Extensions**. The Dashboard tells you when it is
-waiting. On Windows the helper needs to run with administrator rights.
+On macOS this installs a network extension the first time, and macOS will ask
+you to approve it in **System Settings > General > Login Items & Extensions >
+Network Extensions**. Lanius tells you when it is waiting. On Windows the
+helper needs to run with administrator rights.
+
+The system redirector cannot be reconfigured while it is running, so changing
+the setting after capture has already started takes effect on the next launch.
+Lanius says so when that happens.
 
 Applications that pin their certificates will refuse the connection rather
 than be intercepted. That is a property of pinning, not something Lanius can

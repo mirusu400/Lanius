@@ -225,7 +225,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "paused": len(engine.intercept.paused),
             # Per-mode state: a mode can fail while the engine stays up.
             "modes": engine.mode_status(),
-            "local_capture": local_capture_state(),
+            "local_capture": {
+                **local_capture_state(),
+                "spec": engine.local_capture_spec(),
+            },
         }
 
     @app.get("/api/dashboard")
@@ -249,8 +252,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # approval, while the engine itself looks healthy. The
             # dashboard is where a user would notice.
             "modes": engine.mode_status(),
-            "local_capture": local_capture_state(),
+            "local_capture": {
+                **local_capture_state(),
+                "spec": engine.local_capture_spec(),
+            },
         }
+
+    @app.post("/api/capture/local")
+    async def set_local_capture(payload: dict[str, Any]) -> dict[str, Any]:
+        """Turn OS-level capture on or off.
+
+        ``spec`` is a mitmproxy intercept spec: omit it or send an empty
+        string to switch capture off, "curl" to target one process,
+        "!Slack" to exclude one.
+        """
+        spec = payload.get("spec")
+        # Absent or null switches capture off; "" captures every process.
+        if spec is not None and not isinstance(spec, str):
+            raise HTTPException(status_code=422, detail="spec must be a string")
+        try:
+            return await engine.set_local_capture(spec)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/api/flows")
     async def list_flows(

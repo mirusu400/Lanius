@@ -12,6 +12,7 @@ import sys
 
 from mitmproxy import options
 from mitmproxy.tools.dump import DumpMaster
+from mitmproxy_rs.local import LocalRedirector
 
 from .addons.capture import CaptureAddon
 from .addons.intercept import InterceptAddon
@@ -110,14 +111,31 @@ class ProxyEngine:
     def running(self) -> bool:
         return self._task is not None and not self._task.done()
 
+    def _modes(self, extra: list[str] | None = None) -> list[str]:
+        """The mode list: the HTTP proxy, plus anything configured.
+
+        ``extra`` overrides the saved local-capture setting, so a caller
+        switching it off is not handed the old value back.
+        """
+        modes = [f"regular@{self.settings.proxy_port}"]
+        modes.extend(self.settings.extra_modes)
+        if extra is None:
+            if (spec := self.local_capture_spec()) is not None:
+                modes.append(f"local:{spec}" if spec else "local")
+        else:
+            modes.extend(extra)
+        return modes
+
     def _build_master(self) -> DumpMaster:
         opts = options.Options(
             listen_host=self.settings.proxy_host,
-            listen_port=self.settings.proxy_port,
             confdir=str(self.settings.confdir),
-            # "regular" serves the HTTP(S) proxy; extra modes let us intercept
-            # non-HTTP services as raw TCP (codex.md §5).
-            mode=["regular", *self.settings.extra_modes],
+            # The port goes on the mode rather than in listen_port. A global
+            # listen_port is inherited by every mode, including local capture,
+            # which binds nothing: mitmproxy then sees two servers on one
+            # address and refuses any later change to the mode list. Naming
+            # the port here keeps modes switchable at runtime.
+            mode=self._modes(),
             tcp_hosts=list(self.settings.tcp_hosts),
         )
         master = DumpMaster(opts, with_termlog=False, with_dumper=False)
@@ -165,6 +183,75 @@ class ProxyEngine:
             self.settings.proxy_port,
         )
         self._report_mode_failures()
+
+    CAPTURE_SETTING = "local_capture_spec"
+
+    def local_capture_spec(self) -> str | None:
+        """The saved local-capture target.
+
+        ``None`` means off. An empty string means on with no filter, i.e.
+        every application, which is distinct from off.
+        """
+        return self.store.get_setting(self.CAPTURE_SETTING)
+
+    async def set_local_capture(self, spec: str | None) -> dict[str, object]:
+        """Turn OS-level capture on or off without a restart.
+
+        ``spec`` is a mitmproxy intercept spec: ``""`` or ``None`` for off,
+        ``"curl"`` for one process, ``"!Slack"`` to exclude one, and so on.
+        Returns the resulting readiness state.
+        """
+        if spec is not None:
+            spec = spec.strip()
+            if spec:
+                # Reject a bad spec here rather than letting it take the
+                # proxy down when mitmproxy reconfigures.
+                LocalRedirector.describe_spec(spec)
+
+        if spec is None:
+            self.store.delete_setting(self.CAPTURE_SETTING)
+        else:
+            self.store.set_setting(self.CAPTURE_SETTING, spec)
+
+        wanted = [] if spec is None else [f"local:{spec}" if spec else "local"]
+        if self.master is not None:
+            # "local" with no spec captures everything; "local:x" filters.
+            self.master.options.update(mode=self._modes(wanted))
+
+        state = local_capture_state()
+        applied = await self._local_mode_applied(wanted)
+        logger.info(
+            "local capture set to %r (approved=%s, applied=%s)",
+            spec,
+            state["approved"],
+            applied,
+        )
+        result = {"spec": spec, "restart_required": not applied, **state}
+        self.broker.publish("engine.local_capture_changed", result)
+        return result
+
+    async def _local_mode_applied(
+        self, wanted: list[str], timeout: float = 3.0
+    ) -> bool:
+        """Did mitmproxy actually adopt the new local mode?
+
+        The OS redirector is a process-wide singleton that mitmproxy will
+        not respawn, so switching between specs (or switching off) does not
+        always take effect on a running engine. That is not an error, but
+        the caller has to be told a restart is needed.
+        """
+        deadline = asyncio.get_running_loop().time() + timeout
+        expected = set(wanted)
+        while asyncio.get_running_loop().time() < deadline:
+            current = {
+                str(m["spec"])
+                for m in self.mode_status()
+                if str(m["spec"]).startswith("local")
+            }
+            if current == expected:
+                return True
+            await asyncio.sleep(0.2)
+        return False
 
     def mode_status(self) -> list[dict[str, object]]:
         """Per-mode state, so a mode that did not come up is visible.

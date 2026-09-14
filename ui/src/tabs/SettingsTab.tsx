@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 
-import { caDownloadUrl, getCaInfo, getStatus, type CaInfo } from '../api/client';
-import type { EngineStatus } from '../api/types';
+import {
+  caDownloadUrl,
+  getCaInfo,
+  getStatus,
+  setLocalCapture,
+  type CaInfo,
+} from '../api/client';
+import type { EngineStatus, LocalCaptureState } from '../api/types';
 import { LOCALES, LOCALE_NAMES, useI18n, type Locale } from '../i18n';
 
 /** Sentinel used to place a React node inside a translated sentence. */
@@ -30,6 +36,8 @@ export function SettingsTab() {
   return (
     <div className="settings-tab">
       {error && <div className="banner error">{error}</div>}
+
+      <CaptureSection />
 
       <section>
         <h3>{t('settings.languageSection')}</h3>
@@ -132,5 +140,112 @@ export function SettingsTab() {
         </pre>
       </section>
     </div>
+  );
+}
+
+/** Turns OS-level capture on and off. Kept separate because it owns its
+ *  own request state and does not share anything with the rest of the tab. */
+function CaptureSection() {
+  const { t } = useI18n();
+  const [mode, setMode] = useState<'off' | 'all' | 'filtered'>('off');
+  const [filter, setFilter] = useState('');
+  const [state, setState] = useState<LocalCaptureState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getStatus()
+      .then((s) => {
+        const capture = s.local_capture;
+        if (!capture) return;
+        setState(capture);
+        const spec = capture.spec ?? null;
+        if (spec === null) setMode('off');
+        else if (spec === '') setMode('all');
+        else {
+          setMode('filtered');
+          setFilter(spec);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const apply = async (next: 'off' | 'all' | 'filtered', spec: string) => {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      // null is off; '' is on with no filter, i.e. every application.
+      const result = await setLocalCapture(
+        next === 'off' ? null : next === 'all' ? '' : spec,
+      );
+      setState(result);
+      setNote(result.restart_required ? t('capture.restartNeeded') : t('capture.applied'));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      <h3>{t('capture.section')}</h3>
+      <p className="muted">{t('capture.help')}</p>
+
+      <div className="capture-modes">
+        {(['off', 'all', 'filtered'] as const).map((option) => (
+          <label key={option}>
+            <input
+              type="radio"
+              name="capture-mode"
+              checked={mode === option}
+              disabled={busy}
+              onChange={() => {
+                setMode(option);
+                if (option !== 'filtered') void apply(option, '');
+              }}
+            />
+            {t(`capture.${option}` as 'capture.off')}
+          </label>
+        ))}
+      </div>
+
+      {mode === 'filtered' && (
+        <div className="capture-filter">
+          <label htmlFor="capture-filter">{t('capture.filterLabel')}</label>
+          <div className="row">
+            <input
+              id="capture-filter"
+              value={filter}
+              disabled={busy}
+              placeholder={t('capture.filterPlaceholder')}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+            <button
+              type="button"
+              disabled={busy || !filter.trim()}
+              onClick={() => void apply('filtered', filter)}
+            >
+              {t('capture.apply')}
+            </button>
+          </div>
+          <p className="muted">{t('capture.filterHelp')}</p>
+        </div>
+      )}
+
+      {note && <p className="muted">{note}</p>}
+      {error && <div className="banner error">{error}</div>}
+
+      {state && state.spec !== null && !state.approved && (
+        <div className="banner warn">
+          <strong>{t('dash.captureWaiting')}</strong>
+          <span>{t('dash.captureWaitingHelp')}</span>
+        </div>
+      )}
+
+      <p className="muted">{t('capture.pinningNote')}</p>
+    </section>
   );
 }

@@ -264,7 +264,8 @@ def test_status_exposes_per_mode_state(client) -> None:
     """A mode can fail while the engine stays up, so the UI needs to see
     each one rather than a single healthy/unhealthy flag."""
     modes = client.get("/api/status").json()["modes"]
-    assert [m["spec"] for m in modes] == ["regular"]
+    # The port is named on the mode so the list stays switchable at runtime.
+    assert [m["spec"].split("@")[0] for m in modes] == ["regular"]
     assert modes[0]["running"] is True
     assert modes[0]["error"] is None
 
@@ -273,7 +274,7 @@ def test_status_reports_local_capture_readiness(client) -> None:
     """The UI needs to distinguish 'not supported' from 'needs approval',
     because mitmproxy reports a blocked local mode as running."""
     state = client.get("/api/status").json()["local_capture"]
-    assert set(state) == {"supported", "approved", "detail"}
+    assert set(state) == {"supported", "approved", "detail", "spec"}
     assert isinstance(state["supported"], bool)
     assert isinstance(state["approved"], bool)
 
@@ -282,5 +283,62 @@ def test_dashboard_carries_mode_and_capture_state(client) -> None:
     """The dashboard is where a user would notice a mode being down, so it
     must not need a second call to /api/status to find out."""
     data = client.get("/api/dashboard").json()
-    assert [m["spec"] for m in data["modes"]] == ["regular"]
-    assert set(data["local_capture"]) == {"supported", "approved", "detail"}
+    assert [m["spec"].split("@")[0] for m in data["modes"]] == ["regular"]
+    assert set(data["local_capture"]) == {"supported", "approved", "detail", "spec"}
+
+
+# --- local capture control ---------------------------------------------------
+
+
+def test_local_capture_is_off_by_default(client) -> None:
+    assert client.get("/api/status").json()["local_capture"]["spec"] is None
+
+
+def test_enabling_local_capture_persists_the_spec(client) -> None:
+    """Switching it on must survive, so the setting is stored rather than
+    living only in the running mitmproxy options."""
+    body = client.post("/api/capture/local", json={"spec": "curl"}).json()
+    assert body["spec"] == "curl"
+    assert client.get("/api/status").json()["local_capture"]["spec"] == "curl"
+
+
+def test_disabling_local_capture_clears_the_spec(client) -> None:
+    """null switches it off. An empty string does not: that means on with
+    no filter, which is a different thing."""
+    client.post("/api/capture/local", json={"spec": "curl"})
+    body = client.post("/api/capture/local", json={"spec": None}).json()
+    assert body["spec"] is None
+    assert client.get("/api/status").json()["local_capture"]["spec"] is None
+
+
+def test_an_empty_spec_captures_every_process(client) -> None:
+    body = client.post("/api/capture/local", json={"spec": ""}).json()
+    assert body["spec"] == "", "off is null, not empty"
+    assert client.get("/api/status").json()["local_capture"]["spec"] == ""
+
+
+def test_an_invalid_spec_is_rejected(client) -> None:
+    """A bad spec would otherwise take the proxy down when mitmproxy
+    reconfigures, so it is validated before being stored."""
+    assert client.post("/api/capture/local", json={"spec": 42}).status_code == 422
+    assert client.get("/api/status").json()["local_capture"]["spec"] is None
+
+
+def test_local_capture_reports_readiness_with_the_spec(client) -> None:
+    body = client.post("/api/capture/local", json={"spec": "!Slack"}).json()
+    assert body["spec"] == "!Slack"
+    assert set(body) == {
+        "spec",
+        "supported",
+        "approved",
+        "detail",
+        "restart_required",
+    }
+
+
+def test_capture_change_reports_whether_a_restart_is_needed(client) -> None:
+    """The OS redirector is a process-wide singleton, so a change cannot
+    always be applied to a running engine. Saying 'done' would be a lie."""
+    body = client.post("/api/capture/local", json={"spec": "curl"}).json()
+    assert "restart_required" in body
+    assert isinstance(body["restart_required"], bool)

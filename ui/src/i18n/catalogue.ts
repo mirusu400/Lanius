@@ -257,6 +257,24 @@ const en = {
   'dash.captureWaitingHelp':
     'Approve the Mitmproxy Redirector extension in System Settings > General > Login Items & Extensions > Network Extensions. Until then, traffic from other apps is not captured.',
   'dash.captureUnavailable': 'System capture unavailable: {detail}',
+
+  // --- system capture settings ---
+  'capture.section': 'System capture',
+  'capture.help':
+    'Capture applications that ignore proxy settings, without configuring them. Experimental.',
+  'capture.off': 'Off',
+  'capture.all': 'Every application',
+  'capture.filtered': 'Selected applications',
+  'capture.filterLabel': 'Process names or PIDs',
+  'capture.filterPlaceholder': 'curl, firefox, or !Slack to exclude',
+  'capture.filterHelp':
+    'Comma separated. Prefix a name with ! to exclude it instead.',
+  'capture.apply': 'Apply',
+  'capture.applied': 'System capture updated.',
+  'capture.pinningNote':
+    'Applications that pin their certificates will refuse the connection rather than be intercepted.',
+  'capture.restartNeeded':
+    'Saved. Restart Lanius for this change to take effect: the system redirector cannot be reconfigured while it is running.',
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -491,6 +509,23 @@ const ko: Catalogue = {
   'dash.captureWaitingHelp':
     '시스템 설정 > 일반 > 로그인 항목 및 확장 프로그램 > 네트워크 확장에서 Mitmproxy Redirector를 허용하세요. 그 전까지는 다른 앱의 트래픽이 캡처되지 않습니다.',
   'dash.captureUnavailable': '시스템 캡처 사용 불가: {detail}',
+
+  // --- system capture settings ---
+  'capture.section': '시스템 캡처',
+  'capture.help':
+    '프록시 설정을 무시하는 앱도 별도 설정 없이 캡처합니다. 실험적 기능입니다.',
+  'capture.off': '끄기',
+  'capture.all': '모든 앱',
+  'capture.filtered': '선택한 앱',
+  'capture.filterLabel': '프로세스 이름 또는 PID',
+  'capture.filterPlaceholder': 'curl, firefox, 제외하려면 !Slack',
+  'capture.filterHelp': '쉼표로 구분합니다. 이름 앞에 !를 붙이면 제외됩니다.',
+  'capture.apply': '적용',
+  'capture.applied': '시스템 캡처를 변경했습니다.',
+  'capture.pinningNote':
+    '인증서 피닝을 쓰는 앱은 가로채기 대신 연결을 거부합니다.',
+  'capture.restartNeeded':
+    '저장했습니다. 적용하려면 Lanius를 다시 시작하세요. 실행 중에는 시스템 리다이렉터를 다시 설정할 수 없습니다.',
 };
 
 export const CATALOGUES: Record<Locale, Catalogue> = { en, ko };

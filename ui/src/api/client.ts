@@ -359,3 +359,15 @@ export function caDownloadUrl(format: string): string {
 export function getDashboard(top = 8): Promise<import('./types').Dashboard> {
   return request(`/api/dashboard?top=${top}`);
 }
+
+export function setLocalCapture(
+  spec: string | null,
+): Promise<import('./types').LocalCaptureState & { spec: string | null }> {
+  return request('/api/capture/local', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    // null switches capture off; '' turns it on for every process, so the
+    // two must stay distinct on the wire.
+    body: JSON.stringify({ spec }),
+  });
+}

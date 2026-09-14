@@ -297,6 +297,12 @@ class FlowStore:
             )
             self._conn.commit()
 
+    def delete_setting(self, key: str) -> None:
+        """Remove a setting, so its absence is distinct from an empty value."""
+        with self._lock:
+            self._conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+            self._conn.commit()
+
     def list_events(self, limit: int = 200) -> List[dict[str, Any]]:
         with self._lock:
             rows = self._conn.execute(

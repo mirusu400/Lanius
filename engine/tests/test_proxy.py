@@ -353,7 +353,8 @@ async def test_mode_status_reports_the_regular_proxy(tmp_path) -> None:
     await eng.start()
     try:
         modes = eng.mode_status()
-        assert [m["spec"] for m in modes] == ["regular"]
+        # The port is named on the mode so the list stays switchable.
+        assert [m["spec"] for m in modes] == [f"regular@{port}"]
         assert modes[0]["running"] is True
         assert modes[0]["listening"] is True, "a regular proxy binds an address"
         assert modes[0]["error"] is None
