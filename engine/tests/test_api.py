@@ -724,6 +724,40 @@ def test_codegen_from_a_stored_flow_uses_its_real_headers(client) -> None:
     assert "a=1" in text
 
 
+def test_codegen_rebuilds_the_url_from_a_stored_flow(client) -> None:
+    """A record keeps the parts, not the URL. Reading a 'url' field that
+    is not there produced a curl command that requested nothing."""
+    seed(client, "f2", host="example.com", path="/a", scheme="https", port=443)
+    text = client.post("/api/codegen", json={"kind": "curl", "flow_id": "f2"}).json()[
+        "text"
+    ]
+    assert "https://example.com/a" in text
+
+
+def test_codegen_keeps_the_query_string(client) -> None:
+    seed(client, "f3", host="example.com", path="/s", query="q=1&r=2")
+    text = client.post("/api/codegen", json={"kind": "curl", "flow_id": "f3"}).json()[
+        "text"
+    ]
+    assert "?q=1&r=2" in text
+
+
+def test_codegen_leaves_off_a_default_port(client) -> None:
+    seed(client, "f4", host="example.com", path="/a", scheme="https", port=443)
+    text = client.post("/api/codegen", json={"kind": "curl", "flow_id": "f4"}).json()[
+        "text"
+    ]
+    assert ":443" not in text
+
+
+def test_codegen_keeps_a_nonstandard_port(client) -> None:
+    seed(client, "f5", host="example.com", path="/a", scheme="http", port=8080)
+    text = client.post("/api/codegen", json={"kind": "curl", "flow_id": "f5"}).json()[
+        "text"
+    ]
+    assert "example.com:8080" in text
+
+
 def test_codegen_from_an_unsaved_request(client) -> None:
     """Repeater and Intruder send the request being edited, which has no id."""
     response = client.post(

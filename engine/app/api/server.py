@@ -38,7 +38,10 @@ from ..proxy import ProxyEngine, ProxyStartError, local_capture_state
 
 logger = logging.getLogger(__name__)
 
-SENSITIVE_HEADERS = {"authorization", "cookie", "set-cookie", "proxy-authorization"}
+# One definition of what counts as a secret, shared with the MCP server
+# and the code generators. There were three lists, and the shortest of
+# them left a real x-goog-api-key on screen.
+SENSITIVE_HEADERS = codegen.SECRET_HEADERS
 
 
 class InterceptRulesPatch(BaseModel):
@@ -151,7 +154,7 @@ def redact_headers(
     if reveal:
         return headers
     return [
-        (k, "<redacted>" if k.lower() in SENSITIVE_HEADERS else v) for k, v in headers
+        (k, "<redacted>" if codegen.is_secret_header(k) else v) for k, v in headers
     ]
 
 
@@ -617,7 +620,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             detail = record.detail()
             spec = codegen.RequestSpec(
                 method=detail.get("method") or "GET",
-                url=detail.get("url") or "",
+                # A record stores the parts, not the URL, so it is rebuilt
+                # here. Passing detail["url"] gave an empty string and a
+                # curl command that requested nothing at all.
+                url=codegen.rebuild_url(
+                    scheme=detail.get("scheme"),
+                    host=detail.get("host"),
+                    port=detail.get("port"),
+                    path=detail.get("path"),
+                    query=detail.get("query"),
+                ),
                 headers=[(k, v) for k, v in (record.request_headers or [])],
                 body=detail.get("request_body") or "",
             )

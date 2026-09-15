@@ -163,6 +163,63 @@ class TestRedaction:
         assert "hunter2" in codegen.as_python_requests(post)
 
 
+class TestWhatCountsAsASecret:
+    """A fixed list of header names is always out of date.
+
+    These names came off real captured traffic, where an API key sat in
+    the 'redacted' output because nobody had listed x-goog-api-key.
+    """
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "authorization",
+            "cookie",
+            "x-api-key",
+            "x-goog-api-key",
+            "x-browser-validation",
+            "x-csrf-token",
+            "proxy-authorization",
+            "x-session-token",
+            "x-amz-security-token",
+            "x-signature",
+        ],
+    )
+    def test_is_hidden(self, name: str) -> None:
+        assert codegen.is_secret_header(name) is True
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "user-agent",
+            "content-type",
+            "accept",
+            "accept-language",
+            "origin",
+            "referer",
+            "sec-ch-ua",
+            "x-client-data",
+            "sec-fetch-storage-access",
+            "host",
+        ],
+    )
+    def test_is_kept(self, name: str) -> None:
+        """Hiding these makes the request harder to reproduce for no gain."""
+        assert codegen.is_secret_header(name) is False
+
+    def test_an_unknown_key_header_is_hidden(self) -> None:
+        """An internal service will carry something nobody listed."""
+        assert codegen.is_secret_header("x-acme-internal-api-key") is True
+
+    def test_redaction_uses_it(self) -> None:
+        spec = RequestSpec(
+            "GET", "https://x.test/", [("X-Goog-Api-Key", "AIzaSyCbsbvGCe")]
+        )
+        text = codegen.as_python_requests(codegen.redacted(spec))
+        assert "AIzaSyCbsbvGCe" not in text
+        assert "[redacted]" in text
+
+
 class TestCsrf:
     def test_builds_a_self_submitting_form(self) -> None:
         spec = RequestSpec(

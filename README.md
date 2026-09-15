@@ -168,8 +168,26 @@ headers such as `Authorization` and `Cookie` are masked by default; reveal them
 with one click when you need to.
 
 Right-click a request to send it to Repeater or Intruder, add it to the scope,
-or copy it as a URL or a curl command. The site map, Repeater tabs and Intruder
-results have their own menus.
+or copy it as a URL. The site map, Repeater tabs and Intruder results have
+their own menus.
+
+### Taking a request elsewhere
+
+**Copy as** turns the request you are looking at into something you can run
+somewhere else: curl, `fetch`, or Python `requests`. It is built from the
+request the proxy actually saw, headers and body included, so the code repeats
+it rather than approximating it. Available in Repeater and Intruder too, where
+it reflects your edits.
+
+**CSRF proof of concept** builds a page that makes a browser send the request
+by itself. Lanius opens it through the proxy, so the forged request appears in
+the history next to the real one. When a request cannot be forged from another
+site, because it needs a custom header or a JSON body or a method a form cannot
+send, Lanius says so instead of producing a page that sends something else.
+
+The example plugin `copy_as_python_redacted` adds **Python requests
+(redacted)**, which replaces cookies, tokens and passwords with `[redacted]`
+so a request can go into a report without the credentials going with it.
 
 ### Intercept
 
@@ -245,8 +263,21 @@ class Plugin:
             flow.comment = "no CSP"
 ```
 
-Two working examples ship in [`plugins/`](./plugins/), and the full hook list
-is in [`plugins/README.md`](./plugins/README.md).
+A plugin can also add an entry to the right-click menus without shipping any
+UI, by declaring a code format:
+
+```python
+from app.codegen import RequestSpec, as_python_requests, redacted
+
+class Plugin:
+    codegen_formats = {
+        "python-redacted": ("Python requests (redacted)",
+                            lambda spec: as_python_requests(redacted(spec))),
+    }
+```
+
+Three working examples ship in [`plugins/`](./plugins/), and the full hook
+list is in [`plugins/README.md`](./plugins/README.md).
 
 Plugins run inside the engine process, not a sandbox. Only enable code you
 trust.

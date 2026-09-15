@@ -15,7 +15,7 @@ from ..addons.repeater import RepeaterError, build_flow
 from ..addons.scope import ScopeError
 from ..db.store import FlowRecord, FlowStore
 
-from ..codegen import SECRET_HEADERS
+from ..codegen import SECRET_HEADERS, is_secret_header
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def redact_headers(
     if reveal:
         return [[k, v] for k, v in headers]
     return [
-        [k, REDACTED if k.lower() in SENSITIVE_HEADERS else v] for k, v in headers
+        [k, REDACTED if is_secret_header(k) else v] for k, v in headers
     ]
 
 

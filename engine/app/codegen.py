@@ -75,6 +75,39 @@ class RequestSpec:
         ]
 
 
+# A fixed list of header names is always out of date: a real request to
+# Google carries x-goog-api-key, and one to an internal service will carry
+# something nobody thought of. Names are matched on their shape as well,
+# so an unfamiliar credential header is hidden rather than published.
+_SECRET_HEADER_SHAPE = re.compile(
+    r"(^|-)(api[-_]?key|key|token|secret|auth|authorization|credential"
+    r"|password|passwd|signature|sig|session|sid|validation|otp)(-|$)",
+    re.IGNORECASE,
+)
+
+
+def is_secret_header(name: str) -> bool:
+    """Whether a header's value should be hidden when sharing a request."""
+    lowered = name.lower()
+    if lowered in SECRET_HEADERS:
+        return True
+    # Headers that merely describe the client are not credentials, and
+    # hiding them makes the request harder to reproduce for no gain.
+    if lowered in _NOT_SECRET:
+        return False
+    return bool(_SECRET_HEADER_SHAPE.search(lowered))
+
+
+# Names that match the shape above but carry nothing sensitive.
+_NOT_SECRET = frozenset(
+    {
+        "sec-fetch-storage-access",
+        "www-authenticate",
+        "x-content-type-options",
+    }
+)
+
+
 def redact_value(name: str, value: str) -> str:
     """Hide a header value that carries credentials.
 
@@ -83,7 +116,7 @@ def redact_value(name: str, value: str) -> str:
     sharing the request at all.
     """
     lowered = name.lower()
-    if lowered not in SECRET_HEADERS:
+    if not is_secret_header(name):
         return value
     if lowered == "authorization":
         scheme = value.split(" ", 1)[0]
@@ -201,6 +234,29 @@ def redacted(spec: RequestSpec) -> RequestSpec:
         headers=[(name, redact_value(name, value)) for name, value in spec.headers],
         body=redact_body(spec.body, content_type),
     )
+
+
+def rebuild_url(
+    *,
+    scheme: str | None,
+    host: str | None,
+    port: int | None,
+    path: str | None,
+    query: str | None,
+) -> str:
+    """Put a stored request back together into a URL.
+
+    The default port is left off, the way a browser shows it, so the
+    generated code reads like the address the user saw.
+    """
+    scheme = scheme or "http"
+    host = host or ""
+    default = (scheme == "https" and port == 443) or (
+        scheme == "http" and port == 80
+    )
+    authority = host if port is None or default else f"{host}:{port}"
+    suffix = f"?{query}" if query else ""
+    return f"{scheme}://{authority}{path or ''}{suffix}"
 
 
 def as_curl(spec: RequestSpec) -> str:
@@ -436,9 +492,11 @@ __all__ = [
     "as_fetch",
     "as_python_requests",
     "generate",
+    "is_secret_header",
     "redact_body",
     "redact_query",
     "redact_value",
+    "rebuild_url",
     "redacted",
     "register_format",
     "unregister_owner",
