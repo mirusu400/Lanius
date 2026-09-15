@@ -18,6 +18,7 @@ import type {
 import { FlowTable } from '../components/FlowTable';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { flowMenuItems, flowUrl } from './flowMenu';
+import { useCodegenMenu } from '../components/useCodegenMenu';
 import { sendToRepeater } from './repeaterStore';
 import { sendToIntruder } from './intruderStore';
 import { addScopeFromUrl } from '../api/client';
@@ -43,6 +44,7 @@ export function ProxyTab() {
   const [selected, setSelected] = useState<string | null>(null);
   const [filters, setFilters] = useState<FlowFilters>({});
   const [connection, setConnection] = useState<ConnectionState>('connecting');
+  const codegen = useCodegenMenu();
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [paused, setPaused] = useState(false);
   const [error, setError] = useState<Message | null>(null);
@@ -225,7 +227,10 @@ export function ProxyTab() {
                     copy: (text) => {
                       void navigator.clipboard?.writeText(text);
                     },
-                  })
+                  },
+                  // A stored flow is rendered from its id, so the engine
+                  // uses the headers and body it actually captured.
+                  codegen.buildMenu({ flow_id: menu.target.id }))
                 : []
             }
             onClose={menu.close}

@@ -27,6 +27,7 @@ from ..addons.codecs import (
 )
 from ..addons.intruder import IntruderError, find_positions, strip_markers
 from ..addons.plugins import PluginError
+from .. import codegen
 from ..addons.scope import ScopeError, rule_from_url
 from .. import browser
 from ..config import Settings
@@ -67,6 +68,21 @@ class RepeaterRequest(BaseModel):
     body: str = ""
     http_version: str = "HTTP/1.1"
     timeout: float = 30.0
+
+
+class CodegenBody(BaseModel):
+    """A request to render as code.
+
+    Either a stored flow (flow_id) or one being edited in Repeater or
+    Intruder, which has no id yet.
+    """
+
+    kind: str
+    flow_id: str | None = None
+    url: str = ""
+    method: str = "GET"
+    headers: list[list[str]] = []
+    body: str = ""
 
 
 class ScopeRuleBody(BaseModel):
@@ -538,6 +554,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             record.response_headers, reveal=reveal
         )
         return data
+
+    @app.get("/api/codegen/formats")
+    async def codegen_formats() -> dict[str, Any]:
+        """What the copy-as menus should offer, plugins included."""
+        return {"formats": codegen.available_formats()}
+
+    @app.post("/api/codegen")
+    async def render_code(payload: CodegenBody) -> dict[str, Any]:
+        """Render a request as curl, fetch, Python, or a CSRF PoC.
+
+        Done here rather than in the UI so that plugins can add formats
+        and so the rules about what counts as a secret live in one place.
+        """
+        if payload.flow_id:
+            record = await asyncio.to_thread(store.get, payload.flow_id)
+            if record is None:
+                raise HTTPException(status_code=404, detail="flow not found")
+            detail = record.detail()
+            spec = codegen.RequestSpec(
+                method=detail.get("method") or "GET",
+                url=detail.get("url") or "",
+                headers=[(k, v) for k, v in (record.request_headers or [])],
+                body=detail.get("request_body") or "",
+            )
+        else:
+            if not payload.url:
+                raise HTTPException(
+                    status_code=400, detail="url or flow_id is required"
+                )
+            spec = codegen.RequestSpec(
+                method=payload.method,
+                url=payload.url,
+                headers=[(h[0], h[1]) for h in payload.headers if len(h) >= 2],
+                body=payload.body,
+            )
+        try:
+            text = codegen.generate(payload.kind, spec)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"kind": payload.kind, "text": text}
 
     @app.delete("/api/flows")
     async def clear_flows() -> dict[str, Any]:

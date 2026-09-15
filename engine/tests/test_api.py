@@ -700,3 +700,65 @@ def test_the_browser_profile_can_be_thrown_away(client) -> None:
     assert client.delete("/api/browser/profile").json()["cleared"] is True
     assert not profile.exists()
     assert client.delete("/api/browser/profile").json()["cleared"] is False
+
+
+# --- code generation ------------------------------------------------------
+
+
+def test_codegen_from_a_stored_flow_uses_its_real_headers(client) -> None:
+    """The point of rendering server-side: the summary a table holds has
+    no headers or body, so code built from it would not reproduce the
+    request."""
+    seed(
+        client,
+        "f1",
+        method="POST",
+        request_headers=[("Cookie", "session=secret"), ("X-Trace", "1")],
+        request_body=b"a=1",
+    )
+    text = client.post("/api/codegen", json={"kind": "curl", "flow_id": "f1"}).json()[
+        "text"
+    ]
+    assert "Cookie: session=secret" in text
+    assert "X-Trace: 1" in text
+    assert "a=1" in text
+
+
+def test_codegen_from_an_unsaved_request(client) -> None:
+    """Repeater and Intruder send the request being edited, which has no id."""
+    response = client.post(
+        "/api/codegen",
+        json={
+            "kind": "python",
+            "url": "https://x.test/a",
+            "method": "PUT",
+            "headers": [["X-A", "1"]],
+            "body": "hi",
+        },
+    )
+    text = response.json()["text"]
+    assert '"PUT"' in text
+    assert '"X-A": "1"' in text
+
+
+def test_codegen_rejects_an_unknown_format(client) -> None:
+    response = client.post(
+        "/api/codegen", json={"kind": "perl", "url": "https://x.test/"}
+    )
+    assert response.status_code == 400
+
+
+def test_codegen_needs_something_to_render(client) -> None:
+    assert client.post("/api/codegen", json={"kind": "curl"}).status_code == 400
+
+
+def test_codegen_on_a_missing_flow_is_a_404(client) -> None:
+    response = client.post("/api/codegen", json={"kind": "curl", "flow_id": "nope"})
+    assert response.status_code == 404
+
+
+def test_codegen_formats_are_listed_for_the_menu(client) -> None:
+    formats = client.get("/api/codegen/formats").json()["formats"]
+    kinds = {f["kind"] for f in formats}
+    assert {"curl", "fetch", "python", "csrf"} <= kinds
+    assert all(f["source"] == "builtin" for f in formats)

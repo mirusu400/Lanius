@@ -29,20 +29,13 @@ export function flowUrl(flow: FlowSummary): string {
   return `${scheme}://${host}${flow.path ?? ''}${query}`;
 }
 
-/** A curl command that repeats this request. */
-export function flowAsCurl(flow: FlowSummary): string {
-  const parts = ['curl'];
-  if (flow.method && flow.method !== 'GET') parts.push('-X', flow.method);
-  // Quote it: a URL with a query string would otherwise be split by the
-  // shell on & and ?.
-  parts.push(`'${flowUrl(flow).replace(/'/g, "'\\''")}'`);
-  return parts.join(' ');
-}
-
 export function flowMenuItems(
   flow: FlowSummary,
   t: Translator,
   actions: FlowMenuActions,
+  /** The copy-as submenu, built from the formats the engine offers.
+   * Optional so the menu still renders where codegen is unavailable. */
+  copyAs?: MenuItem,
 ): MenuItem[] {
   return [
     {
@@ -63,9 +56,6 @@ export function flowMenuItems(
       separator: true,
       onSelect: () => actions.copy(flowUrl(flow)),
     },
-    {
-      label: t('menu.copyAsCurl'),
-      onSelect: () => actions.copy(flowAsCurl(flow)),
-    },
+    ...(copyAs ? [copyAs] : []),
   ];
 }

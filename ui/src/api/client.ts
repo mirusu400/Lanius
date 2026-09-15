@@ -491,3 +491,30 @@ export function importProject(
     body: JSON.stringify(document),
   });
 }
+
+/** What the copy-as menus can offer, including plugin formats. */
+export function listCodegenFormats(): Promise<{
+  formats: { kind: string; label: string; source: string }[];
+}> {
+  return request('/api/codegen/formats');
+}
+
+/** Render a request as code.
+ *
+ * Done on the engine so that the rules about what is a secret, and the
+ * formats plugins contribute, live in one place.
+ */
+export function renderCode(payload: {
+  kind: string;
+  flow_id?: string;
+  url?: string;
+  method?: string;
+  headers?: string[][];
+  body?: string;
+}): Promise<{ kind: string; text: string }> {
+  return request('/api/codegen', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { flowAsCurl, flowMenuItems, flowUrl } from './flowMenu';
+import { flowMenuItems, flowUrl } from './flowMenu';
 import { t } from '../test-utils';
 import type { FlowSummary } from '../api/types';
 
@@ -33,21 +33,6 @@ describe('flowUrl', () => {
   });
 });
 
-describe('flowAsCurl', () => {
-  it('quotes the URL so the shell does not split the query', () => {
-    expect(flowAsCurl(flow)).toBe("curl 'https://api.example.com/v1/users?page=2'");
-  });
-
-  it('names a method other than GET', () => {
-    expect(flowAsCurl({ ...flow, method: 'POST' })).toContain('-X POST');
-  });
-
-  it('escapes a quote in the URL rather than breaking out of it', () => {
-    const odd = { ...flow, path: "/it's" } as FlowSummary;
-    expect(flowAsCurl(odd)).toContain("'\\''");
-  });
-});
-
 describe('flowMenuItems', () => {
   const actions = {
     sendToRepeater: vi.fn(),
@@ -75,5 +60,17 @@ describe('flowMenuItems', () => {
     const items = flowMenuItems(flow, t, actions);
     const copyUrl = items.find((i) => i.label === t('menu.copyUrl'));
     expect(copyUrl?.separator).toBe(true);
+  });
+
+  it('carries the copy-as submenu when one is supplied', () => {
+    const copyAs = { label: t('menu.copyAs'), items: [{ label: 'curl' }] };
+    const items = flowMenuItems(flow, t, actions, copyAs);
+    expect(items.at(-1)).toBe(copyAs);
+  });
+
+  it('renders without a submenu, so the menu survives a codegen failure', () => {
+    const labels = flowMenuItems(flow, t, actions).map((i) => i.label);
+    expect(labels).not.toContain(t('menu.copyAs'));
+    expect(labels).toContain(t('menu.sendToRepeater'));
   });
 });

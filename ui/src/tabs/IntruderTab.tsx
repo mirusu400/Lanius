@@ -20,6 +20,8 @@ import {
 } from './intruderModel';
 import { subscribeTarget } from './intruderStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
+import { useCodegenMenu } from '../components/useCodegenMenu';
+import { toSendPayload } from './repeaterModel';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { sendToRepeater } from './repeaterStore';
 import { getFlow } from '../api/client';
@@ -97,20 +99,42 @@ export function IntruderTab() {
 
   // Right-clicking the template is the natural way to mark a payload
   // position, so the menu offers it alongside the editing actions.
-  const editorMenu = useEditorMenu([
-    {
-      label: t('intruder.addMarker'),
-      needsSelection: true,
-      onSelect: (_selection, editor) =>
-        setTemplate(
-          addMarker(template, editor.selectionStart, editor.selectionEnd),
-        ),
-    },
-    {
-      label: t('intruder.clearMarkers'),
-      onSelect: () => setTemplate(clearMarkers(template)),
-    },
-  ]);
+  const codegen = useCodegenMenu();
+  // The template carries payload markers, which are not part of the
+  // request. They are stripped first, so the generated code is the
+  // request as it would be sent with an empty payload rather than one
+  // with stray section signs in it.
+  const codegenTarget = () => {
+    try {
+      const payload = toSendPayload(url, clearMarkers(template));
+      return {
+        url: payload.url,
+        method: payload.method,
+        headers: payload.headers,
+        body: payload.body,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const editorMenu = useEditorMenu(
+    [
+      {
+        label: t('intruder.addMarker'),
+        needsSelection: true,
+        onSelect: (_selection, editor) =>
+          setTemplate(
+            addMarker(template, editor.selectionStart, editor.selectionEnd),
+          ),
+      },
+      {
+        label: t('intruder.clearMarkers'),
+        onSelect: () => setTemplate(clearMarkers(template)),
+      },
+    ],
+    [codegen.buildMenu(codegenTarget())],
+  );
   const editorRef = editorMenu.ref;
 
   // Remembered as the selection is made. Pressing a button moves focus,

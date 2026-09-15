@@ -15,6 +15,7 @@ import {
   updateTab,
 } from './repeaterStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
+import { useCodegenMenu } from '../components/useCodegenMenu';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { sendTextToIntruder } from './intruderStore';
 import { errorMessage, renderMessage, useT } from '../i18n';
@@ -42,14 +43,37 @@ export function RepeaterTabView() {
 
   // The request here has been edited, so carrying it to Intruder as text
   // keeps those edits; going back to the history would lose them.
-  const editorMenu = useEditorMenu([
-    {
-      label: t('editor.sendToIntruder'),
-      onSelect: (_selection, editor) => {
-        if (active) sendTextToIntruder(active.url, editor.value);
+  const codegen = useCodegenMenu();
+  // Built from the text in the editor, not from the flow it came from,
+  // so the code matches the request as it has been edited.
+  const codegenTarget = () => {
+    if (!active) return null;
+    try {
+      const payload = toSendPayload(active.url, active.text);
+      return {
+        url: payload.url,
+        method: payload.method,
+        headers: payload.headers,
+        body: payload.body,
+      };
+    } catch {
+      // A half-typed request cannot be rendered; the menu entry is
+      // disabled rather than copying something misleading.
+      return null;
+    }
+  };
+
+  const editorMenu = useEditorMenu(
+    [
+      {
+        label: t('editor.sendToIntruder'),
+        onSelect: (_selection, editor) => {
+          if (active) sendTextToIntruder(active.url, editor.value);
+        },
       },
-    },
-  ]);
+    ],
+    [codegen.buildMenu(codegenTarget())],
+  );
 
   const send = async () => {
     if (!active) return;

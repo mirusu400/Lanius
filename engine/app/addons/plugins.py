@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List
 
+from .. import codegen
+
 logger = logging.getLogger(__name__)
 
 ENABLED_KEY = "plugins.enabled"
@@ -206,6 +208,30 @@ class PluginManager:
             except AttributeError:  # pragma: no cover - exotic addon objects
                 logger.debug("cannot rename addon from plugin %s", plugin.name)
 
+    @staticmethod
+    def _register_formats(plugin: Plugin, objects: List[Any]) -> None:
+        """Pick up any code formats the plugin contributes.
+
+        An addon may declare ``codegen_formats``: a mapping of kind to
+        (label, function). This is how a plugin reaches the right-click
+        menus without shipping any UI.
+        """
+        for obj in objects:
+            formats = getattr(obj, "codegen_formats", None)
+            if not formats:
+                continue
+            for kind, entry in dict(formats).items():
+                try:
+                    label, generator = entry
+                    codegen.register_format(plugin.name, kind, label, generator)
+                except (TypeError, ValueError) as exc:
+                    logger.warning(
+                        "plugin %s offers an unusable format %r: %s",
+                        plugin.name,
+                        kind,
+                        exc,
+                    )
+
     def _load(self, plugin: Plugin) -> Plugin:
         try:
             module = self._import(plugin)
@@ -223,6 +249,7 @@ class PluginManager:
         }
         plugin.objects = objects
         plugin.error = None
+        self._register_formats(plugin, objects)
         if self.addons is not None:
             try:
                 for obj in objects:
@@ -256,6 +283,7 @@ class PluginManager:
                     self.addons.remove(obj)
                 except Exception:  # pragma: no cover - defensive
                     logger.exception("failed to remove addon %s", plugin.name)
+        codegen.unregister_owner(plugin.name)
         plugin.objects = []
         plugin.loaded = False
         sys.modules.pop(f"lanius_plugins.{plugin.name}", None)

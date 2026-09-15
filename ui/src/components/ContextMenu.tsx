@@ -12,6 +12,8 @@ export interface MenuItem {
   disabled?: boolean;
   /** Draws a divider above this item. */
   separator?: boolean;
+  /** Opens a nested menu instead of running an action. */
+  items?: MenuItem[];
 }
 
 export interface MenuPosition {
@@ -85,19 +87,84 @@ export function ContextMenu({
       onContextMenu={(e) => e.preventDefault()}
     >
       {items.map((item, index) => (
-        <button
+        <MenuRow
           key={`${item.label}-${index}`}
-          role="menuitem"
-          className={item.separator ? 'separated' : undefined}
-          disabled={item.disabled}
-          onClick={() => {
-            onClose();
-            item.onSelect?.();
-          }}
-        >
-          {item.label}
-        </button>
+          item={item}
+          onClose={onClose}
+        />
       ))}
+    </div>
+  );
+}
+
+/** One row, which may open a nested menu.
+ *
+ * Submenus keep the top level short enough to read: the copy-as formats
+ * would otherwise double the length of every menu they appear in.
+ */
+function MenuRow({ item, onClose }: { item: MenuItem; onClose: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [flip, setFlip] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return;
+    const box = ref.current.getBoundingClientRect();
+    // Opens to the left when there is no room on the right, so a menu
+    // near the window edge stays readable.
+    setFlip(box.right > window.innerWidth);
+  }, [open]);
+
+  if (!item.items) {
+    return (
+      <button
+        role="menuitem"
+        className={item.separator ? 'separated' : undefined}
+        disabled={item.disabled}
+        onClick={() => {
+          onClose();
+          item.onSelect?.();
+        }}
+      >
+        {item.label}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className="context-submenu"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        role="menuitem"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={item.separator ? 'separated' : undefined}
+        disabled={item.disabled}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {item.label}
+        <span aria-hidden="true" className="submenu-arrow">
+          ›
+        </span>
+      </button>
+      {open && item.items.length > 0 && (
+        <div
+          ref={ref}
+          role="menu"
+          className={flip ? 'context-menu nested flip' : 'context-menu nested'}
+        >
+          {item.items.map((child, index) => (
+            <MenuRow
+              key={`${child.label}-${index}`}
+              item={child}
+              onClose={onClose}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

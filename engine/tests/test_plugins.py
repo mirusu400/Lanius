@@ -467,3 +467,80 @@ def test_capture_stays_last_so_plugin_edits_are_recorded(tmp_path) -> None:
 
         stored = c.get("/api/flows").json()["items"]
         assert stored[0]["comment"] == "tagged-by-plugin"
+
+
+# --- plugins that add code formats ----------------------------------------
+
+FORMAT_PLUGIN = '''
+from app.codegen import RequestSpec
+
+def shout(spec: RequestSpec) -> str:
+    return spec.url.upper()
+
+class Plugin:
+    codegen_formats = {"shout": ("Shout", shout)}
+'''
+
+
+def test_a_plugin_can_add_a_code_format(tmp_path) -> None:
+    """A plugin reaches the copy-as menus without shipping any UI."""
+    from app import codegen
+
+    (tmp_path / "shouter.py").write_text(FORMAT_PLUGIN)
+    manager = PluginManager(tmp_path)
+    manager.discover()
+    manager.enable("shouter")
+    try:
+        assert codegen.generate("shout", codegen.RequestSpec("GET", "https://x.test/"))
+        assert any(f["kind"] == "shout" for f in codegen.available_formats())
+    finally:
+        manager.disable("shouter")
+
+
+def test_disabling_the_plugin_removes_its_format(tmp_path) -> None:
+    """Otherwise the menu keeps offering something that no longer exists."""
+    from app import codegen
+
+    (tmp_path / "shouter.py").write_text(FORMAT_PLUGIN)
+    manager = PluginManager(tmp_path)
+    manager.discover()
+    manager.enable("shouter")
+    manager.disable("shouter")
+    assert not any(f["kind"] == "shout" for f in codegen.available_formats())
+
+
+def test_a_plugin_with_an_unusable_format_still_loads(tmp_path) -> None:
+    """One bad entry should not stop the rest of the plugin working."""
+    from app import codegen
+
+    (tmp_path / "broken.py").write_text(
+        'class Plugin:\n    codegen_formats = {"bad": "not a pair"}\n'
+    )
+    manager = PluginManager(tmp_path)
+    manager.discover()
+    manager.enable("broken")
+    try:
+        assert manager.get("broken").loaded is True
+        assert not any(f["kind"] == "bad" for f in codegen.available_formats())
+    finally:
+        manager.disable("broken")
+
+
+def test_the_shipped_redaction_plugin_works(tmp_path) -> None:
+    """The example in plugins/ is the one users are told to copy."""
+    from pathlib import Path
+    from app import codegen
+
+    source = Path(__file__).resolve().parents[2] / "plugins"
+    manager = PluginManager(source)
+    manager.discover()
+    manager.enable("copy_as_python_redacted")
+    try:
+        spec = codegen.RequestSpec(
+            "GET", "https://x.test/", [("Authorization", "Bearer abc")]
+        )
+        text = codegen.generate("python-redacted", spec)
+        assert "[redacted]" in text
+        assert "abc" not in text
+    finally:
+        manager.disable("copy_as_python_redacted")

@@ -15,16 +15,13 @@ from ..addons.repeater import RepeaterError, build_flow
 from ..addons.scope import ScopeError
 from ..db.store import FlowRecord, FlowStore
 
+from ..codegen import SECRET_HEADERS
+
 logger = logging.getLogger(__name__)
 
-SENSITIVE_HEADERS = {
-    "authorization",
-    "cookie",
-    "set-cookie",
-    "proxy-authorization",
-    "x-api-key",
-    "x-auth-token",
-}
+# One list of what counts as a secret, shared with the code generators,
+# so a header added in one place is not still leaking in the other.
+SENSITIVE_HEADERS = SECRET_HEADERS
 REDACTED = "<redacted>"
 MAX_BODY_CHARS = 20_000
 

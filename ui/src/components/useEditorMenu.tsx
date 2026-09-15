@@ -17,8 +17,16 @@ export interface EditorMenuExtra {
   needsSelection?: boolean;
 }
 
-/** Wire a textarea up to an application menu instead of the native one. */
-export function useEditorMenu(extras: EditorMenuExtra[] = []) {
+/** Wire a textarea up to an application menu instead of the native one.
+ *
+ * `trailing` items are appended as-is, for menus built elsewhere such as
+ * the copy-as submenu, which acts on the whole request rather than on
+ * the selection.
+ */
+export function useEditorMenu(
+  extras: EditorMenuExtra[] = [],
+  trailing: MenuItem[] = [],
+) {
   const t = useT();
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const menu = useContextMenu<null>();
@@ -88,6 +96,7 @@ export function useEditorMenu(extras: EditorMenuExtra[] = []) {
         label: extra.label,
         onSelect: withEditor((editor) => extra.onSelect(selection.text, editor)),
       })),
+    ...trailing,
   ];
 
   const element = (
