@@ -10,6 +10,7 @@ import ipaddress
 import socket
 import subprocess
 import sys
+import time
 from typing import Any
 
 from mitmproxy import options
@@ -45,14 +46,46 @@ BIND_TIMEOUT_SECONDS = 5.0
 MACOS_REDIRECTOR_EXTENSION = "org.mitmproxy.macos-redirector"
 
 
-def local_capture_state() -> dict[str, object]:
+# Approval changes only when the user acts on a system dialog, so asking
+# the OS more than once every few seconds is wasted work. It is read on
+# every status poll and by several tests, which on a slow machine adds up
+# to minutes of subprocess spawning for an answer that did not change.
+_STATE_TTL_SECONDS = 5.0
+_state_cache: tuple[float, dict[str, object]] | None = None
+
+
+def reset_local_capture_cache() -> None:
+    """Forget the cached answer.
+
+    For tests, which change what the OS would report between cases, and
+    after anything that could plausibly have changed the approval.
+    """
+    global _state_cache
+    _state_cache = None
+
+
+def local_capture_state(*, refresh: bool = False) -> dict[str, object]:
     """Whether OS-level local capture is ready on this machine.
 
     Returns ``supported`` (does this platform have it at all),
     ``approved`` (may it actually run) and a ``detail`` string. On
     platforms where approval is not a concept, ``approved`` mirrors
     ``supported``.
+
+    Cached briefly; pass ``refresh`` when the user has just been asked to
+    approve something and the answer is expected to have changed.
     """
+    global _state_cache
+    if not refresh and _state_cache is not None:
+        cached_at, cached = _state_cache
+        if time.monotonic() - cached_at < _STATE_TTL_SECONDS:
+            return cached
+    state = _read_local_capture_state()
+    _state_cache = (time.monotonic(), state)
+    return state
+
+
+def _read_local_capture_state() -> dict[str, object]:
     if sys.platform != "darwin":
         # Windows elevates a helper per run and Linux uses sudo, so there
         # is no persistent approval state to read.
@@ -394,8 +427,17 @@ class ProxyEngine:
             # "local" with no spec captures everything; "local:x" filters.
             self.master.options.update(mode=self._modes(wanted))
 
-        state = local_capture_state()
-        applied = await self._local_mode_applied(wanted)
+        # The user may have just approved the extension in response to
+        # switching this on, so do not answer from a stale cache.
+        state = local_capture_state(refresh=True)
+        # Nothing to wait for when the proxy is not running: the modes can
+        # never appear, so the poll would burn its whole timeout and report
+        # a restart is needed, which is true but already obvious.
+        applied = (
+            await self._local_mode_applied(wanted)
+            if self.master is not None
+            else True
+        )
         logger.info(
             "local capture set to %r (approved=%s, applied=%s)",
             spec,

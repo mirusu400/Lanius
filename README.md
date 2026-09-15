@@ -305,6 +305,14 @@ cd engine && python -m app.main    # proxy on :8080, API on :8081
 cd ui && npm run dev               # interface on :5173
 ```
 
+Everything CI checks also runs locally, in well under a minute:
+
+```bash
+scripts/check.sh          # engine, ui and shell, as CI would
+scripts/check.sh quick    # the fast subset, for a tight loop
+scripts/check.sh engine   # one part only
+```
+
 ## Legal
 
 Lanius is a tool for testing systems you are authorised to test. Confirming you

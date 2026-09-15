@@ -137,8 +137,10 @@ def test_watchdog_exits_when_the_parent_dies(tmp_path) -> None:
     pid_file = tmp_path / "child.pid"
     launcher_code = (
         "import os, subprocess, sys, time\n"
+        "env = dict(os.environ, LANIUS_PARENT_POLL_SECONDS='0.1',\n"
+        "           LANIUS_SHUTDOWN_GRACE_SECONDS='0.2')\n"
         "child = subprocess.Popen(\n"
-        f"    [sys.executable, '-c', {child_code!r}, str(os.getpid())]\n"
+        f"    [sys.executable, '-c', {child_code!r}, str(os.getpid())], env=env\n"
         ")\n"
         f"open({str(pid_file)!r}, 'w').write(str(child.pid))\n"
         "time.sleep(1)\n"
@@ -217,7 +219,9 @@ def test_watchdog_uses_an_explicit_supervisor_pid(tmp_path) -> None:
     )
     launcher_code = (
         "import os, subprocess, sys, time\n"
-        "env = dict(os.environ, SUPERVISOR=str(os.getpid()))\n"
+        "env = dict(os.environ, SUPERVISOR=str(os.getpid()),\n"
+        "           LANIUS_PARENT_POLL_SECONDS='0.1',\n"
+        "           LANIUS_SHUTDOWN_GRACE_SECONDS='0.2')\n"
         f"child = subprocess.Popen([sys.executable, '-c', {child_code!r}], env=env)\n"
         f"open({str(pid_file)!r}, 'w').write(str(child.pid))\n"
         "time.sleep(1)\n"
@@ -527,6 +531,7 @@ def test_local_capture_state_reads_the_extension_state(monkeypatch) -> None:
 
     monkeypatch.setattr(proxy_module.sys, "platform", "darwin")
     monkeypatch.setattr(proxy_module.subprocess, "run", fake_run)
+    proxy_module.reset_local_capture_cache()
 
     state = proxy_module.local_capture_state()
     assert state["supported"] is True
@@ -548,6 +553,7 @@ def test_local_capture_state_reports_an_approved_extension(monkeypatch) -> None:
 
     monkeypatch.setattr(proxy_module.sys, "platform", "darwin")
     monkeypatch.setattr(proxy_module.subprocess, "run", fake_run)
+    proxy_module.reset_local_capture_cache()
     assert proxy_module.local_capture_state()["approved"] is True
 
 
@@ -562,6 +568,7 @@ def test_local_capture_state_when_the_extension_is_absent(monkeypatch) -> None:
 
     monkeypatch.setattr(proxy_module.sys, "platform", "darwin")
     monkeypatch.setattr(proxy_module.subprocess, "run", fake_run)
+    proxy_module.reset_local_capture_cache()
     state = proxy_module.local_capture_state()
     assert state["approved"] is False
     assert state["detail"] == "not installed"
@@ -577,6 +584,7 @@ def test_local_capture_state_survives_a_missing_tool(monkeypatch) -> None:
 
     monkeypatch.setattr(proxy_module.sys, "platform", "darwin")
     monkeypatch.setattr(proxy_module.subprocess, "run", boom)
+    proxy_module.reset_local_capture_cache()
     state = proxy_module.local_capture_state()
     assert state["approved"] is False
     assert "no such tool" in str(state["detail"])
@@ -588,6 +596,7 @@ def test_local_capture_needs_no_approval_off_macos(monkeypatch) -> None:
     from app import proxy as proxy_module
 
     monkeypatch.setattr(proxy_module.sys, "platform", "win32")
+    proxy_module.reset_local_capture_cache()
     assert proxy_module.local_capture_state() == {
         "supported": True,
         "approved": True,
@@ -845,3 +854,46 @@ async def test_repeater_works_with_local_capture_configured(tmp_path) -> None:
         assert proxy.repeater.options is not None
     finally:
         await proxy.stop()
+
+
+def test_local_capture_state_is_cached_but_refreshable(monkeypatch) -> None:
+    """Reading this spawns a process, and it is read on every status poll.
+
+    Caching it is worth doing, but a stale answer would mean a user who
+    has just approved the extension is told it is still not approved.
+    """
+    from app import proxy as proxy_module
+
+    calls = {"n": 0}
+    answer = {"text": "[activated waiting for user]"}
+
+    def fake_run(*_args, **_kwargs):
+        calls["n"] += 1
+
+        class R:
+            stdout = (
+                "\t*\t*\tS8XHQB96PW\torg.mitmproxy.macos-redirector"
+                f".network-extension (2.0/1)\tnet\t{answer['text']}\n"
+            )
+
+        return R()
+
+    monkeypatch.setattr(proxy_module.sys, "platform", "darwin")
+    monkeypatch.setattr(proxy_module.subprocess, "run", fake_run)
+    proxy_module.reset_local_capture_cache()
+
+    first = proxy_module.local_capture_state()
+    assert calls["n"] == 1
+    # Repeated reads do not spawn anything.
+    for _ in range(5):
+        assert proxy_module.local_capture_state() == first
+    assert calls["n"] == 1
+
+    # The user approves it. Asking again with refresh must see that.
+    answer["text"] = "[activated enabled]"
+    assert proxy_module.local_capture_state()["approved"] is False
+    refreshed = proxy_module.local_capture_state(refresh=True)
+    assert refreshed["approved"] is True
+    assert calls["n"] == 2
+
+    proxy_module.reset_local_capture_cache()

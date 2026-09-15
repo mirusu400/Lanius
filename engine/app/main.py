@@ -21,8 +21,13 @@ from .config import Settings
 
 logger = logging.getLogger(__name__)
 
-PARENT_POLL_SECONDS = 2.0
-SHUTDOWN_GRACE_SECONDS = 3.0
+# How often the watchdog checks that the shell is still alive. Two seconds
+# is unnoticeable in use, but the tests wait for a real poll, so they set
+# this lower rather than sleeping through the production interval.
+PARENT_POLL_SECONDS = float(os.environ.get("LANIUS_PARENT_POLL_SECONDS", "2.0"))
+SHUTDOWN_GRACE_SECONDS = float(
+    os.environ.get("LANIUS_SHUTDOWN_GRACE_SECONDS", "3.0")
+)
 
 
 def watch_parent(parent_pid: int) -> None:

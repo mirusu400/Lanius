@@ -3,7 +3,19 @@ name: CI
 on:
   push:
     branches: [main]
+    # Documentation alone cannot break a build, and running seven jobs
+    # across three operating systems to find that out is wasteful. Local
+    # checks (scripts/check.sh) cover everything this does, in under a
+    # minute, so CI is the second opinion rather than the first.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.gitignore'
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.gitignore'
   workflow_call:
 
 # A newer push supersedes an in-flight run for the same ref.
