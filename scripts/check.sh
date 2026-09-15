@@ -50,6 +50,7 @@ if [ "$target" = "all" ] || [ "$target" = "quick" ] || [ "$target" = "ui" ]; the
   echo "ui"
   step "types" npm --prefix ui run typecheck
   step "lint" npm --prefix ui run lint
+  step "css" node ui/scripts/check-css.mjs
   if [ "$target" = "quick" ]; then
     step "tests" npm --prefix ui run test -- --run
   else

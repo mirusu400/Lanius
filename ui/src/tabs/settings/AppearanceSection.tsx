@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react';
 import {
   DEFAULTS as APPEARANCE_DEFAULTS,
   MONO_FAMILIES,
+  MONO_SIZE_PRESETS,
   MONO_SIZE_RANGE,
   UI_FAMILIES,
+  UI_SIZE_PRESETS,
   UI_SIZE_RANGE,
   apply as applyAppearance,
   fontAvailable,
@@ -21,6 +23,7 @@ import {
 import {
   useI18n,
 } from '../../i18n';
+import { SizeField } from '../../components/SizeField';
 
 /** Turns OS-level capture on and off. Kept separate because it owns its
  *  own request state and does not share anything with the rest of the tab. */
@@ -89,15 +92,15 @@ export function AppearanceSection() {
 
       <div className="settings-row">
         <label htmlFor="ui-size">{t('appearance.uiSize')}</label>
-        <input
+        <SizeField
           id="ui-size"
-          type="range"
+          value={settings.uiSize}
           min={UI_SIZE_RANGE.min}
           max={UI_SIZE_RANGE.max}
-          value={settings.uiSize}
-          onChange={(event) => update({ uiSize: Number(event.target.value) })}
+          presets={UI_SIZE_PRESETS}
+          label={t('appearance.uiSizePresets')}
+          onChange={(uiSize) => update({ uiSize })}
         />
-        <span className="mono">{settings.uiSize}px</span>
       </div>
 
       <div className="settings-row">
@@ -120,15 +123,15 @@ export function AppearanceSection() {
 
       <div className="settings-row">
         <label htmlFor="mono-size">{t('appearance.monoSize')}</label>
-        <input
+        <SizeField
           id="mono-size"
-          type="range"
+          value={settings.monoSize}
           min={MONO_SIZE_RANGE.min}
           max={MONO_SIZE_RANGE.max}
-          value={settings.monoSize}
-          onChange={(event) => update({ monoSize: Number(event.target.value) })}
+          presets={MONO_SIZE_PRESETS}
+          label={t('appearance.monoSizePresets')}
+          onChange={(monoSize) => update({ monoSize })}
         />
-        <span className="mono">{settings.monoSize}px</span>
       </div>
 
       {/* Shown in the chosen font at the chosen size, so the effect is

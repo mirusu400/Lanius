@@ -31,6 +31,11 @@ export const DEFAULTS: Appearance = {
 export const UI_SIZE_RANGE = { min: 10, max: 20 } as const;
 export const MONO_SIZE_RANGE = { min: 9, max: 22 } as const;
 
+/** The sizes offered in the dropdown. Any value in range can still be
+ *  typed; these are the ones worth one click. */
+export const UI_SIZE_PRESETS = [10, 11, 12, 13, 14, 15, 16, 18, 20] as const;
+export const MONO_SIZE_PRESETS = [9, 10, 11, 12, 13, 14, 16, 18, 20, 22] as const;
+
 /** Monospace stacks worth offering, with the default first. */
 export const MONO_FAMILIES = [
   { id: '', stack: "'SF Mono', 'JetBrains Mono', Menlo, monospace" },

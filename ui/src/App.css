@@ -124,6 +124,53 @@ body {
   line-height: 1.45;
 }
 
+/* Form controls do not inherit font by default, so the interface size
+   setting resized the text around them and left them at the browser's
+   own 13.3333px. Anything with a .mono class overrides this below. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+/* One rule for all of them.
+ *
+ * There were six different paddings across the app, chosen per area, so
+ * buttons sitting near each other were visibly different heights. The
+ * padding is in em so a button grows with the interface size instead of
+ * keeping a fixed height around larger text. */
+button {
+  padding: 0.3em 0.85em;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-alt);
+  color: var(--fg);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Inputs and dropdowns. Textareas are excluded: they are full-height
+   editors here, and the ones that want a frame set their own. */
+input:not([type='checkbox']):not([type='radio']),
+select {
+  padding: 0.3em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
 .mono {
   font-family: var(--font-mono);
   font-size: var(--font-size-mono);
@@ -175,7 +222,7 @@ pre.body,
   /* It is a button now (it opens the dashboard), so drop the chrome. */
   background: none;
   border: none;
-  font-size: 14px;
+  font-size: 1.08em;
   font-family: inherit;
   cursor: pointer;
   opacity: 0.85;
@@ -205,9 +252,8 @@ pre.body,
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--muted);
-  padding: 10px 12px;
+  padding: 0.75em 0.9em;
   cursor: pointer;
-  font-size: 13px;
   white-space: nowrap;
   flex: none;
 }
@@ -270,7 +316,6 @@ pre.body,
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
-  padding: 4px 10px;
   cursor: pointer;
 }
 
@@ -313,6 +358,18 @@ pre.body,
   display: flex;
   flex: 1;
   min-height: 0;
+}
+
+/* A typed size next to the sizes worth one click. */
+.size-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.size-field input[type='number'] {
+  width: 4.5em;
+  text-align: right;
 }
 
 /* --- loading indicator --- */
@@ -598,7 +655,7 @@ td.empty {
 }
 
 .detail-half-title {
-  font-size: 11px;
+  font-size: 0.85em;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
@@ -616,7 +673,7 @@ td.empty {
   border-radius: 3px;
   color: var(--muted);
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: 0.85em;
   cursor: pointer;
 }
 
@@ -640,7 +697,7 @@ td.empty {
 .detail-half-body h4 {
   margin: 8px 0 6px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.85em;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -681,7 +738,6 @@ td.empty {
   border: 1px solid transparent;
   border-radius: 3px;
   color: var(--muted);
-  padding: 4px 10px;
   cursor: pointer;
 }
 
@@ -707,7 +763,7 @@ td.empty {
 .detail-body h4 {
   margin: 8px 0 6px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.85em;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -761,7 +817,6 @@ pre.body {
   border-radius: 3px 3px 0 0;
   color: var(--muted);
   cursor: pointer;
-  padding: 5px 12px;
 }
 
 .subtabs button.active {
@@ -774,7 +829,7 @@ pre.body {
   background: var(--accent);
   border-radius: 8px;
   color: var(--on-accent);
-  font-size: 10px;
+  font-size: 0.8em;
   font-weight: 700;
   margin-left: 6px;
   padding: 1px 6px;
@@ -819,7 +874,6 @@ pre.body {
   border-radius: 3px;
   color: var(--fg);
   cursor: pointer;
-  padding: 4px 12px;
 }
 
 .intercept-controls button:disabled {
@@ -1038,13 +1092,13 @@ pre.body {
   background: var(--accent);
   border-radius: 3px;
   color: var(--on-accent);
-  font-size: 10px;
+  font-size: 0.8em;
   margin-left: 6px;
   padding: 1px 5px;
 }
 
 .site-meta {
-  font-size: 11px;
+  font-size: 0.85em;
 }
 
 .add-scope {
@@ -1053,7 +1107,7 @@ pre.body {
   border-radius: 3px;
   color: var(--muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 0.85em;
   padding: 2px 6px;
   position: absolute;
   right: 8px;
@@ -1104,7 +1158,7 @@ pre.body {
 }
 
 .tree-flows span {
-  font-size: 11px;
+  font-size: 0.85em;
 }
 
 /* endpoints */
@@ -1148,7 +1202,6 @@ pre.body {
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
-  padding: 4px 8px;
 }
 
 .scope-controls button {
@@ -1215,7 +1268,6 @@ pre.body {
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
-  padding: 5px 8px;
 }
 
 .intruder-controls button {
@@ -1252,7 +1304,7 @@ pre.body {
 
 .intruder-left h4 {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.85em;
   letter-spacing: 0.08em;
   margin: 6px 0;
   text-transform: uppercase;
@@ -1335,7 +1387,6 @@ pre.body {
   border-radius: 3px;
   color: var(--fg);
   cursor: pointer;
-  padding: 4px 10px;
 }
 
 .comparer-controls button.send {
@@ -1459,7 +1510,6 @@ pre.body {
   border-radius: 3px;
   color: var(--fg);
   cursor: pointer;
-  padding: 4px 10px;
 }
 
 .plugins-table td {
@@ -1482,7 +1532,7 @@ pre.body {
 
 .plugin-error-text {
   color: var(--danger-bright);
-  font-size: 11px;
+  font-size: 0.85em;
   margin-top: 4px;
   white-space: pre-wrap;
 }
@@ -1509,7 +1559,6 @@ pre.body {
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
-  padding: 4px 10px;
 }
 
 .logger-controls button {
@@ -1536,7 +1585,7 @@ pre.body {
 .logger-stored h4 {
   background: var(--bg-alt);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.85em;
   letter-spacing: 0.08em;
   margin: 0;
   padding: 6px 10px;
@@ -1590,7 +1639,9 @@ pre.body {
 
 .settings-body h3 {
   color: var(--accent);
-  font-size: 13px;
+  /* Relative, so a heading does not end up smaller than the text under
+     it once the interface size is raised. */
+  font-size: 1em;
   letter-spacing: 0.06em;
   margin: 0 0 10px;
   text-transform: uppercase;
@@ -1613,7 +1664,6 @@ pre.body {
   border-radius: 0;
   display: flex;
   gap: 10px;
-  padding: 5px 10px;
   text-align: left;
   width: 100%;
 }
@@ -1630,7 +1680,7 @@ pre.body {
 .intercept-queue .phase {
   border-radius: 3px;
   flex: none;
-  font-size: 11px;
+  font-size: 0.85em;
   padding: 1px 5px;
 }
 
@@ -1798,7 +1848,7 @@ pre.body {
   background: var(--bg-hover);
   border-radius: 8px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 0.8em;
   padding: 0 6px;
 }
 
@@ -1810,7 +1860,7 @@ pre.body {
 }
 
 .tree-statuses span {
-  font-size: 10px;
+  font-size: 0.8em;
 }
 
 .tree-row.leaf {
@@ -1878,7 +1928,7 @@ pre.body {
 
 .dash-head h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 1.3em;
 }
 
 .dash-sub {
@@ -1896,7 +1946,7 @@ pre.body {
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 3px 10px;
-  font-size: 11px;
+  font-size: 0.85em;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -1946,18 +1996,18 @@ pre.body {
 
 .dash-card-label {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.85em;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .dash-card-value {
-  font-size: 22px;
+  font-size: 1.7em;
   font-weight: 600;
 }
 
 .dash-note {
-  font-size: 11px;
+  font-size: 0.85em;
   color: var(--muted);
 }
 
@@ -2006,7 +2056,7 @@ pre.body {
 
 .dash-panel h3 {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: 0.92em;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -2029,7 +2079,7 @@ pre.body {
 }
 
 .dash-bar-label {
-  font-size: 12px;
+  font-size: 0.92em;
   color: var(--muted);
 }
 
@@ -2089,18 +2139,18 @@ pre.body {
 
 .dash-chip-name {
   font-weight: 600;
-  font-size: 12px;
+  font-size: 0.92em;
 }
 
 .dash-chip-count {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.85em;
 }
 
 .dash-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 0.92em;
   table-layout: auto;
 }
 
@@ -2174,7 +2224,7 @@ pre.body {
 
 .dash-alert span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.92em;
 }
 
 /* --- system capture settings --- */
@@ -2224,7 +2274,7 @@ pre.body {
 
 .banner.warn span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.92em;
 }
 
 /* --- decoder tabs and raw view --- */
@@ -2263,9 +2313,8 @@ pre.body {
   border: 1px solid var(--border);
   background: var(--bg-row);
   color: var(--muted);
-  padding: 2px 10px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.92em;
 }
 
 .view-toggle button:first-child {
@@ -2331,12 +2380,12 @@ pre.body {
 }
 
 .docs-nav strong {
-  font-size: 13px;
+  font-size: 1em;
 }
 
 .docs-nav span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.85em;
   line-height: 1.35;
 }
 
@@ -2348,7 +2397,7 @@ pre.body {
 
 .docs-body h2 {
   margin: 0 0 4px;
-  font-size: 18px;
+  font-size: 1.4em;
 }
 
 .docs-summary {
@@ -2358,7 +2407,7 @@ pre.body {
 
 .docs-body h3 {
   margin: 22px 0 6px;
-  font-size: 12px;
+  font-size: 0.92em;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -2438,7 +2487,7 @@ pre.body {
   padding: 6px 10px;
   border-radius: 3px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.92em;
   white-space: nowrap;
 }
 
@@ -2476,7 +2525,7 @@ pre.body {
 
 .submenu-arrow {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 1.1em;
   line-height: 1;
 }
 
@@ -2546,7 +2595,6 @@ pre.body {
   text-align: left;
   background: transparent;
   border: none;
-  padding: 7px 10px;
   cursor: pointer;
   color: var(--fg);
 }
@@ -2557,7 +2605,7 @@ pre.body {
 
 .process-picker span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.85em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2577,9 +2625,8 @@ pre.body {
   border: 1px solid var(--border);
   background: var(--bg-row);
   border-radius: 4px;
-  padding: 4px 10px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.92em;
 }
 
 .import-button input {
@@ -2592,6 +2639,6 @@ pre.body {
 
 .field-error {
   color: var(--danger-soft);
-  font-size: 12px;
+  font-size: 0.92em;
   margin: 4px 0;
 }
