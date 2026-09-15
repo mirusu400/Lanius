@@ -284,8 +284,13 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
 
   return (
     <div className="flow-detail">
-      <div className="detail-url mono" title={formatUrl(flow)}>
-        <strong>{flow.method}</strong> {formatUrl(flow)}
+      <div className="detail-url mono">
+        {/* The URL is the part that can be long, so it is the part that
+            shrinks. Without this the reveal toggle is pushed off the
+            edge of the pane and cannot be reached at all. */}
+        <span className="detail-url-text" title={formatUrl(flow)}>
+          <strong>{flow.method}</strong> {formatUrl(flow)}
+        </span>
         <label className="reveal">
           <input
             type="checkbox"

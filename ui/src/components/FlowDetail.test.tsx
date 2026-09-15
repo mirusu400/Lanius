@@ -164,6 +164,29 @@ describe('FlowDetailView', () => {
     expect(screen.getByRole('menuitem', { name: t('menu.sendToIntruder') })).toBeTruthy();
   });
 
+  it('keeps the reveal toggle reachable next to a long URL', async () => {
+    // The URL has to be the element that shrinks. When it was not, the
+    // toggle was laid out past the right edge of the pane and could not
+    // be clicked at all.
+    render(<FlowDetailView flow={httpFlow} />);
+    await screen.findByText(t('detail.request'));
+    const toggle = document.querySelector('.detail-url .reveal');
+    const url = document.querySelector('.detail-url-text');
+    expect(toggle).toBeTruthy();
+    expect(url).toBeTruthy();
+    // The URL is inside its own shrinkable box rather than a direct
+    // child competing with the toggle for space.
+    expect(url!.contains(toggle!)).toBe(false);
+  });
+
+  it('can reveal the headers it masks by default', async () => {
+    render(<FlowDetailView flow={httpFlow} />);
+    await screen.findByText(t('detail.request'));
+    const toggle = screen.getByRole('checkbox');
+    await userEvent.click(toggle);
+    expect((toggle as HTMLInputElement).checked).toBe(true);
+  });
+
   it('prompts when nothing is selected', () => {
     render(<FlowDetailView flow={null} />);
     expect(screen.getByText(t('detail.selectPrompt'))).toBeTruthy();

@@ -486,9 +486,14 @@ td.empty {
   min-width: 0;
 }
 
-/* The URL takes the space, the reveal toggle keeps its own. */
-.detail-url > strong + * {
+/* The URL takes the space it can and is clipped; the reveal toggle keeps
+   its own so it stays reachable. */
+.detail-url-text {
+  flex: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .detail-url .reveal {
