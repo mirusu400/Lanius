@@ -220,6 +220,8 @@ class ProxyEngine:
         master.addons.add(self.intercept)
         master.addons.add(self.capture)
         master.addons.add(self.repeater)
+        # Not via the running hook: it does not fire for every mode set.
+        self.repeater.attach(master.options)
         self.plugins.addons = master.addons
         self.plugins.load_enabled()
         self._reorder_capture_last()
@@ -518,13 +520,24 @@ class ProxyEngine:
                     f"proxy failed to bind {self.settings.proxy_host}:"
                     f"{self.settings.proxy_port}: {exc or 'startup aborted'}"
                 )
-            if await self._can_connect():
+            if await self._can_connect() and self._addons_ready():
                 return
             await asyncio.sleep(0.05)
         raise ProxyStartError(
             f"proxy did not start listening on {self.settings.proxy_host}:"
             f"{self.settings.proxy_port} within {BIND_TIMEOUT_SECONDS}s"
         )
+
+    def _addons_ready(self) -> bool:
+        """Has mitmproxy run the addons' ``running`` hook yet?
+
+        Accepting a connection is not the same as being ready: the hook
+        that hands Repeater its options runs separately, and with an extra
+        mode configured it can land after the port is already open. Callers
+        that returned at that moment got a Repeater which reported the
+        engine as not running, permanently, until the next restart.
+        """
+        return self.repeater.options is not None
 
     async def _can_connect(self) -> bool:
         try:

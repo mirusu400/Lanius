@@ -19,6 +19,8 @@ from typing import Any, List
 
 import logging
 
+from .. import charset
+
 logger = logging.getLogger(__name__)
 
 from .schema import migrate
@@ -67,10 +69,32 @@ class FlowRecord:
         return data
 
     def detail(self) -> dict[str, Any]:
-        """Full dict with headers and bodies rendered as text-safe values."""
+        """Full dict with headers and bodies rendered as text-safe values.
+
+        Bodies are read with the charset each message declares. Decoding
+        everything as UTF-8 turned a Korean EUC-KR page into replacement
+        characters, which cannot be turned back into the original bytes.
+        """
         data = asdict(self)
-        data["request_body"] = _decode(self.request_body)
-        data["response_body"] = _decode(self.response_body)
+        request_charset = charset.charset_of(
+            _content_type(self.request_headers), self.request_body
+        )
+        response_charset = charset.charset_of(
+            _content_type(self.response_headers), self.response_body
+        )
+        data["request_body"] = (
+            None
+            if self.request_body is None
+            else charset.decode(self.request_body, request_charset)
+        )
+        data["response_body"] = (
+            None
+            if self.response_body is None
+            else charset.decode(self.response_body, response_charset)
+        )
+        # So the UI can say how it was read, and reply in the same charset.
+        data["request_charset"] = request_charset
+        data["response_charset"] = response_charset
         return data
 
 
@@ -93,6 +117,13 @@ def _record_from_export(data: dict[str, Any]) -> "FlowRecord":
         if isinstance(value, list):
             kwargs[key] = [tuple(pair) for pair in value]
     return FlowRecord(**kwargs)
+
+
+def _content_type(headers: list[tuple[str, str]] | None) -> str | None:
+    for name, value in headers or []:
+        if name.lower() == "content-type":
+            return value
+    return None
 
 
 def _decode(body: bytes | None) -> str | None:

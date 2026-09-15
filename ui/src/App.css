@@ -1292,6 +1292,12 @@ pre.body {
   white-space: nowrap;
 }
 
+/* Charset badge in the detail header: informative, not alarming. */
+.pill.charset {
+  margin-left: 8px;
+  opacity: 0.85;
+}
+
 /* An icon inside a button: aligned with the label, and sharing its colour. */
 .button-icon {
   margin-right: 6px;

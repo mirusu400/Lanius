@@ -30,6 +30,10 @@ export interface FlowDetail extends FlowSummary {
   request_body: string | null;
   response_headers: [string, string][] | null;
   response_body: string | null;
+  /** How the bytes were read. Worth showing: a page that is not UTF-8
+   *  looks wrong if the charset was guessed badly. */
+  request_charset?: string;
+  response_charset?: string;
 }
 
 export interface InterceptRules {

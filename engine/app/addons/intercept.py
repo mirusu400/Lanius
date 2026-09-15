@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from mitmproxy import http
 
+from .. import charset
 from ..events import EventBroker
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,14 @@ def paused_payload(flow: http.HTTPFlow, phase: Phase) -> dict[str, Any]:
         "path": req.path,
         "http_version": req.http_version,
         "request_headers": [[k, v] for k, v in req.headers.items(multi=True)],
-        "request_body": (req.raw_content or b"").decode("utf-8", errors="replace"),
+        "request_body": charset.decode_body(
+            req.headers.get("content-type"), req.raw_content
+        ),
+        # The editor sends text back; this is how to turn it into the bytes
+        # the endpoint expects.
+        "request_charset": charset.charset_of(
+            req.headers.get("content-type"), req.raw_content
+        ),
     }
     if flow.response is not None:
         resp = flow.response
@@ -70,8 +78,11 @@ def paused_payload(flow: http.HTTPFlow, phase: Phase) -> dict[str, Any]:
             status_code=resp.status_code,
             reason=resp.reason,
             response_headers=[[k, v] for k, v in resp.headers.items(multi=True)],
-            response_body=(resp.raw_content or b"").decode(
-                "utf-8", errors="replace"
+            response_body=charset.decode_body(
+                resp.headers.get("content-type"), resp.raw_content
+            ),
+            response_charset=charset.charset_of(
+                resp.headers.get("content-type"), resp.raw_content
             ),
         )
     return payload
@@ -191,7 +202,12 @@ def _replace_headers(target: Any, headers: list[list[str]]) -> None:
 
 
 def _set_body(message: Any, body: str) -> None:
-    raw = body.encode("utf-8")
+    # Back to the charset this message declares. Writing UTF-8 into a
+    # EUC-KR request delivers mojibake to the server, and the header would
+    # then be lying about its own body.
+    raw = charset.encode(
+        body, charset.charset_of(message.headers.get("content-type"), None)
+    )
     message.content = raw
     if "content-length" in message.headers:
         message.headers["content-length"] = str(len(raw))

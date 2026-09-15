@@ -95,10 +95,23 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
       ? (detail?.request_headers ?? null)
       : (detail?.response_headers ?? null);
 
+  const shownCharset =
+    pane === 'response' ? detail?.response_charset : detail?.request_charset;
+  // Only when it is not the default, so the common case stays quiet.
+  const charsetLabel =
+    shownCharset && shownCharset !== 'utf-8'
+      ? t('detail.charset', { charset: shownCharset })
+      : null;
+
   return (
     <div className="flow-detail">
       <div className="detail-url mono" title={formatUrl(flow)}>
         <strong>{flow.method}</strong> {formatUrl(flow)}
+        {charsetLabel && (
+          // Worth saying: a page that is not UTF-8 is only readable
+          // because it was decoded with the charset it declared.
+          <span className="pill charset">{charsetLabel}</span>
+        )}
       </div>
       <div className="detail-tabs">
         <button

@@ -18,6 +18,7 @@ from mitmproxy.addons.clientplayback import ReplayHandler
 from mitmproxy.connection import Client, Server
 from mitmproxy.options import Options
 
+from .. import charset
 from ..db.store import FlowRecord, FlowStore
 
 logger = logging.getLogger(__name__)
@@ -50,10 +51,22 @@ def build_flow(
     client = Client(peername=LOCAL_CLIENT, sockname=LOCAL_CLIENT, timestamp_start=time.time())
     server = Server(address=(parts.hostname, port))
     flow = http.HTTPFlow(client, server)
+    # Validate before reading anything out of them, so a malformed entry
+    # is reported as such rather than failing to unpack somewhere else.
+    for item in headers or []:
+        if len(item) != 2:
+            raise RepeaterError(f"invalid header entry: {item!r}")
+
+    # Encode with the charset this request declares, not always UTF-8:
+    # sending UTF-8 bytes to an EUC-KR endpoint delivers mojibake.
+    content_type = next(
+        (value for name, value in (headers or []) if name.lower() == "content-type"),
+        None,
+    )
     flow.request = http.Request.make(
         method.upper(),
         url,
-        body.encode("utf-8"),
+        charset.encode(body, charset.charset_of(content_type, None)),
     )
     flow.request.path = path
     flow.request.http_version = http_version
@@ -62,11 +75,19 @@ def build_flow(
         # over the one derived from the URL).
         flow.request.headers.clear()
         for item in headers:
-            if len(item) != 2:
-                raise RepeaterError(f"invalid header entry: {item!r}")
             flow.request.headers.add(item[0], item[1])
     if not flow.request.headers.get("host"):
         flow.request.headers["host"] = parts.netloc or parts.hostname
+
+    # Clearing the headers above drops the Content-Length that Request.make
+    # set, so a body was written but never announced and the server read
+    # none of it. Re-derive it from the bytes actually being sent, which is
+    # also what keeps it right after the body was edited or re-encoded.
+    raw = flow.request.raw_content or b""
+    if raw:
+        flow.request.headers["content-length"] = str(len(raw))
+    elif "content-length" in flow.request.headers:
+        flow.request.headers["content-length"] = "0"
     return flow
 
 
@@ -81,6 +102,17 @@ class RepeaterAddon:
         from mitmproxy import ctx
 
         self.options = ctx.options
+
+    def attach(self, options: Options) -> None:
+        """Hand over the options without waiting for the hook.
+
+        mitmproxy only runs ``running`` once the whole addon chain has
+        started, and with a local-capture mode configured that never
+        happened: the port was open and traffic flowed, but Repeater kept
+        reporting the engine as not running. The options are known when
+        the master is built, so pass them in rather than waiting.
+        """
+        self.options = options
 
     async def send(
         self, flow: http.HTTPFlow, timeout: float = DEFAULT_TIMEOUT
@@ -113,6 +145,13 @@ def _to_record(flow: http.HTTPFlow, started: float) -> FlowRecord:
     return record
 
 
+def _content_type(headers: list[tuple[str, str]] | None) -> str | None:
+    for name, value in headers or []:
+        if name.lower() == "content-type":
+            return value
+    return None
+
+
 def render_raw(record: FlowRecord) -> dict[str, Any]:
     """Response view for the Repeater UI."""
     return {
@@ -120,7 +159,14 @@ def render_raw(record: FlowRecord) -> dict[str, Any]:
         "status_code": record.status_code,
         "reason": record.reason,
         "headers": record.response_headers or [],
-        "body": (record.response_body or b"").decode("utf-8", errors="replace"),
+        "body": charset.decode_body(
+            _content_type(record.response_headers), record.response_body
+        ),
+        # What the bytes were read as, so the UI can say so and a reply can
+        # be encoded the same way.
+        "charset": charset.charset_of(
+            _content_type(record.response_headers), record.response_body
+        ),
         "size": record.response_size,
         "duration_ms": record.duration_ms,
         "error": record.error,
