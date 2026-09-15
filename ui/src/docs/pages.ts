@@ -27,6 +27,52 @@ export interface DocPage {
 
 const en: DocPage[] = [
   {
+    id: 'appearance',
+    title: 'Appearance',
+    summary: 'Theme, and the fonts used for the interface and the editors.',
+    sections: [
+      {
+        heading: 'Theme',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Dark, light, or follow the system. Following the system is the default, so Lanius changes with the rest of your desktop, including when it switches at sunset.',
+          },
+          {
+            kind: 'text',
+            body: 'The light theme is a separate palette rather than an inverted dark one: the same colours at dark-theme saturation are hard to read on white, and status codes in particular have to stay distinguishable.',
+          },
+        ],
+      },
+      {
+        heading: 'Fonts',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Two settings, because they do different jobs. The interface font covers labels, tabs and menus. The editor font covers the request and response editors, the history table and anything else showing raw HTTP, where a monospace font keeps columns lined up.',
+          },
+          {
+            kind: 'text',
+            body: 'Sizes are adjustable independently. A preview below the controls shows the editor font at the chosen size, so you can see the effect without opening a request.',
+          },
+          {
+            kind: 'note',
+            body: 'Only fonts installed on this machine can be used. If a choice is not installed, Lanius says so rather than silently falling back and leaving you wondering why nothing changed.',
+          },
+        ],
+      },
+      {
+        heading: 'Where it is kept',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'These choices belong to this machine rather than to a project, so they are not part of an export and do not travel with a shared project file. Reset to defaults puts everything back.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: 'browser',
     title: 'Browser',
     summary: 'Open a browser that is already pointed at the proxy.',
@@ -402,6 +448,52 @@ const en: DocPage[] = [
 ];
 
 const ko: DocPage[] = [
+  {
+    id: 'appearance',
+    title: '모양',
+    summary: '테마와, 인터페이스 및 편집기에 쓰이는 글꼴입니다.',
+    sections: [
+      {
+        heading: '테마',
+        blocks: [
+          {
+            kind: 'text',
+            body: '다크, 라이트, 또는 시스템 설정 따르기를 고를 수 있습니다. 기본값은 시스템 따르기라, 해가 진 뒤 자동으로 바뀌는 것을 포함해 데스크톱 전체와 함께 변합니다.',
+          },
+          {
+            kind: 'text',
+            body: '라이트 테마는 다크를 뒤집은 것이 아니라 별도의 색 구성입니다. 다크 테마의 채도를 흰 배경에 그대로 쓰면 읽기 어렵고, 특히 상태 코드는 서로 구분되어야 하기 때문입니다.',
+          },
+        ],
+      },
+      {
+        heading: '글꼴',
+        blocks: [
+          {
+            kind: 'text',
+            body: '역할이 달라 두 가지로 나눠 두었습니다. 인터페이스 글꼴은 라벨, 탭, 메뉴에 쓰입니다. 편집기 글꼴은 요청과 응답 편집기, 기록 표처럼 원본 HTTP를 보여주는 곳에 쓰입니다. 그런 곳은 고정폭 글꼴이라야 열이 맞습니다.',
+          },
+          {
+            kind: 'text',
+            body: '크기는 각각 따로 조절합니다. 조절하는 자리 아래에 미리보기가 있어, 요청을 열어보지 않아도 결과를 바로 확인할 수 있습니다.',
+          },
+          {
+            kind: 'note',
+            body: '이 컴퓨터에 설치된 글꼴만 쓸 수 있습니다. 설치되어 있지 않으면 조용히 대체하지 않고 그 사실을 알려줍니다. 아무것도 바뀌지 않은 이유를 궁금해하지 않도록 하기 위해서입니다.',
+          },
+        ],
+      },
+      {
+        heading: '어디에 저장되나',
+        blocks: [
+          {
+            kind: 'text',
+            body: '이 설정은 프로젝트가 아니라 이 컴퓨터에 속합니다. 따라서 내보내기에 포함되지 않고, 프로젝트 파일을 주고받아도 따라가지 않습니다. 기본값으로 되돌리기로 전부 원래대로 돌릴 수 있습니다.',
+          },
+        ],
+      },
+    ],
+  },
   {
     id: 'browser',
     title: '브라우저',

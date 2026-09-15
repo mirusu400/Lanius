@@ -1,13 +1,108 @@
-:root {
+/* Colours are named for their role, not their value, so a theme is a set
+   of values rather than a rewrite of the stylesheet. */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
   --bg: #1a1c20;
   --bg-alt: #22252b;
   --bg-row: #1f2228;
+  --bg-sunken: #16181c;
+  --bg-hover: #2b2f36;
   --border: #33373f;
+  --border-soft: #26292f;
   --fg: #dfe3ea;
   --muted: #8b93a1;
+  --fg-disabled: #555b66;
   --accent: #e2703a;
   --accent-dim: #7a3d1f;
-  color-scheme: dark;
+  --on-accent: #14161a;
+  --accent-wash: rgba(226, 112, 58, 0.07);
+  --accent-wash-strong: rgba(226, 112, 58, 0.2);
+  --accent2: #bb8fce;
+  --accent2-wash: rgba(155, 89, 182, 0.18);
+
+  --ok: #6fcf6f;
+  --ok-bright: #8fdc8f;
+  --ok-soft: #6fcf97;
+  --ok-strong: #4caf50;
+  --ok-border: #2f6b45;
+  --ok-wash: rgba(111, 207, 111, 0.18);
+  --warn: #e0a800;
+  --warn-dim: #c8913c;
+  --danger: #e74c3c;
+  --danger-dim: #c0392b;
+  --danger-soft: #e07a7a;
+  --danger-bright: #ff9c94;
+  --danger-muted: #b55353;
+  --danger-deep: #7a3030;
+  --danger-bg: #40211f;
+  --danger-border: #6d2e2a;
+  --danger-wash: rgba(231, 76, 60, 0.18);
+  --info: #5dade2;
+  --info-soft: #6fa8dc;
+  --info-wash: rgba(52, 152, 219, 0.18);
+  --chart-2xx: #4f9d69;
+  --chart-3xx: #4a7fb5;
+  --shadow: rgba(0, 0, 0, 0.45);
+}
+
+/* Typography, adjustable from Settings. Defaults match what the app
+   looked like before these existed, so leaving them alone changes
+   nothing. */
+:root {
+  --font-ui: -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  --font-size-ui: 13px;
+  --font-size-mono: 12px;
+}
+
+/* Light is a separate palette rather than an inverted dark one: the same
+   hues at dark-theme saturation are unreadable on white. */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f6f7f9;
+  --bg-alt: #ffffff;
+  --bg-row: #fbfbfc;
+  --bg-sunken: #f0f1f4;
+  --bg-hover: #e8eaef;
+  --border: #d2d6dd;
+  --border-soft: #e4e7ec;
+  --fg: #1f232a;
+  --muted: #5f6772;
+  --fg-disabled: #a4abb6;
+  --accent: #c2521c;
+  --accent-dim: #f3d9cb;
+  --on-accent: #ffffff;
+  --accent-wash: rgba(194, 82, 28, 0.08);
+  --accent-wash-strong: rgba(194, 82, 28, 0.18);
+  --accent2: #7d3c98;
+  --accent2-wash: rgba(125, 60, 152, 0.12);
+
+  --ok: #1e7a34;
+  --ok-bright: #17692c;
+  --ok-soft: #1e7a4a;
+  --ok-strong: #1e7a34;
+  --ok-border: #9ed3ae;
+  --ok-wash: rgba(30, 122, 52, 0.12);
+  --warn: #8a6100;
+  --warn-dim: #9a7526;
+  --danger: #c0271a;
+  --danger-dim: #9f1f14;
+  --danger-soft: #b23a2c;
+  --danger-bright: #a8231a;
+  --danger-muted: #c4695f;
+  --danger-deep: #f0c8c3;
+  --danger-bg: #fdecea;
+  --danger-border: #f2bcb5;
+  --danger-wash: rgba(192, 39, 26, 0.12);
+  --info: #1c6ea4;
+  --info-soft: #1a5f8a;
+  --info-wash: rgba(28, 110, 164, 0.12);
+  --chart-2xx: #2f8a52;
+  --chart-3xx: #2f6fa8;
+  --shadow: rgba(15, 20, 30, 0.18);
 }
 
 * {
@@ -24,15 +119,29 @@ body,
 body {
   background: var(--bg);
   color: var(--fg);
-  font:
-    13px/1.45 -apple-system,
-    'Segoe UI',
-    sans-serif;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-ui);
+  line-height: 1.45;
 }
 
 .mono {
-  font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-mono);
+}
+
+/* The editors and the bodies they show: the text a user actually reads
+   for long stretches, so they follow the monospace setting too. */
+.intercept-editor,
+.repeater-editor,
+.repeater-response,
+.intruder-editor,
+.scope-editor,
+.decoder-input,
+.decoder-output,
+pre.body,
+.flow-table {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-mono);
 }
 
 .muted {
@@ -170,8 +279,8 @@ body {
 }
 
 .filter-bar button.danger:hover {
-  border-color: #c0392b;
-  color: #e74c3c;
+  border-color: var(--danger-dim);
+  color: var(--danger);
 }
 
 .spacer {
@@ -184,19 +293,19 @@ body {
 }
 
 .conn-open {
-  color: #4caf50;
+  color: var(--ok-strong);
 }
 .conn-connecting {
-  color: #e0a800;
+  color: var(--warn);
 }
 .conn-closed {
-  color: #e74c3c;
+  color: var(--danger);
 }
 
 .banner.error {
-  background: #40211f;
-  border-bottom: 1px solid #6d2e2a;
-  color: #ff9c94;
+  background: var(--danger-bg);
+  border-bottom: 1px solid var(--danger-border);
+  color: var(--danger-bright);
   padding: 6px 10px;
 }
 
@@ -233,7 +342,7 @@ body {
 
 .flow-table td {
   padding: 4px 8px;
-  border-bottom: 1px solid #26292f;
+  border-bottom: 1px solid var(--border-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -244,7 +353,7 @@ body {
 }
 
 .flow-table tbody tr:hover {
-  background: #2b2f36;
+  background: var(--bg-hover);
   cursor: pointer;
 }
 
@@ -281,16 +390,16 @@ td.empty {
 }
 
 .status-2xx {
-  color: #6fcf6f;
+  color: var(--ok);
 }
 .status-3xx {
-  color: #6fa8dc;
+  color: var(--info-soft);
 }
 .status-4xx {
-  color: #e0a800;
+  color: var(--warn);
 }
 .status-5xx {
-  color: #e74c3c;
+  color: var(--danger);
 }
 .status-1xx,
 .status-pending {
@@ -371,7 +480,7 @@ td.empty {
 .headers td {
   padding: 2px 6px;
   vertical-align: top;
-  border-bottom: 1px solid #26292f;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .hname {
@@ -385,7 +494,7 @@ td.empty {
 }
 
 pre.body {
-  background: #16181c;
+  background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 8px;
@@ -424,7 +533,7 @@ pre.body {
 .badge {
   background: var(--accent);
   border-radius: 8px;
-  color: #14161a;
+  color: var(--on-accent);
   font-size: 10px;
   font-weight: 700;
   margin-left: 6px;
@@ -474,20 +583,20 @@ pre.body {
 }
 
 .intercept-controls button:disabled {
-  color: #555b66;
+  color: var(--fg-disabled);
   cursor: default;
 }
 
 .intercept-controls button.toggle.on {
   background: var(--accent);
   border-color: var(--accent);
-  color: #14161a;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
 .intercept-controls button.danger:not(:disabled):hover {
-  border-color: #c0392b;
-  color: #e74c3c;
+  border-color: var(--danger-dim);
+  color: var(--danger);
 }
 
 .queue {
@@ -496,7 +605,7 @@ pre.body {
 
 .intercept-editor {
   flex: 1;
-  background: #16181c;
+  background: var(--bg-sunken);
   border: none;
   border-top: 1px solid var(--border);
   color: var(--fg);
@@ -549,7 +658,7 @@ pre.body {
 }
 
 .repeater-tabs .close:hover {
-  color: #e74c3c;
+  color: var(--danger);
 }
 
 .repeater-tabs .new-tab {
@@ -579,7 +688,7 @@ pre.body {
   background: var(--accent);
   border: none;
   border-radius: 3px;
-  color: #14161a;
+  color: var(--on-accent);
   cursor: pointer;
   font-weight: 600;
   padding: 5px 18px;
@@ -603,7 +712,7 @@ pre.body {
 .repeater-editor,
 .repeater-response {
   flex: 1;
-  background: #16181c;
+  background: var(--bg-sunken);
   color: var(--fg);
   margin: 0;
   overflow: auto;
@@ -665,14 +774,14 @@ pre.body {
 }
 
 .site {
-  border-bottom: 1px solid #26292f;
+  border-bottom: 1px solid var(--border-soft);
   cursor: pointer;
   padding: 8px 10px;
   position: relative;
 }
 
 .site:hover {
-  background: #2b2f36;
+  background: var(--bg-hover);
 }
 
 .site.selected {
@@ -688,7 +797,7 @@ pre.body {
 .in-scope {
   background: var(--accent);
   border-radius: 3px;
-  color: #14161a;
+  color: var(--on-accent);
   font-size: 10px;
   margin-left: 6px;
   padding: 1px 5px;
@@ -740,7 +849,7 @@ pre.body {
 }
 
 .tree-row:hover {
-  background: #2b2f36;
+  background: var(--bg-hover);
 }
 
 .twisty {
@@ -765,7 +874,7 @@ pre.body {
 }
 
 .param {
-  background: #2b2f36;
+  background: var(--bg-hover);
   border-radius: 3px;
   margin-right: 4px;
   padding: 1px 5px;
@@ -818,11 +927,11 @@ pre.body {
 }
 
 .scope-table td.incl {
-  color: #6fcf6f;
+  color: var(--ok);
 }
 
 .scope-table td.excl {
-  color: #e0a800;
+  color: var(--warn);
 }
 
 .scope-table button.danger {
@@ -835,8 +944,8 @@ pre.body {
 }
 
 .scope-table button.danger:hover {
-  border-color: #c0392b;
-  color: #e74c3c;
+  border-color: var(--danger-dim);
+  color: var(--danger);
 }
 
 /* --- intruder --- */
@@ -876,7 +985,7 @@ pre.body {
 .intruder-controls button.send {
   background: var(--accent);
   border-color: var(--accent);
-  color: #14161a;
+  color: var(--on-accent);
   font-weight: 600;
   padding: 5px 16px;
 }
@@ -910,7 +1019,7 @@ pre.body {
 }
 
 .intruder-editor {
-  background: #16181c;
+  background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
@@ -929,7 +1038,7 @@ pre.body {
 }
 
 .payload-input {
-  background: #16181c;
+  background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
@@ -992,7 +1101,7 @@ pre.body {
 .comparer-controls button.send {
   background: var(--accent);
   border-color: var(--accent);
-  color: #14161a;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -1012,7 +1121,7 @@ pre.body {
 
 .decoder-body textarea,
 .chain-output {
-  background: #16181c;
+  background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
@@ -1051,7 +1160,7 @@ pre.body {
 }
 
 .comparer-inputs textarea {
-  background: #16181c;
+  background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
@@ -1072,18 +1181,18 @@ pre.body {
 }
 
 .diff-insert {
-  background: rgba(111, 207, 111, 0.18);
-  color: #8fdc8f;
+  background: var(--ok-wash);
+  color: var(--ok-bright);
 }
 
 .diff-delete {
-  background: rgba(231, 76, 60, 0.18);
-  color: #ff9c94;
+  background: var(--danger-wash);
+  color: var(--danger-bright);
   text-decoration: line-through;
 }
 
 .diff-replace {
-  background: rgba(226, 112, 58, 0.2);
+  background: var(--accent-wash-strong);
   color: var(--accent);
 }
 
@@ -1132,7 +1241,7 @@ pre.body {
 }
 
 .plugin-error-text {
-  color: #ff9c94;
+  color: var(--danger-bright);
   font-size: 11px;
   margin-top: 4px;
   white-space: pre-wrap;
@@ -1254,7 +1363,7 @@ pre.body {
 }
 
 .intercept-queue button:hover {
-  background: #2b2f36;
+  background: var(--bg-hover);
   cursor: pointer;
 }
 
@@ -1270,13 +1379,13 @@ pre.body {
 }
 
 .intercept-queue .phase-request {
-  background: rgba(52, 152, 219, 0.18);
-  color: #5dade2;
+  background: var(--info-wash);
+  color: var(--info);
 }
 
 .intercept-queue .phase-response {
-  background: rgba(155, 89, 182, 0.18);
-  color: #bb8fce;
+  background: var(--accent2-wash);
+  color: var(--accent2);
 }
 
 .intercept-queue .method {
@@ -1296,6 +1405,17 @@ pre.body {
 .pill.charset {
   margin-left: 8px;
   opacity: 0.85;
+}
+
+/* Shows the editor font at the chosen size, so the effect of a change is
+   visible without opening a request. */
+.appearance-preview {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin: 10px 0;
+  overflow-x: auto;
+  padding: 10px 12px;
 }
 
 /* An icon inside a button: aligned with the label, and sharing its colour. */
@@ -1365,13 +1485,13 @@ pre.body {
 }
 
 .ca-link.disabled {
-  color: #555b66;
+  color: var(--fg-disabled);
   cursor: not-allowed;
   pointer-events: none;
 }
 
 .settings-code {
-  background: #16181c;
+  background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: 3px;
   overflow: auto;
@@ -1419,7 +1539,7 @@ pre.body {
 }
 
 .tree-count {
-  background: #2b2f36;
+  background: var(--bg-hover);
   border-radius: 8px;
   color: var(--muted);
   font-size: 10px;
@@ -1526,13 +1646,13 @@ pre.body {
 }
 
 .pill.ok {
-  border-color: #2f6b45;
-  color: #6fcf97;
+  border-color: var(--ok-border);
+  color: var(--ok-soft);
 }
 
 .pill.bad {
-  border-color: #7a3030;
-  color: #e07a7a;
+  border-color: var(--danger-deep);
+  color: var(--danger-soft);
 }
 
 .pill.warn {
@@ -1587,7 +1707,7 @@ pre.body {
 
 .dash-note.bad,
 .dash-table .bad {
-  color: #e07a7a;
+  color: var(--danger-soft);
 }
 
 .dash-grid {
@@ -1672,19 +1792,19 @@ pre.body {
 }
 
 .dash-bar.s2xx {
-  background: #4f9d69;
+  background: var(--chart-2xx);
 }
 
 .dash-bar.s3xx {
-  background: #4a7fb5;
+  background: var(--chart-3xx);
 }
 
 .dash-bar.s4xx {
-  background: #c8913c;
+  background: var(--warn-dim);
 }
 
 .dash-bar.s5xx {
-  background: #b55353;
+  background: var(--danger-muted);
 }
 
 .dash-bar-value {
@@ -1788,7 +1908,7 @@ pre.body {
   border: 1px solid var(--accent-dim);
   border-left-width: 3px;
   border-radius: 4px;
-  background: rgba(226, 112, 58, 0.07);
+  background: var(--accent-wash);
 }
 
 .dash-alert strong {
@@ -1839,7 +1959,7 @@ pre.body {
   border-radius: 4px;
   padding: 10px 12px;
   margin: 8px 0;
-  background: rgba(226, 112, 58, 0.07);
+  background: var(--accent-wash);
 }
 
 .banner.warn strong {
@@ -2005,7 +2125,7 @@ pre.body {
 .docs-note {
   padding: 10px 12px;
   border-left: 3px solid var(--accent-dim);
-  background: rgba(226, 112, 58, 0.06);
+  background: var(--accent-wash);
   border-radius: 0 4px 4px 0;
   color: var(--muted);
 }
@@ -2049,7 +2169,7 @@ pre.body {
   background: var(--bg-alt);
   border: 1px solid var(--border);
   border-radius: 5px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 24px var(--shadow);
   display: flex;
   flex-direction: column;
 }
@@ -2175,11 +2295,11 @@ pre.body {
 }
 
 .rule-list input.invalid {
-  border-color: #b55353;
+  border-color: var(--danger-muted);
 }
 
 .field-error {
-  color: #e07a7a;
+  color: var(--danger-soft);
   font-size: 12px;
   margin: 4px 0;
 }

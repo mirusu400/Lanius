@@ -139,6 +139,17 @@ The API port can also be moved, though only before launching:
 LANIUS_API_PORT=8091 open -a Lanius
 ```
 
+### Appearance
+
+**Settings > Appearance** has a dark and a light theme, and follows the system
+by default. The interface font and the editor font are set separately, with
+their own sizes, since one is for labels and the other for raw HTTP where a
+monospace font keeps columns lined up. A preview shows the result as you
+change it.
+
+These belong to the machine rather than the project, so they are not part of
+an export.
+
 ### Projects
 
 Captured traffic, your scope and the tabs you have open are saved as you

@@ -71,10 +71,20 @@ describe('DocsTab', () => {
     expect(body).toContain('Mitmproxy Redirector');
   });
 
-  it('explains the browser, including what it does not cover', () => {
-    // The browser page opens the docs. It has to say Firefox is out and
-    // why, or a Firefox user is left wondering what they did wrong.
+  it('says appearance settings stay on this machine', () => {
+    // A user who exports a project and finds their theme did not travel
+    // should be able to find out why. The appearance page opens the docs.
     render(<DocsTab />);
+    const body = document.querySelector('.docs-body')!.textContent ?? '';
+    const claim = TEST_LOCALE === 'ko' ? '내보내기에 포함되지 않' : 'not part of an export';
+    expect(body).toContain(claim);
+  });
+
+  it('explains the browser, including what it does not cover', async () => {
+    // It has to say Firefox is out and why, or a Firefox user is left
+    // wondering what they did wrong.
+    render(<DocsTab />);
+    await openPage('Browser', '브라우저');
     const body = document.querySelector('.docs-body')!.textContent ?? '';
     expect(body).toContain('Firefox');
     expect(body).toContain('localhost');
