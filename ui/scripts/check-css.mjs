@@ -35,6 +35,22 @@ if (fixed.length > 0) {
   problems.push(`font sizes that ignore the setting: ${fixed.join(', ')}`);
 }
 
+// Tab rows sit on a bottom border, so a button whose height works out to
+// a fraction of a pixel loses its last row to rounding when the row has
+// no padding under it. WebKit is stricter about this than Chrome, which
+// is why it showed up in the desktop build first.
+const subtabs = css.match(/(^|\})\s*\.subtabs\s*\{([^}]*)\}/m);
+if (!subtabs || /padding:[^;]*\s0(px)?;/.test(subtabs[2])) {
+  problems.push('.subtabs has no room under its buttons, so they get clipped');
+}
+
+// A horizontal scroller clips vertically too, which takes the underline
+// off the active tab.
+const tabs = css.match(/(^|\})\s*\.tabs\s*\{([^}]*)\}/m);
+if (tabs && /overflow-x:\s*auto/.test(tabs[2]) && !/overflow-y:\s*hidden/.test(tabs[2])) {
+  problems.push('.tabs scrolls sideways without saying what happens vertically');
+}
+
 if (problems.length > 0) {
   for (const problem of problems) console.error(`css: ${problem}`);
   process.exit(1);

@@ -235,12 +235,18 @@ pre.body,
 
 .tabs {
   display: flex;
+  align-items: stretch;
   gap: 2px;
   /* With ten tabs the strip outgrows a narrow window; scroll it rather
      than pushing the whole page sideways. */
   overflow-x: auto;
+  /* Only sideways. A horizontal scroller also clips vertically, which
+     took the underline off the active tab at larger font sizes. */
+  overflow-y: hidden;
   scrollbar-width: none;
   min-width: 0;
+  /* Room for the tallest tab, so nothing is cut off by rounding. */
+  min-height: 0;
 }
 
 .tabs::-webkit-scrollbar {
@@ -802,21 +808,38 @@ pre.body {
 }
 
 /* --- sub tabs (Proxy: Intercept / History) --- */
+/* A row of tabs that sit on the bottom border, folder style.
+ *
+ * The bar used to have no bottom padding, so a tab's lower edge landed
+ * exactly on the container's. A button whose height works out to a
+ * fraction of a pixel, which it does at most font sizes, then lost its
+ * last row of pixels to rounding, and the effect is worse in the WebKit
+ * webview the desktop build uses than in Chrome. There is a pixel of
+ * room now, and the row is tall enough for the tallest line it holds. */
 .subtabs {
   display: flex;
+  align-items: flex-end;
   gap: 2px;
-  padding: 6px 8px 0;
+  padding: 6px 8px 1px;
   background: var(--bg-alt);
   border-bottom: 1px solid var(--border);
+  /* Never smaller than the content, whatever the flex context does. */
+  flex: none;
 }
 
 .subtabs button {
   background: transparent;
   border: 1px solid transparent;
-  border-bottom: none;
+  /* Transparent rather than none: dropping the border made the box a
+     pixel shorter at the bottom than the top, which is the asymmetry
+     that pushed the text into the edge. */
+  border-bottom-color: transparent;
   border-radius: 3px 3px 0 0;
   color: var(--muted);
   cursor: pointer;
+  /* Korean glyphs are taller than Latin ones, and 1.4 left nothing to
+     spare for them. */
+  line-height: 1.5;
 }
 
 .subtabs button.active {
