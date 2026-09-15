@@ -20,7 +20,12 @@ export function InterceptPanel({
   onResolved,
 }: Props) {
   const t = useT();
-  const current = paused[0] ?? null;
+  // Which held request is being shown. Burp lets you pick from the queue
+  // rather than only ever seeing the oldest, which matters once several
+  // are waiting and the one you care about is not first.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const current =
+    paused.find((flow) => flow.id === selectedId) ?? paused[0] ?? null;
   const [text, setText] = useState('');
   const [error, setError] = useState<Message | null>(null);
   const original = useMemo(
@@ -32,6 +37,14 @@ export function InterceptPanel({
     setText(original);
     setError(null);
   }, [original, current?.id]);
+
+  // Follow the queue: when the shown request is forwarded or dropped, fall
+  // back to whatever is at the front rather than showing an empty pane.
+  useEffect(() => {
+    if (selectedId && !paused.some((flow) => flow.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [paused, selectedId]);
 
   const act = async (action: 'forward' | 'drop') => {
     if (!current) return;
@@ -102,6 +115,33 @@ export function InterceptPanel({
         </button>
       </div>
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
+      {paused.length > 1 && (
+        <ul className="intercept-queue" aria-label={t('intercept.queueLabel')}>
+          {paused.map((flow) => (
+            <li key={flow.id}>
+              <button
+                type="button"
+                className={flow.id === current?.id ? 'active' : undefined}
+                onClick={() => setSelectedId(flow.id)}
+              >
+                <span className={`phase phase-${flow.phase}`}>
+                  {flow.phase === 'request'
+                    ? t('intercept.phaseRequest')
+                    : t('intercept.phaseResponse')}
+                </span>
+                <span className="method mono">{flow.method}</span>
+                <span className="target mono" title={`${flow.host}${flow.path}`}>
+                  {flow.host}
+                  {flow.path}
+                </span>
+                {flow.status_code != null && (
+                  <span className="mono muted">{flow.status_code}</span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {current ? (
         <>
           <div className="detail-url mono">

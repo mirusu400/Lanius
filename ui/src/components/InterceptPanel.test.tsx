@@ -1,5 +1,5 @@
 /** Renders the real InterceptPanel and asserts the edit/forward/drop flow. */
-import {cleanup, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor, within } from '@testing-library/react';
 import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -128,6 +128,87 @@ describe('InterceptPanel', () => {
     expect(body.method).toBe('POST');
     expect(body.path).toBe('/hacked');
     expect(body.request_body).toBe('x=1');
+  });
+
+  it('lists the queue and shows whichever is picked', async () => {
+    // With several held, only the first was ever shown, so a request
+    // further down the queue could not be read or edited at all.
+    const user = userEvent.setup();
+    const second: PausedFlow = {
+      ...pausedFlow,
+      id: 'p2',
+      method: 'POST',
+      path: '/second',
+      request_body: 'from the second',
+    };
+    const third: PausedFlow = {
+      ...pausedFlow,
+      id: 'p3',
+      phase: 'response',
+      path: '/third',
+      status_code: 500,
+    };
+    render(
+      <InterceptPanel
+        rules={rules}
+        paused={[pausedFlow, second, third]}
+        onToggle={() => {}}
+        onResolved={() => {}}
+      />,
+    );
+
+    const queue = screen.getByLabelText(t('intercept.queueLabel'));
+    expect(within(queue).getAllByRole('button')).toHaveLength(3);
+    // The first is shown until another is chosen.
+    expect(editorEl().value).toContain('/original');
+
+    await user.click(within(queue).getByRole('button', { name: /second/ }));
+    await waitFor(() => expect(editorEl().value).toContain('from the second'));
+    expect(editorEl().value).toContain('/second');
+
+    // Responses are in the queue too, and marked as such.
+    await user.click(within(queue).getByRole('button', { name: /third/ }));
+    await waitFor(() => expect(editorEl().value).toContain('500'));
+  });
+
+  it('acts on the request being shown, not just the first', async () => {
+    // Forwarding the wrong flow would be worse than not offering the list.
+    const user = userEvent.setup();
+    const second: PausedFlow = { ...pausedFlow, id: 'p2', path: '/second' };
+    render(
+      <InterceptPanel
+        rules={rules}
+        paused={[pausedFlow, second]}
+        onToggle={() => {}}
+        onResolved={() => {}}
+      />,
+    );
+
+    const queue = screen.getByLabelText(t('intercept.queueLabel'));
+    await user.click(within(queue).getByRole('button', { name: /second/ }));
+    await waitFor(() => expect(editorEl().value).toContain('/second'));
+
+    await user.click(screen.getByRole('button', { name: t('intercept.forward') }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.url.includes('/api/intercept/p2/forward'))).toBe(
+        true,
+      ),
+    );
+    expect(calls.some((c) => c.url.includes('/api/intercept/p1/forward'))).toBe(
+      false,
+    );
+  });
+
+  it('does not show a queue for a single held request', () => {
+    render(
+      <InterceptPanel
+        rules={rules}
+        paused={[pausedFlow]}
+        onToggle={() => {}}
+        onResolved={() => {}}
+      />,
+    );
+    expect(screen.queryByLabelText(t('intercept.queueLabel'))).toBeNull();
   });
 
   it('drops the paused flow', async () => {
