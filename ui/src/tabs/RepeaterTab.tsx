@@ -5,6 +5,7 @@ import {
   emptyTab,
   renderResponseText,
   toSendPayload,
+  trimResponse,
   type RepeaterTab,
 } from './repeaterModel';
 import {
@@ -56,7 +57,7 @@ export function RepeaterTabView() {
     try {
       const payload = toSendPayload(active.url, active.text);
       const response = await sendRepeaterRequest(payload);
-      updateTab(active.id, { response, sending: false });
+      updateTab(active.id, { response: trimResponse(response), sending: false });
     } catch (err) {
       updateTab(active.id, { sending: false, error: errorMessage(err) });
     }
@@ -168,7 +169,9 @@ export function RepeaterTabView() {
             {editorMenu.element}
             <pre className="repeater-response mono">
               {active.response
-                ? renderResponseText(active.response)
+                ? renderResponseText(active.response, (count) =>
+                    t('repeater.bodyTruncated', { count: String(count) }),
+                  )
                 : t('repeater.noResponse')}
             </pre>
           </div>

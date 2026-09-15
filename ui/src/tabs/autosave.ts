@@ -34,12 +34,20 @@ export function autosave<T>(
       loaded = true;
     });
 
+  // What was last written. Stores emit on every change, including ones
+  // that leave the saved shape identical, and the payload can be hundreds
+  // of kilobytes when a response body is large.
+  let lastSent: string | undefined;
+
   const unsubscribe = subscribe((value) => {
     // Ignore the notification the subscription itself fires, and anything
     // before the saved state has been read, which would overwrite it.
     if (!loaded) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
+      const encoded = JSON.stringify(value);
+      if (encoded === lastSent) return;
+      lastSent = encoded;
       void putWorkspace(key, value).catch(() => undefined);
     }, SAVE_DELAY_MS);
   });

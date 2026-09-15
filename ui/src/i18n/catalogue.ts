@@ -96,6 +96,7 @@ const en = {
   // --- repeater ---
   'repeater.newRequest': 'New request',
   'repeater.send': 'Send',
+  'repeater.bodyTruncated': '[{count} more characters not shown]',
   'repeater.sending': 'Sending…',
   'repeater.targetPlaceholder': 'http://host:port',
   'repeater.request': 'request',
@@ -496,6 +497,7 @@ const ko: Catalogue = {
 
   'repeater.newRequest': '새 요청',
   'repeater.send': 'Send',
+  'repeater.bodyTruncated': '[{count}자 더 있음, 표시 생략]',
   'repeater.sending': '전송 중…',
   'repeater.targetPlaceholder': 'http://host:port',
   'repeater.request': 'request',

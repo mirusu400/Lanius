@@ -13,6 +13,8 @@ export interface RepeaterResponse {
   size: number;
   duration_ms: number | null;
   error: string | null;
+  /** Original length, when the body was too large to keep in full. */
+  truncated?: number;
 }
 
 export interface RepeaterTab {
@@ -141,7 +143,37 @@ export function toSendPayload(url: string, text: string): SendPayload {
 }
 
 /** Render an engine response as raw HTTP text for display. */
-export function renderResponseText(response: RepeaterResponse): string {
+/** How much of a response body to put on screen at once.
+ *
+ * A binary response can be hundreds of kilobytes, and laying that out as
+ * text costs hundreds of milliseconds every time the tab is shown. Past
+ * this there is nothing to read anyway: it is an image or an archive.
+ */
+export const BODY_DISPLAY_LIMIT = 64 * 1024;
+
+/** How much of a response body to keep in the tab.
+ *
+ * Tabs are autosaved into the project, so an unbounded body means the
+ * saved file grows without limit and every keystroke re-serialises it.
+ * Generous enough for any text response worth reading.
+ */
+export const BODY_KEEP_LIMIT = 256 * 1024;
+
+/** Trim a response before it is stored, noting what was dropped. */
+export function trimResponse(response: RepeaterResponse): RepeaterResponse {
+  const body = response.body ?? '';
+  if (body.length <= BODY_KEEP_LIMIT) return response;
+  return {
+    ...response,
+    body: body.slice(0, BODY_KEEP_LIMIT),
+    truncated: body.length,
+  };
+}
+
+export function renderResponseText(
+  response: RepeaterResponse,
+  note: (hidden: number) => string = (n) => `[${n} more characters not shown]`,
+): string {
   if (response.error && response.status_code === null) {
     return `[error] ${response.error}`;
   }
@@ -149,5 +181,13 @@ export function renderResponseText(response: RepeaterResponse): string {
     response.reason ?? ''
   }`.trimEnd();
   const headers = response.headers.map(([k, v]) => `${k}: ${v}`).join('\n');
-  return `${status}\n${headers}\n\n${response.body}`;
+  const body = response.body ?? '';
+  if (body.length <= BODY_DISPLAY_LIMIT) {
+    return `${status}\n${headers}\n\n${body}`;
+  }
+  // Truncated for display only: the full body is still in the tab, and
+  // still what gets saved and sent.
+  const shown = body.slice(0, BODY_DISPLAY_LIMIT);
+  const hidden = body.length - BODY_DISPLAY_LIMIT;
+  return `${status}\n${headers}\n\n${shown}\n\n${note(hidden)}`;
 }

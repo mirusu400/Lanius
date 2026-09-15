@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import type { FlowDetail, FlowSummary } from '../api/types';
 import {
+  BODY_DISPLAY_LIMIT,
+  BODY_KEEP_LIMIT,
   emptyTab,
   originOf,
   renderResponseText,
   tabFromFlow,
   toSendPayload,
+  trimResponse,
   type RepeaterResponse,
 } from './repeaterModel';
 
@@ -153,5 +156,45 @@ describe('emptyTab', () => {
     const payload = toSendPayload(tab.url, tab.text);
     expect(payload.method).toBe('GET');
     expect(payload.url).toBe('http://example.com/');
+  });
+});
+
+
+describe('large responses', () => {
+  const base = {
+    id: 'r1',
+    status_code: 200,
+    reason: 'OK',
+    headers: [['Content-Type', 'image/png']] as [string, string][],
+    size: 0,
+    duration_ms: 1,
+    error: null,
+  };
+
+  it('does not lay out a whole binary body as text', () => {
+    // A 160KB response took 434ms to show every time the tab was opened,
+    // and there is nothing to read in it: it is a PNG.
+    const body = 'x'.repeat(200_000);
+    const text = renderResponseText({ ...base, body });
+    expect(text.length).toBeLessThan(BODY_DISPLAY_LIMIT + 500);
+    // And says what it did, rather than looking like a short response.
+    expect(text).toContain(String(200_000 - BODY_DISPLAY_LIMIT));
+  });
+
+  it('shows a normal response in full', () => {
+    const body = 'hello';
+    expect(renderResponseText({ ...base, body })).toContain('hello');
+    expect(renderResponseText({ ...base, body })).not.toContain('not shown');
+  });
+
+  it('caps what is kept, since tabs are saved into the project', () => {
+    const response = { ...base, body: 'y'.repeat(400_000) };
+    const trimmed = trimResponse(response);
+    expect(trimmed.body.length).toBe(BODY_KEEP_LIMIT);
+    // The original length is recorded, so nothing pretends to be complete.
+    expect(trimmed.truncated).toBe(400_000);
+    // A response that fits is untouched, not copied.
+    const small = { ...base, body: 'ok' };
+    expect(trimResponse(small)).toBe(small);
   });
 });
