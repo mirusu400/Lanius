@@ -14,6 +14,8 @@ import {
   updateTab,
 } from './repeaterStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
+import { useEditorMenu } from '../components/useEditorMenu';
+import { sendTextToIntruder } from './intruderStore';
 import { errorMessage, renderMessage, useT } from '../i18n';
 
 export function RepeaterTabView() {
@@ -37,6 +39,17 @@ export function RepeaterTabView() {
 
   const active = tabs.find((t) => t.id === activeId) ?? null;
 
+  // The request here has been edited, so carrying it to Intruder as text
+  // keeps those edits; going back to the history would lose them.
+  const editorMenu = useEditorMenu([
+    {
+      label: t('editor.sendToIntruder'),
+      onSelect: (_selection, editor) => {
+        if (active) sendTextToIntruder(active.url, editor.value);
+      },
+    },
+  ]);
+
   const send = async () => {
     if (!active) return;
     updateTab(active.id, { sending: true, error: null });
@@ -59,7 +72,9 @@ export function RepeaterTabView() {
             onClick={() => setActiveId(tab.id)}
             onContextMenu={(event) => menu.open(event, tab.id)}
           >
-            {tab.title}
+            <span className="tab-title" title={tab.title}>
+              {tab.title}
+            </span>
             <span
               className="close"
               role="button"
@@ -142,12 +157,15 @@ export function RepeaterTabView() {
           )}
           <div className="repeater-split">
             <textarea
+              ref={editorMenu.ref}
               className="repeater-editor mono"
               aria-label={t('repeater.request')}
               spellCheck={false}
               value={active.text}
               onChange={(e) => updateTab(active.id, { text: e.target.value })}
+              onContextMenu={editorMenu.open}
             />
+            {editorMenu.element}
             <pre className="repeater-response mono">
               {active.response
                 ? renderResponseText(active.response)

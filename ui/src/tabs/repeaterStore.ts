@@ -1,7 +1,7 @@
 /** Tiny pub/sub store so the Proxy tab can push requests into Repeater. */
 
 import type { FlowDetail, FlowSummary } from '../api/types';
-import { tabFromFlow, type RepeaterTab } from './repeaterModel';
+import { tabFromFlow, withUniqueIds, type RepeaterTab } from './repeaterModel';
 import { asMessage } from '../i18n/message';
 
 type Listener = (tabs: RepeaterTab[]) => void;
@@ -26,7 +26,9 @@ export function getTabs(): RepeaterTab[] {
 export function setTabs(next: RepeaterTab[]): void {
   // Restored projects may carry an error saved before errors became
   // messages, when the translated sentence was stored directly.
-  tabs = next.map((tab) => ({ ...tab, error: asMessage(tab.error) }));
+  tabs = withUniqueIds(
+    next.map((tab) => ({ ...tab, error: asMessage(tab.error) })),
+  );
   emit();
 }
 

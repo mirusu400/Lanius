@@ -4,6 +4,7 @@ import { dropFlow, forwardAll, forwardFlow } from '../api/client';
 import type { InterceptRules, PausedFlow } from '../api/types';
 import { editsFromText, renderPaused } from '../tabs/interceptModel';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
+import { OpenBrowserButton } from './OpenBrowserButton';
 
 interface Props {
   rules: InterceptRules;
@@ -52,6 +53,7 @@ export function InterceptPanel({
   return (
     <div className="intercept-panel">
       <div className="intercept-controls">
+        <OpenBrowserButton />
         <button
           className={rules.enabled ? 'toggle on' : 'toggle'}
           onClick={() => onToggle({ enabled: !rules.enabled })}

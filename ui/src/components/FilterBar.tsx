@@ -1,6 +1,5 @@
 import type { ConnectionState } from '../api/stream';
 import { useT } from '../i18n';
-import { OpenBrowserButton } from './OpenBrowserButton';
 import type { EngineStatus, FlowFilters } from '../api/types';
 
 interface Props {
@@ -70,7 +69,6 @@ export function FilterBar({
           })
         }
       />
-      <OpenBrowserButton />
       <button onClick={onTogglePause}>{paused ? t('common.resume') : t('common.pause')}</button>
       <button onClick={onReload}>{t('common.refresh')}</button>
       <button className="danger" onClick={onClear}>

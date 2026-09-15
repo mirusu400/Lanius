@@ -4,6 +4,7 @@ import { getDashboard } from '../api/client';
 import type { Dashboard } from '../api/types';
 import { connectStream } from '../api/stream';
 import { useT } from '../i18n';
+import { OpenBrowserButton } from '../components/OpenBrowserButton';
 import {
   formatBytes,
   formatDuration,
@@ -74,6 +75,7 @@ export function DashboardTab({ onOpenTab }: { onOpenTab?: (tab: string) => void 
         <div>
           <h2>{t('dash.title')}</h2>
           <p className="dash-sub">{t('dash.subtitle')}</p>
+          <OpenBrowserButton />
         </div>
         <div className="dash-engine">
           <span className={data.proxy.running ? 'pill ok' : 'pill bad'}>

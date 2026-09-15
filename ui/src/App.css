@@ -523,6 +523,26 @@ pre.body {
   flex-wrap: wrap;
 }
 
+/* A long path made a single tab wider than the window, pushing the others
+   off and making them look unclickable. Cap the width and let the middle
+   of the title go, keeping the method and the end of the path visible. */
+.repeater-tabs button:not(.new-tab),
+.intruder-tabs button:not(.new-tab) {
+  max-width: 240px;
+  white-space: nowrap;
+}
+
+/* The title shrinks, not the close button: losing the × would leave a tab
+   that cannot be closed. */
+.repeater-tabs button .tab-title {
+  display: inline-block;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
 .repeater-tabs .close {
   color: var(--muted);
   margin-left: 8px;

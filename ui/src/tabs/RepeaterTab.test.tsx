@@ -154,6 +154,41 @@ describe('RepeaterTab', () => {
     expect(screen.queryByText(t('parse.badRequestLine'))).toBeNull();
   });
 
+  it('switches to the tab that was clicked, even after a restart', async () => {
+    // Tab ids came from a counter that restarted with the process, so a
+    // restored project could hold several tabs called rt-1. Clicking the
+    // later one activated the earlier, which looks like tab switching
+    // being broken.
+    const user = userEvent.setup();
+    resetTabs();
+    setTabs([
+      { id: 'rt-1', title: 'first', url: 'http://a.test/', text: 'GET / HTTP/1.1',
+        response: null, sending: false, error: null },
+      { id: 'rt-1', title: 'second', url: 'http://b.test/', text: 'GET /b HTTP/1.1',
+        response: null, sending: false, error: null },
+      { id: 'rt-2', title: 'third', url: 'http://c.test/', text: 'GET /c HTTP/1.1',
+        response: null, sending: false, error: null },
+    ]);
+
+    // The collision is repaired on load, so every tab is reachable.
+    expect(new Set(getTabs().map((tab) => tab.id)).size).toBe(3);
+
+    render(<RepeaterTabView />);
+    // The close control carries the title too, so pick the tab itself.
+    const tab = (title: string) =>
+      screen
+        .getAllByRole('button', { name: new RegExp(title) })
+        .find((node) => node.classList.contains('close') === false)!;
+
+    await user.click(tab('second'));
+    await waitFor(() =>
+      expect(editor().value).toContain('GET /b HTTP/1.1'),
+    );
+
+    await user.click(tab('third'));
+    await waitFor(() => expect(editor().value).toContain('GET /c HTTP/1.1'));
+  });
+
   it('restores a project saved before errors became messages', async () => {
     // Those files hold the translated sentence as a bare string. It cannot
     // be re-translated, but it must still render rather than appear as

@@ -162,6 +162,41 @@ describe('IntruderTab', () => {
     expect(templateBox().value).not.toContain('\u00a7');
   });
 
+  it('marks the selected text', async () => {
+    const user = userEvent.setup();
+    render(<IntruderTab />);
+    await user.click(screen.getByRole('button', { name: t('intruder.clearMarkers') }));
+    await user.clear(templateBox());
+    await user.type(templateBox(), 'GET /?q=abc HTTP/1.1');
+
+    const editor = templateBox();
+    editor.setSelectionRange(8, 11);
+    document.dispatchEvent(new Event('selectionchange'));
+    await user.click(screen.getByRole('button', { name: t('intruder.addMarker') }));
+
+    expect(templateBox().value).toBe('GET /?q=\u00a7abc\u00a7 HTTP/1.1');
+  });
+
+  it('still marks when the selection is lost on the way to the button', async () => {
+    // Pressing a button moves focus, and a webview can collapse the
+    // textarea's selection before the handler runs. Without remembering
+    // it, the button silently did nothing.
+    const user = userEvent.setup();
+    render(<IntruderTab />);
+    await user.click(screen.getByRole('button', { name: t('intruder.clearMarkers') }));
+    await user.clear(templateBox());
+    await user.type(templateBox(), 'GET /?q=abc HTTP/1.1');
+
+    const editor = templateBox();
+    editor.setSelectionRange(8, 11);
+    document.dispatchEvent(new Event('selectionchange'));
+    // The selection is gone by the time the click lands.
+    editor.setSelectionRange(0, 0);
+
+    await user.click(screen.getByRole('button', { name: t('intruder.addMarker') }));
+    expect(templateBox().value).toBe('GET /?q=\u00a7abc\u00a7 HTTP/1.1');
+  });
+
   it('warns about unbalanced markers', async () => {
     const user = userEvent.setup();
     render(<IntruderTab />);

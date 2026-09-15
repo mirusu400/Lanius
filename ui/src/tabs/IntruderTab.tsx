@@ -20,6 +20,7 @@ import {
 } from './intruderModel';
 import { subscribeTarget } from './intruderStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
+import { useEditorMenu } from '../components/useEditorMenu';
 import { sendToRepeater } from './repeaterStore';
 import { getFlow } from '../api/client';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
@@ -34,7 +35,7 @@ export function IntruderTab() {
   const [payloadText, setPayloadText] = useState(['a\nb\nc']);
   const [attack, setAttack] = useState<Attack | null>(null);
   const [error, setError] = useState<Message | null>(null);
-  const editorRef = useRef<HTMLTextAreaElement | null>(null);
+
   const attackIdRef = useRef<string | null>(null);
 
   useEffect(
@@ -94,15 +95,60 @@ export function IntruderTab() {
     [refresh],
   );
 
+  // Right-clicking the template is the natural way to mark a payload
+  // position, so the menu offers it alongside the editing actions.
+  const editorMenu = useEditorMenu([
+    {
+      label: t('intruder.addMarker'),
+      needsSelection: true,
+      onSelect: (_selection, editor) =>
+        setTemplate(
+          addMarker(template, editor.selectionStart, editor.selectionEnd),
+        ),
+    },
+    {
+      label: t('intruder.clearMarkers'),
+      onSelect: () => setTemplate(clearMarkers(template)),
+    },
+  ]);
+  const editorRef = editorMenu.ref;
+
+  // Remembered as the selection is made. Pressing a button moves focus,
+  // and a webview may collapse the textarea's selection before the click
+  // handler runs, which left the button doing nothing at all.
+  const selectionRef = useRef({ start: 0, end: 0 });
+
+  const rememberSelection = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (editor.selectionEnd > editor.selectionStart) {
+      selectionRef.current = {
+        start: editor.selectionStart,
+        end: editor.selectionEnd,
+      };
+    }
+  }, [editorRef]);
+
+  // Also watch the document: React's onSelect does not fire for every way
+  // a selection can be made, and this is the event the platform itself
+  // raises whenever it changes.
+  useEffect(() => {
+    document.addEventListener('selectionchange', rememberSelection);
+    return () =>
+      document.removeEventListener('selectionchange', rememberSelection);
+  }, [rememberSelection]);
+
   const mark = () => {
     const editor = editorRef.current;
     if (!editor) return;
-    const next = addMarker(
-      template,
-      editor.selectionStart,
-      editor.selectionEnd,
-    );
-    setTemplate(next);
+    // Prefer a live selection; fall back to the last one seen.
+    const live = editor.selectionEnd > editor.selectionStart;
+    const { start, end } = live
+      ? { start: editor.selectionStart, end: editor.selectionEnd }
+      : selectionRef.current;
+    if (end <= start) return;
+    setTemplate(addMarker(template, start, end));
+    selectionRef.current = { start: 0, end: 0 };
   };
 
   const launch = async () => {
@@ -190,7 +236,12 @@ export function IntruderTab() {
             spellCheck={false}
             value={template}
             onChange={(e) => setTemplate(e.target.value)}
+            onContextMenu={editorMenu.open}
+            onSelect={rememberSelection}
+            onKeyUp={rememberSelection}
+            onMouseUp={rememberSelection}
           />
+          {editorMenu.element}
           <h4>
             {t('intruder.payloadSets')}{' '}
             <span className="muted">

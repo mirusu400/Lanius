@@ -37,9 +37,39 @@ export interface SendPayload {
 const CRLF = '\r\n';
 
 let counter = 0;
+
+/** A tab id that stays unique across restarts.
+ *
+ * A plain counter restarts at 1 with the process, so tabs restored from a
+ * saved project collided with newly created ones. Two tabs sharing an id
+ * meant clicking the later one activated the earlier, which looked like
+ * tab switching being broken, and gave React duplicate keys as well.
+ */
 export function nextTabId(): string {
   counter += 1;
-  return `rt-${counter}`;
+  const unique =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+  return `rt-${counter}-${unique}`;
+}
+
+/** Give restored tabs fresh ids when a saved project carries collisions.
+ *
+ * Existing projects were saved with colliding ids, so they have to be
+ * repaired on load rather than only prevented from here on.
+ */
+export function withUniqueIds(tabs: RepeaterTab[]): RepeaterTab[] {
+  const seen = new Set<string>();
+  return tabs.map((tab) => {
+    if (tab.id && !seen.has(tab.id)) {
+      seen.add(tab.id);
+      return tab;
+    }
+    const id = nextTabId();
+    seen.add(id);
+    return { ...tab, id };
+  });
 }
 
 /** Origin (scheme://host[:port]) that a tab's requests are sent to. */
