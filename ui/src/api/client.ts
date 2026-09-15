@@ -518,3 +518,22 @@ export function renderCode(payload: {
     body: JSON.stringify(payload),
   });
 }
+
+/** Write the CSRF page to disk and open it in the proxied browser.
+ *
+ * Seeing the forged request land in the history next to the real one is
+ * what makes the proof convincing.
+ */
+export function openCsrfPoc(payload: {
+  flow_id?: string;
+  url?: string;
+  method?: string;
+  headers?: string[][];
+  body?: string;
+}): Promise<{ path: string }> {
+  return request('/api/codegen/csrf/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind: 'csrf', ...payload }),
+  });
+}

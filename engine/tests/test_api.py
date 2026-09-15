@@ -762,3 +762,50 @@ def test_codegen_formats_are_listed_for_the_menu(client) -> None:
     kinds = {f["kind"] for f in formats}
     assert {"curl", "fetch", "python", "csrf"} <= kinds
     assert all(f["source"] == "builtin" for f in formats)
+
+
+def test_opening_a_csrf_poc_refuses_an_unforgeable_request(client) -> None:
+    """A blank page would look like the tool failing rather than the
+    request being impossible to forge from another site."""
+    response = client.post(
+        "/api/codegen/csrf/open",
+        json={
+            "kind": "csrf",
+            "url": "https://api.test/x",
+            "method": "POST",
+            "headers": [["Content-Type", "application/json"]],
+            "body": "{}",
+        },
+    )
+    assert response.status_code == 409
+    assert "cannot be forged" in response.json()["detail"]
+
+
+def test_opening_a_csrf_poc_writes_the_page(client, monkeypatch) -> None:
+    """The page has to exist on disk before a browser can be sent to it."""
+    from app import browser
+
+    opened: dict[str, object] = {}
+
+    def fake_launch(**kwargs):
+        opened.update(kwargs)
+        return {"browser": "test"}
+
+    monkeypatch.setattr(browser, "launch", fake_launch)
+    response = client.post(
+        "/api/codegen/csrf/open",
+        json={
+            "kind": "csrf",
+            "url": "https://bank.test/transfer",
+            "method": "POST",
+            "headers": [["Content-Type", "application/x-www-form-urlencoded"]],
+            "body": "to=attacker",
+        },
+    )
+    assert response.status_code == 200
+    from pathlib import Path
+
+    written = Path(response.json()["path"])
+    assert 'value="attacker"' in written.read_text(encoding="utf-8")
+    # Opened through the proxy, so the forged request lands in the history.
+    assert str(opened["url"]).startswith("file://")

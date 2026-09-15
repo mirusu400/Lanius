@@ -438,6 +438,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except browser.BrowserError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+    @app.post("/api/codegen/csrf/open")
+    async def open_csrf_poc(payload: CodegenBody) -> dict[str, Any]:
+        """Write the CSRF page to disk and open it in the proxied browser.
+
+        A proof of concept is only convincing when it is watched: served
+        from a file, through the proxy, the forged request shows up in the
+        history next to the real one. Copying the HTML leaves the user to
+        do that by hand.
+        """
+        spec = await _spec_from(payload)
+        html = codegen.as_csrf_html(spec)
+        if "<form" not in html:
+            # It explained why not; sending the user to a blank page would
+            # look like the tool failing rather than the request being
+            # unforgeable.
+            raise HTTPException(
+                status_code=409,
+                detail="this request cannot be forged with a cross-site form",
+            )
+        target = settings.data_dir / "csrf-poc.html"
+        await asyncio.to_thread(target.write_text, html, encoding="utf-8")
+        try:
+            result = await asyncio.to_thread(
+                browser.launch,
+                proxy_host=settings.proxy_host,
+                proxy_port=settings.proxy_port,
+                data_dir=settings.data_dir,
+                confdir=settings.confdir,
+                url=target.as_uri(),
+            )
+        except browser.BrowserError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {**result, "path": str(target)}
+
     @app.delete("/api/browser/profile")
     async def clear_browser_profile() -> dict[str, Any]:
         """Throw away the browser profile: cookies, logins and history."""
@@ -567,6 +601,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         Done here rather than in the UI so that plugins can add formats
         and so the rules about what counts as a secret live in one place.
         """
+        spec = await _spec_from(payload)
+        try:
+            text = codegen.generate(payload.kind, spec)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"kind": payload.kind, "text": text}
+
+    async def _spec_from(payload: CodegenBody) -> codegen.RequestSpec:
+        """The request to render, whether stored or still being edited."""
         if payload.flow_id:
             record = await asyncio.to_thread(store.get, payload.flow_id)
             if record is None:
@@ -589,11 +632,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 headers=[(h[0], h[1]) for h in payload.headers if len(h) >= 2],
                 body=payload.body,
             )
-        try:
-            text = codegen.generate(payload.kind, spec)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return {"kind": payload.kind, "text": text}
+        return spec
 
     @app.delete("/api/flows")
     async def clear_flows() -> dict[str, Any]:

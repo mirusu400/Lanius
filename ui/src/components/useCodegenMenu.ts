@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-import { listCodegenFormats, renderCode } from '../api/client';
+import { listCodegenFormats, openCsrfPoc, renderCode } from '../api/client';
 import type { MenuItem } from './ContextMenu';
 import { errorMessage, type Message } from '../i18n/message';
 import { useT } from '../i18n';
@@ -82,7 +82,8 @@ export function useCodegenMenu(onError?: (message: Message) => void) {
       label: t('menu.copyAs'),
       separator: true,
       disabled: target == null,
-      items: formats.map((format) => ({
+      items: [
+        ...formats.map((format) => ({
         label:
           format.kind === 'csrf'
             ? t('menu.csrfPoc')
@@ -95,8 +96,21 @@ export function useCodegenMenu(onError?: (message: Message) => void) {
           if (target) void copyAs(format.kind, target);
         },
       })),
+        {
+          // Copying the HTML leaves the user to save it and open it
+          // through the proxy by hand, which is most of the work.
+          label: t('menu.openCsrfPoc'),
+          separator: true,
+          onSelect: () => {
+            if (!target) return;
+            openCsrfPoc(target).catch((error: unknown) =>
+              onError?.(errorMessage(error)),
+            );
+          },
+        },
+      ],
     }),
-    [copyAs, formats, t],
+    [copyAs, formats, onError, t],
   );
 
   return { buildMenu, copyAs, copied, formats };
