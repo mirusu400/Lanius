@@ -4,6 +4,7 @@ import { listEvents, type LogEvent } from '../api/client';
 import { connectStream } from '../api/stream';
 import { formatTime } from './proxyModel';
 import { useT } from '../i18n';
+import { useReportBusy } from '../components/busy';
 
 const MAX_LIVE = 500;
 
@@ -24,11 +25,16 @@ export function LoggerTab() {
   pausedRef.current = paused;
   const counter = useRef(0);
 
+  const [loading, setLoading] = useState(true);
+  useReportBusy('logger', loading);
+
   const refresh = useCallback(async () => {
     try {
       setStored((await listEvents()).items);
     } catch {
       setStored([]);
+    } finally {
+      setLoading(false);
     }
   }, []);
 

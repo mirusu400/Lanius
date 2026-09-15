@@ -627,6 +627,26 @@ class FlowStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def paths_by_site(self) -> dict[tuple[str, str, int | None], List[dict[str, Any]]]:
+        """Every site's paths in one pass.
+
+        The site map needs this for every host it shows. Asking per host
+        meant one request and one query per host, which on a real capture
+        with sixty hosts took seconds and grew with every new host seen.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, scheme, host, port, method, path, query,"
+                " status_code, response_size, started_at FROM flows"
+                " ORDER BY host, path, method"
+            ).fetchall()
+        grouped: dict[tuple[str, str, int | None], List[dict[str, Any]]] = {}
+        for row in rows:
+            item = dict(row)
+            key = (item.pop("scheme"), item.pop("host"), item.pop("port"))
+            grouped.setdefault(key, []).append(item)
+        return grouped
+
 
 def _truncate(body: bytes | None) -> bytes | None:
     if body is None:

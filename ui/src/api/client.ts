@@ -200,8 +200,13 @@ export function setRestrictCapture(
 
 export function getSitemap(
   inScopeOnly = false,
+  /** Include each site's paths, so the tree needs one request not one
+   * per host. */
+  withPaths = false,
 ): Promise<{ sites: import('./types').Site[] }> {
-  return request(`/api/sitemap?in_scope_only=${inScopeOnly}`);
+  return request(
+    `/api/sitemap?in_scope_only=${inScopeOnly}&with_paths=${withPaths}`,
+  );
 }
 
 export function getSitePaths(

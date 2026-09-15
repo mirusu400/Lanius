@@ -162,6 +162,8 @@ export interface Site {
   paths: number;
   last_seen: number | null;
   in_scope: boolean;
+  /** Present when the site map was asked for paths as well. */
+  path_items?: SitePath[];
 }
 
 export interface SitePath {

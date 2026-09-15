@@ -762,25 +762,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/sitemap")
-    async def sitemap(in_scope_only: bool = False) -> dict[str, Any]:
+    async def sitemap(
+        in_scope_only: bool = False, with_paths: bool = False
+    ) -> dict[str, Any]:
+        """The site map, optionally with each site's paths included.
+
+        with_paths exists because the tree needs them for every host it
+        draws. Fetching them per host meant one request and one query per
+        host, so opening Target on a real capture took seconds and got
+        worse with every new host.
+        """
         sites = await asyncio.to_thread(store.distinct_sites)
+        by_site = await asyncio.to_thread(store.paths_by_site)
         items = []
         for site in sites:
+            key = (site["scheme"], site["host"], site["port"])
+            rows = by_site.get(key, [])
             # A site counts as in scope when any of its recorded paths is, so a
             # rule like /users/* still marks the host as a target.
-            paths = await asyncio.to_thread(
-                store.distinct_paths_for_site,
-                site["scheme"],
-                site["host"],
-                site["port"],
-            )
+            paths = {row["path"] for row in rows if row.get("path")}
             inside = any(
                 engine.scope.contains(site["scheme"], site["host"], site["port"], p)
-                for p in (paths or ["/"])
+                for p in (paths or {"/"})
             )
             if in_scope_only and not inside:
                 continue
-            items.append({**site, "in_scope": inside})
+            item = {**site, "in_scope": inside}
+            if with_paths:
+                # Not "paths": that key is already the count of them.
+                item["path_items"] = rows
+            items.append(item)
         return {"sites": items}
 
     @app.get("/api/sitemap/paths")

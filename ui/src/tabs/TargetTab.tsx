@@ -5,7 +5,6 @@ import {
   deleteScopeRule,
   getEndpoints,
   getScope,
-  getSitePaths,
   getFlow,
   getSitemap,
   patchScopeRule,
@@ -22,6 +21,7 @@ import type {
 import { ScopeEditor } from '../components/ScopeEditor';
 import { SitemapTree } from '../components/SitemapTree';
 import { ContextMenu, useContextMenu, type MenuItem } from '../components/ContextMenu';
+import { useReportBusy } from '../components/busy';
 import { sendToRepeater } from './repeaterStore';
 import { sendToIntruder } from './intruderStore';
 import {
@@ -51,6 +51,11 @@ export function TargetTab() {
   });
   const [inScopeOnly, setInScopeOnly] = useState(false);
   const [error, setError] = useState<Message | null>(null);
+  // Only the first load: a refresh triggered by arriving traffic should
+  // not throw a spinner over a map you are reading.
+  const [loading, setLoading] = useState(true);
+
+  useReportBusy('target', loading);
 
   const menu = useContextMenu<TreeMenuTarget>();
 
@@ -64,11 +69,15 @@ export function TargetTab() {
 
   const refreshSites = useCallback(async () => {
     try {
-      const data = await getSitemap(inScopeOnly);
+      // Ask for the paths in the same request: one round trip instead of
+      // one per host, which is what made opening this tab take seconds.
+      const data = await getSitemap(inScopeOnly, true);
       setSites(data.sites);
       setError(null);
     } catch (err) {
       setError(msg('target.sitemapFailed', { message: (err as Error).message }));
+    } finally {
+      setLoading(false);
     }
   }, [inScopeOnly]);
 
@@ -107,26 +116,15 @@ export function TargetTab() {
   // Load the paths of every site up front: the map should be readable
   // without clicking a host first.
   useEffect(() => {
-    let cancelled = false;
     if (sites.length === 0) {
       setTrees([]);
       return;
     }
-    Promise.all(
-      sites.map(async (site) => {
-        try {
-          const data = await getSitePaths(site.host, site.scheme, site.port);
-          return { site, root: buildTree(data.items) };
-        } catch {
-          return { site, root: buildTree([]) };
-        }
-      }),
-    ).then((loaded) => {
-      if (!cancelled) setTrees(loaded);
-    });
-    return () => {
-      cancelled = true;
-    };
+    // The paths arrive with the sites, so the trees are built from what
+    // is already in hand rather than fetched again.
+    setTrees(
+      sites.map((site) => ({ site, root: buildTree(site.path_items ?? []) })),
+    );
   }, [sites]);
 
   useEffect(() => {

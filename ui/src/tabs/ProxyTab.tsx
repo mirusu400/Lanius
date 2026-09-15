@@ -28,6 +28,7 @@ import { FilterBar } from '../components/FilterBar';
 import { InterceptPanel } from '../components/InterceptPanel';
 import { matchesFilters, mergeFlow } from './proxyModel';
 import { msg, renderMessage, useT, type Message } from '../i18n';
+import { useReportBusy } from '../components/busy';
 
 const DEFAULT_RULES: InterceptRules = {
   enabled: false,
@@ -57,12 +58,19 @@ export function ProxyTab() {
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
 
+  // First load only: reloading as traffic arrives, or after changing a
+  // filter, should not cover the table you are reading.
+  const [loading, setLoading] = useState(true);
+  useReportBusy('proxy', loading);
+
   const reload = useCallback(async () => {
     try {
       setFlows(await listFlows(filtersRef.current));
       setError(null);
     } catch (err) {
       setError(msg('proxy.engineUnreachable', { message: (err as Error).message }));
+    } finally {
+      setLoading(false);
     }
   }, []);
 

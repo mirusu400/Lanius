@@ -5,6 +5,7 @@ import type { Dashboard } from '../api/types';
 import { connectStream } from '../api/stream';
 import { useT } from '../i18n';
 import { OpenBrowserButton } from '../components/OpenBrowserButton';
+import { useReportBusy } from '../components/busy';
 import {
   formatBytes,
   formatDuration,
@@ -21,6 +22,9 @@ export function DashboardTab({ onOpenTab }: { onOpenTab?: (tab: string) => void 
   const [data, setData] = useState<Dashboard | null>(null);
   const pending = useRef(false);
 
+  const [loading, setLoading] = useState(true);
+  useReportBusy('dashboard', loading);
+
   const refresh = useCallback(async () => {
     if (pending.current) return;
     pending.current = true;
@@ -30,6 +34,7 @@ export function DashboardTab({ onOpenTab }: { onOpenTab?: (tab: string) => void 
       // The engine may still be starting; the next tick retries.
     } finally {
       pending.current = false;
+      setLoading(false);
     }
   }, []);
 

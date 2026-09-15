@@ -126,8 +126,14 @@ beforeEach(() => {
       }
       if (url.includes('/api/sitemap')) {
         const onlyScope = url.includes('in_scope_only=true');
+        const shown = onlyScope ? sites.filter((s) => s.in_scope) : sites;
+        // The server sends the paths along with the sites when asked, so
+        // the tree can be built from one response.
+        const withPaths = url.includes('with_paths=true');
         return jsonResponse({
-          sites: onlyScope ? sites.filter((s) => s.in_scope) : sites,
+          sites: withPaths
+            ? shown.map((s) => ({ ...s, path_items: paths }))
+            : shown,
         });
       }
       if (url.includes('/api/endpoints')) {
@@ -173,6 +179,16 @@ describe('TargetTab', () => {
     treeRows().find(
       (row) => row.querySelector('.tree-name')?.textContent === label,
     );
+
+  it('does not make a request per host', async () => {
+    // It used to: sixty hosts meant sixty requests and sixty queries, so
+    // opening this tab took seconds and got slower as the capture grew.
+    render(<TargetTab />);
+    await waitFor(() => expect(treeRows().length).toBeGreaterThan(4));
+    const calls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+    expect(calls.filter((u) => u.includes('/api/sitemap/paths'))).toHaveLength(0);
+    expect(calls.filter((u) => u.includes('/api/sitemap'))).toHaveLength(1);
+  });
 
   it('shows the whole site map without clicking a site first', async () => {
     render(<TargetTab />);

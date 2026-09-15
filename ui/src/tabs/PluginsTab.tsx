@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { listPlugins, reloadPlugin, setPluginEnabled } from '../api/client';
 import type { PluginInfo } from '../api/types';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
+import { useReportBusy } from '../components/busy';
 
 export function PluginsTab() {
   const t = useT();
@@ -12,6 +13,11 @@ export function PluginsTab() {
 
   // `refresh` must not clear `error`: it runs right after a failed
   // enable/reload, and wiping the banner would hide why it failed.
+  // First load only: a refresh after toggling a plugin should not throw
+  // a spinner over the list you just clicked in.
+  const [loading, setLoading] = useState(true);
+  useReportBusy('plugins', loading);
+
   const refresh = useCallback(async () => {
     try {
       const data = await listPlugins();
@@ -19,6 +25,8 @@ export function PluginsTab() {
       setDirectory(data.directory);
     } catch (err) {
       setError(msg('plugins.listFailed', { message: (err as Error).message }));
+    } finally {
+      setLoading(false);
     }
   }, []);
 

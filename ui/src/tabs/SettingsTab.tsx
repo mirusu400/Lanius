@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useReportBusy } from '../components/busy';
 
 import {
   caDownloadUrl,
@@ -91,9 +92,18 @@ export function SettingsTab() {
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [loading, setLoading] = useState(true);
+  useReportBusy('settings', loading);
+
   useEffect(() => {
-    getCaInfo().then(setCa).catch((e) => setError((e as Error).message));
-    getStatus().then(setStatus).catch(() => undefined);
+    // Settled when both have answered, either way: the page is usable
+    // once it knows what it does and does not have.
+    void Promise.allSettled([
+      getCaInfo()
+        .then(setCa)
+        .catch((e) => setError((e as Error).message)),
+      getStatus().then(setStatus).catch(() => undefined),
+    ]).then(() => setLoading(false));
   }, []);
 
   const host = status?.proxy.host ?? '127.0.0.1';

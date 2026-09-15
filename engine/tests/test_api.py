@@ -843,3 +843,44 @@ def test_opening_a_csrf_poc_writes_the_page(client, monkeypatch) -> None:
     assert 'value="attacker"' in written.read_text(encoding="utf-8")
     # Opened through the proxy, so the forged request lands in the history.
     assert str(opened["url"]).startswith("file://")
+
+
+def test_sitemap_can_include_paths(client) -> None:
+    """The site map tree needs every host's paths. Fetching them one host
+    at a time meant a request and a query per host, which took seconds on
+    a real capture and grew with every new host."""
+    seed(client, "s1", host="a.com", path="/one")
+    seed(client, "s2", host="a.com", path="/two")
+    seed(client, "s3", host="b.com", path="/x")
+    sites = client.get("/api/sitemap?with_paths=true").json()["sites"]
+    by_host = {s["host"]: s for s in sites}
+    assert {p["path"] for p in by_host["a.com"]["path_items"]} == {"/one", "/two"}
+    assert {p["path"] for p in by_host["b.com"]["path_items"]} == {"/x"}
+
+
+def test_sitemap_leaves_paths_out_by_default(client) -> None:
+    """Callers that only want the host list should not pay for the rest."""
+    seed(client, "s1", host="a.com", path="/one")
+    sites = client.get("/api/sitemap").json()["sites"]
+    assert "path_items" not in sites[0]
+
+
+def test_sitemap_paths_match_the_per_site_endpoint(client) -> None:
+    """The two have to agree, or the tree changes shape depending on
+    which one produced it."""
+    seed(client, "s1", host="a.com", path="/one", method="GET", scheme="https", port=443)
+    seed(client, "s2", host="a.com", path="/two", method="POST", scheme="https", port=443)
+    combined = client.get("/api/sitemap?with_paths=true").json()["sites"][0]
+    single = client.get("/api/sitemap/paths?host=a.com&scheme=https&port=443")
+    assert single.json()["items"] == combined["path_items"]
+
+
+def test_sitemap_is_one_query_regardless_of_host_count(client) -> None:
+    """A site with no recorded paths still appears, rather than being
+    dropped because the grouped lookup had no row for it."""
+    seed(client, "s1", host="a.com", path="/one")
+    seed(client, "s2", host="b.com", path=None)
+    hosts = {
+        s["host"] for s in client.get("/api/sitemap?with_paths=true").json()["sites"]
+    }
+    assert hosts == {"a.com", "b.com"}
