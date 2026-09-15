@@ -315,11 +315,68 @@ pre.body,
   min-height: 0;
 }
 
+/* --- draggable splits --- */
+.split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split-h { flex-direction: row; }
+.split-v { flex-direction: column; }
+
+/* The first pane is sized by flex-basis; the second takes what is left,
+   so the two always fill the container exactly. */
+.split > .split-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.split > .split-pane:last-child {
+  flex: 1;
+}
+
+/* Thin to look like a border, but with padding-sized hit area: a 1px
+   target is most of the reason drag handles feel broken. */
+.split-handle {
+  flex: 0 0 auto;
+  position: relative;
+  background: var(--border);
+  z-index: 1;
+}
+
+.split-h > .split-handle {
+  width: 1px;
+  cursor: col-resize;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.split-v > .split-handle {
+  height: 1px;
+  cursor: row-resize;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.split-handle:hover,
+.split-handle:focus-visible,
+.split-handle.dragging {
+  background-color: var(--accent);
+  outline: none;
+}
+
 /* --- flow table --- */
 .flow-table-wrap {
-  flex: 1.4;
+  flex: 1;
   overflow: auto;
-  border-right: 1px solid var(--border);
+  min-height: 0;
 }
 
 .flow-table {
@@ -420,11 +477,110 @@ td.empty {
 }
 
 .detail-url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+/* The URL takes the space, the reveal toggle keeps its own. */
+.detail-url > strong + * {
+  min-width: 0;
+}
+
+.detail-url .reveal {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+/* --- request and response halves --- */
+.detail-half {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.detail-half-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.detail-half-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.view-switch {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.view-switch button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--muted);
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.view-switch button:hover:not(.active) {
+  color: var(--fg);
+}
+
+.view-switch button.active {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--fg);
+}
+
+.detail-half-body {
+  flex: 1;
+  overflow: auto;
+  padding: 10px;
+  min-height: 0;
+}
+
+.detail-half-body h4 {
+  margin: 8px 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.detail-half-body h4:first-child {
+  margin-top: 0;
+}
+
+/* Read only, but a textarea rather than a pre: it scrolls horizontally
+   without wrapping and supports select-all, which is what the raw view
+   is for. */
+.raw-view {
+  width: 100%;
+  height: 100%;
+  min-height: 120px;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  white-space: pre;
+  overflow: auto;
+  font-size: inherit;
+  padding: 0;
 }
 
 .detail-tabs {

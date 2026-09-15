@@ -1,5 +1,6 @@
 /** Repeater state: raw HTTP request text <-> engine send payload. */
 
+import { rawRequest } from '../components/rawHttp';
 import type { FlowDetail, FlowSummary } from '../api/types';
 import { ParseError } from '../i18n/ParseError';
 import type { Message } from '../i18n/message';
@@ -87,15 +88,13 @@ export function tabFromFlow(
   flow: FlowSummary,
   detail?: FlowDetail | null,
 ): RepeaterTab {
-  const target = `${flow.path ?? '/'}${flow.query ? `?${flow.query}` : ''}`;
-  const headers = detail?.request_headers ?? [['Host', flow.host ?? '']];
-  const headerText = headers.map(([k, v]) => `${k}: ${v}`).join(CRLF);
-  const body = detail?.request_body ?? '';
   return {
     id: nextTabId(),
     title: `${flow.method} ${flow.path ?? '/'}`,
     url: originOf(flow),
-    text: `${flow.method} ${target} ${flow.http_version ?? 'HTTP/1.1'}${CRLF}${headerText}${CRLF}${CRLF}${body}`,
+    // The same text the detail pane shows as Raw, so what you read there
+    // is what you edit here.
+    text: rawRequest(flow, detail),
     response: null,
     sending: false,
     error: null,

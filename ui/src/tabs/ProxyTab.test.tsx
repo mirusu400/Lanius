@@ -160,13 +160,14 @@ describe('ProxyTab', () => {
     expect(screen.getByText(t('proxy.flowCount', { count: 1 }))).toBeTruthy();
   });
 
-  it('shows request/response detail when a row is selected', async () => {
+  it('shows request and response together when a row is selected', async () => {
+    // Both halves are on screen at once, so reading the response no
+    // longer means losing sight of the request that caused it.
     const user = userEvent.setup();
     render(<ProxyTab />);
     await user.click(await screen.findByText('/seeded'));
 
     expect(await screen.findByText('<redacted>')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: new RegExp(t('detail.response')) }));
     expect(await screen.findByText('<h1>hello lanius</h1>')).toBeTruthy();
   });
 

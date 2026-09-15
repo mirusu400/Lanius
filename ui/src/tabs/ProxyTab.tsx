@@ -19,6 +19,7 @@ import { FlowTable } from '../components/FlowTable';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { flowMenuItems, flowUrl } from './flowMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
+import { Split } from '../components/Split';
 import { sendToRepeater } from './repeaterStore';
 import { sendToIntruder } from './intruderStore';
 import { addScopeFromUrl } from '../api/client';
@@ -205,15 +206,21 @@ export function ProxyTab() {
             count={flows.length}
           />
           {error && <div className="banner error">{renderMessage(error, t)}</div>}
-          <div className="proxy-split">
-            <FlowTable
-              flows={flows}
-              selectedId={selected}
-              onSelect={setSelected}
-              onContextMenu={menu.open}
-            />
-            <FlowDetailView flow={selectedFlow} />
-          </div>
+          <Split
+            direction="horizontal"
+            storageKey="lanius.split.proxy"
+            initial={0.58}
+            className="proxy-split"
+            first={
+              <FlowTable
+                flows={flows}
+                selectedId={selected}
+                onSelect={setSelected}
+                onContextMenu={menu.open}
+              />
+            }
+            second={<FlowDetailView flow={selectedFlow} />}
+          />
           <ContextMenu
             position={menu.position}
             items={

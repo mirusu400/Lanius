@@ -1,5 +1,6 @@
 /** Detail pane: HTTP vs raw TCP rendering. */
-import {cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithI18n as render, t } from '../test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -88,26 +89,79 @@ describe('toHex', () => {
 });
 
 describe('FlowDetailView', () => {
-  it('shows headers for HTTP flows', async () => {
+  it('shows request and response together, not one at a time', async () => {
+    // Comparing what was sent with what came back is the usual reason to open a flow.
     render(<FlowDetailView flow={httpFlow} />);
-    expect(await screen.findByText(t('detail.headers'))).toBeTruthy();
-    expect(screen.getByRole('button', { name: `${t('detail.response')} (200)` })).toBeTruthy();
+    expect(await screen.findByText(t('detail.request'))).toBeTruthy();
+    expect(screen.getByText(`${t('detail.response')} (200)`)).toBeTruthy();
   });
 
-  it('shows a byte and hex view for TCP flows', async () => {
+  it('parses headers for HTTP flows', async () => {
+    render(<FlowDetailView flow={httpFlow} />);
+    await waitFor(() => expect(screen.getAllByText(t('detail.headers')).length).toBe(2));
+    expect(screen.getByText('Host')).toBeTruthy();
+    expect(screen.getByText('Content-Type')).toBeTruthy();
+  });
+
+  it('offers a raw view that reads as HTTP', async () => {
+    render(<FlowDetailView flow={httpFlow} />);
+    const tabs = await screen.findAllByRole('tab', { name: t('detail.view.raw') });
+    await userEvent.click(tabs[0]);
+    const raw = screen.getAllByRole('textbox')[0] as HTMLTextAreaElement;
+    expect(raw.value).toContain('GET /x HTTP/1.1');
+    expect(raw.value).toContain('Host: api.test');
+  });
+
+  it('the raw response carries the status line', async () => {
+    render(<FlowDetailView flow={httpFlow} />);
+    const tabs = await screen.findAllByRole('tab', { name: t('detail.view.raw') });
+    await userEvent.click(tabs[1]);
+    const raw = screen.getAllByRole('textbox')[0] as HTMLTextAreaElement;
+    expect(raw.value).toContain('HTTP/1.1 200 OK');
+    expect(raw.value).toContain('ok');
+  });
+
+  it('offers a hex view of the same bytes', async () => {
+    render(<FlowDetailView flow={httpFlow} />);
+    const tabs = await screen.findAllByRole('tab', { name: t('detail.view.hex') });
+    await userEvent.click(tabs[0]);
+    // "GET" in hex.
+    await waitFor(() => expect(document.body.textContent).toContain('47 45 54'));
+  });
+
+  it('does not offer to parse a raw TCP stream', async () => {
+    // It has no headers, so parsing would only produce an empty table.
     render(<FlowDetailView flow={tcpFlow} />);
-    expect(await screen.findByText(`${t('detail.rawBytes')} · 3 messages`)).toBeTruthy();
-    expect(screen.getByText(t('detail.hex'))).toBeTruthy();
-    expect(screen.queryByText(t('detail.headers'))).toBeNull();
     await waitFor(() =>
-      expect(document.body.textContent).toContain('48 45 4c 4c 4f'),
+      expect(screen.queryAllByRole('tab', { name: t('detail.view.parsed') })).toHaveLength(0),
     );
+    expect(screen.getAllByRole('tab', { name: t('detail.view.hex') }).length).toBe(2);
   });
 
-  it('labels TCP directions instead of request/response', async () => {
+  it('labels TCP directions instead of request and response', async () => {
     render(<FlowDetailView flow={tcpFlow} />);
-    expect(await screen.findByRole('button', { name: t('detail.toServer') })).toBeTruthy();
-    expect(screen.getByRole('button', { name: t('detail.toClient') })).toBeTruthy();
+    expect(await screen.findByText(t('detail.toServer'))).toBeTruthy();
+    expect(screen.getByText(t('detail.toClient'))).toBeTruthy();
+  });
+
+  it('keeps the TCP message count, which says it is several exchanges', async () => {
+    render(<FlowDetailView flow={tcpFlow} />);
+    expect(await screen.findByText('3 messages')).toBeTruthy();
+  });
+
+  it('has no send buttons: those moved to the right-click menu', async () => {
+    render(<FlowDetailView flow={httpFlow} />);
+    await screen.findByText(t('detail.request'));
+    expect(screen.queryByRole('button', { name: t('menu.sendToRepeater') })).toBeNull();
+    expect(screen.queryByRole('button', { name: t('menu.sendToIntruder') })).toBeNull();
+  });
+
+  it('offers them on right-click instead', async () => {
+    render(<FlowDetailView flow={httpFlow} />);
+    const half = (await screen.findByText(t('detail.request'))).closest('section')!;
+    fireEvent.contextMenu(half);
+    expect(screen.getByRole('menuitem', { name: t('menu.sendToRepeater') })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: t('menu.sendToIntruder') })).toBeTruthy();
   });
 
   it('prompts when nothing is selected', () => {
