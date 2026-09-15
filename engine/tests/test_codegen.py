@@ -129,6 +129,24 @@ class TestRedaction:
         value = codegen.redact_value("Cookie", "s=aB3xY9kLmNpQrStUvWxYz012345; lang=ko")
         assert value == "s=[redacted]; lang=ko"
 
+    def test_hides_a_cookie_whose_value_contains_separators(self) -> None:
+        """Google's NID is '534=...'. Matching on a token shape missed it
+        and published a live session cookie."""
+        value = codegen.redact_value(
+            "Cookie",
+            "NID=534=EZkjXevxEVVyPJqP6TUupqUFgBFGbA7aw4BaxB6keguPhVs3inQdFQ; lang=ko",
+        )
+        assert value == "NID=[redacted]; lang=ko"
+
+    def test_keeps_short_readable_cookies(self) -> None:
+        value = codegen.redact_value("Cookie", "theme=dark; view=grid; cart=3")
+        assert value == "theme=dark; view=grid; cart=3"
+
+    def test_keeps_a_long_value_that_is_only_words(self) -> None:
+        """A long preference string is not a credential."""
+        value = codegen.redact_value("Cookie", "prefs=verylongwordwithoutdigits")
+        assert value == "prefs=verylongwordwithoutdigits"
+
     def test_hides_a_token_in_the_query_string(self, post: RequestSpec) -> None:
         url = codegen.redact_query(post.url)
         assert "token=[redacted]" in url

@@ -155,12 +155,31 @@ def _redact_cookies(value: str) -> str:
 
 # Long opaque strings are credentials often enough to be worth hiding
 # even when the name gives nothing away, which is common for session
-# cookies named things like "s" or "_id".
-_TOKENISH = re.compile(r"^[A-Za-z0-9_\-]{24,}$|^[A-Za-z0-9+/=]{24,}$")
+# cookies named things like "s", "_id" or Google's "NID". The value may
+# itself contain '=' and other separators, as NID's "534=..." does, so
+# this matches on the alphabet and the length rather than on a shape.
+_TOKEN_ALPHABET = re.compile(r"^[A-Za-z0-9_\-+/=.%~|:]+$")
+_TOKEN_MIN_LENGTH = 20
 
 
 def _looks_like_a_token(value: str) -> bool:
-    return bool(_TOKENISH.match(value.strip()))
+    """Whether a value is long and opaque enough to be a credential.
+
+    Deliberately eager: a false positive costs a reader one value they
+    could have seen, while a false negative publishes a live session.
+    """
+    stripped = value.strip()
+    if len(stripped) < _TOKEN_MIN_LENGTH:
+        return False
+    if not _TOKEN_ALPHABET.match(stripped):
+        return False
+    # Something with no digits and no case mixing is more likely a word
+    # or a path than a token, e.g. a long language preference.
+    has_digit = any(c.isdigit() for c in stripped)
+    mixed_case = any(c.islower() for c in stripped) and any(
+        c.isupper() for c in stripped
+    )
+    return has_digit or mixed_case
 
 
 def redact_query(url: str) -> str:
