@@ -3,7 +3,7 @@ import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SettingsTab } from './SettingsTab';
+import { TlsSection } from './settings/TlsSection';
 import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import { useI18n, type Locale } from '../i18n';
 
@@ -90,18 +90,18 @@ const profileSelect = () => screen.getByLabelText(t('tls.profile')) as HTMLSelec
 
 describe('TLS fingerprint', () => {
   it('starts on the engine default', async () => {
-    render(<SettingsTab />);
+    render(<TlsSection />);
     await waitFor(() => expect(profileSelect().value).toBe('default'));
   });
 
   it('offers the profiles the engine reports', async () => {
-    render(<SettingsTab />);
+    render(<TlsSection />);
     await waitFor(() => expect(profileSelect().options.length).toBe(3));
     expect(screen.getByRole('option', { name: 'Chrome' })).toBeTruthy();
   });
 
   it('applies a profile as soon as it is picked', async () => {
-    render(<SettingsTab />);
+    render(<TlsSection />);
     await waitFor(() => expect(profileSelect()).toBeTruthy());
 
     await userEvent.selectOptions(profileSelect(), 'chrome');
@@ -120,7 +120,7 @@ describe('TLS fingerprint', () => {
           <button type="button" onClick={() => setLocale(other)}>
             switch
           </button>
-          <SettingsTab />
+          <TlsSection />
         </>
       );
     }
@@ -136,7 +136,7 @@ describe('TLS fingerprint', () => {
   });
 
   it('reports how many ciphers are offered, so the change is visible', async () => {
-    render(<SettingsTab />);
+    render(<TlsSection />);
     await waitFor(() => expect(profileSelect()).toBeTruthy());
     await userEvent.selectOptions(profileSelect(), 'chrome');
 
@@ -144,7 +144,7 @@ describe('TLS fingerprint', () => {
   });
 
   it('sends a custom cipher string with the profile', async () => {
-    render(<SettingsTab />);
+    render(<TlsSection />);
     await waitFor(() => expect(profileSelect()).toBeTruthy());
 
     await userEvent.type(screen.getByLabelText(t('tls.customLabel')), 'AES256-SHA');
@@ -158,7 +158,7 @@ describe('TLS fingerprint', () => {
   it('surfaces a cipher list the engine refuses', async () => {
     // Storing an unusable list would make every request fail with a 502.
     postFails = true;
-    render(<SettingsTab />);
+    render(<TlsSection />);
     await waitFor(() => expect(profileSelect()).toBeTruthy());
 
     await userEvent.type(screen.getByLabelText(t('tls.customLabel')), 'NOPE');
@@ -168,7 +168,7 @@ describe('TLS fingerprint', () => {
   });
 
   it('states what the profile does not cover', async () => {
-    render(<SettingsTab />);
+    render(<TlsSection />);
     expect(await screen.findByText(t('tls.limitation'))).toBeTruthy();
   });
 });

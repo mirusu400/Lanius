@@ -5,6 +5,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LoggerTab } from './LoggerTab';
+import { CaSection } from './settings/CaSection';
+import { EngineSection } from './settings/EngineSection';
 import { SettingsTab } from './SettingsTab';
 
 class MockSocket {
@@ -30,6 +32,9 @@ function jsonResponse(body: unknown) {
 }
 
 beforeEach(() => {
+  // Settings remembers the group you were in, so one test choosing a
+  // group would otherwise decide where the next one starts.
+  window.localStorage.clear();
   MockSocket.last = null;
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
   vi.stubGlobal(
@@ -124,15 +129,50 @@ describe('LoggerTab', () => {
 
 describe('SettingsTab', () => {
   it('shows engine and proxy status', async () => {
-    render(<SettingsTab />);
+    render(<EngineSection />);
     expect(await screen.findByText(t('settings.running'))).toBeTruthy();
-    // shown in both the proxy section and the CA section
-    expect(screen.getAllByText('127.0.0.1:8080').length).toBeGreaterThan(0);
+    expect(screen.getByText('127.0.0.1:8080')).toBeTruthy();
     expect(screen.getByText('42')).toBeTruthy();
   });
 
-  it('offers CA downloads for available formats only', async () => {
+  it('opens on the proxy group, where the listener lives', async () => {
+    // The group people come here for most often, and the one that
+    // explains why nothing is being captured.
     render(<SettingsTab />);
+    const proxy = await screen.findByRole('button', {
+      name: t('settings.group.proxy'),
+    });
+    expect(proxy.className).toContain('active');
+  });
+
+  it('remembers the group you were last in', async () => {
+    const user = userEvent.setup();
+    const view = render(<SettingsTab />);
+    await user.click(screen.getByRole('button', { name: t('settings.group.project') }));
+    view.unmount();
+    render(<SettingsTab />);
+    const project = await screen.findByRole('button', {
+      name: t('settings.group.project'),
+    });
+    expect(project.className).toContain('active');
+  });
+
+  it('shows one group at a time', async () => {
+    // The whole point: eleven sections on one page meant scrolling past
+    // everything else to reach any one of them.
+    render(<SettingsTab />);
+    await screen.findByRole('button', { name: t('settings.group.proxy') });
+    // Headings, not the group buttons: a group label and its section
+    // heading can read the same.
+    const headings = () =>
+      [...document.querySelectorAll('h3')].map((h) => h.textContent);
+    expect(headings()).toContain(t('listener.section'));
+    expect(headings()).not.toContain(t('mcp.section'));
+    expect(headings()).not.toContain(t('project.section'));
+  });
+
+  it('offers CA downloads for available formats only', async () => {
+    render(<CaSection />);
     const pem = (await screen.findByText(t('settings.caDownload', { format: 'pem' }))) as HTMLAnchorElement;
     expect(pem.getAttribute('href')).toContain('/api/ca/pem');
     const p12 = screen.getByText(t('settings.caDownload', { format: 'p12' }));
@@ -141,13 +181,13 @@ describe('SettingsTab', () => {
   });
 
   it('links to mitm.it for device installation', async () => {
-    render(<SettingsTab />);
+    render(<CaSection />);
     const link = (await screen.findByText('mitm.it')) as HTMLAnchorElement;
     expect(link.href).toContain('mitm.it');
   });
 
   it('shows the CA directory', async () => {
-    render(<SettingsTab />);
+    render(<CaSection />);
     expect(await screen.findByText('/home/u/.mitmproxy')).toBeTruthy();
   });
 });

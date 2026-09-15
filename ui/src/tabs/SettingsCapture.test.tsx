@@ -3,7 +3,7 @@ import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SettingsTab } from './SettingsTab';
+import { CaptureSection } from './settings/CaptureSection';
 import { renderWithI18n as render, t } from '../test-utils';
 
 let captureSpec: string | null = null;
@@ -96,7 +96,7 @@ afterEach(() => {
 
 describe('system capture', () => {
   it('starts switched off', async () => {
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     const off = (await screen.findByLabelText(t('capture.off'))) as HTMLInputElement;
     expect(off.checked).toBe(true);
   });
@@ -104,7 +104,7 @@ describe('system capture', () => {
   it('sends null to switch capture off, not an empty string', async () => {
     // '' means 'capture everything', so the two must not be conflated.
     captureSpec = 'curl';
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     await waitFor(() =>
       expect(
         (screen.getByLabelText(t('capture.filtered')) as HTMLInputElement).checked,
@@ -116,7 +116,7 @@ describe('system capture', () => {
   });
 
   it('sends an empty spec to capture every application', async () => {
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     await screen.findByLabelText(t('capture.all'));
 
     await userEvent.click(screen.getByLabelText(t('capture.all')));
@@ -124,7 +124,7 @@ describe('system capture', () => {
   });
 
   it('sends the rules when specific applications are chosen', async () => {
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
 
     // Choosing the mode must not apply an empty list on its own.
@@ -141,7 +141,7 @@ describe('system capture', () => {
   });
 
   it('builds one spec from several rules', async () => {
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
 
     await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
@@ -164,7 +164,7 @@ describe('system capture', () => {
   });
 
   it('leaves a disabled rule out without deleting it', async () => {
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
     await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
     await userEvent.type(
@@ -187,7 +187,7 @@ describe('system capture', () => {
   it('refuses a rule with a comma rather than splitting it in two', async () => {
     // The comma is the spec separator, so 'a,b' would silently become two
     // rules. The engine refuses it too.
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
     await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
     await userEvent.type(
@@ -204,7 +204,7 @@ describe('system capture', () => {
   });
 
   it('removes a rule', async () => {
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
     await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
     await userEvent.type(
@@ -217,7 +217,7 @@ describe('system capture', () => {
   });
 
   it('will not apply an empty filter', async () => {
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
     expect(
       (screen.getByRole('button', { name: t('capture.apply') }) as HTMLButtonElement)
@@ -227,7 +227,7 @@ describe('system capture', () => {
 
   it('restores the saved rules', async () => {
     captureSpec = 'chrome,!Slack';
-    render(<SettingsTab />);
+    render(<CaptureSection />);
 
     await waitFor(() =>
       expect(
@@ -247,19 +247,19 @@ describe('system capture', () => {
 
   it('warns that the extension still needs approval', async () => {
     captureSpec = 'curl';
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     expect(await screen.findByText(t('dash.captureWaiting'))).toBeTruthy();
   });
 
   it('does not warn about approval while capture is off', async () => {
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     await screen.findByLabelText(t('capture.off'));
     expect(screen.queryByText(t('dash.captureWaiting'))).toBeNull();
   });
 
   it('surfaces a rejected spec instead of failing silently', async () => {
     postFails = true;
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     await userEvent.click(await screen.findByLabelText(t('capture.filtered')));
     await userEvent.click(screen.getByRole('button', { name: t('capture.addRule') }));
     await userEvent.type(
@@ -276,7 +276,7 @@ describe('system capture', () => {
     // a running engine does not always take effect. Saying 'done' would be
     // a lie.
     restartRequired = true;
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     await userEvent.click(await screen.findByLabelText(t('capture.all')));
 
     expect(await screen.findByText(t('capture.restartNeeded'))).toBeTruthy();
@@ -284,13 +284,13 @@ describe('system capture', () => {
   });
 
   it('says it is applied when the change took effect immediately', async () => {
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     await userEvent.click(await screen.findByLabelText(t('capture.all')));
     expect(await screen.findByText(t('capture.applied'))).toBeTruthy();
   });
 
   it('always states the pinning limitation', async () => {
-    render(<SettingsTab />);
+    render(<CaptureSection />);
     expect(await screen.findByText(t('capture.pinningNote'))).toBeTruthy();
   });
 });

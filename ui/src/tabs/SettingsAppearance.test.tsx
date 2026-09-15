@@ -7,7 +7,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SettingsTab } from './SettingsTab';
+import { AppearanceSection } from './settings/AppearanceSection';
 import { renderWithI18n as render, t } from '../test-utils';
 import {
   DEFAULTS,
@@ -129,7 +129,7 @@ const section = () => {
 describe('appearance settings', () => {
   it('switches to the light theme', async () => {
     const user = userEvent.setup();
-    render(<SettingsTab />);
+    render(<AppearanceSection />);
     await user.selectOptions(
       section().getByLabelText(t('appearance.theme')),
       'light',
@@ -148,7 +148,7 @@ describe('appearance settings', () => {
   });
 
   it('changes the editor font size', async () => {
-    render(<SettingsTab />);
+    render(<AppearanceSection />);
     const slider = section().getByLabelText(t('appearance.monoSize'));
 
     // Assigning .value directly is invisible to React on a controlled
@@ -167,7 +167,7 @@ describe('appearance settings', () => {
 
   it('changes the editor font family', async () => {
     const user = userEvent.setup();
-    render(<SettingsTab />);
+    render(<AppearanceSection />);
     await user.selectOptions(
       section().getByLabelText(t('appearance.monoFont')),
       'menlo',
@@ -177,7 +177,7 @@ describe('appearance settings', () => {
 
   it('remembers the choice for next launch', async () => {
     const user = userEvent.setup();
-    render(<SettingsTab />);
+    render(<AppearanceSection />);
     await user.selectOptions(
       section().getByLabelText(t('appearance.theme')),
       'light',
@@ -191,7 +191,7 @@ describe('appearance settings', () => {
 
   it('resets to the defaults', async () => {
     const user = userEvent.setup();
-    render(<SettingsTab />);
+    render(<AppearanceSection />);
     await user.selectOptions(
       section().getByLabelText(t('appearance.theme')),
       'light',
@@ -206,7 +206,7 @@ describe('appearance settings', () => {
   });
 
   it('shows a preview in the chosen editor font', async () => {
-    render(<SettingsTab />);
+    render(<AppearanceSection />);
     const preview = await screen.findByLabelText(t('appearance.previewLabel'));
     // Carries the class the font variables are attached to.
     expect(preview.classList.contains('mono')).toBe(true);

@@ -1561,18 +1561,34 @@ pre.body {
 
 /* --- settings --- */
 .settings-tab {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The group tabs stay put; only the settings under them scroll, so you
+   can always switch group without scrolling back up first. */
+.settings-body {
+  flex: 1;
   overflow: auto;
   padding: 20px 24px;
   max-width: 900px;
 }
 
-.settings-tab section {
+/* The last section has nothing after it to divide from. */
+.settings-body section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.settings-body section {
   border-bottom: 1px solid var(--border);
   margin-bottom: 20px;
   padding-bottom: 20px;
 }
 
-.settings-tab h3 {
+.settings-body h3 {
   color: var(--accent);
   font-size: 13px;
   letter-spacing: 0.06em;

@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithI18n } from '../test-utils';
 import { I18nProvider, STORAGE_KEY, useI18n } from './index';
-import { SettingsTab } from '../tabs/SettingsTab';
+import { BrowserHelpSection } from '../tabs/settings/BrowserHelpSection';
+import { CaSection } from '../tabs/settings/CaSection';
+import { LanguageSection } from '../tabs/settings/LanguageSection';
 
 function Probe() {
   const { locale, t } = useI18n();
@@ -97,7 +99,18 @@ describe('I18nProvider', () => {
 describe('Settings language selector', () => {
   // This suite asserts concrete English and Korean strings, so it always
   // starts from English regardless of VITE_TEST_LOCALE.
-  const renderSettings = () => renderWithI18n(<SettingsTab />, { locale: 'en' });
+  // Settings is grouped into sub-tabs now, so these sections no longer
+  // share a screen. They are rendered together here because what this
+  // suite is really checking is that changing the language re-renders
+  // everything, not just the control that changed it.
+  const Sections = () => (
+    <>
+      <LanguageSection />
+      <CaSection />
+      <BrowserHelpSection />
+    </>
+  );
+  const renderSettings = () => renderWithI18n(<Sections />, { locale: 'en' });
 
   it('lists every supported language', async () => {
     renderSettings();

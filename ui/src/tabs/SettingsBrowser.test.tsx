@@ -8,7 +8,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SettingsTab } from './SettingsTab';
+import { BrowserSection } from './settings/BrowserSection';
 import { renderWithI18n as render, t } from '../test-utils';
 
 let browserState: {
@@ -141,7 +141,7 @@ const section = () => {
 describe('browser settings', () => {
   it('opens a browser through the proxy', async () => {
     const user = userEvent.setup();
-    render(<SettingsTab />);
+    render(<BrowserSection />);
     await waitFor(() => expect(screen.getByText(t('browser.section'))).toBeTruthy());
 
     await user.click(section().getByRole('button', { name: t('browser.open') }));
@@ -152,14 +152,14 @@ describe('browser settings', () => {
   });
 
   it('shows the separate profile, so the usual browser is clearly untouched', async () => {
-    render(<SettingsTab />);
+    render(<BrowserSection />);
     await waitFor(() => expect(screen.getByText(t('browser.section'))).toBeTruthy());
     expect(section().getByText('/home/u/.lanius/browser-profile')).toBeTruthy();
   });
 
   it('says so when no browser is installed, instead of failing on click', async () => {
     browserState = { ...browserState, available: false, name: null };
-    render(<SettingsTab />);
+    render(<BrowserSection />);
     expect(await screen.findByText(t('browser.unavailable'))).toBeTruthy();
     // And offers no button that could only fail.
     expect(section().queryByRole('button', { name: t('browser.open') })).toBeNull();
@@ -167,14 +167,14 @@ describe('browser settings', () => {
 
   it('warns when HTTPS will not be trusted yet', async () => {
     browserState = { ...browserState, ca_trusted: false };
-    render(<SettingsTab />);
+    render(<BrowserSection />);
     expect(await screen.findByText(t('browser.noCa'))).toBeTruthy();
   });
 
   it('reports a launch that failed', async () => {
     const user = userEvent.setup();
     launchError = 'no Chromium-based browser found';
-    render(<SettingsTab />);
+    render(<BrowserSection />);
     await waitFor(() => expect(screen.getByText(t('browser.section'))).toBeTruthy());
 
     await user.click(section().getByRole('button', { name: t('browser.open') }));
@@ -188,7 +188,7 @@ describe('browser settings', () => {
 
   it('clears the browsing data after confirming', async () => {
     const user = userEvent.setup();
-    render(<SettingsTab />);
+    render(<BrowserSection />);
     await waitFor(() => expect(screen.getByText(t('browser.section'))).toBeTruthy());
 
     await user.click(
@@ -201,7 +201,7 @@ describe('browser settings', () => {
   it('does not clear anything when the confirmation is declined', async () => {
     const user = userEvent.setup();
     vi.stubGlobal('confirm', () => false);
-    render(<SettingsTab />);
+    render(<BrowserSection />);
     await waitFor(() => expect(screen.getByText(t('browser.section'))).toBeTruthy());
 
     await user.click(

@@ -181,6 +181,11 @@ const en = {
   'menu.sendToIntruder': 'Send to Intruder',
   'menu.copyUrl': 'Copy URL',
   'common.loading': 'Loading',
+  'settings.group.proxy': 'Proxy',
+  'settings.group.browser': 'Browser',
+  'settings.group.appearance': 'Appearance',
+  'settings.group.integrations': 'Integrations',
+  'settings.group.project': 'Project',
   'menu.copyAs': 'Copy as',
   'detail.view.parsed': 'Parsed',
   'detail.view.raw': 'Raw',
@@ -345,7 +350,7 @@ const en = {
     'No plugins found. Drop a .py file into the directory above and rescan.',
 
   // --- settings ---
-  'settings.proxySection': 'Proxy',
+  'settings.proxySection': 'Engine status',
   'settings.running': 'running',
   'settings.stopped': 'stopped',
   'settings.projectDb': 'Project DB',
@@ -582,6 +587,11 @@ const ko: Catalogue = {
   'menu.sendToIntruder': 'Intruder로 보내기',
   'menu.copyUrl': 'URL 복사',
   'common.loading': '불러오는 중',
+  'settings.group.proxy': '프록시',
+  'settings.group.browser': '브라우저',
+  'settings.group.appearance': '화면',
+  'settings.group.integrations': '연동',
+  'settings.group.project': '프로젝트',
   'menu.copyAs': '다른 형식으로 복사',
   'detail.view.parsed': '해석',
   'detail.view.raw': '원문',
@@ -742,7 +752,7 @@ const ko: Catalogue = {
   'plugins.none':
     '플러그인이 없습니다. 위 디렉터리에 .py 파일을 넣고 다시 검색하세요.',
 
-  'settings.proxySection': '프록시',
+  'settings.proxySection': '엔진 상태',
   'settings.running': 'running',
   'settings.stopped': 'stopped',
   'settings.projectDb': '프로젝트 DB',

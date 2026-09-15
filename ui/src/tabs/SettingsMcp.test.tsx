@@ -7,7 +7,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SettingsTab } from './SettingsTab';
+import { McpSection } from './settings/McpSection';
 import { renderWithI18n as render, t } from '../test-utils';
 
 const TOOLS = [
@@ -121,14 +121,14 @@ const mcpSection = () => {
 
 describe('MCP settings', () => {
   it('shows where an agent connects', async () => {
-    render(<SettingsTab />);
+    render(<McpSection />);
     await waitFor(() => expect(screen.getByText(t('mcp.section'))).toBeTruthy());
     expect(mcpSection().getByText('http://127.0.0.1:8081/mcp')).toBeTruthy();
     expect(mcpSection().getByText(t('mcp.localOnly'))).toBeTruthy();
   });
 
   it('lists the tools, and marks the ones that act', async () => {
-    render(<SettingsTab />);
+    render(<McpSection />);
     await waitFor(() => expect(screen.getByText(t('mcp.section'))).toBeTruthy());
 
     expect(mcpSection().getByText('list_flows')).toBeTruthy();
@@ -145,14 +145,14 @@ describe('MCP settings', () => {
   });
 
   it('warns that an agent can act, not just read', async () => {
-    render(<SettingsTab />);
+    render(<McpSection />);
     await waitFor(() => expect(screen.getByText(t('mcp.section'))).toBeTruthy());
     expect(mcpSection().getByText(t('mcp.writesWarning'))).toBeTruthy();
   });
 
   it('turns agents off and on', async () => {
     const user = userEvent.setup();
-    render(<SettingsTab />);
+    render(<McpSection />);
     await waitFor(() => expect(screen.getByText(t('mcp.section'))).toBeTruthy());
 
     await user.click(mcpSection().getByLabelText(t('mcp.enable')));
@@ -176,7 +176,7 @@ describe('MCP settings', () => {
         },
       },
     });
-    render(<SettingsTab />);
+    render(<McpSection />);
     await waitFor(() => expect(screen.getByText(t('mcp.section'))).toBeTruthy());
 
     await user.click(mcpSection().getByRole('button', { name: t('mcp.copy') }));
@@ -192,7 +192,7 @@ describe('MCP settings', () => {
 
   it('says so when the MCP server did not start', async () => {
     mcp = { ...mcp, available: false, tools: [] };
-    render(<SettingsTab />);
+    render(<McpSection />);
     expect(await screen.findByText(t('mcp.unavailable'))).toBeTruthy();
   });
 });

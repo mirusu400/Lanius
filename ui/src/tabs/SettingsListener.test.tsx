@@ -7,7 +7,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SettingsTab } from './SettingsTab';
+import { ListenerSection } from './settings/ListenerSection';
 import { renderWithI18n as render, t } from '../test-utils';
 
 let listener = {
@@ -137,7 +137,7 @@ const applyButton = () => {
 
 describe('listener settings', () => {
   it('shows where the proxy is listening', async () => {
-    render(<SettingsTab />);
+    render(<ListenerSection />);
     await waitFor(() => expect(portInput()).toBeTruthy());
     expect(portInput().value).toBe('8080');
     expect(bindSelect().value).toBe('127.0.0.1');
@@ -146,7 +146,7 @@ describe('listener settings', () => {
 
   it('moves the proxy to another port', async () => {
     const user = userEvent.setup();
-    render(<SettingsTab />);
+    render(<ListenerSection />);
     await waitFor(() => expect(portInput()).toBeTruthy());
 
     await user.clear(portInput());
@@ -163,7 +163,7 @@ describe('listener settings', () => {
 
   it('warns before binding beyond this machine', async () => {
     const user = userEvent.setup();
-    render(<SettingsTab />);
+    render(<ListenerSection />);
     await waitFor(() => expect(bindSelect()).toBeTruthy());
 
     // The warning appears on choosing, before anything is applied.
@@ -173,7 +173,7 @@ describe('listener settings', () => {
   });
 
   it('offers the addresses this machine can bind', async () => {
-    render(<SettingsTab />);
+    render(<ListenerSection />);
     await waitFor(() => expect(bindSelect()).toBeTruthy());
     const values = [...bindSelect().options].map((option) => option.value);
     expect(values).toContain('127.0.0.1');
@@ -185,7 +185,7 @@ describe('listener settings', () => {
   it('says the proxy was kept when the new address is refused', async () => {
     const user = userEvent.setup();
     rejectWith = 'proxy port 127.0.0.1:9999 is unavailable: in use';
-    render(<SettingsTab />);
+    render(<ListenerSection />);
     await waitFor(() => expect(portInput()).toBeTruthy());
 
     await user.clear(portInput());
@@ -204,7 +204,7 @@ describe('listener settings', () => {
       running: false,
       error: 'proxy port 127.0.0.1:8080 is unavailable: address in use',
     };
-    render(<SettingsTab />);
+    render(<ListenerSection />);
 
     expect(
       await screen.findByText(
