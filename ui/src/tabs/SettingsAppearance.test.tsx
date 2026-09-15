@@ -229,3 +229,59 @@ describe('stored appearance', () => {
     expect(load()).toEqual(DEFAULTS);
   });
 });
+
+describe('window chrome', () => {
+  /** Stands in for the desktop shell. */
+  function fakeShell() {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window, '__TAURI_INTERNALS__', {
+      value: { invoke },
+      configurable: true,
+      writable: true,
+    });
+    return invoke;
+  }
+
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+  });
+
+  it('tells the window which theme to draw itself in', async () => {
+    // The page repaints from CSS, but the title bar is drawn by the OS,
+    // so without this the light theme left a dark bar above a light app.
+    const invoke = fakeShell();
+    apply({ ...DEFAULTS, theme: 'light' });
+    expect(invoke).toHaveBeenCalledWith('set_window_theme', { theme: 'light' });
+  });
+
+  it('hands the window back to the system when asked to follow it', () => {
+    // Resolving it here would freeze the window on whatever the system
+    // was at that moment; null lets it keep following.
+    const invoke = fakeShell();
+    apply({ ...DEFAULTS, theme: 'system' });
+    expect(invoke).toHaveBeenCalledWith('set_window_theme', { theme: null });
+  });
+
+  it('still applies the dark theme to the window', () => {
+    const invoke = fakeShell();
+    apply({ ...DEFAULTS, theme: 'dark' });
+    expect(invoke).toHaveBeenCalledWith('set_window_theme', { theme: 'dark' });
+  });
+
+  it('works in a browser, where there is no window to set', () => {
+    // No shell present: applying a theme must still style the page.
+    expect(() => apply({ ...DEFAULTS, theme: 'light' })).not.toThrow();
+    expect(document.documentElement.dataset.theme).toBe('light');
+  });
+
+  it('does not let a failing shell take the theme change down', async () => {
+    const invoke = vi.fn().mockRejectedValue(new Error('no window'));
+    Object.defineProperty(window, '__TAURI_INTERNALS__', {
+      value: { invoke },
+      configurable: true,
+      writable: true,
+    });
+    expect(() => apply({ ...DEFAULTS, theme: 'dark' })).not.toThrow();
+    expect(document.documentElement.dataset.theme).toBe('dark');
+  });
+});

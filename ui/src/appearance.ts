@@ -133,6 +133,28 @@ export function apply(appearance: Appearance): void {
   root.style.setProperty('--font-size-mono', `${appearance.monoSize}px`);
   root.style.setProperty('--font-mono', stackOf(MONO_FAMILIES, appearance.monoFamily));
   root.style.setProperty('--font-ui', stackOf(UI_FAMILIES, appearance.uiFamily));
+  applyWindowTheme(appearance.theme);
+}
+
+/** Match the window frame to the theme.
+ *
+ * The page repaints itself, but the title bar is drawn by the OS, so
+ * without this the light theme left a dark bar above a light app.
+ *
+ * 'system' is passed through rather than resolved: the window then
+ * follows the OS by itself, including changes made later.
+ */
+function applyWindowTheme(theme: ThemeChoice): void {
+  const internals = (window as unknown as {
+    __TAURI_INTERNALS__?: { invoke(cmd: string, args: unknown): Promise<unknown> };
+  }).__TAURI_INTERNALS__;
+  // Absent in a browser, where there is no window to set.
+  if (!internals) return;
+  void internals
+    .invoke('set_window_theme', { theme: theme === 'system' ? null : theme })
+    // A frame that does not match is worth less than a working app, so a
+    // failure here is not worth interrupting anyone over.
+    .catch(() => undefined);
 }
 
 /** Re-apply when the system theme changes, while following the system. */

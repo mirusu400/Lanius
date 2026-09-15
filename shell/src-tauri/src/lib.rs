@@ -342,11 +342,42 @@ fn engine_running() -> bool {
     port_open(api_port())
 }
 
+/// Match the window chrome to the theme the page is using.
+///
+/// The page repaints itself from a CSS custom property, but the title
+/// bar and the window frame are drawn by the OS and do not know about
+/// it, so picking the light theme left a dark bar above a light app.
+///
+/// `None` hands the window back to the system, which is what "follow the
+/// system" has to mean: the window then keeps following later changes on
+/// its own.
+#[tauri::command]
+fn set_window_theme(window: tauri::Window, theme: Option<String>) -> Result<(), String> {
+    window
+        .set_theme(parse_theme(theme.as_deref()))
+        .map_err(|e| e.to_string())
+}
+
+/// `None` means "follow the system", which is also what anything
+/// unrecognised means: a window stuck on the wrong theme is worse than
+/// one that defers to the OS.
+fn parse_theme(theme: Option<&str>) -> Option<tauri::Theme> {
+    match theme {
+        Some("dark") => Some(tauri::Theme::Dark),
+        Some("light") => Some(tauri::Theme::Light),
+        _ => None,
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(EngineProcess::default())
-        .invoke_handler(tauri::generate_handler![engine_info, engine_running])
+        .invoke_handler(tauri::generate_handler![
+            engine_info,
+            engine_running,
+            set_window_theme
+        ])
         .setup(|app| {
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
@@ -377,6 +408,25 @@ pub fn run() {
 mod tests {
     use super::*;
     use std::net::TcpListener;
+
+    #[test]
+    fn theme_names_map_to_window_themes() {
+        assert_eq!(parse_theme(Some("dark")), Some(tauri::Theme::Dark));
+        assert_eq!(parse_theme(Some("light")), Some(tauri::Theme::Light));
+    }
+
+    #[test]
+    fn following_the_system_leaves_the_window_to_the_system() {
+        // Resolving it here would pin the window to whatever the system
+        // was at that moment and stop it following later changes.
+        assert_eq!(parse_theme(None), None);
+        assert_eq!(parse_theme(Some("system")), None);
+    }
+
+    #[test]
+    fn an_unknown_theme_defers_rather_than_guessing() {
+        assert_eq!(parse_theme(Some("solarized")), None);
+    }
 
     #[test]
     fn port_open_detects_a_listening_socket() {
