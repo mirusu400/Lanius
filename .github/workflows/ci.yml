@@ -53,7 +53,9 @@ jobs:
         # Several tests bind local sockets and drive real HTTP servers, so they
         # need a little headroom on slower CI runners.
         timeout-minutes: 15
-        run: python -m pytest -q
+        # Report the slowest tests: a job that takes ten times as long on
+        # one platform should say which test is responsible.
+        run: python -m pytest -q --durations=10
 
   ui:
     name: UI
