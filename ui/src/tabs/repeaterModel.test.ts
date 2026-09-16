@@ -71,8 +71,43 @@ describe('tabFromFlow', () => {
     expect(tab.url).toBe('https://api.test');
     expect(tab.text).toContain('POST /v1/login?next=/home HTTP/1.1');
     expect(tab.text).toContain('Content-Type: application/json');
-    expect(tab.text.endsWith('{"u":"a"}')).toBe(true);
+    // Laid out, because a captured JSON body arrives as one line and
+    // this is a text editor.
+    expect(tab.text).toContain('"u": "a"');
     expect(tab.title).toBe('POST /v1/login');
+  });
+
+  it('lays out a JSON body but leaves the headers alone', () => {
+    // Rewriting the whole message would reindent headers, which are not
+    // JSON and are often the thing being tested.
+    const detail = {
+      ...flow(),
+      request_headers: [
+        ['Host', 'api.test'],
+        ['Content-Type', 'application/json'],
+      ],
+      request_body: '{"a":1,"b":2}',
+      response_headers: null,
+      response_body: null,
+    } as unknown as FlowDetail;
+
+    const tab = tabFromFlow(flow(), detail);
+    expect(tab.text).toContain('Host: api.test\r\nContent-Type');
+    expect(tab.text).toContain('"a": 1');
+  });
+
+  it('leaves a body that is not JSON exactly as it was', () => {
+    const detail = {
+      ...flow(),
+      request_headers: [['Content-Type', 'application/x-www-form-urlencoded']],
+      request_body: 'user=alice&password=hunter2',
+      response_headers: null,
+      response_body: null,
+    } as unknown as FlowDetail;
+
+    expect(tabFromFlow(flow(), detail).text).toContain(
+      'user=alice&password=hunter2',
+    );
   });
 
   it('falls back to a Host header without detail', () => {

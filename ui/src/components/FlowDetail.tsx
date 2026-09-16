@@ -9,6 +9,7 @@ import { ContextMenu, useContextMenu, type MenuItem } from './ContextMenu';
 import { Split } from './Split';
 import { useCodegenMenu } from './useCodegenMenu';
 import { rawRequest, rawResponse } from './rawHttp';
+import { canReformat, formatBody, type BodyView } from './bodyFormat';
 import { useT } from '../i18n';
 import type { Translator } from '../i18n';
 
@@ -87,6 +88,8 @@ function Half({
   title,
   note,
   view,
+  bodyView,
+  onBodyView,
   onView,
   headers,
   body,
@@ -99,6 +102,8 @@ function Half({
   title: string;
   note?: string | null;
   view: View;
+  bodyView: BodyView;
+  onBodyView: (view: BodyView) => void;
   onView: (view: View) => void;
   headers: [string, string][] | null;
   body: string;
@@ -137,8 +142,23 @@ function Half({
           <>
             <h4>{t('detail.headers')}</h4>
             <HeaderList headers={headers} t={t} />
-            <h4>{t('detail.body')}</h4>
-            <pre className="body mono">{body || t('common.empty')}</pre>
+            <h4>
+              {t('detail.body')}
+              {canReformat(body) && (
+                // Only when laying it out would change something: a
+                // control that does nothing is worse than none.
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => onBodyView(bodyView === 'pretty' ? 'raw' : 'pretty')}
+                >
+                  {bodyView === 'pretty' ? t('body.showRaw') : t('body.showPretty')}
+                </button>
+              )}
+            </h4>
+            <pre className="body mono">
+              {formatBody(body, bodyView) || t('common.empty')}
+            </pre>
           </>
         )}
         {view === 'raw' && (
@@ -172,6 +192,10 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
   const [reveal, setReveal] = useState(false);
   const [requestView, setRequestView] = useState<View>('parsed');
   const [responseView, setResponseView] = useState<View>('parsed');
+  // Laid out by default: a captured JSON body is one long line, which is
+  // not readable.
+  const [requestBodyView, setRequestBodyView] = useState<BodyView>('pretty');
+  const [responseBodyView, setResponseBodyView] = useState<BodyView>('pretty');
   const menu = useContextMenu<null>();
   const codegen = useCodegenMenu();
   // Captured when the menu opens: the flow can change underneath while
@@ -252,6 +276,8 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
       view={pick(requestView)}
       onView={setRequestView}
       views={views}
+      bodyView={requestBodyView}
+      onBodyView={setRequestBodyView}
       headers={detail?.request_headers ?? null}
       body={detail?.request_body ?? ''}
       raw={isTcp ? (detail?.request_body ?? '') : rawRequest(flow, detail)}
@@ -273,6 +299,8 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
       view={pick(responseView)}
       onView={setResponseView}
       views={views}
+      bodyView={responseBodyView}
+      onBodyView={setResponseBodyView}
       headers={detail?.response_headers ?? null}
       body={detail?.response_body ?? ''}
       raw={isTcp ? (detail?.response_body ?? '') : rawResponse(flow, detail)}

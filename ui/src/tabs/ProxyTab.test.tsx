@@ -2,13 +2,15 @@
  * Renders the real ProxyTab against a mocked engine (fetch + WebSocket) and
  * asserts the live history table and detail pane behave as expected.
  */
-import {cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import { useI18n, type Locale } from '../i18n';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProxyTab } from './ProxyTab';
+import { clearSelection } from './selectionStore';
+import { getTabs, resetTabs } from './repeaterStore';
 import type { FlowSummary } from '../api/types';
 
 const seeded: FlowSummary = {
@@ -69,6 +71,9 @@ class MockSocket {
 let failListFlows = false;
 
 beforeEach(() => {
+  // The selection lives outside the component so it survives a tab
+  // switch, which also means it survives between tests.
+  clearSelection();
   failListFlows = false;
   MockSocket.instances = [];
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
@@ -259,5 +264,54 @@ describe('ProxyTab', () => {
     await screen.findByText('seeded.test');
     MockSocket.instances[0].emit('flows.cleared', {});
     await waitFor(() => expect(screen.queryByText('seeded.test')).toBeNull());
+  });
+});
+
+describe('selection across tabs', () => {
+  it('keeps the selected flow when the tab is unmounted and shown again', async () => {
+    // React unmounts a tab when you switch away, so a selection held in
+    // the component was gone the moment you looked at anything else.
+    const user = userEvent.setup();
+    const view = render(<ProxyTab />);
+    await user.click(await screen.findByText('/seeded'));
+    await screen.findByText('<redacted>');
+
+    view.unmount();
+    render(<ProxyTab />);
+
+    expect(await screen.findByText('<redacted>')).toBeTruthy();
+  });
+
+  it('forgets the selection when the history is cleared', async () => {
+    // That is the one case where the flow really is gone.
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await user.click(await screen.findByText('/seeded'));
+    await screen.findByText('<redacted>');
+
+    await user.click(screen.getByRole('button', { name: t('common.clear') }));
+
+    expect(await screen.findByText(t('detail.selectPrompt'))).toBeTruthy();
+  });
+});
+
+describe('sending a flow onward', () => {
+  it('carries the headers and body, not just the request line', async () => {
+    // The table row is a summary with neither, so without fetching the
+    // full flow first the request arrived in Repeater as one bare line,
+    // missing everything that was being tested.
+    const user = userEvent.setup();
+    resetTabs();
+    render(<ProxyTab />);
+    const row = (await screen.findByText('/seeded')).closest('tr')!;
+    fireEvent.contextMenu(row);
+    await user.click(
+      screen.getByRole('menuitem', { name: t('menu.sendToRepeater') }),
+    );
+
+    await waitFor(() => expect(getTabs()).toHaveLength(1));
+    const text = getTabs()[0].text;
+    expect(text).toContain('Cookie:');
+    expect(text).toContain('Host: seeded.test');
   });
 });

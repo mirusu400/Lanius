@@ -22,6 +22,7 @@ import { subscribeTarget } from './intruderStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { toSendPayload } from './repeaterModel';
+import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { sendToRepeater } from './repeaterStore';
 import { getFlow } from '../api/client';
@@ -131,6 +132,24 @@ export function IntruderTab() {
       {
         label: t('intruder.clearMarkers'),
         onSelect: () => setTemplate(clearMarkers(template)),
+      },
+      // Rewrites the template rather than changing how it is shown, so
+      // it is an action you ask for and can undo.
+      {
+        label: t('body.format'),
+        onSelect: (_selection, editor) => {
+          const next = formatMessageBody(editor.value, 'pretty');
+          if (next !== editor.value) setTemplate(next);
+        },
+      },
+      {
+        label: t('body.minify'),
+        onSelect: (_selection, editor) => {
+          const { head, separator, body } = splitMessage(editor.value);
+          if (!separator) return;
+          const next = `${head}${separator}${minify(body)}`;
+          if (next !== editor.value) setTemplate(next);
+        },
       },
     ],
     [codegen.buildMenu(codegenTarget())],

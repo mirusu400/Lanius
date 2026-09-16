@@ -16,6 +16,7 @@ import {
 } from './repeaterStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
+import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { sendTextToIntruder } from './intruderStore';
 import { errorMessage, renderMessage, useT } from '../i18n';
@@ -69,6 +70,27 @@ export function RepeaterTabView() {
         label: t('editor.sendToIntruder'),
         onSelect: (_selection, editor) => {
           if (active) sendTextToIntruder(active.url, editor.value);
+        },
+      },
+      // An explicit action rather than a view toggle: this rewrites the
+      // request you are editing, so it has to be something you asked
+      // for and can undo, not a display mode you might not notice.
+      {
+        label: t('body.format'),
+        onSelect: (_selection, editor) => {
+          if (!active) return;
+          const next = formatMessageBody(editor.value, 'pretty');
+          if (next !== editor.value) updateTab(active.id, { text: next });
+        },
+      },
+      {
+        label: t('body.minify'),
+        onSelect: (_selection, editor) => {
+          if (!active) return;
+          const { head, separator, body } = splitMessage(editor.value);
+          if (!separator) return;
+          const next = `${head}${separator}${minify(body)}`;
+          if (next !== editor.value) updateTab(active.id, { text: next });
         },
       },
     ],

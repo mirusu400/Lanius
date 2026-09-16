@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   clearFlows,
+  getFlow,
   getInterceptState,
   getStatus,
   listFlows,
@@ -10,6 +11,7 @@ import {
 import { connectStream, type ConnectionState } from '../api/stream';
 import type {
   EngineStatus,
+  FlowDetail,
   FlowFilters,
   FlowSummary,
   InterceptRules,
@@ -20,6 +22,12 @@ import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { flowMenuItems, flowUrl } from './flowMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { Split } from '../components/Split';
+import {
+  clearSelection,
+  getSelectedFlow,
+  setSelectedFlow,
+  subscribe as subscribeSelection,
+} from './selectionStore';
 import { sendToRepeater } from './repeaterStore';
 import { sendToIntruder } from './intruderStore';
 import { addScopeFromUrl } from '../api/client';
@@ -43,7 +51,10 @@ export function ProxyTab() {
   const t = useT();
   const [view, setView] = useState<View>('history');
   const [flows, setFlows] = useState<FlowSummary[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  // Outside the component: switching tabs unmounts this one, and a
+  // selection kept here would be gone when you came back to it.
+  const [selected, setSelected] = useState<string | null>(getSelectedFlow);
+  useEffect(() => subscribeSelection(setSelected), []);
   const [filters, setFilters] = useState<FlowFilters>({});
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const codegen = useCodegenMenu();
@@ -110,7 +121,7 @@ export function ProxyTab() {
           switch (event.type) {
             case 'flows.cleared':
               setFlows([]);
-              setSelected(null);
+              clearSelection();
               return;
             case 'intercept.rules':
               setRules(event.data);
@@ -165,10 +176,26 @@ export function ProxyTab() {
   const onClear = useCallback(async () => {
     await clearFlows();
     setFlows([]);
-    setSelected(null);
+    clearSelection();
   }, []);
 
   const menu = useContextMenu<FlowSummary>();
+
+  /** Run an action with the flow's headers and body loaded.
+   *
+   * Falls through with nothing if the fetch fails, so the request still
+   * opens rather than the menu silently doing nothing.
+   */
+  const withDetail = useCallback(
+    async (flow: FlowSummary, run: (detail: FlowDetail | null) => void) => {
+      try {
+        run(await getFlow(flow.id, true));
+      } catch {
+        run(null);
+      }
+    },
+    [],
+  );
 
   const selectedFlow = useMemo(
     () => flows.find((f) => f.id === selected) ?? null,
@@ -223,7 +250,7 @@ export function ProxyTab() {
               <FlowTable
                 flows={flows}
                 selectedId={selected}
-                onSelect={setSelected}
+                onSelect={setSelectedFlow}
                 onContextMenu={menu.open}
               />
             }
@@ -234,8 +261,20 @@ export function ProxyTab() {
             items={
               menu.target
                 ? flowMenuItems(menu.target, t, {
-                    sendToRepeater: (flow) => sendToRepeater(flow),
-                    sendToIntruder: (flow) => sendToIntruder(flow),
+                    // The table row is a summary with no headers or
+                    // body, so the full flow is fetched first. Without
+                    // this the request arrived in Repeater as a bare
+                    // request line, missing everything being tested.
+                    sendToRepeater: (flow) => {
+                      void withDetail(flow, (detail) =>
+                        sendToRepeater(flow, detail),
+                      );
+                    },
+                    sendToIntruder: (flow) => {
+                      void withDetail(flow, (detail) =>
+                        sendToIntruder(flow, detail),
+                      );
+                    },
                     addToScope: (flow) => {
                       void addScopeFromUrl(flowUrl(flow)).catch(() => undefined);
                     },

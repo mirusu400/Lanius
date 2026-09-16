@@ -1,6 +1,7 @@
 /** Repeater state: raw HTTP request text <-> engine send payload. */
 
 import { rawRequest } from '../components/rawHttp';
+import { formatMessageBody } from '../components/bodyFormat';
 import type { FlowDetail, FlowSummary } from '../api/types';
 import { ParseError } from '../i18n/ParseError';
 import type { Message } from '../i18n/message';
@@ -92,9 +93,12 @@ export function tabFromFlow(
     id: nextTabId(),
     title: `${flow.method} ${flow.path ?? '/'}`,
     url: originOf(flow),
-    // The same text the detail pane shows as Raw, so what you read there
-    // is what you edit here.
-    text: rawRequest(flow, detail),
+    // Laid out, because a captured JSON body is one long line and this
+    // is a text editor. Nothing undoes it at send time: what is in the
+    // editor is what goes on the wire, so the request cannot quietly
+    // differ from what is on screen. "Minify JSON body" in the
+    // right-click menu puts it back.
+    text: formatMessageBody(rawRequest(flow, detail), 'pretty'),
     response: null,
     sending: false,
     error: null,

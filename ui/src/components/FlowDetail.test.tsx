@@ -32,6 +32,9 @@ const httpFlow: FlowSummary = {
   comment: null,
 };
 
+/** A flow whose response body is JSON on one line. */
+const jsonFlow: FlowSummary = { ...httpFlow, id: 'j1' };
+
 const tcpFlow: FlowSummary = {
   ...httpFlow,
   id: 't1',
@@ -49,6 +52,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const isTcp = String(input).includes('t1');
+      const isJson = String(input).includes('j1');
       return {
         ok: true,
         status: 200,
@@ -58,7 +62,11 @@ beforeEach(() => {
           request_headers: isTcp ? [] : [['Host', 'api.test']],
           request_body: isTcp ? 'HELLO\r\n' : '',
           response_headers: isTcp ? null : [['Content-Type', 'text/plain']],
-          response_body: isTcp ? '220 READY\r\n' : 'ok',
+          response_body: isTcp
+            ? '220 READY\r\n'
+            : isJson
+              ? '{"a":1,"b":2}'
+              : 'ok',
         }),
       } as Response;
     }),
@@ -185,6 +193,38 @@ describe('FlowDetailView', () => {
     const toggle = screen.getByRole('checkbox');
     await userEvent.click(toggle);
     expect((toggle as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('lays out a JSON body, which arrives as one line', async () => {
+    // Captured JSON is unreadable as it comes off the wire.
+    render(<FlowDetailView flow={jsonFlow} />);
+    const body = await screen.findByText(/"a": 1/);
+    expect(body).toBeTruthy();
+  });
+
+  it('offers the exact bytes when the body has been laid out', async () => {
+    render(<FlowDetailView flow={jsonFlow} />);
+    const toggle = await screen.findByRole('button', { name: t('body.showRaw') });
+    await userEvent.click(toggle);
+    expect(await screen.findByText('{"a":1,"b":2}')).toBeTruthy();
+  });
+
+  it('goes back to the laid-out view', async () => {
+    render(<FlowDetailView flow={jsonFlow} />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: t('body.showRaw') }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', { name: t('body.showPretty') }),
+    );
+    expect(await screen.findByText(/"a": 1/)).toBeTruthy();
+  });
+
+  it('does not offer the choice for a body it cannot lay out', async () => {
+    // A control that does nothing is worse than no control.
+    render(<FlowDetailView flow={httpFlow} />);
+    await screen.findByText(t('detail.request'));
+    expect(screen.queryByRole('button', { name: t('body.showRaw') })).toBeNull();
   });
 
   it('prompts when nothing is selected', () => {
