@@ -122,6 +122,13 @@ jobs:
 
       - name: Freeze the engine
         working-directory: engine
+        env:
+          # Stamped into the binary so a downloaded build can say which
+          # commit it came from. Without these it would fall back to git,
+          # which a user's machine does not have.
+          LANIUS_BUILD_COMMIT: ${{ github.sha }}
+          LANIUS_BUILD_RELEASE: nightly-${{ needs.changes.outputs.date }}
+          LANIUS_BUILD_DATE: ${{ needs.changes.outputs.date }}
         run: pyinstaller --clean --noconfirm lanius-engine.spec
 
       - name: Smoke-test the frozen engine

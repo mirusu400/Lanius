@@ -28,6 +28,7 @@ from ..addons.codecs import (
 from ..addons.intruder import IntruderError, find_positions, strip_markers
 from ..addons.plugins import PluginError
 from .. import codegen
+from ..build_info import build_info
 from ..addons.scope import ScopeError, rule_from_url
 from .. import browser
 from ..config import Settings
@@ -591,6 +592,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             record.response_headers, reveal=reveal
         )
         return data
+
+    @app.get("/api/about")
+    async def about() -> dict[str, Any]:
+        """What build this is, for a bug report.
+
+        Every nightly this month reports version 0.1.0, so the version
+        alone does not say which build someone is running.
+        """
+        return build_info()
 
     @app.get("/api/codegen/formats")
     async def codegen_formats() -> dict[str, Any]:

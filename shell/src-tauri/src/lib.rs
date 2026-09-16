@@ -26,6 +26,22 @@ pub struct EngineInfo {
     pub api_url: String,
     pub proxy: String,
     pub managed: bool,
+    /// The shell's own version, which is not necessarily the engine's:
+    /// a development build can pair either with either.
+    pub shell_version: String,
+}
+
+impl EngineInfo {
+    /// The local endpoints, before it is known whether we started the
+    /// engine ourselves.
+    fn local() -> Self {
+        Self {
+            api_url: format!("http://{API_HOST}:{}", api_port()),
+            proxy: format!("{API_HOST}:{}", proxy_port()),
+            managed: false,
+            shell_version: env!("CARGO_PKG_VERSION").to_string(),
+        }
+    }
 }
 
 fn port_open(port: u16) -> bool {
@@ -210,11 +226,7 @@ fn repo_root() -> Option<PathBuf> {
 }
 
 fn start_engine(app: &tauri::AppHandle, state: &EngineProcess) -> EngineInfo {
-    let info = EngineInfo {
-        api_url: format!("http://{API_HOST}:{}", api_port()),
-        proxy: format!("{API_HOST}:{}", proxy_port()),
-        managed: false,
-    };
+    let info = EngineInfo::local();
 
     // Reuse an engine the user already started (e.g. `python -m app.main`).
     if port_open(api_port()) {
@@ -331,9 +343,8 @@ fn install_signal_handlers(handle: tauri::AppHandle) {
 #[tauri::command]
 fn engine_info(state: State<'_, EngineProcess>) -> EngineInfo {
     EngineInfo {
-        api_url: format!("http://{API_HOST}:{}", api_port()),
-        proxy: format!("{API_HOST}:{}", proxy_port()),
         managed: state.0.lock().expect("engine lock").is_some(),
+        ..EngineInfo::local()
     }
 }
 
@@ -482,6 +493,15 @@ mod tests {
         assert_eq!(DEFAULT_API_PORT, 8081);
         assert_eq!(DEFAULT_PROXY_PORT, 8080);
         assert_eq!(API_HOST, "127.0.0.1", "engine stays on loopback");
+    }
+
+    #[test]
+    fn engine_info_carries_the_shell_version() {
+        // So a bug report can say which shell it came from, which is not
+        // necessarily the same build as the engine beside it.
+        let info = EngineInfo::local();
+        assert_eq!(info.shell_version, env!("CARGO_PKG_VERSION"));
+        assert!(!info.shell_version.is_empty());
     }
 
     #[test]

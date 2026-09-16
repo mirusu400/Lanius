@@ -542,3 +542,37 @@ export function openCsrfPoc(payload: {
     body: JSON.stringify({ kind: 'csrf', ...payload }),
   });
 }
+
+export interface AboutInfo {
+  version: string;
+  commit: string | null;
+  commit_short: string | null;
+  release: string | null;
+  built_at: string | null;
+  dirty: boolean;
+  source: 'release' | 'development';
+}
+
+/** What build this is: version alone does not identify one. */
+export function getAbout(): Promise<AboutInfo> {
+  return request('/api/about');
+}
+
+/** The shell's own version, when running in the desktop app. */
+export async function getShellVersion(): Promise<string | null> {
+  const internals = (
+    window as unknown as {
+      __TAURI_INTERNALS__?: { invoke(cmd: string, args?: unknown): Promise<unknown> };
+    }
+  ).__TAURI_INTERNALS__;
+  if (!internals) return null;
+  try {
+    const info = (await internals.invoke('engine_info')) as {
+      shell_version?: string;
+    };
+    return info.shell_version ?? null;
+  } catch {
+    // The shell is optional context, not something to fail the page for.
+    return null;
+  }
+}

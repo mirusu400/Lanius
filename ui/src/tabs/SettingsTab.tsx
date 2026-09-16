@@ -9,31 +9,39 @@
  * list of sections and nothing has to be threaded through here.
  */
 
-import { useState } from 'react';
+import { useState } from "react";
 
-import { useT } from '../i18n';
-import { AppearanceSection } from './settings/AppearanceSection';
-import { BrowserHelpSection } from './settings/BrowserHelpSection';
-import { BrowserSection } from './settings/BrowserSection';
-import { CaSection } from './settings/CaSection';
-import { CaptureSection } from './settings/CaptureSection';
-import { EngineSection } from './settings/EngineSection';
-import { LanguageSection } from './settings/LanguageSection';
-import { ListenerSection } from './settings/ListenerSection';
-import { McpSection } from './settings/McpSection';
-import { ProjectSection } from './settings/ProjectSection';
-import { TlsSection } from './settings/TlsSection';
+import { useT } from "../i18n";
+import { AboutSection } from "./settings/AboutSection";
+import { AppearanceSection } from "./settings/AppearanceSection";
+import { BrowserHelpSection } from "./settings/BrowserHelpSection";
+import { BrowserSection } from "./settings/BrowserSection";
+import { CaSection } from "./settings/CaSection";
+import { CaptureSection } from "./settings/CaptureSection";
+import { EngineSection } from "./settings/EngineSection";
+import { LanguageSection } from "./settings/LanguageSection";
+import { ListenerSection } from "./settings/ListenerSection";
+import { McpSection } from "./settings/McpSection";
+import { ProjectSection } from "./settings/ProjectSection";
+import { TlsSection } from "./settings/TlsSection";
 
-const GROUPS = ['proxy', 'browser', 'appearance', 'integrations', 'project'] as const;
+const GROUPS = [
+  "proxy",
+  "browser",
+  "appearance",
+  "integrations",
+  "project",
+  "about",
+] as const;
 type Group = (typeof GROUPS)[number];
 
 /** Where the chosen group is remembered, so a reload does not drop you
  *  back at the first one while you are in the middle of something. */
-const STORAGE_KEY = 'lanius.settings.group';
+const STORAGE_KEY = "lanius.settings.group";
 
 function initialGroup(): Group {
   const stored = window.localStorage?.getItem(STORAGE_KEY);
-  return GROUPS.includes(stored as Group) ? (stored as Group) : 'proxy';
+  return GROUPS.includes(stored as Group) ? (stored as Group) : "proxy";
 }
 
 export function SettingsTab() {
@@ -52,7 +60,7 @@ export function SettingsTab() {
         {GROUPS.map((name) => (
           <button
             key={name}
-            className={group === name ? 'active' : ''}
+            className={group === name ? "active" : ""}
             onClick={() => choose(name)}
           >
             {t(`settings.group.${name}`)}
@@ -64,7 +72,7 @@ export function SettingsTab() {
 
       <div className="settings-body">
         {/* Everything about getting traffic into Lanius. */}
-        {group === 'proxy' && (
+        {group === "proxy" && (
           <>
             <ListenerSection />
             <EngineSection />
@@ -74,7 +82,7 @@ export function SettingsTab() {
         )}
 
         {/* Everything about pointing a browser at it. */}
-        {group === 'browser' && (
+        {group === "browser" && (
           <>
             <BrowserSection />
             <CaSection onError={setError} />
@@ -82,16 +90,18 @@ export function SettingsTab() {
           </>
         )}
 
-        {group === 'appearance' && (
+        {group === "appearance" && (
           <>
             <AppearanceSection />
             <LanguageSection />
           </>
         )}
 
-        {group === 'integrations' && <McpSection />}
+        {group === "integrations" && <McpSection />}
 
-        {group === 'project' && <ProjectSection />}
+        {group === "project" && <ProjectSection />}
+
+        {group === "about" && <AboutSection />}
       </div>
     </div>
   );

@@ -45,3 +45,6 @@ engine/build/
 engine/dist/
 
 # CI artifact staging (top-level dist/ is covered above)
+
+# Written by the engine build, not checked in.
+engine/app/_build_stamp.py

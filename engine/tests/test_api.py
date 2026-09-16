@@ -884,3 +884,33 @@ def test_sitemap_is_one_query_regardless_of_host_count(client) -> None:
         s["host"] for s in client.get("/api/sitemap?with_paths=true").json()["sites"]
     }
     assert hosts == {"a.com", "b.com"}
+
+
+# --- build information -----------------------------------------------------
+
+
+def test_about_reports_the_version(client) -> None:
+    data = client.get("/api/about").json()
+    assert data["version"]
+
+
+def test_about_identifies_the_build_not_just_the_version(client) -> None:
+    """Every nightly this month says 0.1.0, so the version alone does not
+    tell anyone which build they are running."""
+    data = client.get("/api/about").json()
+    assert "commit" in data
+    assert "release" in data
+
+
+def test_about_shortens_the_commit_for_pasting(client) -> None:
+    data = client.get("/api/about").json()
+    if data["commit"]:
+        assert data["commit_short"] == data["commit"][:7]
+
+
+def test_about_does_not_claim_to_be_a_release_without_one(client) -> None:
+    """A build from a checkout is not the last release that happened to
+    be tagged."""
+    data = client.get("/api/about").json()
+    expected = "release" if data["release"] else "development"
+    assert data["source"] == expected
