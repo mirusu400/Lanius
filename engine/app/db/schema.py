@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -81,6 +81,22 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
             updated_at  REAL NOT NULL
         )
         """,
+    ),
+    4: (
+        # Named payload lists for Intruder, so a wordlist is pasted once
+        # rather than every time an attack is set up.
+        """
+        CREATE TABLE IF NOT EXISTS payload_sets (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL UNIQUE,
+            payloads    TEXT NOT NULL,
+            source      TEXT,
+            created_at  REAL NOT NULL,
+            updated_at  REAL NOT NULL
+        )
+        """,
+        # Listed by name in a picker, so that is what the index is for.
+        "CREATE INDEX IF NOT EXISTS idx_payload_sets_name ON payload_sets(name)",
     ),
 }
 

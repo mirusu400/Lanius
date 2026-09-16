@@ -245,6 +245,27 @@ export interface AttackConfig {
   template: string;
   attack_type: import('./types').AttackType;
   payload_sets: string[][];
+  /** Saved sets to use, so a wordlist is not posted with every attack. */
+  payload_set_ids?: string[];
+  concurrency?: number;
+  delay?: number;
+}
+
+export interface PayloadSetSummary {
+  id: string;
+  name: string;
+  count: number;
+  source: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface WordlistEntry {
+  id: string;
+  name: string;
+  category: string;
+  approx_lines: number;
+  url: string;
 }
 
 export function planAttack(config: AttackConfig): Promise<{ total: number }> {
@@ -575,4 +596,51 @@ export async function getShellVersion(): Promise<string | null> {
     // The shell is optional context, not something to fail the page for.
     return null;
   }
+}
+
+/** Saved payload sets, without their payloads. */
+export function listPayloadSets(): Promise<{ items: PayloadSetSummary[] }> {
+  return request('/api/payload-sets');
+}
+
+export function savePayloadSet(body: {
+  name: string;
+  payloads: string;
+  source?: string;
+}): Promise<PayloadSetSummary> {
+  return request('/api/payload-sets', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
+export function getPayloadSet(
+  id: string,
+): Promise<PayloadSetSummary & { payloads: string[] }> {
+  return request(`/api/payload-sets/${id}`);
+}
+
+export function deletePayloadSet(id: string): Promise<{ ok: boolean }> {
+  return request(`/api/payload-sets/${id}`, { method: 'DELETE' });
+}
+
+/** Wordlists that can be fetched. A fixed catalogue, not a listing. */
+export function listWordlists(): Promise<{
+  items: WordlistEntry[];
+  ref: string;
+}> {
+  return request('/api/wordlists');
+}
+
+/** Fetch a wordlist and keep it as a payload set. */
+export function importWordlist(body: {
+  list_id: string;
+  name?: string;
+}): Promise<PayloadSetSummary> {
+  return request('/api/wordlists/import', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
 }

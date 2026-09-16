@@ -22,6 +22,7 @@ import { subscribeTarget } from './intruderStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { toSendPayload } from './repeaterModel';
+import { PayloadPicker } from '../components/PayloadPicker';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { sendToRepeater } from './repeaterStore';
@@ -37,6 +38,10 @@ export function IntruderTab() {
   const [attackType, setAttackType] = useState<AttackType>('sniper');
   const [payloadText, setPayloadText] = useState(['a\nb\nc']);
   const [attack, setAttack] = useState<Attack | null>(null);
+  // How hard to push. Gentle by default: an attack that knocks a service
+  // over tells you nothing.
+  const [concurrency, setConcurrency] = useState(5);
+  const [delay, setDelay] = useState(0);
   const [error, setError] = useState<Message | null>(null);
 
   const attackIdRef = useRef<string | null>(null);
@@ -201,6 +206,8 @@ export function IntruderTab() {
       template,
       attack_type: attackType,
       payload_sets: sets,
+      concurrency,
+      delay,
     };
     try {
       const started = await startAttack(config);
@@ -250,6 +257,39 @@ export function IntruderTab() {
         <button onClick={() => setTemplate(clearMarkers(template))}>
           {t('intruder.clearMarkers')}
         </button>
+
+        {/* How hard to push. A fixed rate suits neither a load test nor
+            a target that falls over at three requests a second. */}
+        <label className="speed-field">
+          {t('intruder.concurrency')}
+          <input
+            type="number"
+            min={1}
+            max={64}
+            value={concurrency}
+            disabled={running}
+            onChange={(e) =>
+              setConcurrency(
+                Math.min(64, Math.max(1, Number(e.target.value) || 1)),
+              )
+            }
+          />
+        </label>
+        <label className="speed-field">
+          {t('intruder.delay')}
+          <input
+            type="number"
+            min={0}
+            max={60}
+            step={0.1}
+            value={delay}
+            disabled={running}
+            onChange={(e) =>
+              setDelay(Math.min(60, Math.max(0, Number(e.target.value) || 0)))
+            }
+          />
+        </label>
+
         <span className="spacer" />
         <span className="muted">
           {positions < 0
@@ -298,17 +338,13 @@ export function IntruderTab() {
           </h4>
           <div className="payload-sets">
             {payloadText.map((text, index) => (
-              <textarea
+              <PayloadPicker
                 key={index}
-                aria-label={t('intruder.payloadSet', { index: index + 1 })}
-                className="payload-input mono"
-                placeholder={t('intruder.payloadPlaceholder', {
-                  index: index + 1,
-                })}
+                index={index}
                 value={text}
-                onChange={(e) =>
+                onChange={(next) =>
                   setPayloadText((prev) =>
-                    prev.map((t, i) => (i === index ? e.target.value : t)),
+                    prev.map((existing, i) => (i === index ? next : existing)),
                   )
                 }
               />

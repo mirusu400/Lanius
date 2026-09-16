@@ -28,6 +28,14 @@ ATTACK_TYPES: tuple[AttackType, ...] = (
 
 MAX_REQUESTS = 100_000
 
+# Enough to saturate most targets without being a denial of service by
+# accident. Above this the bottleneck is the target, not Lanius.
+MAX_CONCURRENCY = 64
+DEFAULT_CONCURRENCY = 5
+# A minute between requests is slow enough for the most delicate target
+# worth testing; beyond that an attack is better paused.
+MAX_DELAY = 60.0
+
 
 class IntruderError(Exception):
     """Invalid attack configuration (mapped to HTTP 4xx)."""
@@ -179,6 +187,33 @@ class AttackResult:
 
 
 @dataclass(slots=True)
+class AttackSpeed:
+    """How hard to push the target.
+
+    Defaults are deliberately gentle: an attack that knocks a service
+    over tells you nothing, and the person running it usually has
+    permission for the traffic rather than for the outage.
+    """
+
+    #: Requests in flight at once.
+    concurrency: int = DEFAULT_CONCURRENCY
+    #: Seconds to wait before each request leaves, per worker. A whole
+    #: second here with one worker is one request per second.
+    delay: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.concurrency <= MAX_CONCURRENCY:
+            raise IntruderError(
+                f"concurrency must be between 1 and {MAX_CONCURRENCY}"
+            )
+        if not 0 <= self.delay <= MAX_DELAY:
+            raise IntruderError(f"delay must be between 0 and {MAX_DELAY} seconds")
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"concurrency": self.concurrency, "delay": self.delay}
+
+
+@dataclass(slots=True)
 class Attack:
     """A running or finished attack."""
 
@@ -187,6 +222,7 @@ class Attack:
     url: str
     template: str
     total: int
+    speed: AttackSpeed = field(default_factory=lambda: AttackSpeed())
     results: list[AttackResult] = field(default_factory=list)
     status: str = "pending"
     started_at: float = field(default_factory=time.time)
@@ -208,6 +244,7 @@ class Attack:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "error": self.error,
+            "speed": self.speed.as_dict(),
         }
 
     def as_dict(self) -> dict[str, Any]:
@@ -286,6 +323,7 @@ class IntruderAddon:
         template: str,
         attack_type: AttackType = "sniper",
         payload_sets: Sequence[Sequence[str]],
+        speed: AttackSpeed | None = None,
     ) -> Attack:
         total = self.plan(
             attack_type=attack_type, template=template, payload_sets=payload_sets
@@ -296,6 +334,9 @@ class IntruderAddon:
             url=url,
             template=template,
             total=total,
+            # Falls back to the addon's configured default, so an
+            # existing caller keeps the behaviour it had.
+            speed=speed or AttackSpeed(concurrency=self.concurrency),
         )
         self.attacks[attack.id] = attack
         task = asyncio.create_task(
@@ -330,43 +371,76 @@ class IntruderAddon:
         attack.status = "running"
         self._publish("intruder.started", attack.summary())
         positions = len(find_positions(attack.template))
-        semaphore = asyncio.Semaphore(self.concurrency)
 
         async def run_one(index: int, slots: list[str | None], labels: list[str]) -> None:
-            async with semaphore:
-                result = AttackResult(index=index, payloads=labels)
-                try:
-                    # Building requests is pure CPU work: keep it off the loop.
-                    payload = await asyncio.to_thread(
-                        _render_request, attack.url, attack.template, slots
-                    )
-                    flow = build_flow(**payload)
-                    record = await self.repeater.send(flow)
-                    result.status_code = record.status_code
-                    result.length = record.response_size
-                    result.duration_ms = record.duration_ms
-                    result.error = record.error
-                    result.flow_id = record.id
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:  # network/parse errors are per-request
-                    result.error = str(exc)
-                attack.results.append(result)
-                self._publish(
-                    "intruder.result",
-                    {"attack_id": attack.id, "result": result.as_dict()},
+            result = AttackResult(index=index, payloads=labels)
+            try:
+                # Building requests is pure CPU work: keep it off the loop.
+                payload = await asyncio.to_thread(
+                    _render_request, attack.url, attack.template, slots
                 )
+                flow = build_flow(**payload)
+                record = await self.repeater.send(flow)
+                result.status_code = record.status_code
+                result.length = record.response_size
+                result.duration_ms = record.duration_ms
+                result.error = record.error
+                result.flow_id = record.id
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # network/parse errors are per-request
+                result.error = str(exc)
+            attack.results.append(result)
+            self._publish(
+                "intruder.result",
+                {"attack_id": attack.id, "result": result.as_dict()},
+            )
 
         try:
-            tuples = list(
-                generate_payload_tuples(attack.attack_type, positions, payload_sets)
+            # Fed through a queue rather than scheduled all at once: a
+            # gather over the 100k request limit builds 100k coroutines
+            # before sending anything, which measured at 139MB of memory
+            # held for the whole attack.
+            queue: asyncio.Queue[tuple[int, list[str | None], list[str]] | None] = (
+                asyncio.Queue(maxsize=attack.speed.concurrency * 2)
             )
-            await asyncio.gather(
-                *(
-                    run_one(index, slots, labels)
-                    for index, (slots, labels) in enumerate(tuples)
-                )
-            )
+
+            async def worker() -> None:
+                while True:
+                    item = await queue.get()
+                    try:
+                        if item is None:
+                            return
+                        if attack.speed.delay:
+                            # Before the request, not after: the last
+                            # request of an attack should not be followed
+                            # by a wait nobody is using.
+                            await asyncio.sleep(attack.speed.delay)
+                        await run_one(*item)
+                    finally:
+                        queue.task_done()
+
+            workers = [
+                asyncio.create_task(worker())
+                for _ in range(attack.speed.concurrency)
+            ]
+            try:
+                for index, (slots, labels) in enumerate(
+                    generate_payload_tuples(
+                        attack.attack_type, positions, payload_sets
+                    )
+                ):
+                    await queue.put((index, slots, labels))
+                for _ in workers:
+                    await queue.put(None)
+                await asyncio.gather(*workers)
+            except BaseException:
+                # Includes cancellation: stopping an attack should not
+                # leave workers waiting on a queue nobody will fill.
+                for task in workers:
+                    task.cancel()
+                await asyncio.gather(*workers, return_exceptions=True)
+                raise
             attack.status = "completed"
         except asyncio.CancelledError:
             attack.status = "stopped"

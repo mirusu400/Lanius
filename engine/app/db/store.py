@@ -24,6 +24,10 @@ from .. import charset
 logger = logging.getLogger(__name__)
 
 from .schema import migrate
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .payloads import PayloadSetStore
 
 MAX_BODY_BYTES = 5 * 1024 * 1024
 
@@ -163,6 +167,7 @@ class FlowStore:
         self._conn = sqlite3.connect(self.path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._payload_sets: "PayloadSetStore | None" = None
         self._conn.execute("PRAGMA synchronous=NORMAL")
         migrate(self._conn)
 
@@ -626,6 +631,15 @@ class FlowStore:
                 params,
             ).fetchall()
         return [dict(row) for row in rows]
+
+    @property
+    def payload_sets(self) -> "PayloadSetStore":
+        """Payload sets, sharing this connection and its lock."""
+        if self._payload_sets is None:
+            from .payloads import PayloadSetStore
+
+            self._payload_sets = PayloadSetStore(self._conn, self._lock)
+        return self._payload_sets
 
     def paths_by_site(self) -> dict[tuple[str, str, int | None], List[dict[str, Any]]]:
         """Every site's paths in one pass.

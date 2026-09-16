@@ -378,6 +378,92 @@ pre.body,
   text-align: right;
 }
 
+/* --- intruder payloads --- */
+.speed-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.speed-field input {
+  width: 4.5em;
+  text-align: right;
+}
+
+.payload-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.payload-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85em;
+}
+
+.payload-picker-head .spacer {
+  flex: 1;
+}
+
+/* Sits above the editor rather than in a dialog: picking a list is part
+   of setting up the attack, not a detour from it. */
+.payload-library {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-alt);
+  padding: 8px 10px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.payload-library h5 {
+  margin: 8px 0 4px;
+  color: var(--muted);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.payload-library h5:first-child {
+  margin-top: 0;
+}
+
+.payload-set-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.payload-set-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.payload-set-list li > .link-button:first-child {
+  flex: 1;
+  text-align: left;
+  padding-left: 0;
+}
+
+.link-button.danger {
+  color: var(--status-5xx);
+}
+
+.intruder-payloads {
+  flex: 1;
+  min-height: 120px;
+  resize: vertical;
+}
+
 /* --- loading indicator --- */
 .spinner {
   display: inline-flex;

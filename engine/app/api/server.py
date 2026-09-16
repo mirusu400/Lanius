@@ -25,7 +25,15 @@ from ..addons.codecs import (
     compare,
     run_chain,
 )
-from ..addons.intruder import IntruderError, find_positions, strip_markers
+from ..addons.intruder import (
+    DEFAULT_CONCURRENCY,
+    AttackSpeed,
+    IntruderError,
+    find_positions,
+    strip_markers,
+)
+from ..db.payloads import PayloadSetError, parse_payloads
+from .. import wordlists
 from ..addons.plugins import PluginError
 from .. import codegen
 from ..build_info import build_info
@@ -124,6 +132,24 @@ class AttackBody(BaseModel):
     template: str
     attack_type: str = "sniper"
     payload_sets: list[list[str]] = []
+    #: Ids of saved sets, used for any position a literal list does not
+    #: cover. Saves posting a 30,000 line wordlist with every attack.
+    payload_set_ids: list[str] = []
+    concurrency: int | None = None
+    delay: float | None = None
+
+
+class PayloadSetBody(BaseModel):
+    name: str
+    #: One payload per line, which is the shape a wordlist already has.
+    payloads: str
+    source: str | None = None
+
+
+class WordlistImportBody(BaseModel):
+    list_id: str
+    #: Defaults to the wordlist's own name when not given.
+    name: str | None = None
 
 
 class PositionsBody(BaseModel):
@@ -858,6 +884,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"total": total}
 
+    def _resolve_payload_sets(body: AttackBody) -> list[list[str]]:
+        """Literal lists first, then any saved sets named by id.
+
+        Both are allowed so a quick one-off attack does not need a saved
+        set, and a real wordlist does not need to be posted every time.
+        """
+        sets = [list(entry) for entry in body.payload_sets]
+        for set_id in body.payload_set_ids:
+            found = store.payload_sets.get(set_id)
+            if found is None:
+                raise HTTPException(
+                    status_code=404, detail=f"payload set not found: {set_id}"
+                )
+            sets.append(found.payloads)
+        return sets
+
+    def _speed(body: AttackBody) -> AttackSpeed:
+        try:
+            return AttackSpeed(
+                concurrency=(
+                    body.concurrency
+                    if body.concurrency is not None
+                    else DEFAULT_CONCURRENCY
+                ),
+                delay=body.delay or 0.0,
+            )
+        except IntruderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post("/api/intruder/attacks")
     async def intruder_start(body: AttackBody) -> dict[str, Any]:
         try:
@@ -865,11 +920,76 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 url=body.url,
                 template=body.template,
                 attack_type=body.attack_type,  # type: ignore[arg-type]
-                payload_sets=body.payload_sets,
+                payload_sets=_resolve_payload_sets(body),
+                speed=_speed(body),
             )
         except IntruderError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return attack.summary()
+
+    # --- payload sets -----------------------------------------------------
+    @app.get("/api/payload-sets")
+    async def payload_sets_list() -> dict[str, Any]:
+        """Names and sizes only: a picker does not need 30,000 entries."""
+        items = await asyncio.to_thread(store.payload_sets.list)
+        return {"items": [s.summary() for s in items]}
+
+    @app.get("/api/payload-sets/{set_id}")
+    async def payload_set_get(set_id: str) -> dict[str, Any]:
+        found = await asyncio.to_thread(store.payload_sets.get, set_id)
+        if found is None:
+            raise HTTPException(status_code=404, detail="payload set not found")
+        return found.as_dict()
+
+    @app.post("/api/payload-sets")
+    async def payload_set_save(body: PayloadSetBody) -> dict[str, Any]:
+        try:
+            saved = await asyncio.to_thread(
+                lambda: store.payload_sets.save(
+                    name=body.name,
+                    payloads=parse_payloads(body.payloads),
+                    source=body.source,
+                )
+            )
+        except PayloadSetError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return saved.summary()
+
+    @app.delete("/api/payload-sets/{set_id}")
+    async def payload_set_delete(set_id: str) -> dict[str, Any]:
+        removed = await asyncio.to_thread(store.payload_sets.delete, set_id)
+        if not removed:
+            raise HTTPException(status_code=404, detail="payload set not found")
+        return {"ok": True}
+
+    # --- wordlists --------------------------------------------------------
+    @app.get("/api/wordlists")
+    async def wordlists_catalogue() -> dict[str, Any]:
+        """What can be fetched. A fixed list, not a directory listing."""
+        return {"items": wordlists.catalogue(), "ref": wordlists.SECLISTS_REF}
+
+    @app.post("/api/wordlists/import")
+    async def wordlist_import(body: WordlistImportBody) -> dict[str, Any]:
+        """Fetch a wordlist and keep it as a payload set.
+
+        Nothing is fetched until this is called: a proxy that reaches out
+        on its own is not one to trust.
+        """
+        try:
+            entry, payloads = await wordlists.fetch(body.list_id)
+        except wordlists.WordlistError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        try:
+            saved = await asyncio.to_thread(
+                lambda: store.payload_sets.save(
+                    name=body.name or entry.name,
+                    payloads=payloads,
+                    source=entry.url,
+                )
+            )
+        except PayloadSetError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return saved.summary()
 
     @app.get("/api/intruder/attacks")
     async def intruder_list() -> dict[str, Any]:
