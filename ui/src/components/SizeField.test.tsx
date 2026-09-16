@@ -1,5 +1,5 @@
 /** The size field: typed values and a list of the usual ones. */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,7 +16,6 @@ function renderField(props: Partial<React.ComponentProps<typeof SizeField>> = {}
       min={10}
       max={20}
       presets={[10, 12, 13, 16, 20]}
-      label="Common sizes"
       onChange={onChange}
       {...props}
     />,
@@ -62,24 +61,36 @@ describe('SizeField', () => {
     expect(field().value).toBe('13');
   });
 
-  it('offers the usual sizes in a dropdown', async () => {
-    const { onChange } = renderField();
-    await userEvent.selectOptions(screen.getByLabelText('Common sizes'), '16');
-    expect(onChange).toHaveBeenLastCalledWith(16);
-  });
-
-  it('is a real select, not a datalist', () => {
-    // The desktop build runs in a WebKit webview, where datalist support
-    // is patchy enough that the list can simply not appear.
+  it('offers the usual sizes from the field itself', () => {
+    // One control, not a box beside a dropdown: a datalist is a field
+    // that also suggests. Verified in WKWebView that the desktop build
+    // draws the picker for it.
     renderField();
-    expect(document.querySelector('datalist')).toBeNull();
-    expect(screen.getByLabelText('Common sizes').tagName).toBe('SELECT');
+    const list = document.getElementById('size-presets') as HTMLDataListElement;
+    expect(list).toBeTruthy();
+    expect([...list.options].map((o) => o.value)).toEqual([
+      '10',
+      '12',
+      '13',
+      '16',
+      '20',
+    ]);
   });
 
-  it('does not claim a preset when the size was typed by hand', () => {
+  it('points the field at its list', () => {
+    renderField();
+    expect(field().getAttribute('list')).toBe('size-presets');
+  });
+
+  it('is one control, not two', () => {
+    // The pair of controls read as a mistake, which is what they were.
+    renderField();
+    expect(document.querySelectorAll('.size-field select')).toHaveLength(0);
+    expect(document.querySelectorAll('.size-field input')).toHaveLength(1);
+  });
+
+  it('accepts a size that is not one of the presets', () => {
     renderField({ value: 17 });
-    const select = screen.getByLabelText('Common sizes') as HTMLSelectElement;
-    expect(select.value).toBe('');
     expect(field().value).toBe('17');
   });
 

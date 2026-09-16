@@ -1,13 +1,14 @@
-/** A font size: type an exact number, or pick from a list.
+/** A font size: type an exact number, or pick from the usual ones.
  *
  * A slider makes it easy to land near a size and hard to land on one,
  * which matters because the difference between 12 and 13 is the whole
- * decision. This takes a typed number and offers the usual values, so
- * both ways work.
+ * decision.
  *
- * A real select rather than a datalist: this runs in a WebKit webview in
- * the desktop build, where datalist support is patchy enough that the
- * list can simply not appear.
+ * One control rather than a box beside a dropdown. A datalist is exactly
+ * this: a text field that also offers suggestions. It was split in two
+ * on an assumption that the WebKit webview the desktop build uses would
+ * not draw the picker; tested in WKWebView, it does, on number inputs as
+ * well as text.
  */
 
 import { useEffect, useState } from 'react';
@@ -18,17 +19,14 @@ export function SizeField({
   min,
   max,
   presets,
-  label,
   onChange,
 }: {
   id: string;
   value: number;
   min: number;
   max: number;
-  /** The sizes offered in the dropdown. */
+  /** The sizes offered alongside the field. */
   presets: readonly number[];
-  /** Describes the dropdown for a screen reader. */
-  label: string;
   onChange: (size: number) => void;
 }) {
   // Held separately so a half-typed number is not clamped on every
@@ -57,6 +55,7 @@ export function SizeField({
         id={id}
         type="number"
         inputMode="numeric"
+        list={`${id}-presets`}
         min={min}
         max={max}
         value={text}
@@ -74,21 +73,12 @@ export function SizeField({
           if (event.key === 'Enter') commit(event.currentTarget.value);
         }}
       />
-      <span className="muted">px</span>
-      <select
-        aria-label={label}
-        // A size typed by hand may not be one of the presets, so the
-        // dropdown shows no selection rather than claiming a wrong one.
-        value={presets.includes(value) ? String(value) : ''}
-        onChange={(event) => commit(event.target.value)}
-      >
-        {!presets.includes(value) && <option value="">{value}</option>}
+      <datalist id={`${id}-presets`}>
         {presets.map((size) => (
-          <option key={size} value={size}>
-            {size}
-          </option>
+          <option key={size} value={size} />
         ))}
-      </select>
+      </datalist>
+      <span className="muted">px</span>
     </span>
   );
 }

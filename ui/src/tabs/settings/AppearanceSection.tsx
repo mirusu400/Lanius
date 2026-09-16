@@ -98,7 +98,6 @@ export function AppearanceSection() {
           min={UI_SIZE_RANGE.min}
           max={UI_SIZE_RANGE.max}
           presets={UI_SIZE_PRESETS}
-          label={t('appearance.uiSizePresets')}
           onChange={(uiSize) => update({ uiSize })}
         />
       </div>
@@ -129,7 +128,6 @@ export function AppearanceSection() {
           min={MONO_SIZE_RANGE.min}
           max={MONO_SIZE_RANGE.max}
           presets={MONO_SIZE_PRESETS}
-          label={t('appearance.monoSizePresets')}
           onChange={(monoSize) => update({ monoSize })}
         />
       </div>
