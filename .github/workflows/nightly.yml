@@ -158,6 +158,13 @@ jobs:
           echo "$status"
           echo "$status" | grep -q '"running":true'
 
+          # The Windows bundle loads the UI from this WebView2 origin. A
+          # missing CORS header makes a healthy engine look like it is down.
+          curl -fsS -D - -o /dev/null \
+            -H 'Origin: http://tauri.localhost' \
+            http://127.0.0.1:18081/api/status \
+            | grep -qiF 'access-control-allow-origin: http://tauri.localhost'
+
           # Prove the proxy actually captures traffic. The upstream status
           # does not matter (example.com/ci-smoke is a 404); what matters is
           # that the flow was recorded, so do not use curl -f here.

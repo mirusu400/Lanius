@@ -584,7 +584,8 @@ def test_the_desktop_window_is_allowed_by_cors(client) -> None:
     """
     for origin in (
         "tauri://localhost",  # macOS and Linux
-        "https://tauri.localhost",  # Windows
+        "http://tauri.localhost",  # Windows WebView2 default
+        "https://tauri.localhost",  # custom secure protocol
         "http://127.0.0.1:5173",  # the dev server
         "http://localhost:5173",
     ):
@@ -599,6 +600,7 @@ def test_cors_still_refuses_a_remote_origin(client) -> None:
     """Widening the rule must not open the engine to a web page."""
     for origin in (
         "http://evil.test",
+        "http://tauri.localhost.evil.test",
         "https://tauri.localhost.evil.test",
         "http://127.0.0.1.evil.test",
     ):

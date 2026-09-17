@@ -269,7 +269,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Two callers, both local. The dev UI (vite) is served over http on a
     # localhost port. The desktop window is not: its documents come from the
     # bundle, so the webview sends "tauri://localhost" on macOS and Linux and
-    # "https://tauri.localhost" on Windows. Without those the shipped app
+    # "http://tauri.localhost" on Windows. Keep the https form too for custom
+    # protocol configurations. Without those the shipped app
     # gets a 200 the webview then refuses to hand over, which surfaces as
     # "Load failed" with nothing wrong on the server.
     app.add_middleware(
@@ -277,7 +278,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origin_regex=(
             r"(http://(127\.0\.0\.1|localhost)(:\d+)?"
             r"|tauri://localhost"
-            r"|https://tauri\.localhost)"
+            r"|https?://tauri\.localhost)"
         ),
         allow_methods=["*"],
         allow_headers=["*"],
