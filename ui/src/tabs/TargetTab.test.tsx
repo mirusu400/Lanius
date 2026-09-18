@@ -1,5 +1,5 @@
 /** Renders the real Target tab against a mocked engine. */
-import {cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -152,21 +152,21 @@ afterEach(() => {
 describe('TargetTab', () => {
   it('lists captured sites', async () => {
     render(<TargetTab />);
-    // The host appears in the tree and again in the summary card.
     expect((await screen.findAllByText('https://api.test')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('http://cdn.test').length).toBeGreaterThan(0);
-    expect(screen.getByText(t('target.siteMeta', { flows: 4, paths: 3 }))).toBeTruthy();
   });
 
-  it('marks in-scope sites', async () => {
+  it('shows each host once', async () => {
+    // Hosts used to appear twice, in the tree and again in a card above
+    // the detail pane, which said nothing the tree did not.
     render(<TargetTab />);
     await screen.findByText('https://api.test');
-    expect(screen.getAllByText(t('target.inScopeBadge')).length).toBe(1);
+    expect(screen.getAllByText('https://api.test').length).toBe(1);
+    expect(document.querySelector('.site-summary')).toBeNull();
   });
 
-  /** Text inside the tree only: hosts also appear in the summary cards, and
-   *  both mocked sites share the same path fixture, so plain getByText would
-   *  hit duplicates. */
+  /** Text inside the tree only: both mocked sites share the same path
+   *  fixture, so plain getByText would hit duplicates. */
   const treeText = () =>
     (document.querySelector('.sitemap-tree') as HTMLElement | null)
       ?.textContent ?? '';
@@ -241,11 +241,50 @@ describe('TargetTab', () => {
     );
   });
 
-  it('adds a site to scope from the list', async () => {
+  it('offers the code formats on a request in the tree', async () => {
+    // Send to Repeater and Intruder were here already; the same request
+    // could not be copied as curl without going back to the history.
     const user = userEvent.setup();
     render(<TargetTab />);
-    await screen.findByText('https://api.test');
-    await user.click(screen.getAllByText(t('target.addToScope'))[1]);
+    await waitFor(() =>
+      expect(document.querySelector('.tree-row.leaf')).toBeTruthy(),
+    );
+    fireEvent.contextMenu(document.querySelector('.tree-row.leaf') as HTMLElement);
+    await user.hover(await screen.findByRole('menuitem', { name: t('menu.copyAs') }));
+    expect(await screen.findByRole('menuitem', { name: 'curl' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'fetch' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Python requests' })).toBeTruthy();
+  });
+
+  it('renders the code from the stored flow, not the tree row', async () => {
+    // The tree holds a summary with no headers and no body, so rendering
+    // from it would produce a command that does not repeat the request.
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await waitFor(() =>
+      expect(document.querySelector('.tree-row.leaf')).toBeTruthy(),
+    );
+    fireEvent.contextMenu(document.querySelector('.tree-row.leaf') as HTMLElement);
+    await user.hover(await screen.findByRole('menuitem', { name: t('menu.copyAs') }));
+    const curl = await screen.findByRole('menuitem', { name: 'curl' });
+    fireEvent.click(curl);
+    await waitFor(() => {
+      const call = calls.find((c) => c.url.endsWith('/api/codegen'));
+      expect(call).toBeTruthy();
+      // The row the menu was opened on, whichever leaf that is.
+      expect((call!.body as { flow_id: string }).flow_id).toMatch(/^p[12]$/);
+      expect((call!.body as { kind: string }).kind).toBe('curl');
+    });
+  });
+
+  it('adds a site to scope from the tree', async () => {
+    // The cards carried the only button for this; right-clicking the
+    // host row in the tree has to reach the same endpoint.
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    const host = await screen.findByText('http://cdn.test');
+    fireEvent.contextMenu(host);
+    await user.click(await screen.findByText(t('menu.addToScope')));
     await waitFor(() =>
       expect(
         calls.some(

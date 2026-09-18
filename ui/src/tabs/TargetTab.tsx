@@ -22,12 +22,12 @@ import { ScopeEditor } from '../components/ScopeEditor';
 import { SitemapTree } from '../components/SitemapTree';
 import { ContextMenu, useContextMenu, type MenuItem } from '../components/ContextMenu';
 import { useReportBusy } from '../components/busy';
+import { useCodegenMenu } from '../components/useCodegenMenu';
 import { sendToRepeater } from './repeaterStore';
 import { sendToIntruder } from './intruderStore';
 import {
   buildTree,
   endpointHost,
-  siteLabel,
   type SiteTree,
   type TreeNode,
 } from './targetModel';
@@ -58,6 +58,7 @@ export function TargetTab() {
   useReportBusy('target', loading);
 
   const menu = useContextMenu<TreeMenuTarget>();
+  const codegen = useCodegenMenu(setError);
 
   const refreshScope = useCallback(async () => {
     try {
@@ -153,16 +154,6 @@ export function TargetTab() {
       cancelled = true;
     };
   }, [selectedFlow]);
-
-  const addSiteToScope = async (site: Site) => {
-    try {
-      await addScopeFromUrl(siteLabel(site));
-      await refreshScope();
-      await refreshSites();
-    } catch (err) {
-      setError(rawMsg((err as Error).message));
-    }
-  };
 
   return (
     <div className="target-tab">
@@ -279,40 +270,18 @@ export function TargetTab() {
             />
             <ContextMenu
               position={menu.position}
-              items={menu.target ? treeMenuItems(menu.target, t, refreshScope) : []}
+              items={
+                menu.target
+                  ? treeMenuItems(menu.target, t, refreshScope, codegen)
+                  : []
+              }
               onClose={menu.close}
             />
           </div>
+          {/* The host cards that used to sit here repeated what the tree
+              already shows, and their only action, adding a site to
+              scope, is on the tree's own right-click menu. */}
           <div className="site-detail">
-            <div className="site-summary">
-              {sites.map((site) => (
-                <div
-                  key={`${site.scheme}-${site.host}-${site.port}`}
-                  className="site"
-                >
-                  <div className="site-name mono">
-                    {siteLabel(site)}
-                    {site.in_scope && (
-                      <span className="in-scope">
-                        {t('target.inScopeBadge')}
-                      </span>
-                    )}
-                  </div>
-                  <div className="site-meta muted">
-                    {t('target.siteMeta', {
-                      flows: site.flows,
-                      paths: site.paths,
-                    })}
-                  </div>
-                  <button
-                    className="add-scope"
-                    onClick={() => void addSiteToScope(site)}
-                  >
-                    {t('target.addToScope')}
-                  </button>
-                </div>
-              ))}
-            </div>
             {selectedDetail && <FlowDetailView flow={selectedDetail} />}
           </div>
         </div>
@@ -334,6 +303,7 @@ function treeMenuItems(
   target: TreeMenuTarget,
   t: ReturnType<typeof useT>,
   onScopeChanged: () => void,
+  codegen: ReturnType<typeof useCodegenMenu>,
 ): MenuItem[] {
   const copy = (text: string) => {
     void navigator.clipboard?.writeText(text);
@@ -384,5 +354,8 @@ function treeMenuItems(
       separator: true,
       onSelect: () => copy(flow.path ?? ''),
     },
+    // Rendered from the stored flow's id, so the engine uses the headers
+    // and body it captured rather than the summary this tree holds.
+    codegen.buildMenu({ flow_id: flow.id }),
   ];
 }

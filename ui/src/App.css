@@ -1391,64 +1391,6 @@ pre.body {
   border-radius: 3px;
 }
 
-.site-list {
-  border-right: 1px solid var(--border);
-  overflow: auto;
-  width: 340px;
-}
-
-.site {
-  border-bottom: 1px solid var(--border-soft);
-  cursor: pointer;
-  padding: 8px 10px;
-  position: relative;
-}
-
-.site:hover {
-  background: var(--bg-hover);
-}
-
-.site.selected {
-  background: var(--accent-dim);
-}
-
-.site-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.in-scope {
-  background: var(--accent);
-  border-radius: 3px;
-  color: var(--on-accent);
-  font-size: 0.8em;
-  margin-left: 6px;
-  padding: 1px 5px;
-}
-
-.site-meta {
-  font-size: 0.85em;
-}
-
-.add-scope {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.85em;
-  padding: 2px 6px;
-  position: absolute;
-  right: 8px;
-  top: 8px;
-}
-
-.add-scope:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
 .site-detail {
   flex: 1;
   overflow: auto;
@@ -2217,28 +2159,6 @@ pre.body {
 .tree-status {
   margin-left: auto;
   padding-right: 8px;
-}
-
-.site-summary {
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px;
-}
-
-.site-summary .site {
-  border: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  border-radius: 4px;
-  cursor: default;
-  padding: 6px 10px;
-  padding-right: 74px;
-  position: relative;
-}
-
-.site-summary .site:hover {
-  background: transparent;
 }
 
 /* --- dashboard --- */
