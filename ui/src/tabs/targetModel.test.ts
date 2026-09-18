@@ -5,7 +5,6 @@ import {
   buildTree,
   countFlows,
   countNodes,
-  defaultExpanded,
   describeRule,
   endpointHost,
   siteLabel,
@@ -205,23 +204,3 @@ describe('statusesUnder', () => {
   });
 });
 
-describe('defaultExpanded', () => {
-  it('opens branches near the root so the map is readable', () => {
-    const root = buildTree([path('/api/v1/users'), path('/admin/login')]);
-    const open = defaultExpanded(root);
-    expect(open.has('/api')).toBe(true);
-    expect(open.has('/admin')).toBe(true);
-  });
-
-  it('does not open leaves', () => {
-    const root = buildTree([path('/solo')]);
-    expect(defaultExpanded(root).has('/solo')).toBe(false);
-  });
-
-  it('respects the depth limit', () => {
-    const root = buildTree([path('/a/b/c/d/e')]);
-    const open = defaultExpanded(root, 1);
-    expect(open.has('/a')).toBe(true);
-    expect(open.has('/a/b')).toBe(false);
-  });
-});

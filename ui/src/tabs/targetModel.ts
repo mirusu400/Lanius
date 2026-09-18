@@ -38,21 +38,6 @@ export function statusesUnder(node: TreeNode): number[] {
   return [...seen].sort((a, b) => a - b);
 }
 
-/** Paths whose node should start expanded: the spine down to the first
- *  branch, so a fresh site map is never a single collapsed row. */
-export function defaultExpanded(root: TreeNode, maxDepth = 2): Set<string> {
-  const open = new Set<string>();
-  const walk = (node: TreeNode, depth: number) => {
-    if (depth >= maxDepth) return;
-    for (const child of node.children) {
-      if (child.children.length > 0) open.add(child.path);
-      walk(child, depth + 1);
-    }
-  };
-  walk(root, 0);
-  return open;
-}
-
 export function siteLabel(site: Site): string {
   const isDefault =
     (site.scheme === 'https' && site.port === 443) ||

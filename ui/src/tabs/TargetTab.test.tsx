@@ -51,6 +51,26 @@ const paths = [
     response_size: 5,
     started_at: 2,
   },
+  // Same path, different queries: one row each, and the pile of them is
+  // what made the pane scroll.
+  {
+    id: 'p3',
+    method: 'GET',
+    path: '/api/v1/users',
+    query: 'page=1',
+    status_code: 200,
+    response_size: 10,
+    started_at: 3,
+  },
+  {
+    id: 'p4',
+    method: 'GET',
+    path: '/api/v1/users',
+    query: 'page=2',
+    status_code: 200,
+    response_size: 10,
+    started_at: 4,
+  },
 ];
 
 const endpoints = [
@@ -180,19 +200,39 @@ describe('TargetTab', () => {
       (row) => row.querySelector('.tree-name')?.textContent === label,
     );
 
+  /** The map starts closed, so most tests need it opened first. */
+  const expandAll = async (user: ReturnType<typeof userEvent.setup>) => {
+    await waitFor(() => expect(treeRows().length).toBeGreaterThan(0));
+    await user.click(screen.getByRole('button', { name: t('target.expandAll') }));
+    await waitFor(() => expect(treeRows().length).toBeGreaterThan(4));
+  };
+
   it('does not make a request per host', async () => {
     // It used to: sixty hosts meant sixty requests and sixty queries, so
     // opening this tab took seconds and got slower as the capture grew.
     render(<TargetTab />);
-    await waitFor(() => expect(treeRows().length).toBeGreaterThan(4));
+    await waitFor(() => expect(treeRows().length).toBeGreaterThan(0));
     const calls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
     expect(calls.filter((u) => u.includes('/api/sitemap/paths'))).toHaveLength(0);
     expect(calls.filter((u) => u.includes('/api/sitemap'))).toHaveLength(1);
   });
 
-  it('shows the whole site map without clicking a site first', async () => {
+  it('starts with every site closed', async () => {
+    // A real capture is hundreds of hosts. Opening the spine of each one
+    // filled the pane with rows to scroll past before finding anything.
     render(<TargetTab />);
-    await waitFor(() => expect(treeRows().length).toBeGreaterThan(4));
+    await waitFor(() => expect(treeText()).toContain('https://api.test'));
+    // Two rows: one per host, and nothing underneath either of them.
+    expect(treeRows().length).toBe(2);
+    expect(treeText()).not.toContain('api/v1');
+    expect(treeText()).not.toContain('users');
+    expect(document.querySelectorAll('.tree-row.leaf').length).toBe(0);
+  });
+
+  it('shows the whole site map without clicking a site first', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await expandAll(user);
 
     const text = treeText();
     expect(text).toContain('https://api.test');
@@ -204,8 +244,9 @@ describe('TargetTab', () => {
   });
 
   it('shows the request method and status on each leaf', async () => {
+    const user = userEvent.setup();
     render(<TargetTab />);
-    await waitFor(() => expect(treeRows().length).toBeGreaterThan(4));
+    await expandAll(user);
     expect(treeText()).toContain('POST');
     expect(treeText()).toContain('401');
   });
@@ -220,6 +261,7 @@ describe('TargetTab', () => {
         (row) => row.querySelector('.tree-name')?.textContent === label,
       ).length;
 
+    await expandAll(user);
     await waitFor(() => expect(countRows('v1')).toBe(2));
 
     await user.click(rowFor('api')!);
@@ -229,12 +271,45 @@ describe('TargetTab', () => {
     await waitFor(() => expect(countRows('v1')).toBe(2));
   });
 
+  it('folds a path that only holds query variations', async () => {
+    // These rows had no twisty at all: only child *nodes* made a row
+    // foldable, so a path with many query strings could not be closed.
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await expandAll(user);
+
+    // Both mocked sites share the path fixture, so count the rows and
+    // watch one site's worth disappear rather than expecting none.
+    const queryRows = () =>
+      [...document.querySelectorAll('.sitemap-tree .tree-row.leaf')].filter(
+        (row) => row.textContent?.includes('page='),
+      ).length;
+
+    await waitFor(() => expect(queryRows()).toBe(4));
+    await user.click(rowFor('users')!);
+    await waitFor(() => expect(queryRows()).toBe(2));
+    await user.click(rowFor('users')!);
+    await waitFor(() => expect(queryRows()).toBe(4));
+  });
+
+  it('opens every level at once, and closes them again', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await waitFor(() => expect(treeRows().length).toBe(2));
+
+    await user.click(screen.getByRole('button', { name: t('target.expandAll') }));
+    await waitFor(() => expect(treeText()).toContain('page='));
+
+    // The same button closes it: one control, labelled for what it does
+    // next, rather than two that are each dead half the time.
+    await user.click(screen.getByRole('button', { name: t('target.collapseAll') }));
+    await waitFor(() => expect(treeRows().length).toBe(2));
+  });
+
   it('opens the request detail when a leaf is selected', async () => {
     const user = userEvent.setup();
     render(<TargetTab />);
-    await waitFor(() =>
-      expect(document.querySelector('.tree-row.leaf')).toBeTruthy(),
-    );
+    await expandAll(user);
     await user.click(document.querySelector('.tree-row.leaf') as HTMLElement);
     await waitFor(() =>
       expect(document.querySelector('.flow-detail')).toBeTruthy(),
@@ -246,9 +321,7 @@ describe('TargetTab', () => {
     // could not be copied as curl without going back to the history.
     const user = userEvent.setup();
     render(<TargetTab />);
-    await waitFor(() =>
-      expect(document.querySelector('.tree-row.leaf')).toBeTruthy(),
-    );
+    await expandAll(user);
     fireEvent.contextMenu(document.querySelector('.tree-row.leaf') as HTMLElement);
     await user.hover(await screen.findByRole('menuitem', { name: t('menu.copyAs') }));
     expect(await screen.findByRole('menuitem', { name: 'curl' })).toBeTruthy();
@@ -261,9 +334,7 @@ describe('TargetTab', () => {
     // from it would produce a command that does not repeat the request.
     const user = userEvent.setup();
     render(<TargetTab />);
-    await waitFor(() =>
-      expect(document.querySelector('.tree-row.leaf')).toBeTruthy(),
-    );
+    await expandAll(user);
     fireEvent.contextMenu(document.querySelector('.tree-row.leaf') as HTMLElement);
     await user.hover(await screen.findByRole('menuitem', { name: t('menu.copyAs') }));
     const curl = await screen.findByRole('menuitem', { name: 'curl' });

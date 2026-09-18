@@ -19,7 +19,7 @@ import type {
   SitePath,
 } from '../api/types';
 import { ScopeEditor } from '../components/ScopeEditor';
-import { SitemapTree } from '../components/SitemapTree';
+import { SitemapTree, useSitemapExpansion } from '../components/SitemapTree';
 import { ContextMenu, useContextMenu, type MenuItem } from '../components/ContextMenu';
 import { useReportBusy } from '../components/busy';
 import { useCodegenMenu } from '../components/useCodegenMenu';
@@ -59,6 +59,7 @@ export function TargetTab() {
 
   const menu = useContextMenu<TreeMenuTarget>();
   const codegen = useCodegenMenu(setError);
+  const expansion = useSitemapExpansion(trees);
 
   const refreshScope = useCallback(async () => {
     try {
@@ -188,6 +189,15 @@ export function TargetTab() {
           />
           {t('target.inScopeOnly')}
         </label>
+        {view === 'sitemap' && (
+          <button
+            onClick={() =>
+              expansion.anyOpen ? expansion.collapseAll() : expansion.expandAll()
+            }
+          >
+            {expansion.anyOpen ? t('target.collapseAll') : t('target.expandAll')}
+          </button>
+        )}
         <button onClick={() => void refreshSites()}>{t('common.refresh')}</button>
       </div>
 
@@ -267,6 +277,7 @@ export function TargetTab() {
               onNodeContextMenu={(event, node) =>
                 menu.open(event, { kind: 'node', node })
               }
+              expansion={expansion}
             />
             <ContextMenu
               position={menu.position}

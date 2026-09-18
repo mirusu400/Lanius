@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import type { SitePath } from '../api/types';
 import { statusClass } from '../tabs/proxyModel';
 import {
   countFlows,
-  defaultExpanded,
   siteLabel,
   statusesUnder,
   type SiteTree,
@@ -20,6 +19,8 @@ interface Props {
   onFlowContextMenu?: (event: React.MouseEvent, flow: SitePath) => void;
   /** Right-click on a folder, which stands for a path prefix. */
   onNodeContextMenu?: (event: React.MouseEvent, node: TreeNode) => void;
+  /** Open/closed state, owned by the tab so its toolbar can drive it. */
+  expansion: ReturnType<typeof useSitemapExpansion>;
 }
 
 /** Requests attached to a node, one row per method + query combination. */
@@ -84,10 +85,11 @@ function Node({
   onFlowContextMenu?: (event: React.MouseEvent, flow: SitePath) => void;
   onNodeContextMenu?: (event: React.MouseEvent, node: TreeNode) => void;
 }) {
-  const hasChildren = node.children.length > 0;
-  // A leaf has nothing to fold, so its requests are always visible; only
-  // nodes with children participate in expand/collapse.
-  const open = hasChildren ? expanded.has(node.path) : true;
+  // A node folds if anything hangs off it. The requests count: a path
+  // with fifty query variations was a wall of rows with no way to
+  // collapse it, because only child *nodes* used to make a row foldable.
+  const canFold = node.children.length > 0 || node.flows.length > 0;
+  const open = expanded.has(node.path);
   const total = countFlows(node);
   const statuses = statusesUnder(node);
 
@@ -96,11 +98,11 @@ function Node({
       <div
         className="tree-row"
         style={{ paddingLeft: `${depth * 14}px` }}
-        onClick={() => hasChildren && toggle(node.path)}
+        onClick={() => canFold && toggle(node.path)}
         onContextMenu={(event) => onNodeContextMenu?.(event, node)}
       >
         <span className="twisty">
-          {hasChildren ? (open ? '\u25be' : '\u25b8') : '\u00b7'}
+          {canFold ? (open ? '\u25be' : '\u25b8') : '\u00b7'}
         </span>
         <span className="mono tree-name">{node.name}</span>
         {total > 0 && <span className="tree-count">{total}</span>}
@@ -143,36 +145,42 @@ function Node({
   );
 }
 
-export function SitemapTree({
-  trees,
-  selectedFlowId,
-  onSelectFlow,
-  onFlowContextMenu,
-  onNodeContextMenu,
-}: Props) {
-  const t = useT();
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [touched, setTouched] = useState(false);
-
-  // Open each site and the spine of its tree, so the map is readable at a
-  // glance instead of a list of collapsed hosts. A user toggle takes over.
-  const initial = useMemo(() => {
-    const open = new Set<string>();
-    for (const { site, root } of trees) {
-      open.add(siteLabel(site));
-      for (const path of defaultExpanded(root)) {
-        open.add(`${siteLabel(site)}${path}`);
+/** Every foldable path in the trees, for expand-all.
+ *
+ * A node folds if it holds requests or children, which is the same rule
+ * the rows use; anything else has nothing to show when opened.
+ */
+export function allFoldablePaths(trees: SiteTree[]): Set<string> {
+  const paths = new Set<string>();
+  for (const { site, root } of trees) {
+    const label = siteLabel(site);
+    paths.add(label);
+    const walk = (node: TreeNode) => {
+      for (const child of node.children) {
+        if (child.children.length > 0 || child.flows.length > 0) {
+          paths.add(`${label}${child.path}`);
+        }
+        walk(child);
       }
-    }
-    return open;
+    };
+    walk(root);
+  }
+  return paths;
+}
+
+/** Which nodes are open, kept here so the Target tab's toolbar can drive
+ *  expand-all and collapse-all without owning the tree's internals. */
+export function useSitemapExpansion(trees: SiteTree[]) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Everything starts closed. Opening the spine of every site sounded
+  // helpful, but a real capture is hundreds of hosts and the map opened
+  // as a page of rows you had to scroll past to find anything.
+  useEffect(() => {
+    setExpanded(new Set());
   }, [trees]);
 
-  useEffect(() => {
-    if (!touched) setExpanded(initial);
-  }, [initial, touched]);
-
-  const toggle = (path: string) => {
-    setTouched(true);
+  const toggle = useCallback((path: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(path)) {
@@ -182,7 +190,27 @@ export function SitemapTree({
       }
       return next;
     });
-  };
+  }, []);
+
+  const expandAll = useCallback(() => {
+    setExpanded(allFoldablePaths(trees));
+  }, [trees]);
+
+  const collapseAll = useCallback(() => setExpanded(new Set()), []);
+
+  return { expanded, toggle, expandAll, collapseAll, anyOpen: expanded.size > 0 };
+}
+
+export function SitemapTree({
+  trees,
+  selectedFlowId,
+  onSelectFlow,
+  onFlowContextMenu,
+  onNodeContextMenu,
+  expansion,
+}: Props) {
+  const t = useT();
+  const { expanded, toggle } = expansion;
 
   if (trees.length === 0) {
     return <p className="muted pad">{t('target.noSites')}</p>;
