@@ -308,7 +308,16 @@ jobs:
   release:
     name: Publish prerelease
     needs: [meta, build]
-    if: needs.meta.outputs.publish == 'true' 
+    # `!cancelled()` is load-bearing, and was what skipped this job on
+    # the first two per-commit runs. `verify` is skipped for a
+    # workflow_run; a skipped dependency skips `build`'s condition too
+    # unless it is guarded, and that skip then reaches here. Confirmed
+    # against this exact job graph: with the guard a skipped `verify`
+    # still releases, and a single failed platform still does not.
+    if: >-
+      ${{ !cancelled()
+          && needs.meta.outputs.publish == 'true'
+          && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
