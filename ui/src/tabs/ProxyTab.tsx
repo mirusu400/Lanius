@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   clearFlows,
+  deleteFlows,
   getFlow,
   getInterceptState,
   getStatus,
@@ -21,6 +22,7 @@ import { FlowTable } from '../components/FlowTable';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { flowMenuItems, flowUrl } from './flowMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Split } from '../components/Split';
 import { FilterDialog } from '../components/FilterDialog';
 import {
@@ -175,6 +177,25 @@ export function ProxyTab() {
     setQueue((prev) => (id === '*' ? [] : prev.filter((p) => p.id !== id)));
   }, []);
 
+  const [pendingDelete, setPendingDelete] = useState<FlowSummary | null>(null);
+
+  const removeFlow = useCallback(
+    async (flow: FlowSummary) => {
+      try {
+        await deleteFlows({ ids: [flow.id] });
+        // Dropped locally rather than reloading: a reload would jump the
+        // list back to the top and lose where the user was reading.
+        setFlows((prev) => prev.filter((f) => f.id !== flow.id));
+        // Only when the deleted row was the selected one. A selection
+        // missing from this page usually just means it is filtered out.
+        if (getSelectedFlow() === flow.id) clearSelection();
+      } catch {
+        // The row stays; the next refresh will show whether it went.
+      }
+    },
+    [],
+  );
+
   const onClear = useCallback(async () => {
     await clearFlows();
     setFlows([]);
@@ -265,6 +286,18 @@ export function ProxyTab() {
             }
             second={<FlowDetailView flow={selectedFlow} />}
           />
+          <ConfirmDialog
+            open={pendingDelete !== null}
+            title={t('menu.deleteFlow')}
+            message={t('delete.confirmFlow')}
+            confirmLabel={t('common.delete')}
+            onCancel={() => setPendingDelete(null)}
+            onConfirm={() => {
+              const flow = pendingDelete;
+              setPendingDelete(null);
+              if (flow) void removeFlow(flow);
+            }}
+          />
           <ContextMenu
             position={menu.position}
             items={
@@ -290,6 +323,7 @@ export function ProxyTab() {
                     copy: (text) => {
                       void navigator.clipboard?.writeText(text);
                     },
+                    deleteFlow: (flow) => setPendingDelete(flow),
                   },
                   // A stored flow is rendered from its id, so the engine
                   // uses the headers and body it actually captured.

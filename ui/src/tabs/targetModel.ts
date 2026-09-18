@@ -38,6 +38,34 @@ export function statusesUnder(node: TreeNode): number[] {
   return [...seen].sort((a, b) => a - b);
 }
 
+/** What a site map row stands for, as a deletion target.
+ *
+ * Tree paths are prefixed with the site label so two hosts never share a
+ * React key, and a top-level row's path *is* the label. Both have to be
+ * unpicked before the path means anything to the engine, and getting it
+ * wrong would delete the wrong subtree.
+ */
+export function deletionTarget(node: TreeNode, site: Site | undefined): {
+  host?: string;
+  port?: number | null;
+  scheme?: string;
+  pathPrefix?: string;
+} | null {
+  if (!site) return null;
+  const label = siteLabel(site);
+  const path = node.path.startsWith(label)
+    ? node.path.slice(label.length)
+    : node.path;
+  return {
+    host: site.host,
+    port: site.port,
+    scheme: site.scheme,
+    // A host row has nothing left after the label, and means the whole
+    // site rather than a path under it.
+    pathPrefix: path || undefined,
+  };
+}
+
 export function siteLabel(site: Site): string {
   const isDefault =
     (site.scheme === 'https' && site.port === 443) ||

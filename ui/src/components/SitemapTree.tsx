@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import type { SitePath } from '../api/types';
+import type { Site, SitePath } from '../api/types';
 import { statusClass } from '../tabs/proxyModel';
 import {
   countFlows,
@@ -221,7 +221,7 @@ export function SitemapTree({
       {trees.map(({ site, root }) => {
         const label = siteLabel(site);
         // Prefix child paths with the site so two hosts never share a key.
-        const prefixed = prefixPaths(root, label);
+        const prefixed = prefixPaths(root, label, site);
         return (
           <Node
             key={label}
@@ -240,10 +240,18 @@ export function SitemapTree({
   );
 }
 
-function prefixPaths(node: TreeNode, prefix: string): TreeNode {
+/** Prefixes paths with the site label and carries the site down.
+ *
+ * The label keeps two hosts from sharing a React key. The site is
+ * attached to every node, not just the top one, because acting on a row
+ * (deleting the subtree it stands for) needs to know which site it
+ * belongs to, and a nested row had no way to find out.
+ */
+function prefixPaths(node: TreeNode, prefix: string, site: Site): TreeNode {
   return {
     ...node,
+    site,
     path: `${prefix}${node.path}`,
-    children: node.children.map((child) => prefixPaths(child, prefix)),
+    children: node.children.map((child) => prefixPaths(child, prefix, site)),
   };
 }

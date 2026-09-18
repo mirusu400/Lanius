@@ -102,6 +102,29 @@ export function clearFlows(): Promise<{ ok: boolean }> {
   return request<{ ok: boolean }>('/api/flows', { method: 'DELETE' });
 }
 
+/** Remove part of the history: either a set of rows, or the subtree a
+ *  site map folder stands for. The engine vacuums afterwards, so the
+ *  database file actually gets smaller. */
+export function deleteFlows(target: {
+  ids?: string[];
+  host?: string;
+  port?: number | null;
+  scheme?: string;
+  pathPrefix?: string;
+}): Promise<{ deleted: number }> {
+  return request<{ deleted: number }>('/api/flows/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ids: target.ids,
+      host: target.host,
+      port: target.port ?? undefined,
+      scheme: target.scheme,
+      path_prefix: target.pathPrefix,
+    }),
+  });
+}
+
 // --- intercept (M2) -------------------------------------------------------
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };

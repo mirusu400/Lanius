@@ -378,6 +378,24 @@ pre.body,
   text-align: right;
 }
 
+.confirm-dialog {
+  max-width: 460px;
+}
+
+.confirm-dialog p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.context-menu button.danger {
+  color: var(--danger-soft);
+}
+
+.context-menu button.danger:hover:not(:disabled) {
+  background: var(--danger-dim);
+  color: #fff;
+}
+
 /* --- history filter --- */
 .filter-dialog {
   width: 820px;

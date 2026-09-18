@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   addScopeFromUrl,
+  deleteFlows,
   deleteScopeRule,
   getEndpoints,
   getScope,
@@ -23,11 +24,15 @@ import { SitemapTree, useSitemapExpansion } from '../components/SitemapTree';
 import { ContextMenu, useContextMenu, type MenuItem } from '../components/ContextMenu';
 import { useReportBusy } from '../components/busy';
 import { useCodegenMenu } from '../components/useCodegenMenu';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { sendToRepeater } from './repeaterStore';
 import { sendToIntruder } from './intruderStore';
 import {
   buildTree,
+  countFlows,
+  deletionTarget,
   endpointHost,
+  siteLabel,
   type SiteTree,
   type TreeNode,
 } from './targetModel';
@@ -60,7 +65,6 @@ export function TargetTab() {
   const menu = useContextMenu<TreeMenuTarget>();
   const codegen = useCodegenMenu(setError);
   const expansion = useSitemapExpansion(trees);
-
   const refreshScope = useCallback(async () => {
     try {
       setScope(await getScope());
@@ -82,6 +86,45 @@ export function TargetTab() {
       setLoading(false);
     }
   }, [inScopeOnly]);
+
+  const [pendingDelete, setPendingDelete] = useState<TreeMenuTarget | null>(null);
+
+  /** What the confirmation says, and what it will remove. */
+  const deletion = useMemo(() => {
+    if (!pendingDelete) return null;
+    if (pendingDelete.kind === 'flow') {
+      const { flow } = pendingDelete;
+      return {
+        message: t('delete.confirmFlow'),
+        run: () => deleteFlows({ ids: [flow.id] }),
+      };
+    }
+    const { node } = pendingDelete;
+    const target = deletionTarget(node, node.site);
+    if (!target) return null;
+    return {
+      // Says how many and which folder: "delete everything under here"
+      // is not a question anyone can answer without those two facts.
+      message: t('delete.confirmSubtree', {
+        count: countFlows(node),
+        name: node.name,
+      }),
+      run: () => deleteFlows(target),
+    };
+  }, [pendingDelete, t]);
+
+  const runDeletion = useCallback(async () => {
+    const pending = deletion;
+    setPendingDelete(null);
+    if (!pending) return;
+    try {
+      await pending.run();
+      setSelectedFlow(null);
+      await refreshSites();
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    }
+  }, [deletion, refreshSites]);
 
   useEffect(() => {
     void refreshScope();
@@ -279,11 +322,25 @@ export function TargetTab() {
               }
               expansion={expansion}
             />
+            <ConfirmDialog
+              open={deletion !== null}
+              title={t('menu.deleteFlow')}
+              message={deletion?.message ?? ''}
+              confirmLabel={t('common.delete')}
+              onCancel={() => setPendingDelete(null)}
+              onConfirm={() => void runDeletion()}
+            />
             <ContextMenu
               position={menu.position}
               items={
                 menu.target
-                  ? treeMenuItems(menu.target, t, refreshScope, codegen)
+                  ? treeMenuItems(
+                      menu.target,
+                      t,
+                      refreshScope,
+                      codegen,
+                      setPendingDelete,
+                    )
                   : []
               }
               onClose={menu.close}
@@ -315,6 +372,7 @@ function treeMenuItems(
   t: ReturnType<typeof useT>,
   onScopeChanged: () => void,
   codegen: ReturnType<typeof useCodegenMenu>,
+  onDelete: (target: TreeMenuTarget) => void,
 ): MenuItem[] {
   const copy = (text: string) => {
     void navigator.clipboard?.writeText(text);
@@ -338,6 +396,20 @@ function treeMenuItems(
       { label: t('menu.copyPath'), separator: true, onSelect: () => copy(node.path) },
       ...(site
         ? [{ label: t('menu.copyHost'), onSelect: () => copy(site.host) }]
+        : []),
+      // A folder stands for a subtree, so this removes everything under
+      // it in one request rather than a few thousand ids.
+      ...(site
+        ? [
+            {
+              label: node.site && node.path === siteLabel(node.site)
+                ? t('menu.deleteHost')
+                : t('menu.deletePath'),
+              separator: true,
+              danger: true,
+              onSelect: () => onDelete(target),
+            },
+          ]
         : []),
     ];
   }
@@ -368,5 +440,11 @@ function treeMenuItems(
     // Rendered from the stored flow's id, so the engine uses the headers
     // and body it captured rather than the summary this tree holds.
     codegen.buildMenu({ flow_id: flow.id }),
+    {
+      label: t('menu.deleteFlow'),
+      separator: true,
+      danger: true,
+      onSelect: () => onDelete(target),
+    },
   ];
 }

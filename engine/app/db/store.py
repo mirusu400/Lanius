@@ -226,6 +226,81 @@ class FlowStore:
             self._conn.execute("DELETE FROM flows")
             self._conn.commit()
 
+    def delete(self, flow_ids: Sequence[str]) -> int:
+        """Remove flows by id. Returns how many rows went."""
+        ids = list(flow_ids)
+        if not ids:
+            return 0
+        with self._lock:
+            placeholders = ", ".join("?" for _ in ids)
+            cursor = self._conn.execute(
+                f"DELETE FROM flows WHERE id IN ({placeholders})", ids
+            )
+            self._conn.commit()
+            return cursor.rowcount
+
+    def delete_by_prefix(
+        self,
+        *,
+        host: str | None = None,
+        port: int | None = None,
+        scheme: str | None = None,
+        path_prefix: str | None = None,
+    ) -> int:
+        """Remove everything under a host, or under a path on that host.
+
+        What the site map's folders stand for. Deleting a subtree one id
+        at a time would mean shipping thousands of ids to say something
+        the database can work out itself.
+        """
+        clauses: list[str] = []
+        params: list[Any] = []
+        if host:
+            clauses.append("host = ?")
+            params.append(host)
+        if port is not None:
+            clauses.append("port = ?")
+            params.append(port)
+        if scheme:
+            clauses.append("scheme = ?")
+            params.append(scheme)
+        if path_prefix:
+            # The prefix stands for a folder, so "/api" takes "/api" and
+            # "/api/v1/x" but not "/apidocs". LIKE would also treat _ and
+            # % in a captured path as wildcards, hence the escape.
+            escaped = (
+                path_prefix.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+            )
+            clauses.append("(path = ? OR path LIKE ? ESCAPE '\\')")
+            params.extend([path_prefix, f"{escaped.rstrip('/')}/%"])
+        if not clauses:
+            # Refuse to read an empty filter as "everything": clear() is
+            # the way to do that, and it is not reached by accident.
+            return 0
+        with self._lock:
+            cursor = self._conn.execute(
+                f"DELETE FROM flows WHERE {' AND '.join(clauses)}", params
+            )
+            self._conn.commit()
+            return cursor.rowcount
+
+    def reclaim_space(self) -> None:
+        """Hand freed pages back to the filesystem.
+
+        Deleting rows only marks pages reusable, so the file does not
+        shrink, and saving space is the whole reason for deleting.
+
+        The checkpoint is not optional. In WAL mode the vacuum's own
+        writes land in the -wal file and the main database keeps its old
+        size until something moves them across, so vacuuming alone left
+        the file exactly as large as before.
+        """
+        with self._lock:
+            self._conn.execute("VACUUM")
+            self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
     # --- reads ------------------------------------------------------------
     def get(self, flow_id: str) -> FlowRecord | None:
         with self._lock:

@@ -69,8 +69,10 @@ class MockSocket {
 
 // Set by the locale test to make the next flow listing fail.
 let failListFlows = false;
+let calls: { url: string; method: string; body?: unknown }[] = [];
 
 beforeEach(() => {
+  calls = [];
   // The selection lives outside the component so it survives a tab
   // switch, which also means it survives between tests.
   clearSelection();
@@ -79,8 +81,18 @@ beforeEach(() => {
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      calls.push({
+        url,
+        method: init?.method ?? 'GET',
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      // Before the /api/flows/ branch below: that prefix would otherwise
+      // answer a delete with a flow.
+      if (url.endsWith('/api/flows/delete')) {
+        return jsonResponse({ deleted: 1 });
+      }
       if (url.includes('/api/status')) {
         return jsonResponse({
           version: '0.1.0',
@@ -313,5 +325,52 @@ describe('sending a flow onward', () => {
     const text = getTabs()[0].text;
     expect(text).toContain('Cookie:');
     expect(text).toContain('Host: seeded.test');
+  });
+});
+
+describe('deleting from the history', () => {
+  const openMenu = async () => {
+    resetTabs();
+    render(<ProxyTab />);
+    const row = (await screen.findByText('/seeded')).closest('tr')!;
+    fireEvent.contextMenu(row);
+  };
+
+  it('removes the request the menu was opened on', async () => {
+    const user = userEvent.setup();
+    await openMenu();
+    await user.click(screen.getByRole('menuitem', { name: t('menu.deleteFlow') }));
+    await user.click(await screen.findByRole('button', { name: t('common.delete') }));
+    await waitFor(() => {
+      const call = calls.find((c) => c.url.endsWith('/api/flows/delete'));
+      expect((call!.body as { ids: string[] }).ids).toEqual(['seed-1']);
+    });
+  });
+
+  it('takes the row out of the table', async () => {
+    // Without reloading: a reload jumps the list back to the top and
+    // loses where the user was reading.
+    const user = userEvent.setup();
+    await openMenu();
+    await user.click(screen.getByRole('menuitem', { name: t('menu.deleteFlow') }));
+    await user.click(await screen.findByRole('button', { name: t('common.delete') }));
+    await waitFor(() => expect(screen.queryByText('/seeded')).toBeNull());
+  });
+
+  it('asks before deleting', async () => {
+    const user = userEvent.setup();
+    await openMenu();
+    await user.click(screen.getByRole('menuitem', { name: t('menu.deleteFlow') }));
+    expect(calls.some((c) => c.url.endsWith('/api/flows/delete'))).toBe(false);
+    expect(screen.getByText(t('delete.confirmFlow'))).toBeTruthy();
+  });
+
+  it('keeps the request when the confirmation is cancelled', async () => {
+    const user = userEvent.setup();
+    await openMenu();
+    await user.click(screen.getByRole('menuitem', { name: t('menu.deleteFlow') }));
+    await user.click(screen.getByRole('button', { name: t('common.cancel') }));
+    expect(calls.some((c) => c.url.endsWith('/api/flows/delete'))).toBe(false);
+    expect(screen.getByText('/seeded')).toBeTruthy();
   });
 });

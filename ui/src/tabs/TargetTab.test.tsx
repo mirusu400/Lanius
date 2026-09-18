@@ -348,6 +348,94 @@ describe('TargetTab', () => {
     });
   });
 
+  it('deletes one request from the tree', async () => {
+    // Space is the point: a capture is mostly noise and the database
+    // grows without bound if the only option is clearing all of it.
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await expandAll(user);
+    fireEvent.contextMenu(document.querySelector('.tree-row.leaf') as HTMLElement);
+    await user.click(await screen.findByRole('menuitem', { name: t('menu.deleteFlow') }));
+    await user.click(await screen.findByRole('button', { name: t('common.delete') }));
+    await waitFor(() => {
+      const call = calls.find((c) => c.url.endsWith('/api/flows/delete'));
+      expect((call!.body as { ids: string[] }).ids).toHaveLength(1);
+    });
+  });
+
+  it('deletes a folder as a subtree, not as a list of ids', async () => {
+    // A folder can hold thousands of requests. Sending every id would
+    // be a huge request describing something the database can select.
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await expandAll(user);
+    fireEvent.contextMenu(rowFor('v1')!);
+    await user.click(await screen.findByRole('menuitem', { name: t('menu.deletePath') }));
+    await user.click(await screen.findByRole('button', { name: t('common.delete') }));
+    await waitFor(() => {
+      const call = calls.find((c) => c.url.endsWith('/api/flows/delete'));
+      const body = call!.body as { path_prefix?: string; host?: string; ids?: string[] };
+      expect(body.path_prefix).toBe('/api/v1');
+      expect(body.host).toBe('api.test');
+      expect(body.ids ?? []).toHaveLength(0);
+    });
+  });
+
+  it('deletes a whole site from its top row', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await waitFor(() => expect(treeRows().length).toBe(2));
+    fireEvent.contextMenu(rowFor('https://api.test')!);
+    await user.click(await screen.findByRole('menuitem', { name: t('menu.deleteHost') }));
+    await user.click(await screen.findByRole('button', { name: t('common.delete') }));
+    await waitFor(() => {
+      const call = calls.find((c) => c.url.endsWith('/api/flows/delete'));
+      const body = call!.body as { host: string; path_prefix?: string };
+      expect(body.host).toBe('api.test');
+      // No path: the row is the site, not a folder inside it.
+      expect(body.path_prefix).toBeUndefined();
+    });
+  });
+
+  it('asks first, and deleting nothing is the default', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await expandAll(user);
+    fireEvent.contextMenu(document.querySelector('.tree-row.leaf') as HTMLElement);
+    await user.click(await screen.findByRole('menuitem', { name: t('menu.deleteFlow') }));
+    // Nothing has gone yet.
+    expect(calls.some((c) => c.url.endsWith('/api/flows/delete'))).toBe(false);
+    await user.click(screen.getByRole('button', { name: t('common.cancel') }));
+    expect(calls.some((c) => c.url.endsWith('/api/flows/delete'))).toBe(false);
+  });
+
+  it('says how much a folder would take', async () => {
+    // "Delete everything under here" is unanswerable without a number.
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await expandAll(user);
+    fireEvent.contextMenu(rowFor('users')!);
+    await user.click(await screen.findByRole('menuitem', { name: t('menu.deletePath') }));
+    expect(
+      await screen.findByText(t('delete.confirmSubtree', { count: 3, name: 'users' })),
+    ).toBeTruthy();
+  });
+
+  it('reloads the map once the deletion goes through', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await expandAll(user);
+    const before = calls.filter((c) => c.url.includes('/api/sitemap')).length;
+    fireEvent.contextMenu(document.querySelector('.tree-row.leaf') as HTMLElement);
+    await user.click(await screen.findByRole('menuitem', { name: t('menu.deleteFlow') }));
+    await user.click(await screen.findByRole('button', { name: t('common.delete') }));
+    await waitFor(() =>
+      expect(
+        calls.filter((c) => c.url.includes('/api/sitemap')).length,
+      ).toBeGreaterThan(before),
+    );
+  });
+
   it('adds a site to scope from the tree', async () => {
     // The cards carried the only button for this; right-clicking the
     // host row in the tree has to reach the same endpoint.

@@ -5,6 +5,7 @@ import {
   buildTree,
   countFlows,
   countNodes,
+  deletionTarget,
   describeRule,
   endpointHost,
   siteLabel,
@@ -204,3 +205,45 @@ describe('statusesUnder', () => {
   });
 });
 
+describe('deletionTarget', () => {
+  /** The tree prefixes every path with the site label, so a row's path
+   *  is not what the engine should be sent. */
+  const node = (path: string) => ({
+    name: path.split('/').pop() ?? path,
+    path,
+    children: [],
+    flows: [],
+  });
+
+  it('strips the site label the tree added', () => {
+    const s = site();
+    expect(deletionTarget(node('https://api.test/api/v1'), s)?.pathPrefix).toBe(
+      '/api/v1',
+    );
+  });
+
+  it('sends no path for a whole site', () => {
+    // A top-level row's path *is* the label, so nothing is left after
+    // stripping it, and that means the site rather than a path in it.
+    const s = site();
+    expect(deletionTarget(node('https://api.test'), s)?.pathPrefix).toBeUndefined();
+  });
+
+  it('carries the host, port and scheme', () => {
+    // Two sites can share a hostname on different ports, and the map
+    // shows them separately, so deleting one must not take the other.
+    const s = site({ port: 8443 });
+    const target = deletionTarget(node('https://api.test:8443/x'), s);
+    expect(target).toMatchObject({ host: 'api.test', port: 8443, scheme: 'https' });
+  });
+
+  it('leaves an unprefixed path alone', () => {
+    expect(deletionTarget(node('/api'), site())?.pathPrefix).toBe('/api');
+  });
+
+  it('is nothing without a site', () => {
+    // No site means no way to say what to delete, and a request with no
+    // host would be refused by the engine anyway.
+    expect(deletionTarget(node('/api'), undefined)).toBeNull();
+  });
+});

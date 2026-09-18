@@ -13,6 +13,8 @@ export interface FlowMenuActions {
   sendToIntruder: (flow: FlowSummary) => void;
   addToScope: (flow: FlowSummary) => void;
   copy: (text: string) => void;
+  /** Optional so a menu without deletion still renders. */
+  deleteFlow?: (flow: FlowSummary) => void;
 }
 
 /** The full URL as it was requested. */
@@ -57,5 +59,18 @@ export function flowMenuItems(
       onSelect: () => actions.copy(flowUrl(flow)),
     },
     ...(copyAs ? [copyAs] : []),
+    // Last, separated and marked: a capture is mostly noise and removing
+    // it is what keeps the database from growing without bound, but it
+    // is also the one item here that cannot be undone.
+    ...(actions.deleteFlow
+      ? [
+          {
+            label: t('menu.deleteFlow'),
+            separator: true,
+            danger: true,
+            onSelect: () => actions.deleteFlow?.(flow),
+          },
+        ]
+      : []),
   ];
 }

@@ -14,6 +14,9 @@ export interface MenuItem {
   separator?: boolean;
   /** Opens a nested menu instead of running an action. */
   items?: MenuItem[];
+  /** Destructive: drawn in the warning colour so it is not picked by
+   *  accident while aiming for the item above it. */
+  danger?: boolean;
 }
 
 export interface MenuPosition {
@@ -119,7 +122,11 @@ function MenuRow({ item, onClose }: { item: MenuItem; onClose: () => void }) {
     return (
       <button
         role="menuitem"
-        className={item.separator ? 'separated' : undefined}
+        className={
+          [item.separator ? 'separated' : '', item.danger ? 'danger' : '']
+            .filter(Boolean)
+            .join(' ') || undefined
+        }
         disabled={item.disabled}
         onClick={() => {
           onClose();

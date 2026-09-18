@@ -97,6 +97,21 @@ class CodegenBody(BaseModel):
     body: str = ""
 
 
+class DeleteFlowsBody(BaseModel):
+    """What to remove from the history.
+
+    Either a set of ids, or the subtree a site map folder stands for.
+    Sending ids for a subtree would mean listing thousands of them to
+    describe something the database can select itself.
+    """
+
+    ids: list[str] = []
+    host: str | None = None
+    port: int | None = None
+    scheme: str | None = None
+    path_prefix: str | None = None
+
+
 class ScopeRuleBody(BaseModel):
     kind: str = "include"
     host: str = "*"
@@ -203,6 +218,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         "intruder.started",
         "intruder.finished",
         "flows.cleared",
+        "flows.deleted",
     )
 
     def _log_event(event_type: str, data: Any) -> None:
@@ -709,8 +725,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.delete("/api/flows")
     async def clear_flows() -> dict[str, Any]:
         await asyncio.to_thread(store.clear)
+        await asyncio.to_thread(store.reclaim_space)
         broker.publish("flows.cleared", {})
         return {"ok": True}
+
+    @app.post("/api/flows/delete")
+    async def delete_flows(payload: DeleteFlowsBody) -> dict[str, Any]:
+        """Delete some of the history.
+
+        A POST rather than DELETE /api/flows/{id}: a selection is
+        several ids, and a site map folder is a filter rather than a
+        list, neither of which fits in a path.
+        """
+        if payload.ids:
+            deleted = await asyncio.to_thread(store.delete, payload.ids)
+        elif payload.host or payload.path_prefix:
+            deleted = await asyncio.to_thread(
+                store.delete_by_prefix,
+                host=payload.host,
+                port=payload.port,
+                scheme=payload.scheme,
+                path_prefix=payload.path_prefix,
+            )
+        else:
+            # An empty body would otherwise mean "everything", which is
+            # not something to arrive at by accident. Clearing has its
+            # own endpoint and its own confirmation.
+            raise HTTPException(
+                status_code=400, detail="nothing to delete: give ids or a host"
+            )
+
+        if deleted:
+            # Deleting is for saving space, and sqlite keeps the pages
+            # unless asked. Done here so the file shrinks when the user
+            # expects it to.
+            await asyncio.to_thread(store.reclaim_space)
+            broker.publish("flows.deleted", {"count": deleted})
+        return {"deleted": deleted}
 
     # --- intercept (M2) ---------------------------------------------------
     @app.get("/api/intercept")
