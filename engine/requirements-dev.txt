@@ -3,3 +3,6 @@ pytest>=9.1
 pytest-asyncio>=1.4
 httpx>=0.28
 mypy>=2.3
+# Not used by the engine. The Python that codegen produces imports it,
+# and one test runs that output to prove it sends the captured bytes.
+requests>=2.32

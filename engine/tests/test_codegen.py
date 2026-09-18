@@ -71,9 +71,18 @@ class TestFetch:
 
 
 class TestPython:
-    def test_sends_json_as_json(self, post: RequestSpec) -> None:
+    def test_sends_the_body_as_captured(self, post: RequestSpec) -> None:
+        """json=payload re-encodes, and requests' spacing is not the
+        server's, so the request that goes out is a different size to the
+        one that was captured."""
         code = codegen.as_python_requests(post)
-        assert "json=payload" in code
+        assert "data=body" in code
+        assert "json=payload" not in code
+
+    def test_still_shows_the_body_as_a_literal(self, post: RequestSpec) -> None:
+        """Readable as well as faithful: the literal is what someone
+        edits, the string is what is sent."""
+        code = codegen.as_python_requests(post)
         assert '"password": "hunter2"' in code
 
     def test_json_literals_are_python_ones(self) -> None:
@@ -84,8 +93,65 @@ class TestPython:
             '{"a":true,"b":false,"c":null}',
         )
         code = codegen.as_python_requests(spec)
-        assert "True" in code and "False" in code and "None" in code
-        assert "true" not in code and "null" not in code
+        payload = code.split("payload = ", 1)[1].split("\n\n", 1)[0]
+        assert "True" in payload and "False" in payload and "None" in payload
+        # Only the literal is translated. The captured bytes are quoted
+        # verbatim below it, JSON spelling and all, because that is what
+        # gets sent.
+        assert "true" not in payload
+        assert '"{\\"a\\":true' in code
+
+    def test_the_generated_code_sends_the_same_bytes(self) -> None:
+        """Runs the generated Python against a server that reports what it
+        received. Reading the source cannot show that requests re-encodes
+        the body, which is how the size drifted in the first place."""
+        import http.server
+        import importlib.util
+        import subprocess
+        import sys
+        import threading
+
+        # requests is what the generated code imports, and it is not an
+        # engine dependency. CI installs it so this runs there.
+        if importlib.util.find_spec("requests") is None:
+            pytest.skip("requests is not installed")
+
+        received: dict[str, object] = {}
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:
+                length = int(self.headers.get("Content-Length", 0))
+                received["body"] = self.rfile.read(length)
+                received["type"] = self.headers.get("Content-Type")
+                self.send_response(200)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def log_message(self, *args: object) -> None:
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        # Spacing a re-encode would not reproduce.
+        body = '{"user":"admin",  "n":1}'
+        spec = RequestSpec(
+            "POST",
+            f"http://127.0.0.1:{port}/",
+            [("Content-Type", "application/json")],
+            body,
+        )
+        code = codegen.as_python_requests(spec)
+        result = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, timeout=30
+        )
+        thread.join(timeout=10)
+        server.server_close()
+
+        assert result.returncode == 0, result.stderr
+        assert received["body"] == body.encode()
 
     def test_a_non_json_body_is_sent_as_data(self) -> None:
         spec = RequestSpec(

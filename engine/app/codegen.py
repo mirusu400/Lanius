@@ -326,9 +326,18 @@ def as_python_requests(spec: RequestSpec) -> str:
             except ValueError:
                 call.append(f"    data={_py(spec.body)},")
             else:
+                # Written out as a literal so it can be read and edited,
+                # but sent as the captured text. json=payload re-encodes
+                # it, and requests' spacing is not the server's: a
+                # 31-byte body went out as 34, which is a different
+                # request to anything checking a signature or a length.
                 lines.append(f"payload = {_py_value(parsed)}")
                 lines.append("")
-                call.append("    json=payload,")
+                lines.append("# The bytes as captured. Send `payload` instead if you")
+                lines.append("# edit it and the exact encoding does not matter.")
+                lines.append(f"body = {_py(spec.body)}")
+                lines.append("")
+                call.append("    data=body,")
         else:
             call.append(f"    data={_py(spec.body)},")
 
