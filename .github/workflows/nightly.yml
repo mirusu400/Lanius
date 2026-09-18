@@ -32,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.check.outputs.build }}
+      publish: ${{ steps.check.outputs.publish }}
       sha: ${{ steps.check.outputs.sha }}
       short_sha: ${{ steps.check.outputs.short_sha }}
       date: ${{ steps.check.outputs.date }}
@@ -46,6 +47,7 @@ jobs:
           # request is the source branch. A fork's branch called main
           # would otherwise publish itself over the real release.
           CI_EVENT: ${{ github.event.workflow_run.event }}
+          PUBLISH: ${{ inputs.publish }}
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           FALLBACK_SHA: ${{ github.sha }}
         run: |
@@ -58,18 +60,30 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           if [ "$EVENT" = "workflow_dispatch" ]; then
-            echo "manual run: building $sha"
-            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "manual run: building $sha, publish=$PUBLISH"
+            {
+              echo "build=true"
+              echo "publish=$PUBLISH"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           # Never ship a commit whose tests did not pass, and only ship
           # what was actually pushed to main.
           echo "CI ran on: $CI_EVENT, concluded: $CONCLUSION"
+          # Decided here rather than in an `if:` expression, because a
+          # wrong expression silently skips the job and shows nothing,
+          # whereas this prints its reasoning and can be run locally.
           if [ "$CONCLUSION" = "success" ] && [ "$CI_EVENT" = "push" ]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "build=true"
+              echo "publish=true"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "build=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "build=false"
+              echo "publish=false"
+            } >> "$GITHUB_OUTPUT"
           fi
 
   # A workflow_run already waited for CI. A manual run has not, so it
@@ -294,9 +308,7 @@ jobs:
   release:
     name: Publish prerelease
     needs: [meta, build]
-    if: >-
-      needs.meta.outputs.build == 'true' &&
-      (github.event_name == 'workflow_run' || inputs.publish)
+    if: needs.meta.outputs.publish == 'true' 
     runs-on: ubuntu-latest
     permissions:
       contents: write
