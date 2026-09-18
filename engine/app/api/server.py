@@ -146,6 +146,10 @@ class PayloadSetBody(BaseModel):
     source: str | None = None
 
 
+class PayloadSetRename(BaseModel):
+    name: str
+
+
 class WordlistImportBody(BaseModel):
     list_id: str
     #: Defaults to the wordlist's own name when not given.
@@ -955,6 +959,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except PayloadSetError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return saved.summary()
+
+    @app.patch("/api/payload-sets/{set_id}")
+    async def payload_set_rename(set_id: str, body: PayloadSetRename) -> dict[str, Any]:
+        try:
+            renamed = await asyncio.to_thread(
+                store.payload_sets.rename, set_id, body.name
+            )
+        except PayloadSetError as exc:
+            status = 404 if "not found" in str(exc) else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+        return renamed.summary()
 
     @app.delete("/api/payload-sets/{set_id}")
     async def payload_set_delete(set_id: str) -> dict[str, Any]:

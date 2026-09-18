@@ -644,3 +644,15 @@ export function importWordlist(body: {
     body: JSON.stringify(body),
   });
 }
+
+/** Rename a set in place, keeping its id and payloads. */
+export function renamePayloadSet(
+  id: string,
+  name: string,
+): Promise<PayloadSetSummary> {
+  return request(`/api/payload-sets/${id}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ name }),
+  });
+}

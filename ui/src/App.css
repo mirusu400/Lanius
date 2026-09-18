@@ -378,6 +378,133 @@ pre.body,
   text-align: right;
 }
 
+/* --- dialogs --- */
+.dialog {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  padding: 0;
+  box-shadow: 0 16px 48px var(--shadow);
+  max-width: 90vw;
+  max-height: 85vh;
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.dialog-head h3 {
+  margin: 0;
+  font-size: 1em;
+  flex: 1;
+}
+
+.dialog-head button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.3em;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+.dialog-head button:hover {
+  color: var(--fg);
+}
+
+.dialog-body {
+  padding: 12px 14px;
+  overflow: auto;
+}
+
+.dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.dialog-foot .spacer {
+  flex: 1;
+}
+
+/* The library needs room: it was a 260px strip, which was too small to
+   read a list in, let alone judge one. */
+.payload-dialog {
+  width: 900px;
+}
+
+.payload-dialog-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 420px;
+}
+
+.payload-sources {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: auto;
+}
+
+.payload-set-list li.selected {
+  background: var(--accent-dim);
+  border-radius: 3px;
+}
+
+.payload-set-name {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  background: none;
+  border: none;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  padding: 3px 6px;
+  min-width: 0;
+}
+
+.payload-set-name > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payload-set-name:hover {
+  color: var(--accent);
+}
+
+/* Scrolls independently, so a long list does not push the buttons off. */
+.payload-preview {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  padding: 8px;
+  overflow: auto;
+  min-width: 0;
+}
+
+.payload-preview pre {
+  margin: 0;
+  white-space: pre;
+}
+
 /* --- request editor with views --- */
 .request-editor {
   display: flex;
@@ -454,29 +581,6 @@ pre.body,
 
 .payload-picker-head .spacer {
   flex: 1;
-}
-
-/* Sits above the editor rather than in a dialog: picking a list is part
-   of setting up the attack, not a detour from it. */
-.payload-library {
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  background: var(--bg-alt);
-  padding: 8px 10px;
-  max-height: 260px;
-  overflow: auto;
-}
-
-.payload-library h5 {
-  margin: 8px 0 4px;
-  color: var(--muted);
-  font-size: 0.85em;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.payload-library h5:first-child {
-  margin-top: 0;
 }
 
 .payload-set-list {

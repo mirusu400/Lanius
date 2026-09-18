@@ -177,3 +177,48 @@ class TestWordlistCatalogue:
     def test_importing_an_unknown_list_is_refused(self, client) -> None:
         r = client.post("/api/wordlists/import", json={"list_id": "nope"})
         assert r.status_code == 502
+
+
+class TestRenaming:
+    def test_renames_a_set_in_place(self, client) -> None:
+        """Saving under a new name would create a second set, since save
+        is keyed by name."""
+        set_id = client.post(
+            "/api/payload-sets", json={"name": "old", "payloads": "a\nb"}
+        ).json()["id"]
+        renamed = client.patch(f"/api/payload-sets/{set_id}", json={"name": "new"})
+        assert renamed.status_code == 200
+        assert renamed.json()["id"] == set_id
+        assert renamed.json()["name"] == "new"
+        items = client.get("/api/payload-sets").json()["items"]
+        assert [i["name"] for i in items] == ["new"]
+
+    def test_renaming_keeps_the_payloads(self, client) -> None:
+        set_id = client.post(
+            "/api/payload-sets", json={"name": "keep", "payloads": "a\nb\nc"}
+        ).json()["id"]
+        client.patch(f"/api/payload-sets/{set_id}", json={"name": "kept"})
+        assert client.get(f"/api/payload-sets/{set_id}").json()["payloads"] == [
+            "a",
+            "b",
+            "c",
+        ]
+
+    def test_refuses_a_name_already_in_use(self, client) -> None:
+        # Otherwise two sets answer to the same name and the picker is a
+        # guess.
+        client.post("/api/payload-sets", json={"name": "taken", "payloads": "a"})
+        other = client.post(
+            "/api/payload-sets", json={"name": "other", "payloads": "b"}
+        ).json()["id"]
+        r = client.patch(f"/api/payload-sets/{other}", json={"name": "taken"})
+        assert r.status_code == 400
+
+    def test_refuses_an_empty_name(self, client) -> None:
+        set_id = client.post(
+            "/api/payload-sets", json={"name": "n", "payloads": "a"}
+        ).json()["id"]
+        assert client.patch(f"/api/payload-sets/{set_id}", json={"name": " "}).status_code == 400
+
+    def test_renaming_a_missing_set_is_a_404(self, client) -> None:
+        assert client.patch("/api/payload-sets/nope", json={"name": "x"}).status_code == 404

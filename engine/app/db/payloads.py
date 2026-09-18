@@ -135,6 +135,36 @@ class PayloadSetStore:
             updated_at=now,
         )
 
+    def rename(self, set_id: str, name: str) -> PayloadSet:
+        """Change a set's name, keeping its id and payloads.
+
+        Saving under a new name would create a second set, since save is
+        keyed by name; this is how a set gets renamed rather than copied.
+        """
+        name = name.strip()
+        if not name:
+            raise PayloadSetError("name is required")
+        if len(name) > MAX_NAME:
+            raise PayloadSetError(f"name must be {MAX_NAME} characters or fewer")
+        with self._lock:
+            clash = self._conn.execute(
+                "SELECT id FROM payload_sets WHERE name = ? AND id != ?",
+                (name, set_id),
+            ).fetchone()
+            if clash:
+                raise PayloadSetError(f"a set called {name!r} already exists")
+            cur = self._conn.execute(
+                "UPDATE payload_sets SET name = ?, updated_at = ? WHERE id = ?",
+                (name, time.time(), set_id),
+            )
+            self._conn.commit()
+        if cur.rowcount == 0:
+            raise PayloadSetError("payload set not found")
+        found = self.get(set_id)
+        if found is None:  # pragma: no cover - deleted between the two
+            raise PayloadSetError("payload set not found")
+        return found
+
     def delete(self, set_id: str) -> bool:
         with self._lock:
             cur = self._conn.execute(

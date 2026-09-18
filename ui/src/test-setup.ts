@@ -35,6 +35,20 @@ class InertSocket {
   removeEventListener(): void {}
 }
 
+// jsdom implements <dialog> as an element but not its modal behaviour,
+// so showModal and close are missing entirely. Dialogs are checked for
+// what they show and how they close, not for the browser's top layer, so
+// a small stand-in is enough.
+if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    this.open = false;
+    this.dispatchEvent(new Event('close'));
+  };
+}
+
 beforeEach(() => {
   // Only stub when a test has not provided its own WebSocket double.
   if (!('__laniusSocketMock' in globalThis)) {
