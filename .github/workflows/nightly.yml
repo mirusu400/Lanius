@@ -385,6 +385,9 @@ jobs:
       - name: Drop assets left over from an older build
         env:
           GH_TOKEN: ${{ github.token }}
+          # gh works out the repository from the git remote, and this job
+          # never checks anything out.
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           current="$(cd dist && ls)"
