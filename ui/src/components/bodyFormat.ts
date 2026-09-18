@@ -10,8 +10,17 @@
  * user is trying to look at.
  */
 
-/** How a body is being shown. */
-export type BodyView = 'pretty' | 'raw';
+/** How a body is being shown.
+ *
+ * Views, not edits. The raw text is what a request is; pretty and hex
+ * are ways of reading it. Inserting indentation into the thing that goes
+ * on the wire makes it a different request.
+ */
+export type BodyView = 'pretty' | 'raw' | 'hex';
+
+/** Hex costs four characters a byte, so a body that is merely large as
+ *  text is unmanageable as a dump. */
+const HEX_LIMIT = 64 * 1024;
 
 /** Two spaces: deep JSON runs out of width quickly at four. */
 const INDENT = 2;
@@ -56,7 +65,9 @@ export function minify(body: string): string {
 
 /** The body as the chosen view shows it. */
 export function formatBody(body: string, view: BodyView): string {
-  return view === 'pretty' ? prettify(body) : body;
+  if (view === 'pretty') return prettify(body);
+  if (view === 'hex') return hexPreview(body).text;
+  return body;
 }
 
 /**
@@ -106,4 +117,33 @@ export function formatMessageBody(text: string, view: BodyView): string {
 /** Whether a raw HTTP message has a body worth reformatting. */
 export function messageCanReformat(text: string): boolean {
   return canReformat(splitMessage(text).body);
+}
+
+/** Classic hex dump: offset, bytes, printable ASCII. */
+export function toHex(text: string, width = 16): string {
+  const bytes = new TextEncoder().encode(text);
+  const lines: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += width) {
+    const chunk = bytes.slice(offset, offset + width);
+    const hex = [...chunk]
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join(' ')
+      .padEnd(width * 3 - 1, ' ');
+    const ascii = [...chunk]
+      .map((b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.'))
+      .join('');
+    lines.push(`${offset.toString(16).padStart(8, '0')}  ${hex}  |${ascii}|`);
+  }
+  return lines.join('\n');
+}
+
+/** A hex dump of at most HEX_LIMIT bytes, and whether it was cut. */
+export function hexPreview(text: string): { text: string; truncated: number } {
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.length <= HEX_LIMIT) return { text: toHex(text), truncated: 0 };
+  // Decoded back so toHex works on one representation; the slice is on a
+  // byte boundary, so a multi-byte character at the edge shows as the
+  // replacement character rather than shifting every following offset.
+  const head = new TextDecoder().decode(bytes.slice(0, HEX_LIMIT));
+  return { text: toHex(head), truncated: bytes.length - HEX_LIMIT };
 }

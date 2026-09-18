@@ -9,7 +9,12 @@ import { ContextMenu, useContextMenu, type MenuItem } from './ContextMenu';
 import { Split } from './Split';
 import { useCodegenMenu } from './useCodegenMenu';
 import { rawRequest, rawResponse } from './rawHttp';
-import { canReformat, formatBody, type BodyView } from './bodyFormat';
+import {
+  canReformat,
+  formatBody,
+  hexPreview,
+  type BodyView,
+} from './bodyFormat';
 import { useT } from '../i18n';
 import type { Translator } from '../i18n';
 
@@ -25,11 +30,6 @@ interface Props {
  * encoding or invisible bytes.
  */
 type View = 'parsed' | 'raw' | 'hex';
-
-// Hex costs four characters per byte, so a body that is merely large as
-// text becomes unmanageable as a dump. The cap is applied to the bytes
-// before formatting, with a note, rather than freezing the window.
-const HEX_LIMIT = 64 * 1024;
 
 function HeaderList({
   headers,
@@ -52,35 +52,6 @@ function HeaderList({
       </tbody>
     </table>
   );
-}
-
-/** Classic hex dump: offset, bytes, printable ASCII. */
-export function toHex(text: string, width = 16): string {
-  const bytes = new TextEncoder().encode(text);
-  const lines: string[] = [];
-  for (let offset = 0; offset < bytes.length; offset += width) {
-    const chunk = bytes.slice(offset, offset + width);
-    const hex = [...chunk]
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join(' ')
-      .padEnd(width * 3 - 1, ' ');
-    const ascii = [...chunk]
-      .map((b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.'))
-      .join('');
-    lines.push(`${offset.toString(16).padStart(8, '0')}  ${hex}  |${ascii}|`);
-  }
-  return lines.join('\n');
-}
-
-/** A hex dump of at most HEX_LIMIT bytes, and whether it was cut. */
-export function hexPreview(text: string): { text: string; truncated: number } {
-  const bytes = new TextEncoder().encode(text);
-  if (bytes.length <= HEX_LIMIT) return { text: toHex(text), truncated: 0 };
-  // Decoded back so toHex works on one representation; the slice is on a
-  // byte boundary, so a multi-byte character at the edge shows as the
-  // replacement character rather than shifting every following offset.
-  const head = new TextDecoder().decode(bytes.slice(0, HEX_LIMIT));
-  return { text: toHex(head), truncated: bytes.length - HEX_LIMIT };
 }
 
 /** One half of the exchange, with its own view switch. */

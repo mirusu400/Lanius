@@ -71,29 +71,30 @@ describe('tabFromFlow', () => {
     expect(tab.url).toBe('https://api.test');
     expect(tab.text).toContain('POST /v1/login?next=/home HTTP/1.1');
     expect(tab.text).toContain('Content-Type: application/json');
-    // Laid out, because a captured JSON body arrives as one line and
-    // this is a text editor.
-    expect(tab.text).toContain('"u": "a"');
+    expect(tab.text.endsWith('{"u":"a"}')).toBe(true);
     expect(tab.title).toBe('POST /v1/login');
   });
 
-  it('lays out a JSON body but leaves the headers alone', () => {
-    // Rewriting the whole message would reindent headers, which are not
-    // JSON and are often the thing being tested.
+  it('carries the captured bytes, not a reformatted copy of them', () => {
+    // Indentation inserted here would go on the wire. Anything checking
+    // a signature, a length or a hash would see a different body, so a
+    // request that cannot be reproduced is worse than an ugly one.
+    const body = '{"a":1,"b":2}';
     const detail = {
       ...flow(),
       request_headers: [
         ['Host', 'api.test'],
         ['Content-Type', 'application/json'],
       ],
-      request_body: '{"a":1,"b":2}',
+      request_body: body,
       response_headers: null,
       response_body: null,
     } as unknown as FlowDetail;
 
     const tab = tabFromFlow(flow(), detail);
-    expect(tab.text).toContain('Host: api.test\r\nContent-Type');
-    expect(tab.text).toContain('"a": 1');
+    expect(tab.text.endsWith(body)).toBe(true);
+    // The giveaway: formatting adds a space after the colon.
+    expect(tab.text).not.toContain('"a": 1');
   });
 
   it('leaves a body that is not JSON exactly as it was', () => {
@@ -231,5 +232,38 @@ describe('large responses', () => {
     // A response that fits is untouched, not copied.
     const small = { ...base, body: 'ok' };
     expect(trimResponse(small)).toBe(small);
+  });
+});
+
+describe('the bytes that go on the wire', () => {
+  it('sends the body exactly as it appears in the editor', () => {
+    // Formatting is a way of looking at a request, never a change to it.
+    // Indentation inserted into the stored text would go on the wire,
+    // and anything checking a length, a hash or a signature would see a
+    // different body.
+    const body = '{"user":"alice","token":"abc123"}';
+    const text = `POST /x HTTP/1.1\nHost: api.test\n\n${body}`;
+    expect(toSendPayload('https://api.test', text).body).toBe(body);
+  });
+
+  it('does not add whitespace to a compact JSON body', () => {
+    const text = 'POST /x HTTP/1.1\nHost: a\n\n{"a":1,"b":[1,2]}';
+    const sent = toSendPayload('https://a', text).body;
+    expect(sent).not.toContain('"a": 1');
+    expect(sent).toBe('{"a":1,"b":[1,2]}');
+  });
+
+  it('keeps a body that was deliberately laid out', () => {
+    // The reverse case: if someone formats it themselves, that is the
+    // request they meant to send.
+    const body = '{\n  "a": 1\n}';
+    const text = `POST /x HTTP/1.1\nHost: a\n\n${body}`;
+    expect(toSendPayload('https://a', text).body).toBe(body);
+  });
+
+  it('preserves a body that is not JSON at all', () => {
+    const body = 'user=alice&sig=9f2b';
+    const text = `POST /x HTTP/1.1\nHost: a\n\n${body}`;
+    expect(toSendPayload('https://a', text).body).toBe(body);
   });
 });

@@ -23,6 +23,7 @@ import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { toSendPayload } from './repeaterModel';
 import { PayloadPicker } from '../components/PayloadPicker';
+import { RequestEditor } from '../components/RequestEditor';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { sendToRepeater } from './repeaterStore';
@@ -312,17 +313,14 @@ export function IntruderTab() {
       <div className="intruder-split">
         <div className="intruder-left">
           <h4>{t('intruder.template')}</h4>
-          <textarea
-            ref={editorRef}
-            aria-label={t('intruder.templateLabel')}
+          <RequestEditor
+            editorRef={editorRef}
+            label={t('intruder.templateLabel')}
             className="intruder-editor mono"
-            spellCheck={false}
             value={template}
-            onChange={(e) => setTemplate(e.target.value)}
+            onChange={setTemplate}
             onContextMenu={editorMenu.open}
-            onSelect={rememberSelection}
-            onKeyUp={rememberSelection}
-            onMouseUp={rememberSelection}
+            onSelectionChange={rememberSelection}
           />
           {editorMenu.element}
           <h4>

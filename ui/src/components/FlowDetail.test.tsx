@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { renderWithI18n as render, t } from '../test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FlowDetailView, toHex } from './FlowDetail';
+import { FlowDetailView } from './FlowDetail';
+import { toHex } from './bodyFormat';
 import type { FlowSummary } from '../api/types';
 
 const httpFlow: FlowSummary = {

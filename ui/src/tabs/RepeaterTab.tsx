@@ -16,6 +16,7 @@ import {
 } from './repeaterStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
+import { RequestEditor } from '../components/RequestEditor';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { sendTextToIntruder } from './intruderStore';
@@ -203,13 +204,12 @@ export function RepeaterTabView() {
             <div className="banner error">{renderMessage(active.error, t)}</div>
           )}
           <div className="repeater-split">
-            <textarea
-              ref={editorMenu.ref}
+            <RequestEditor
+              editorRef={editorMenu.ref}
               className="repeater-editor mono"
-              aria-label={t('repeater.request')}
-              spellCheck={false}
+              label={t('repeater.request')}
               value={active.text}
-              onChange={(e) => updateTab(active.id, { text: e.target.value })}
+              onChange={(text) => updateTab(active.id, { text })}
               onContextMenu={editorMenu.open}
             />
             {editorMenu.element}
