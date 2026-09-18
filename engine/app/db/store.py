@@ -15,7 +15,7 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from dataclasses import fields as dataclasses_fields
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Sequence
 
 import logging
 
@@ -243,6 +243,10 @@ class FlowStore:
         method: str | None = None,
         status_code: int | None = None,
         search: str | None = None,
+        methods: Sequence[str] | None = None,
+        status_classes: Sequence[int] | None = None,
+        extensions: Sequence[str] | None = None,
+        exclude_extensions: Sequence[str] | None = None,
     ) -> List[FlowRecord]:
         clauses: list[str] = []
         params: list[Any] = []
@@ -252,9 +256,35 @@ class FlowStore:
         if method:
             clauses.append("method = ?")
             params.append(method.upper())
+        if methods:
+            # A list rather than one value, so the filter can be a set of
+            # checkboxes instead of a single choice.
+            placeholders = ", ".join("?" for _ in methods)
+            clauses.append(f"method IN ({placeholders})")
+            params.extend(m.upper() for m in methods)
         if status_code is not None:
             clauses.append("status_code = ?")
             params.append(status_code)
+        if status_classes:
+            # By class, because 2xx is the useful unit, not 204 vs 200.
+            # A flow with no response yet is kept out rather than falling
+            # into whichever class happens to be selected.
+            ranges = " OR ".join(
+                "(status_code >= ? AND status_code < ?)" for _ in status_classes
+            )
+            clauses.append(f"({ranges})")
+            for cls in status_classes:
+                params.extend([cls * 100, cls * 100 + 100])
+        if extensions:
+            # The query string lives in its own column, so matching the
+            # end of the path is exact rather than a guess.
+            matches = " OR ".join("lower(path) LIKE ?" for _ in extensions)
+            clauses.append(f"({matches})")
+            params.extend(f"%.{ext.lower().lstrip('.')}" for ext in extensions)
+        if exclude_extensions:
+            for ext in exclude_extensions:
+                clauses.append("(path IS NULL OR lower(path) NOT LIKE ?)")
+                params.append(f"%.{ext.lower().lstrip('.')}")
         if search:
             clauses.append("(path LIKE ? OR query LIKE ? OR host LIKE ?)")
             params.extend([f"%{search}%"] * 3)

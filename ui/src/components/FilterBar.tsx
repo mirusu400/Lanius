@@ -1,5 +1,6 @@
 import type { ConnectionState } from '../api/stream';
 import { useT } from '../i18n';
+import { countActive } from './FilterDialog';
 import type { EngineStatus, FlowFilters } from '../api/types';
 
 interface Props {
@@ -11,10 +12,9 @@ interface Props {
   onReload: () => void;
   connection: ConnectionState;
   status: EngineStatus | null;
+  onOpenFilter: () => void;
   count: number;
 }
-
-const METHODS = ['', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
 export function FilterBar({
   filters,
@@ -25,9 +25,11 @@ export function FilterBar({
   onReload,
   connection,
   status,
+  onOpenFilter,
   count,
 }: Props) {
   const t = useT();
+  const active = countActive(filters);
   return (
     <div className="filter-bar">
       <input
@@ -38,37 +40,14 @@ export function FilterBar({
           onChange({ ...filters, search: e.target.value || undefined })
         }
       />
-      <input
-        className="host"
-        placeholder={t('proxy.hostPlaceholder')}
-        value={filters.host ?? ''}
-        onChange={(e) =>
-          onChange({ ...filters, host: e.target.value || undefined })
-        }
-      />
-      <select
-        value={filters.method ?? ''}
-        onChange={(e) =>
-          onChange({ ...filters, method: e.target.value || undefined })
-        }
-      >
-        {METHODS.map((m) => (
-          <option key={m} value={m}>
-            {m || t('proxy.methodPlaceholder')}
-          </option>
-        ))}
-      </select>
-      <input
-        className="status-filter"
-        placeholder={t('proxy.statusPlaceholder')}
-        value={filters.statusCode ?? ''}
-        onChange={(e) =>
-          onChange({
-            ...filters,
-            statusCode: e.target.value ? Number(e.target.value) : undefined,
-          })
-        }
-      />
+      {/* Everything except the search moved into the dialog: host,
+          method and status were three controls that answered one
+          question each, and a capture needs several answers at once. */}
+      <button className={active > 0 ? 'active' : undefined} onClick={onOpenFilter}>
+        {active > 0
+          ? t('filter.buttonActive', { count: String(active) })
+          : t('filter.button')}
+      </button>
       <button onClick={onTogglePause}>{paused ? t('common.resume') : t('common.pause')}</button>
       <button onClick={onReload}>{t('common.refresh')}</button>
       <button className="danger" onClick={onClear}>

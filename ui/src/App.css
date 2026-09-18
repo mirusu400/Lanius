@@ -378,6 +378,54 @@ pre.body,
   text-align: right;
 }
 
+/* --- history filter --- */
+.filter-dialog {
+  width: 820px;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 16px;
+}
+
+.filter-grid section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filter-grid h5 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Wraps rather than scrolling: every option should be visible at once,
+   which is the point of having a dialog instead of a dropdown. */
+.filter-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.filter-checks label,
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.filter-bar button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* --- dialogs --- */
 .dialog {
   border: 1px solid var(--border);
@@ -503,6 +551,7 @@ pre.body,
 .payload-preview pre {
   margin: 0;
   white-space: pre;
+  overflow-wrap: normal;
 }
 
 /* --- request editor with views --- */
@@ -606,10 +655,16 @@ pre.body,
   color: var(--status-5xx);
 }
 
+/* A payload is one line. Wrapping hides where a line ends, which is the
+   one thing that has to be visible when a payload is long: a wrapped
+   line and two short ones look the same. */
 .intruder-payloads {
   flex: 1;
   min-height: 120px;
   resize: vertical;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
 }
 
 /* --- loading indicator --- */

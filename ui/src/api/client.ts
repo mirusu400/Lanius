@@ -63,6 +63,17 @@ export function buildFlowQuery(filters: FlowFilters, limit = 200): string {
     params.set('status_code', String(filters.statusCode));
   }
   if (filters.search) params.set('search', filters.search);
+  // Repeated rather than joined: the engine reads these as a list, so
+  // ?methods=GET&methods=POST is two values and not one called "GET,POST".
+  for (const method of filters.methods ?? []) params.append('methods', method);
+  for (const cls of filters.statusClasses ?? []) {
+    params.append('status_classes', String(cls));
+  }
+  for (const ext of filters.extensions ?? []) params.append('extensions', ext);
+  for (const ext of filters.excludeExtensions ?? []) {
+    params.append('exclude_extensions', ext);
+  }
+  if (filters.inScopeOnly) params.set('in_scope_only', 'true');
   return params.toString();
 }
 

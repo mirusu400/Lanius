@@ -598,16 +598,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         method: str | None = None,
         status_code: int | None = None,
         search: str | None = None,
+        # Repeatable, so the filter can be a set of checkboxes rather
+        # than a single choice: ?methods=GET&methods=POST
+        methods: list[str] | None = Query(None),
+        status_classes: list[int] | None = Query(None),
+        extensions: list[str] | None = Query(None),
+        exclude_extensions: list[str] | None = Query(None),
+        in_scope_only: bool = False,
     ) -> dict[str, Any]:
         records = await asyncio.to_thread(
             store.list,
-            limit=limit,
+            # Scope is decided in Python, so the database cannot do the
+            # paging for it; fetch a wider slice and cut it afterwards.
+            limit=limit if not in_scope_only else min(limit * 20, 20_000),
             offset=offset,
             host=host,
             method=method,
             status_code=status_code,
             search=search,
+            methods=methods,
+            status_classes=status_classes,
+            extensions=extensions,
+            exclude_extensions=exclude_extensions,
         )
+        if in_scope_only:
+            records = [
+                r
+                for r in records
+                if engine.scope.contains(r.scheme, r.host, r.port, r.path)
+            ][:limit]
         return {"items": [r.summary() for r in records], "count": len(records)}
 
     @app.get("/api/flows/{flow_id}")

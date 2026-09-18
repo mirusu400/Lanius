@@ -134,6 +134,13 @@ export interface FlowFilters {
   method?: string;
   statusCode?: number;
   search?: string;
+  /** Checkbox filters: several at once, rather than a single choice. */
+  methods?: string[];
+  /** By class (2 for 2xx), because that is the useful unit. */
+  statusClasses?: number[];
+  extensions?: string[];
+  excludeExtensions?: string[];
+  inScopeOnly?: boolean;
 }
 
 // --- target / scope (M4) --------------------------------------------------

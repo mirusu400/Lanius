@@ -22,6 +22,7 @@ import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { flowMenuItems, flowUrl } from './flowMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { Split } from '../components/Split';
+import { FilterDialog } from '../components/FilterDialog';
 import {
   clearSelection,
   getSelectedFlow,
@@ -58,6 +59,7 @@ export function ProxyTab() {
   const [filters, setFilters] = useState<FlowFilters>({});
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const codegen = useCodegenMenu();
+  const [filterOpen, setFilterOpen] = useState(false);
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [paused, setPaused] = useState(false);
   const [error, setError] = useState<Message | null>(null);
@@ -239,6 +241,13 @@ export function ProxyTab() {
             connection={connection}
             status={status}
             count={flows.length}
+            onOpenFilter={() => setFilterOpen(true)}
+          />
+          <FilterDialog
+            open={filterOpen}
+            filters={filters}
+            onClose={() => setFilterOpen(false)}
+            onApply={setFilters}
           />
           {error && <div className="banner error">{renderMessage(error, t)}</div>}
           <Split
