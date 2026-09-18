@@ -1,9 +1,15 @@
 name: Nightly
 
+# Runs after CI passes on main, not on a clock. A build a day meant the
+# newest download could be up to 24 hours behind main, and a day where
+# nothing was pushed still produced a release. Waiting on CI rather than
+# on the push itself means a failing commit is never published, and CI
+# is not run twice for the same commit.
 on:
-  schedule:
-    # 03:00 UTC every day (12:00 KST).
-    - cron: '0 3 * * *'
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       publish:
@@ -11,6 +17,8 @@ on:
         type: boolean
         default: true
 
+# A newer commit supersedes an in-flight build: the release always
+# describes the tip of main, so finishing an older one is wasted work.
 concurrency:
   group: nightly
   cancel-in-progress: true
@@ -19,50 +27,66 @@ permissions:
   contents: read
 
 jobs:
-  # Never ship a build that does not pass the suite.
-  verify:
-    uses: ./.github/workflows/ci.yml
-
-  # Skip the whole build when nothing landed since the last nightly.
-  changes:
-    name: Check for new commits
+  meta:
+    name: Resolve the commit
     runs-on: ubuntu-latest
     outputs:
-      should_build: ${{ steps.check.outputs.should_build }}
+      build: ${{ steps.check.outputs.build }}
       sha: ${{ steps.check.outputs.sha }}
+      short_sha: ${{ steps.check.outputs.short_sha }}
       date: ${{ steps.check.outputs.date }}
     steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
       - id: check
         env:
-          FORCED: ${{ github.event_name == 'workflow_dispatch' }}
+          # For a workflow_run the commit under test is the one CI ran
+          # on, which is not necessarily the tip by the time this starts.
+          EVENT: ${{ github.event_name }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          # `branches: [main]` matches the head branch, which for a pull
+          # request is the source branch. A fork's branch called main
+          # would otherwise publish itself over the real release.
+          CI_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          FALLBACK_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-          echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          sha="${RUN_SHA:-$FALLBACK_SHA}"
+          {
+            echo "sha=$sha"
+            echo "short_sha=${sha:0:7}"
+            echo "date=$(date -u +%Y%m%d)"
+          } >> "$GITHUB_OUTPUT"
 
-          if [ "$FORCED" = "true" ]; then
-            echo "manual run: building"
-            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "manual run: building $sha"
+            echo "build=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Anything committed in the last 24h?
-          recent="$(git log --since='24 hours ago' --oneline | wc -l | tr -d ' ')"
-          echo "commits in the last 24h: $recent"
-          if [ "$recent" -gt 0 ]; then
-            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          # Never ship a commit whose tests did not pass, and only ship
+          # what was actually pushed to main.
+          echo "CI ran on: $CI_EVENT, concluded: $CONCLUSION"
+          if [ "$CONCLUSION" = "success" ] && [ "$CI_EVENT" = "push" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
           else
-            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "build=false" >> "$GITHUB_OUTPUT"
           fi
+
+  # A workflow_run already waited for CI. A manual run has not, so it
+  # gets its own pass over the suite.
+  verify:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/ci.yml
 
   build:
     name: Build ${{ matrix.label }}
-    needs: [verify, changes]
-    if: needs.changes.outputs.should_build == 'true'
+    needs: [meta, verify]
+    # `verify` is skipped for a workflow_run, and a skipped dependency
+    # would otherwise skip this too.
+    if: >-
+      ${{ !cancelled()
+          && needs.meta.outputs.build == 'true'
+          && needs.verify.result != 'failure' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -83,6 +107,9 @@ jobs:
             bundles: msi,nsis
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Not the tip of main: build exactly what CI approved.
+          ref: ${{ needs.meta.outputs.sha }}
 
       - uses: actions/setup-python@v7
         with:
@@ -126,9 +153,13 @@ jobs:
           # Stamped into the binary so a downloaded build can say which
           # commit it came from. Without these it would fall back to git,
           # which a user's machine does not have.
-          LANIUS_BUILD_COMMIT: ${{ github.sha }}
-          LANIUS_BUILD_RELEASE: nightly-${{ needs.changes.outputs.date }}
-          LANIUS_BUILD_DATE: ${{ needs.changes.outputs.date }}
+          LANIUS_BUILD_COMMIT: ${{ needs.meta.outputs.sha }}
+          # The commit is part of the name because several builds now
+          # land on the same day, and a date alone stopped telling them
+          # apart.
+          LANIUS_BUILD_RELEASE: >-
+            nightly-${{ needs.meta.outputs.date }}-${{ needs.meta.outputs.short_sha }}
+          LANIUS_BUILD_DATE: ${{ needs.meta.outputs.date }}
         run: pyinstaller --clean --noconfirm lanius-engine.spec
 
       - name: Smoke-test the frozen engine
@@ -157,6 +188,12 @@ jobs:
           status="$(curl -fsS http://127.0.0.1:18081/api/status)"
           echo "$status"
           echo "$status" | grep -q '"running":true'
+
+          # The build stamp is the whole point of stamping it: a download
+          # that cannot say which commit it is makes bug reports guesswork.
+          about="$(curl -fsS http://127.0.0.1:18081/api/about)"
+          echo "$about"
+          echo "$about" | grep -qF '"commit_short":"${{ needs.meta.outputs.short_sha }}"'
 
           # The Windows bundle loads the UI from this WebView2 origin. A
           # missing CORS header makes a healthy engine look like it is down.
@@ -256,10 +293,10 @@ jobs:
 
   release:
     name: Publish prerelease
-    needs: [changes, build]
+    needs: [meta, build]
     if: >-
-      needs.changes.outputs.should_build == 'true' &&
-      (github.event_name == 'schedule' || inputs.publish)
+      needs.meta.outputs.build == 'true' &&
+      (github.event_name == 'workflow_run' || inputs.publish)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -272,12 +309,36 @@ jobs:
       - name: List artifacts
         run: ls -la dist
 
+      # One rolling tag rather than one per day. Builds now happen per
+      # commit, so dated tags would pile up several a day, and
+      # /releases/latest/download/<file> only works if there is a single
+      # moving target. The action updates the release but leaves the tag
+      # where it was, so move it here.
+      - name: Point the nightly tag at this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.meta.outputs.sha }}
+        run: |
+          set -euo pipefail
+          repo="${{ github.repository }}"
+          if gh api "repos/$repo/git/ref/tags/nightly" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/$repo/git/refs/tags/nightly" \
+              -f sha="$SHA" -F force=true
+          else
+            gh api --method POST "repos/$repo/git/refs" \
+              -f ref=refs/tags/nightly -f sha="$SHA"
+          fi
+
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: nightly-${{ needs.changes.outputs.date }}
-          name: Nightly ${{ needs.changes.outputs.date }}
+          tag_name: nightly
+          target_commitish: ${{ needs.meta.outputs.sha }}
+          name: Nightly ${{ needs.meta.outputs.date }} (${{ needs.meta.outputs.short_sha }})
           body: |
-            Automated nightly build of `${{ needs.changes.outputs.sha }}`.
+            Built from
+            [`${{ needs.meta.outputs.short_sha }}`](https://github.com/${{ github.repository }}/commit/${{ needs.meta.outputs.sha }})
+            after CI passed. This release is replaced by every commit that
+            lands on `main`, so it always matches the newest code.
 
             These builds are unsigned. On macOS remove the quarantine flag
             before the first launch:
@@ -294,3 +355,22 @@ jobs:
           prerelease: true
           files: dist/*
           fail_on_unmatched_files: true
+
+      # Uploads replace files of the same name, so a bundle that changes
+      # name (a version bump, a dropped platform) would otherwise stay on
+      # the release forever, next to the current one, with nothing saying
+      # which is which. Done after the upload: a failed run leaves the
+      # previous build in place rather than an empty release.
+      - name: Drop assets left over from an older build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current="$(cd dist && ls)"
+          gh release view nightly --json assets --jq '.assets[].name' \
+          | while read -r asset; do
+              if ! grep -qxF "$asset" <<< "$current"; then
+                echo "removing stale asset: $asset"
+                gh release delete-asset nightly "$asset" --yes
+              fi
+            done

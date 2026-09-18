@@ -24,10 +24,11 @@ and the workflow tools on top.
 
 ## Download
 
-Grab the latest build from the [Releases page](https://github.com/mirusu400/Lanius/releases).
-Builds are published nightly whenever something changed, so the newest one
-may be a day behind `main`. To run the current code instead, see
-[Building from source](#building-from-source).
+Grab the latest build from the
+[Nightly release](https://github.com/mirusu400/Lanius/releases/tag/nightly).
+It is rebuilt from every commit that lands on `main` and passes CI, so the
+download always matches the current code. Settings, About says which commit
+a build came from.
 
 | Platform | File |
 |---|---|
