@@ -16,12 +16,14 @@ import { AboutSection } from "./settings/AboutSection";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { BrowserHelpSection } from "./settings/BrowserHelpSection";
 import { BrowserSection } from "./settings/BrowserSection";
+import { BodyDisplaySection } from "./settings/BodyDisplaySection";
 import { CaSection } from "./settings/CaSection";
 import { CaptureSection } from "./settings/CaptureSection";
 import { EngineSection } from "./settings/EngineSection";
 import { LanguageSection } from "./settings/LanguageSection";
 import { ListenerSection } from "./settings/ListenerSection";
 import { McpSection } from "./settings/McpSection";
+import { MatchReplaceSection } from "./settings/MatchReplaceSection";
 import { ProjectSection } from "./settings/ProjectSection";
 import { TlsSection } from "./settings/TlsSection";
 
@@ -75,6 +77,8 @@ export function SettingsTab() {
         {group === "proxy" && (
           <>
             <ListenerSection />
+            <BodyDisplaySection />
+            <MatchReplaceSection />
             <EngineSection />
             <CaptureSection />
             <TlsSection />

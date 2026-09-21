@@ -156,6 +156,8 @@
 - **M6. 유틸 & 원시 TCP ✅ 완료:** Decoder(체인)/Comparer(단어·바이트 diff), 원시 TCP 캡처 + 헥스 덤프 뷰.
 - **M7. 플러그인 시스템 ✅ (엔진측 완료):** Python 애드온 로더(발견·활성/비활성·리로드·영구 상태) + 예시 플러그인 2개 + Plugins 탭. UI측 JS 플러그인 API는 후속.
 - **M8. MCP 연동 ✅ 완료:** 자체 MCP 서버(13개 툴). 히스토리·사이트맵·엔드포인트 조회, 스코프 관리, 인터셉트 제어·포워드·드롭, replay/send, 디코딩. 시크릿 기본 리댁션.
+- **M9. 프록시 워크플로우 확장 ✅ 완료:** 영속 Match & Replace(URL/헤더/본문, 문자열/정규식) + WebSocket 양방향 히스토리·인터셉트·편집·드롭·활성 연결 재전송.
+- **M10. HTTP 본문·수정 이력 ✅ 완료:** Content-Encoding(gzip/deflate/br/zstd) 표시 자동 해제·재전송 시 재압축(기본 켜짐/설정 가능) + History Modified 열 + Original/Auto-modified/Modified request 스냅샷.
 
 > DoD(완료 정의): 각 마일스톤은 문서화 + 테스트 + GUI에서 수동 검증 가능해야 한다.
 
@@ -166,7 +168,7 @@
 
 ## 8. 기능 명세 요약 (탭별)
 
-- **Proxy:** 인터셉트 토글, 히스토리(필터/검색), 요청·응답 상세, "Send to Repeater/Intruder".
+- **Proxy:** HTTP 인터셉트와 히스토리, 압축 본문 자동 해제, 요청 수정 단계 비교, Match & Replace, WebSocket 메시지 히스토리·양방향 인터셉트·재전송, "Send to Repeater/Intruder".
 - **Target:** 사이트맵 트리, 엔드포인트 뷰(그룹핑+파라미터), Scope 편집기(include/exclude).
 - **Repeater:** 다중 탭 요청 에디터(Monaco), 재전송, 응답 diff.
 - **Intruder:** 페이로드 위치 마킹, 워드리스트/페이로드 세트, 공격 실행·결과 표(상태코드·길이·시간).
@@ -174,7 +176,7 @@
 - **Comparer:** 두 요청/응답 바이트·단어 단위 비교.
 - **Logger:** 실시간 이벤트 스트림 + 저장된 이벤트 로그, 필터/일시정지.
 - **Plugins:** 설치/활성/비활성, 플러그인 제공 탭 마운트.
-- **Settings:** 엔진/프록시 상태, CA 내보내기(pem/cer/p12) 및 `mitm.it` 안내, 인터페이스 언어 선택.
+- **Settings:** 엔진/프록시 상태, HTTP 본문 자동 압축 해제, Match & Replace 규칙, CA 내보내기(pem/cer/p12) 및 `mitm.it` 안내, 인터페이스 언어 선택.
 
 ---
 

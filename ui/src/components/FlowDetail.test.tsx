@@ -35,6 +35,13 @@ const httpFlow: FlowSummary = {
 
 /** A flow whose response body is JSON on one line. */
 const jsonFlow: FlowSummary = { ...httpFlow, id: 'j1' };
+const modifiedFlow: FlowSummary = {
+  ...httpFlow,
+  id: 'm1',
+  method: 'POST',
+  modified: true,
+  auto_modified: true,
+};
 
 const tcpFlow: FlowSummary = {
   ...httpFlow,
@@ -54,12 +61,13 @@ beforeEach(() => {
     vi.fn(async (input: RequestInfo | URL) => {
       const isTcp = String(input).includes('t1');
       const isJson = String(input).includes('j1');
+      const isModified = String(input).includes('m1');
       return {
         ok: true,
         status: 200,
         statusText: 'OK',
         json: async () => ({
-          ...(isTcp ? tcpFlow : httpFlow),
+          ...(isTcp ? tcpFlow : isModified ? modifiedFlow : httpFlow),
           request_headers: isTcp ? [] : [['Host', 'api.test']],
           request_body: isTcp ? 'HELLO\r\n' : '',
           response_headers: isTcp ? null : [['Content-Type', 'text/plain']],
@@ -68,6 +76,28 @@ beforeEach(() => {
             : isJson
               ? '{"a":1,"b":2}'
               : 'ok',
+          request_variants: isModified
+            ? {
+                original: {
+                  method: 'POST', scheme: 'https', host: 'api.test', port: 443,
+                  path: '/original', http_version: 'HTTP/1.1',
+                  headers: [['Host', 'api.test']], body: 'before', charset: 'utf-8',
+                  content_encoding: null, body_decoded: false, decode_error: null,
+                },
+                auto_modified: {
+                  method: 'POST', scheme: 'https', host: 'api.test', port: 443,
+                  path: '/automatic', http_version: 'HTTP/1.1',
+                  headers: [['Host', 'api.test']], body: 'automatic', charset: 'utf-8',
+                  content_encoding: null, body_decoded: false, decode_error: null,
+                },
+                modified: {
+                  method: 'PUT', scheme: 'https', host: 'api.test', port: 443,
+                  path: '/final', http_version: 'HTTP/1.1',
+                  headers: [['Host', 'api.test']], body: 'final', charset: 'utf-8',
+                  content_encoding: null, body_decoded: false, decode_error: null,
+                },
+              }
+            : null,
         }),
       } as Response;
     }),
@@ -226,6 +256,20 @@ describe('FlowDetailView', () => {
     render(<FlowDetailView flow={httpFlow} />);
     await screen.findByText(t('detail.request'));
     expect(screen.queryByRole('button', { name: t('body.showRaw') })).toBeNull();
+  });
+
+  it('switches between original, automatic, and final request snapshots', async () => {
+    render(<FlowDetailView flow={modifiedFlow} />);
+
+    expect(await screen.findByText('final')).toBeTruthy();
+    await userEvent.click(
+      screen.getByRole('tab', { name: t('detail.originalRequest') }),
+    );
+    expect(await screen.findByText('before')).toBeTruthy();
+    await userEvent.click(
+      screen.getByRole('tab', { name: t('detail.autoModifiedRequest') }),
+    );
+    expect(await screen.findByText('automatic')).toBeTruthy();
   });
 
   it('prompts when nothing is selected', () => {

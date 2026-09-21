@@ -1,13 +1,17 @@
 /** REST client for the Lanius engine. */
 
 import type {
+  BodyDisplaySettings,
   EngineStatus,
   FlowDetail,
   FlowEdits,
   FlowFilters,
   FlowSummary,
   InterceptRules,
+  MatchReplaceRule,
   PausedFlow,
+  WebSocketInterceptRules,
+  WebSocketState,
 } from './types';
 
 /** Engine base URL.
@@ -163,6 +167,90 @@ export function dropFlow(id: string): Promise<{ ok: boolean }> {
 
 export function forwardAll(): Promise<{ forwarded: number }> {
   return request('/api/intercept/forward-all', { method: 'POST' });
+}
+
+// --- automatic Match & Replace ------------------------------------------
+
+export async function getMatchReplaceRules(): Promise<MatchReplaceRule[]> {
+  const data = await request<{ rules: MatchReplaceRule[] }>('/api/match-replace');
+  return data.rules ?? [];
+}
+
+export async function putMatchReplaceRules(
+  rules: MatchReplaceRule[],
+): Promise<MatchReplaceRule[]> {
+  const data = await request<{ rules: MatchReplaceRule[] }>('/api/match-replace', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ rules }),
+  });
+  return data.rules ?? [];
+}
+
+// --- body display --------------------------------------------------------
+
+export function getBodyDisplaySettings(): Promise<BodyDisplaySettings> {
+  return request('/api/body-display');
+}
+
+export function setBodyDisplaySettings(
+  auto_decompress: boolean,
+): Promise<BodyDisplaySettings> {
+  return request('/api/body-display', {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ auto_decompress }),
+  });
+}
+
+// --- WebSocket proxy -----------------------------------------------------
+
+export function getWebSocketState(): Promise<WebSocketState> {
+  return request('/api/websockets');
+}
+
+export function patchWebSocketIntercept(
+  patch: Partial<WebSocketInterceptRules>,
+): Promise<WebSocketInterceptRules> {
+  return request('/api/websockets/intercept', {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(patch),
+  });
+}
+
+export function forwardWebSocketMessage(
+  id: string,
+  content: string,
+  encoding: string,
+): Promise<{ ok: boolean }> {
+  return request(`/api/websockets/${id}/forward`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ content, encoding }),
+  });
+}
+
+export function dropWebSocketMessage(id: string): Promise<{ ok: boolean }> {
+  return request(`/api/websockets/${id}/drop`, { method: 'POST' });
+}
+
+export function repeatWebSocketMessage(payload: {
+  connection_id: string;
+  to_client: boolean;
+  content: string;
+  encoding: string;
+  is_text: boolean;
+}): Promise<{ ok: boolean }> {
+  return request('/api/websockets/repeat', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload),
+  });
+}
+
+export function clearWebSocketMessages(): Promise<{ ok: boolean }> {
+  return request('/api/websockets', { method: 'DELETE' });
 }
 
 // --- repeater (M3) --------------------------------------------------------

@@ -379,7 +379,10 @@ class IntruderAddon:
                 payload = await asyncio.to_thread(
                     _render_request, attack.url, attack.template, slots
                 )
-                flow = build_flow(**payload)
+                flow = build_flow(
+                    **payload,
+                    encode_content_body=self.repeater.auto_decompress,
+                )
                 record = await self.repeater.send(flow)
                 result.status_code = record.status_code
                 result.length = record.response_size

@@ -7,6 +7,7 @@ mitmproxy asyncio loop must go through :mod:`app.db.async_store` (or
 
 from __future__ import annotations
 
+import base64
 import json
 import sqlite3
 import threading
@@ -20,6 +21,7 @@ from typing import Any, List, Sequence
 import logging
 
 from .. import charset
+from ..content_encoding import body_for_display
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,54 @@ if TYPE_CHECKING:
     from .payloads import PayloadSetStore
 
 MAX_BODY_BYTES = 5 * 1024 * 1024
+
+
+@dataclass(slots=True)
+class RequestSnapshot:
+    """A request as it existed at one point in the proxy pipeline."""
+
+    method: str
+    scheme: str
+    host: str
+    port: int
+    path: str
+    http_version: str
+    headers: list[tuple[str, str]] = field(default_factory=list)
+    body: bytes = b""
+
+    @classmethod
+    def from_mapping(cls, value: dict[str, Any]) -> "RequestSnapshot":
+        return cls(
+            method=str(value.get("method") or "GET"),
+            scheme=str(value.get("scheme") or "http"),
+            host=str(value.get("host") or ""),
+            port=int(value.get("port") or 80),
+            path=str(value.get("path") or "/"),
+            http_version=str(value.get("http_version") or "HTTP/1.1"),
+            headers=[tuple(item) for item in value.get("headers", [])],
+            body=bytes(value.get("body") or b""),
+        )
+
+    def detail(self, *, auto_decompress: bool) -> dict[str, Any]:
+        shown, content_encoding, decoded, decode_error = body_for_display(
+            self.headers, self.body, enabled=auto_decompress
+        )
+        content_type = _content_type(self.headers)
+        body_charset = charset.charset_of(content_type, shown)
+        return {
+            "method": self.method,
+            "scheme": self.scheme,
+            "host": self.host,
+            "port": self.port,
+            "path": self.path,
+            "http_version": self.http_version,
+            "headers": self.headers,
+            "body": charset.decode(shown, body_charset),
+            "charset": body_charset,
+            "content_encoding": content_encoding,
+            "body_decoded": decoded,
+            "decode_error": decode_error,
+        }
 
 
 @dataclass(slots=True)
@@ -62,6 +112,10 @@ class FlowRecord:
     error: str | None = None
     source: str = "proxy"
     comment: str | None = None
+    request_original: RequestSnapshot | None = None
+    request_auto_modified: RequestSnapshot | None = None
+    auto_modified: bool = False
+    modified: bool = False
 
     def summary(self) -> dict[str, Any]:
         """Lightweight dict for list views / WS events (no bodies)."""
@@ -70,9 +124,11 @@ class FlowRecord:
         data.pop("response_body", None)
         data.pop("request_headers", None)
         data.pop("response_headers", None)
+        data.pop("request_original", None)
+        data.pop("request_auto_modified", None)
         return data
 
-    def detail(self) -> dict[str, Any]:
+    def detail(self, *, auto_decompress: bool = False) -> dict[str, Any]:
         """Full dict with headers and bodies rendered as text-safe values.
 
         Bodies are read with the charset each message declares. Decoding
@@ -80,25 +136,69 @@ class FlowRecord:
         characters, which cannot be turned back into the original bytes.
         """
         data = asdict(self)
+        data.pop("request_original", None)
+        data.pop("request_auto_modified", None)
+        request_display, request_encoding, request_decoded, request_error = (
+            body_for_display(
+                self.request_headers,
+                self.request_body,
+                enabled=auto_decompress,
+            )
+        )
+        response_display, response_encoding, response_decoded, response_error = (
+            body_for_display(
+                self.response_headers,
+                self.response_body,
+                enabled=auto_decompress,
+            )
+        )
         request_charset = charset.charset_of(
-            _content_type(self.request_headers), self.request_body
+            _content_type(self.request_headers), request_display
         )
         response_charset = charset.charset_of(
-            _content_type(self.response_headers), self.response_body
+            _content_type(self.response_headers), response_display
         )
         data["request_body"] = (
             None
-            if self.request_body is None
-            else charset.decode(self.request_body, request_charset)
+            if request_display is None
+            else charset.decode(request_display, request_charset)
         )
         data["response_body"] = (
             None
-            if self.response_body is None
-            else charset.decode(self.response_body, response_charset)
+            if response_display is None
+            else charset.decode(response_display, response_charset)
         )
         # So the UI can say how it was read, and reply in the same charset.
         data["request_charset"] = request_charset
         data["response_charset"] = response_charset
+        data["request_content_encoding"] = request_encoding
+        data["response_content_encoding"] = response_encoding
+        data["request_body_decoded"] = request_decoded
+        data["response_body_decoded"] = response_decoded
+        data["request_decode_error"] = request_error
+        data["response_decode_error"] = response_error
+        data["request_variants"] = None
+        if self.modified and self.request_original is not None:
+            final = RequestSnapshot(
+                method=self.method or "GET",
+                scheme=self.scheme or "http",
+                host=self.host or "",
+                port=self.port or (443 if self.scheme == "https" else 80),
+                path=(self.path or "/") + (f"?{self.query}" if self.query else ""),
+                http_version=self.http_version or "HTTP/1.1",
+                headers=self.request_headers,
+                body=self.request_body,
+            )
+            automatic = self.request_auto_modified or self.request_original
+            data["request_variants"] = {
+                "original": self.request_original.detail(
+                    auto_decompress=auto_decompress
+                ),
+                "auto_modified": automatic.detail(
+                    auto_decompress=auto_decompress
+                ),
+                "modified": final.detail(auto_decompress=auto_decompress),
+            }
         return data
 
 
@@ -116,6 +216,12 @@ def _record_from_export(data: dict[str, Any]) -> "FlowRecord":
         value = kwargs.get(key)
         if isinstance(value, str):
             kwargs[key] = value.encode("utf-8")
+    for key in ("request_original", "request_auto_modified"):
+        value = kwargs.get(key)
+        if isinstance(value, dict):
+            body = value.get("body", "")
+            value["body"] = body.encode("utf-8") if isinstance(body, str) else body
+            kwargs[key] = RequestSnapshot.from_mapping(value)
     for key in ("request_headers", "response_headers"):
         value = kwargs.get(key)
         if isinstance(value, list):
@@ -148,11 +254,32 @@ def _load_headers(raw: str | None) -> list[tuple[str, str]] | None:
     return [(k, v) for k, v in json.loads(raw)]
 
 
+def _dump_snapshot(snapshot: RequestSnapshot | None) -> str | None:
+    if snapshot is None:
+        return None
+    data = asdict(snapshot)
+    data["body"] = base64.b64encode(snapshot.body).decode("ascii")
+    return json.dumps(data, ensure_ascii=False)
+
+
+def _load_snapshot(raw: str | None) -> RequestSnapshot | None:
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        data["body"] = base64.b64decode(data.get("body") or "", validate=True)
+        return RequestSnapshot.from_mapping(data)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        logger.warning("discarding unreadable request snapshot")
+        return None
+
+
 _COLUMNS = (
     "id, type, client_addr, server_addr, scheme, method, host, port, path, query,"
     " http_version, request_headers, request_body, request_size, started_at,"
     " status_code, reason, response_headers, response_body, response_size,"
-    " response_mime, completed_at, duration_ms, error, source, comment"
+    " response_mime, completed_at, duration_ms, error, source, comment,"
+    " request_original, request_auto_modified, auto_modified, modified"
 )
 
 
@@ -204,6 +331,10 @@ class FlowStore:
             record.error,
             record.source,
             record.comment,
+            _dump_snapshot(record.request_original),
+            _dump_snapshot(record.request_auto_modified),
+            int(record.auto_modified),
+            int(record.modified),
         )
         placeholders = ", ".join(["?"] * len(values))
         with self._lock:
@@ -801,4 +932,8 @@ def _row_to_record(row: sqlite3.Row) -> FlowRecord:
         error=row["error"],
         source=row["source"],
         comment=row["comment"],
+        request_original=_load_snapshot(row["request_original"]),
+        request_auto_modified=_load_snapshot(row["request_auto_modified"]),
+        auto_modified=bool(row["auto_modified"]),
+        modified=bool(row["modified"]),
     )

@@ -5,7 +5,7 @@ import time
 import sqlite3
 
 from app.db.schema import SCHEMA_VERSION, migrate
-from app.db.store import FlowRecord, FlowStore
+from app.db.store import FlowRecord, FlowStore, RequestSnapshot
 
 
 def make_record(flow_id: str, **kwargs) -> FlowRecord:
@@ -84,6 +84,52 @@ def test_upsert_is_idempotent_on_same_id() -> None:
     assert store.count() == 1
     got = store.get("a")
     assert got is not None and got.status_code == 500
+    store.close()
+
+
+def test_request_modification_snapshots_roundtrip() -> None:
+    store = FlowStore()
+    original = RequestSnapshot(
+        method="POST",
+        scheme="https",
+        host="example.com",
+        port=443,
+        path="/before",
+        http_version="HTTP/1.1",
+        headers=[("X-Stage", "original")],
+        body=b"before",
+    )
+    automatic = RequestSnapshot(
+        method="POST",
+        scheme="https",
+        host="example.com",
+        port=443,
+        path="/auto",
+        http_version="HTTP/1.1",
+        headers=[("X-Stage", "auto")],
+        body=b"automatic",
+    )
+    store.upsert(
+        make_record(
+            "modified",
+            method="PUT",
+            path="/final",
+            request_headers=[("X-Stage", "final")],
+            request_body=b"final",
+            request_original=original,
+            request_auto_modified=automatic,
+            auto_modified=True,
+            modified=True,
+        )
+    )
+
+    loaded = store.get("modified")
+    assert loaded is not None
+    assert loaded.summary()["modified"] is True
+    variants = loaded.detail()["request_variants"]
+    assert variants["original"]["path"] == "/before"
+    assert variants["auto_modified"]["body"] == "automatic"
+    assert variants["modified"]["path"] == "/final?page=1"
     store.close()
 
 

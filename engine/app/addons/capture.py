@@ -13,8 +13,9 @@ from typing import Any
 from mitmproxy import http
 from mitmproxy import tcp
 
-from ..db.store import FlowRecord, FlowStore
+from ..db.store import FlowRecord, FlowStore, RequestSnapshot
 from ..events import EventBroker
+from ..request_history import AUTO_MODIFIED, ORIGINAL, request_changed, snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,21 @@ def flow_to_record(flow: http.HTTPFlow) -> FlowRecord:
         source="proxy",
         comment=flow.comment or None,
     )
+    original_data = flow.metadata.get(ORIGINAL)
+    automatic_data = flow.metadata.get(AUTO_MODIFIED)
+    final_data = snapshot(req)
+    if isinstance(original_data, dict):
+        if not isinstance(automatic_data, dict):
+            automatic_data = original_data
+        auto_changed = request_changed(original_data, automatic_data)
+        later_changed = request_changed(automatic_data, final_data)
+        if auto_changed or later_changed:
+            record.request_original = RequestSnapshot.from_mapping(original_data)
+            record.request_auto_modified = RequestSnapshot.from_mapping(
+                automatic_data
+            )
+            record.auto_modified = auto_changed
+            record.modified = True
     resp = flow.response
     if resp is not None:
         body = resp.raw_content or b""
@@ -127,6 +143,7 @@ class CaptureAddon:
         self.broker = broker
         self.scope = scope
         self._pending: set[asyncio.Task[None]] = set()
+        self._last_write: dict[str, asyncio.Task[None]] = {}
 
     def in_scope(self, flow: http.HTTPFlow) -> bool:
         if self.scope is None:
@@ -140,6 +157,10 @@ class CaptureAddon:
 
     # --- mitmproxy hooks --------------------------------------------------
     def request(self, flow: http.HTTPFlow) -> None:
+        self._save(flow, "flow.request")
+
+    def request_updated(self, flow: http.HTTPFlow) -> None:
+        """Persist an Intercept edit; mitmproxy does not repeat request()."""
         self._save(flow, "flow.request")
 
     def response(self, flow: http.HTTPFlow) -> None:
@@ -182,9 +203,7 @@ class CaptureAddon:
         except RuntimeError:
             self.store.upsert(record)
             return
-        task = loop.create_task(self._persist(record))
-        self._pending.add(task)
-        task.add_done_callback(self._pending.discard)
+        self._queue_persist(loop, record)
 
     def _save_tcp(self, flow: tcp.TCPFlow, event_type: str) -> None:
         try:
@@ -202,9 +221,30 @@ class CaptureAddon:
         except RuntimeError:
             self.store.upsert(record)
             return
-        task = loop.create_task(self._persist(record))
+        self._queue_persist(loop, record)
+
+    def _queue_persist(
+        self, loop: asyncio.AbstractEventLoop, record: FlowRecord
+    ) -> None:
+        """Keep writes for one flow ordered while allowing different flows in parallel."""
+        previous = self._last_write.get(record.id)
+        task = loop.create_task(self._persist_after(record, previous))
+        self._last_write[record.id] = task
         self._pending.add(task)
-        task.add_done_callback(self._pending.discard)
+
+        def finished(done: asyncio.Task[None]) -> None:
+            self._pending.discard(done)
+            if self._last_write.get(record.id) is done:
+                self._last_write.pop(record.id, None)
+
+        task.add_done_callback(finished)
+
+    async def _persist_after(
+        self, record: FlowRecord, previous: asyncio.Task[None] | None
+    ) -> None:
+        if previous is not None:
+            await previous
+        await self._persist(record)
 
     async def _persist(self, record: FlowRecord) -> None:
         try:

@@ -5,7 +5,7 @@
  * editable request out of a flow.
  */
 
-import type { FlowDetail, FlowSummary } from '../api/types';
+import type { FlowDetail, FlowSummary, RequestVariant } from '../api/types';
 
 export const CRLF = '\r\n';
 
@@ -26,6 +26,14 @@ export function rawRequest(
   // Repeater edits and sends.
   const headers = detail?.request_headers ?? [['Host', flow.host ?? '']];
   return join(line, headers, detail?.request_body ?? '');
+}
+
+export function rawRequestVariant(variant: RequestVariant): string {
+  const line = `${variant.method || 'GET'} ${variant.path || '/'} ${variant.http_version || 'HTTP/1.1'}`;
+  const headers = variant.headers.length
+    ? variant.headers
+    : [['Host', variant.host]] as [string, string][];
+  return join(line, headers, variant.body);
 }
 
 /** The response as it came back. */

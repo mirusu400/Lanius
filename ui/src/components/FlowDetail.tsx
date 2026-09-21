@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { getFlow } from '../api/client';
-import type { FlowDetail, FlowSummary } from '../api/types';
+import type { FlowDetail, FlowSummary, RequestVariant } from '../api/types';
 import { formatUrl } from '../tabs/proxyModel';
 import { sendToRepeater } from '../tabs/repeaterStore';
 import { sendToIntruder } from '../tabs/intruderStore';
 import { ContextMenu, useContextMenu, type MenuItem } from './ContextMenu';
 import { Split } from './Split';
 import { useCodegenMenu } from './useCodegenMenu';
-import { rawRequest, rawResponse } from './rawHttp';
+import { rawRequest, rawRequestVariant, rawResponse } from './rawHttp';
 import {
   canReformat,
   formatBody,
@@ -30,6 +30,7 @@ interface Props {
  * encoding or invisible bytes.
  */
 type View = 'parsed' | 'raw' | 'hex';
+type RequestStage = 'original' | 'auto_modified' | 'modified';
 
 function HeaderList({
   headers,
@@ -66,6 +67,10 @@ function Half({
   body,
   raw,
   charsetLabel,
+  encodingLabel,
+  decodeError,
+  requestStage,
+  onRequestStage,
   onContextMenu,
   views,
   t,
@@ -80,6 +85,10 @@ function Half({
   body: string;
   raw: string;
   charsetLabel: string | null;
+  encodingLabel: string | null;
+  decodeError?: string | null;
+  requestStage?: RequestStage;
+  onRequestStage?: (stage: RequestStage) => void;
   onContextMenu: (event: React.MouseEvent) => void;
   /** Which views make sense here. A raw TCP stream has no headers, so
    * offering to parse it would only produce an empty table. */
@@ -94,6 +103,29 @@ function Half({
         <span className="detail-half-title">{title}</span>
         {note && <span className="muted">{note}</span>}
         {charsetLabel && <span className="pill charset">{charsetLabel}</span>}
+        {encodingLabel && <span className="pill encoding">{encodingLabel}</span>}
+        {requestStage && onRequestStage && (
+          <div className="request-variants" role="tablist">
+            {(['original', 'auto_modified', 'modified'] as const).map((stage) => (
+              <button
+                key={stage}
+                type="button"
+                role="tab"
+                aria-selected={requestStage === stage}
+                className={requestStage === stage ? 'active' : ''}
+                onClick={() => onRequestStage(stage)}
+              >
+                {t(
+                  stage === 'original'
+                    ? 'detail.originalRequest'
+                    : stage === 'auto_modified'
+                      ? 'detail.autoModifiedRequest'
+                      : 'detail.modifiedRequest',
+                )}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="view-switch" role="tablist">
           {views.map((option) => (
             <button
@@ -109,6 +141,7 @@ function Half({
         </div>
       </div>
       <div className="detail-half-body">
+        {decodeError && <div className="banner error">{decodeError}</div>}
         {view === 'parsed' && (
           <>
             <h4>{t('detail.headers')}</h4>
@@ -167,6 +200,7 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
   // not readable.
   const [requestBodyView, setRequestBodyView] = useState<BodyView>('pretty');
   const [responseBodyView, setResponseBodyView] = useState<BodyView>('pretty');
+  const [requestStage, setRequestStage] = useState<RequestStage>('modified');
   const menu = useContextMenu<null>();
   const codegen = useCodegenMenu();
   // Captured when the menu opens: the flow can change underneath while
@@ -182,6 +216,7 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
       return;
     }
     let cancelled = false;
+    setRequestStage('modified');
     getFlow(flow.id, reveal)
       .then((d) => {
         if (!cancelled) setDetail(d);
@@ -238,6 +273,34 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
       ? t('detail.charset', { charset })
       : null;
 
+  const variants = detail?.request_variants ?? null;
+  const selectedVariant: RequestVariant | null = variants
+    ? variants[requestStage]
+    : null;
+  const requestEncoding = selectedVariant
+    ? selectedVariant.content_encoding
+    : detail?.request_content_encoding;
+  const requestDecoded = selectedVariant
+    ? selectedVariant.body_decoded
+    : detail?.request_body_decoded;
+  const requestDecodeError = selectedVariant
+    ? selectedVariant.decode_error
+    : detail?.request_decode_error;
+  const encodingOf = (
+    encoding: string | null | undefined,
+    decoded: boolean | undefined,
+  ) =>
+    encoding && decoded
+      ? t('detail.decompressed', { encoding })
+      : null;
+  const decodeErrorOf = (
+    encoding: string | null | undefined,
+    error: string | null | undefined,
+  ) =>
+    encoding && error
+      ? `${t('detail.decodeError', { encoding })}: ${error}`
+      : null;
+
   const request = (
     <Half
       title={isTcp ? t('detail.toServer') : t('detail.request')}
@@ -249,10 +312,20 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
       views={views}
       bodyView={requestBodyView}
       onBodyView={setRequestBodyView}
-      headers={detail?.request_headers ?? null}
-      body={detail?.request_body ?? ''}
-      raw={isTcp ? (detail?.request_body ?? '') : rawRequest(flow, detail)}
-      charsetLabel={charsetOf(detail?.request_charset)}
+      body={selectedVariant?.body ?? detail?.request_body ?? ''}
+      raw={
+        isTcp
+          ? (detail?.request_body ?? '')
+          : selectedVariant
+            ? rawRequestVariant(selectedVariant)
+            : rawRequest(flow, detail)
+      }
+      headers={selectedVariant?.headers ?? detail?.request_headers ?? null}
+      charsetLabel={charsetOf(selectedVariant?.charset ?? detail?.request_charset)}
+      encodingLabel={encodingOf(requestEncoding, requestDecoded)}
+      decodeError={decodeErrorOf(requestEncoding, requestDecodeError)}
+      requestStage={variants ? requestStage : undefined}
+      onRequestStage={variants ? setRequestStage : undefined}
       onContextMenu={openMenu}
       t={t}
     />
@@ -276,6 +349,14 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
       body={detail?.response_body ?? ''}
       raw={isTcp ? (detail?.response_body ?? '') : rawResponse(flow, detail)}
       charsetLabel={charsetOf(detail?.response_charset)}
+      encodingLabel={encodingOf(
+        detail?.response_content_encoding,
+        detail?.response_body_decoded,
+      )}
+      decodeError={decodeErrorOf(
+        detail?.response_content_encoding,
+        detail?.response_decode_error,
+      )}
       onContextMenu={openMenu}
       t={t}
     />

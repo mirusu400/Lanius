@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from mitmproxy import http
 
 from .. import charset
+from ..content_encoding import auto_decompress_enabled, body_for_display
+from ..db.store import FlowStore
 from ..events import EventBroker
 
 logger = logging.getLogger(__name__)
@@ -50,9 +52,14 @@ def _matches(rules: InterceptRules, flow: http.HTTPFlow) -> bool:
     return True
 
 
-def paused_payload(flow: http.HTTPFlow, phase: Phase) -> dict[str, Any]:
+def paused_payload(
+    flow: http.HTTPFlow, phase: Phase, *, auto_decompress: bool = True
+) -> dict[str, Any]:
     """Serialize a paused flow for the UI editor."""
     req = flow.request
+    request_body, _, _, _ = body_for_display(
+        req.headers.items(multi=True), req.raw_content, enabled=auto_decompress
+    )
     payload: dict[str, Any] = {
         "id": flow.id,
         "phase": phase,
@@ -64,25 +71,30 @@ def paused_payload(flow: http.HTTPFlow, phase: Phase) -> dict[str, Any]:
         "http_version": req.http_version,
         "request_headers": [[k, v] for k, v in req.headers.items(multi=True)],
         "request_body": charset.decode_body(
-            req.headers.get("content-type"), req.raw_content
+            req.headers.get("content-type"), request_body
         ),
         # The editor sends text back; this is how to turn it into the bytes
         # the endpoint expects.
         "request_charset": charset.charset_of(
-            req.headers.get("content-type"), req.raw_content
+            req.headers.get("content-type"), request_body
         ),
     }
     if flow.response is not None:
         resp = flow.response
+        response_body, _, _, _ = body_for_display(
+            resp.headers.items(multi=True),
+            resp.raw_content,
+            enabled=auto_decompress,
+        )
         payload.update(
             status_code=resp.status_code,
             reason=resp.reason,
             response_headers=[[k, v] for k, v in resp.headers.items(multi=True)],
             response_body=charset.decode_body(
-                resp.headers.get("content-type"), resp.raw_content
+                resp.headers.get("content-type"), response_body
             ),
             response_charset=charset.charset_of(
-                resp.headers.get("content-type"), resp.raw_content
+                resp.headers.get("content-type"), response_body
             ),
         )
     return payload
@@ -91,10 +103,22 @@ def paused_payload(flow: http.HTTPFlow, phase: Phase) -> dict[str, Any]:
 class InterceptAddon:
     """Holds flows at a breakpoint until the UI resolves them."""
 
-    def __init__(self, broker: EventBroker, rules: InterceptRules | None = None) -> None:
+    def __init__(
+        self,
+        broker: EventBroker,
+        rules: InterceptRules | None = None,
+        *,
+        store: FlowStore | None = None,
+        on_forwarded: Callable[[http.HTTPFlow], None] | None = None,
+    ) -> None:
         self.broker = broker
         self.rules = rules or InterceptRules()
+        self.store = store
+        self.on_forwarded = on_forwarded
         self.paused: dict[str, tuple[http.HTTPFlow, Phase]] = {}
+
+    def _auto_decompress(self) -> bool:
+        return self.store is None or auto_decompress_enabled(self.store)
 
     # --- mitmproxy hooks --------------------------------------------------
     def request(self, flow: http.HTTPFlow) -> None:
@@ -119,12 +143,23 @@ class InterceptAddon:
         return self.rules
 
     def list_paused(self) -> list[dict[str, Any]]:
-        return [paused_payload(f, phase) for f, phase in self.paused.values()]
+        enabled = self._auto_decompress()
+        return [
+            paused_payload(f, phase, auto_decompress=enabled)
+            for f, phase in self.paused.values()
+        ]
 
     def forward(self, flow_id: str, edits: dict[str, Any] | None = None) -> None:
         flow, phase = self._take(flow_id)
         if edits:
-            apply_edits(flow, phase, edits)
+            apply_edits(
+                flow,
+                phase,
+                edits,
+                body_is_decoded=self._auto_decompress(),
+            )
+            if self.on_forwarded is not None:
+                self.on_forwarded(flow)
         flow.resume()
         self.broker.publish("intercept.resolved", {"id": flow_id, "action": "forward"})
 
@@ -153,7 +188,12 @@ class InterceptAddon:
     def _hold(self, flow: http.HTTPFlow, phase: Phase) -> None:
         flow.intercept()
         self.paused[flow.id] = (flow, phase)
-        self.broker.publish("intercept.paused", paused_payload(flow, phase))
+        self.broker.publish(
+            "intercept.paused",
+            paused_payload(
+                flow, phase, auto_decompress=self._auto_decompress()
+            ),
+        )
 
     def _take(self, flow_id: str) -> tuple[http.HTTPFlow, Phase]:
         entry = self.paused.pop(flow_id, None)
@@ -162,7 +202,13 @@ class InterceptAddon:
         return entry
 
 
-def apply_edits(flow: http.HTTPFlow, phase: Phase, edits: dict[str, Any]) -> None:
+def apply_edits(
+    flow: http.HTTPFlow,
+    phase: Phase,
+    edits: dict[str, Any],
+    *,
+    body_is_decoded: bool = True,
+) -> None:
     """Apply UI edits to a paused flow before resuming."""
     if phase == "request":
         req = flow.request
@@ -177,7 +223,7 @@ def apply_edits(flow: http.HTTPFlow, phase: Phase, edits: dict[str, Any]) -> Non
         if (headers := edits.get("request_headers")) is not None:
             _replace_headers(req.headers, headers)
         if (body := edits.get("request_body")) is not None:
-            _set_body(req, body)
+            _set_body(req, body, decoded=body_is_decoded)
         return
 
     if flow.response is None:
@@ -190,7 +236,7 @@ def apply_edits(flow: http.HTTPFlow, phase: Phase, edits: dict[str, Any]) -> Non
     if (headers := edits.get("response_headers")) is not None:
         _replace_headers(resp.headers, headers)
     if (body := edits.get("response_body")) is not None:
-        _set_body(resp, body)
+        _set_body(resp, body, decoded=body_is_decoded)
 
 
 def _replace_headers(target: Any, headers: list[list[str]]) -> None:
@@ -201,13 +247,27 @@ def _replace_headers(target: Any, headers: list[list[str]]) -> None:
         target.add(item[0], item[1])
 
 
-def _set_body(message: Any, body: str) -> None:
+def _set_body(message: Any, body: str, *, decoded: bool) -> None:
     # Back to the charset this message declares. Writing UTF-8 into a
     # EUC-KR request delivers mojibake to the server, and the header would
     # then be lying about its own body.
-    raw = charset.encode(
-        body, charset.charset_of(message.headers.get("content-type"), None)
-    )
-    message.content = raw
-    if "content-length" in message.headers:
-        message.headers["content-length"] = str(len(raw))
+    if not decoded and message.headers.get("content-encoding"):
+        try:
+            raw = body.encode("latin-1")
+        except UnicodeEncodeError:
+            raw = charset.encode(
+                body,
+                charset.charset_of(message.headers.get("content-type"), None),
+            )
+    else:
+        raw = charset.encode(
+            body, charset.charset_of(message.headers.get("content-type"), None)
+        )
+    if decoded:
+        # Setting logical content re-applies gzip/deflate/br/zstd according
+        # to Content-Encoding and fixes Content-Length.
+        message.content = raw
+    else:
+        message.raw_content = raw
+        if "transfer-encoding" not in message.headers:
+            message.headers["content-length"] = str(len(raw))

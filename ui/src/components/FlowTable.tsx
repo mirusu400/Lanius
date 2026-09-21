@@ -28,6 +28,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu }: Props)
             <th className="col-host">{t('flow.host')}</th>
             <th className="col-url">{t('flow.url')}</th>
             <th className="col-status">{t('flow.status')}</th>
+            <th className="col-modified">{t('flow.modified')}</th>
             <th className="col-size">{t('flow.size')}</th>
             <th className="col-time">{t('flow.time')}</th>
           </tr>
@@ -35,7 +36,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu }: Props)
         <tbody>
           {flows.length === 0 && (
             <tr>
-              <td colSpan={7} className="empty">
+              <td colSpan={8} className="empty">
                 {t('proxy.emptyTable')}
               </td>
             </tr>
@@ -61,6 +62,12 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu }: Props)
               </td>
               <td className={`mono ${statusClass(flow.status_code)}`}>
                 {flow.status_code ?? (flow.error ? 'ERR' : '…')}
+              </td>
+              <td
+                className={flow.modified ? 'mono col-modified is-modified' : 'mono col-modified'}
+                title={flow.modified ? t('flow.modified') : undefined}
+              >
+                {flow.modified ? '✓' : ''}
               </td>
               <td className="mono num">{formatBytes(flow.response_size)}</td>
               <td className="mono num">{formatDuration(flow.duration_ms)}</td>

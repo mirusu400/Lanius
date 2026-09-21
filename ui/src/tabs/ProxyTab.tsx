@@ -37,6 +37,7 @@ import { addScopeFromUrl } from '../api/client';
 import { FlowDetailView } from '../components/FlowDetail';
 import { FilterBar } from '../components/FilterBar';
 import { InterceptPanel } from '../components/InterceptPanel';
+import { WebSocketPanel } from '../components/WebSocketPanel';
 import { matchesFilters, mergeFlow } from './proxyModel';
 import { msg, renderMessage, useT, type Message } from '../i18n';
 import { useReportBusy } from '../components/busy';
@@ -48,7 +49,7 @@ const DEFAULT_RULES: InterceptRules = {
   host_filter: null,
 };
 
-type View = 'intercept' | 'history';
+type View = 'intercept' | 'history' | 'websockets';
 
 export function ProxyTab() {
   const t = useT();
@@ -241,6 +242,12 @@ export function ProxyTab() {
         >
           {t('proxy.history')}
         </button>
+        <button
+          className={view === 'websockets' ? 'active' : ''}
+          onClick={() => setView('websockets')}
+        >
+          {t('proxy.websockets')}
+        </button>
       </div>
 
       {view === 'intercept' ? (
@@ -250,6 +257,8 @@ export function ProxyTab() {
           onToggle={onToggleIntercept}
           onResolved={onResolved}
         />
+      ) : view === 'websockets' ? (
+        <WebSocketPanel />
       ) : (
         <>
           <FilterBar

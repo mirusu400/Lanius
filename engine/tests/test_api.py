@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import socket
 import time
+import gzip
 
 from unittest import mock
 
@@ -163,6 +164,89 @@ def test_forward_all(client) -> None:
     for _ in range(3):
         addon.request(tflow.tflow(req=tutils.treq(host="example.com"), resp=False))
     assert client.post("/api/intercept/forward-all").json() == {"forwarded": 3}
+
+
+def test_match_replace_rules_api(client) -> None:
+    payload = {
+        "rules": [
+            {
+                "id": "mask",
+                "name": "mask token",
+                "phase": "request",
+                "target": "headers",
+                "match": "Bearer secret",
+                "replace": "Bearer changed",
+            }
+        ]
+    }
+    saved = client.put("/api/match-replace", json=payload)
+    assert saved.status_code == 200
+    assert client.get("/api/match-replace").json()["rules"][0]["id"] == "mask"
+
+
+def test_match_replace_rejects_invalid_regex(client) -> None:
+    response = client.put(
+        "/api/match-replace",
+        json={
+            "rules": [
+                {
+                    "id": "bad",
+                    "phase": "request",
+                    "target": "body",
+                    "match": "[",
+                    "replace": "",
+                    "regex": True,
+                }
+            ]
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_body_display_defaults_on_and_can_be_disabled(client) -> None:
+    assert client.get("/api/body-display").json() == {"auto_decompress": True}
+    assert client.patch(
+        "/api/body-display", json={"auto_decompress": False}
+    ).json() == {"auto_decompress": False}
+    assert client.get("/api/body-display").json() == {"auto_decompress": False}
+
+
+def test_get_flow_automatically_decompresses_body(client) -> None:
+    seed(
+        client,
+        "gzip",
+        request_headers=[
+            ("Content-Type", "application/json"),
+            ("Content-Encoding", "gzip"),
+        ],
+        request_body=gzip.compress(b'{"ok":true}'),
+    )
+    data = client.get("/api/flows/gzip").json()
+    assert data["request_body"] == '{"ok":true}'
+    assert data["request_body_decoded"] is True
+
+
+def test_websocket_proxy_api_defaults_and_rules(client) -> None:
+    state = client.get("/api/websockets").json()
+    assert state["messages"] == []
+    assert state["rules"]["enabled"] is False
+    rules = client.patch(
+        "/api/websockets/intercept",
+        json={"enabled": True, "server_messages": False},
+    ).json()
+    assert rules["enabled"] is True
+    assert rules["server_messages"] is False
+
+
+def test_websocket_actions_report_stale_targets(client) -> None:
+    assert client.post(
+        "/api/websockets/missing/forward", json={"content": "x"}
+    ).status_code == 409
+    assert client.post("/api/websockets/missing/drop").status_code == 409
+    assert client.post(
+        "/api/websockets/repeat",
+        json={"connection_id": "missing", "content": "x"},
+    ).status_code == 409
 
 
 # --- CA / events (final pass) ---------------------------------------------

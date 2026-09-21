@@ -19,6 +19,11 @@ from mitmproxy.connection import Client, Server
 from mitmproxy.options import Options
 
 from .. import charset
+from ..content_encoding import (
+    auto_decompress_enabled,
+    body_for_display,
+    encode_content,
+)
 from ..db.store import FlowRecord, FlowStore
 
 logger = logging.getLogger(__name__)
@@ -38,6 +43,7 @@ def build_flow(
     headers: list[list[str]] | None = None,
     body: str = "",
     http_version: str = "HTTP/1.1",
+    encode_content_body: bool = True,
 ) -> http.HTTPFlow:
     """Construct a standalone flow ready for replay."""
     parts = urlsplit(url)
@@ -63,11 +69,30 @@ def build_flow(
         (value for name, value in (headers or []) if name.lower() == "content-type"),
         None,
     )
-    flow.request = http.Request.make(
-        method.upper(),
-        url,
-        charset.encode(body, charset.charset_of(content_type, None)),
+    body_encoding = next(
+        (
+            value
+            for name, value in (headers or [])
+            if name.lower() == "content-encoding"
+        ),
+        None,
     )
+    if not encode_content_body and body_encoding:
+        # With automatic decoding disabled the editor contains the original
+        # compressed bytes mapped one-to-one through latin-1. Preserve those
+        # bytes instead of UTF-8-encoding the display string.
+        try:
+            body_bytes = body.encode("latin-1")
+        except UnicodeEncodeError:
+            body_bytes = charset.encode(body, charset.charset_of(content_type, None))
+    else:
+        body_bytes = charset.encode(body, charset.charset_of(content_type, None))
+    if encode_content_body and body_encoding:
+        try:
+            body_bytes = encode_content(body_bytes, body_encoding)
+        except (TypeError, ValueError) as exc:
+            raise RepeaterError(f"invalid Content-Encoding: {exc}") from exc
+    flow.request = http.Request.make(method.upper(), url, body_bytes)
     flow.request.path = path
     flow.request.http_version = http_version
     if headers:
@@ -97,6 +122,10 @@ class RepeaterAddon:
     def __init__(self, store: FlowStore) -> None:
         self.store = store
         self.options: Options | None = None
+
+    @property
+    def auto_decompress(self) -> bool:
+        return auto_decompress_enabled(self.store)
 
     def running(self) -> None:  # mitmproxy hook
         from mitmproxy import ctx
@@ -152,21 +181,31 @@ def _content_type(headers: list[tuple[str, str]] | None) -> str | None:
     return None
 
 
-def render_raw(record: FlowRecord) -> dict[str, Any]:
+def render_raw(
+    record: FlowRecord, *, auto_decompress: bool = True
+) -> dict[str, Any]:
     """Response view for the Repeater UI."""
+    shown, body_encoding, decoded, decode_error = body_for_display(
+        record.response_headers,
+        record.response_body,
+        enabled=auto_decompress,
+    )
     return {
         "id": record.id,
         "status_code": record.status_code,
         "reason": record.reason,
         "headers": record.response_headers or [],
         "body": charset.decode_body(
-            _content_type(record.response_headers), record.response_body
+            _content_type(record.response_headers), shown
         ),
         # What the bytes were read as, so the UI can say so and a reply can
         # be encoded the same way.
         "charset": charset.charset_of(
-            _content_type(record.response_headers), record.response_body
+            _content_type(record.response_headers), shown
         ),
+        "content_encoding": body_encoding,
+        "body_decoded": decoded,
+        "decode_error": decode_error,
         "size": record.response_size,
         "duration_ms": record.duration_ms,
         "error": record.error,

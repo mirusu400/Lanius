@@ -14,6 +14,9 @@ export interface RepeaterResponse {
   size: number;
   duration_ms: number | null;
   error: string | null;
+  content_encoding?: string | null;
+  body_decoded?: boolean;
+  decode_error?: string | null;
   /** Original length, when the body was too large to keep in full. */
   truncated?: number;
 }

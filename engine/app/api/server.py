@@ -16,7 +16,9 @@ from pydantic import BaseModel
 
 from .. import __version__
 from ..addons.intercept import InterceptError
+from ..addons.match_replace import MatchReplaceError
 from ..addons.repeater import RepeaterError, build_flow, render_raw
+from ..addons.websocket_proxy import WebSocketProxyError
 from ..addons.endpoints import build_endpoints
 from ..addons.codecs import (
     ChainStep,
@@ -40,6 +42,7 @@ from ..build_info import build_info
 from ..addons.scope import ScopeError, rule_from_url
 from .. import browser
 from ..config import Settings
+from ..content_encoding import AUTO_DECOMPRESS_SETTING, auto_decompress_enabled
 from ..db.store import FlowStore
 from ..events import EventBroker
 from ..processes import list_processes
@@ -80,6 +83,31 @@ class RepeaterRequest(BaseModel):
     body: str = ""
     http_version: str = "HTTP/1.1"
     timeout: float = 30.0
+
+
+class MatchReplaceBody(BaseModel):
+    rules: list[dict[str, Any]] = []
+
+
+class BodyDisplayPatch(BaseModel):
+    auto_decompress: bool
+
+
+class WebSocketRulesPatch(BaseModel):
+    enabled: bool | None = None
+    client_messages: bool | None = None
+    server_messages: bool | None = None
+
+
+class WebSocketForwardBody(BaseModel):
+    content: str
+    encoding: str = "utf-8"
+
+
+class WebSocketRepeatBody(WebSocketForwardBody):
+    connection_id: str
+    to_client: bool = False
+    is_text: bool = True
 
 
 class CodegenBody(BaseModel):
@@ -414,6 +442,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # The scope lives in memory once loaded, so without this the
         # imported rules sit in the database and affect nothing.
         scope = await asyncio.to_thread(engine.scope.reload)
+        engine.match_replace.reload()
         broker.publish("scope.changed", scope.as_dict())
         broker.publish("project.imported", counts)
         return {"ok": True, **counts}
@@ -650,13 +679,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         record = await asyncio.to_thread(store.get, flow_id)
         if record is None:
             raise HTTPException(status_code=404, detail="flow not found")
-        data = record.detail()
+        data = record.detail(auto_decompress=auto_decompress_enabled(store))
         data["request_headers"] = redact_headers(
             record.request_headers, reveal=reveal
         )
         data["response_headers"] = redact_headers(
             record.response_headers, reveal=reveal
         )
+        variants = data.get("request_variants")
+        if isinstance(variants, dict):
+            for variant in variants.values():
+                if isinstance(variant, dict):
+                    variant["headers"] = redact_headers(
+                        variant.get("headers"), reveal=reveal
+                    )
         return data
 
     @app.get("/api/about")
@@ -797,6 +833,83 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def forward_all() -> dict[str, Any]:
         return {"forwarded": engine.intercept.resume_all()}
 
+    # --- automatic Match & Replace --------------------------------------
+    @app.get("/api/match-replace")
+    async def match_replace_state() -> dict[str, Any]:
+        return {"rules": engine.match_replace.state()}
+
+    @app.put("/api/match-replace")
+    async def put_match_replace(payload: MatchReplaceBody) -> dict[str, Any]:
+        try:
+            rules = engine.match_replace.replace_rules(payload.rules)
+        except MatchReplaceError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"rules": rules}
+
+    # --- body display ----------------------------------------------------
+    @app.get("/api/body-display")
+    async def body_display_state() -> dict[str, bool]:
+        return {"auto_decompress": auto_decompress_enabled(store)}
+
+    @app.patch("/api/body-display")
+    async def patch_body_display(payload: BodyDisplayPatch) -> dict[str, bool]:
+        store.set_setting(
+            AUTO_DECOMPRESS_SETTING, "1" if payload.auto_decompress else "0"
+        )
+        state = {"auto_decompress": payload.auto_decompress}
+        broker.publish("body_display.changed", state)
+        return state
+
+    # --- WebSocket proxy -------------------------------------------------
+    @app.get("/api/websockets")
+    async def websocket_state() -> dict[str, Any]:
+        return engine.websockets.state()
+
+    @app.patch("/api/websockets/intercept")
+    async def patch_websocket_intercept(
+        patch: WebSocketRulesPatch,
+    ) -> dict[str, bool]:
+        return engine.websockets.set_rules(**patch.model_dump(exclude_unset=True))
+
+    @app.post("/api/websockets/{message_id}/forward")
+    async def forward_websocket_message(
+        message_id: str, payload: WebSocketForwardBody
+    ) -> dict[str, bool]:
+        try:
+            engine.websockets.forward(message_id, payload.content, payload.encoding)
+        except WebSocketProxyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"ok": True}
+
+    @app.post("/api/websockets/{message_id}/drop")
+    async def drop_websocket_message(message_id: str) -> dict[str, bool]:
+        try:
+            engine.websockets.drop(message_id)
+        except WebSocketProxyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"ok": True}
+
+    @app.post("/api/websockets/repeat")
+    async def repeat_websocket_message(
+        payload: WebSocketRepeatBody,
+    ) -> dict[str, bool]:
+        try:
+            engine.websockets.repeat(
+                payload.connection_id,
+                to_client=payload.to_client,
+                content=payload.content,
+                encoding=payload.encoding,
+                is_text=payload.is_text,
+            )
+        except WebSocketProxyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"ok": True}
+
+    @app.delete("/api/websockets")
+    async def clear_websocket_messages() -> dict[str, bool]:
+        engine.websockets.clear()
+        return {"ok": True}
+
     # --- repeater (M3) ----------------------------------------------------
     @app.post("/api/repeater/send")
     async def repeater_send(req: RepeaterRequest) -> dict[str, Any]:
@@ -807,11 +920,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 headers=[list(h) for h in req.headers],
                 body=req.body,
                 http_version=req.http_version,
+                encode_content_body=auto_decompress_enabled(store),
             )
             record = await engine.repeater.send(flow, timeout=req.timeout)
         except RepeaterError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return render_raw(record)
+        return render_raw(
+            record, auto_decompress=auto_decompress_enabled(store)
+        )
 
     # --- scope / target (M4) ----------------------------------------------
     @app.get("/api/scope")

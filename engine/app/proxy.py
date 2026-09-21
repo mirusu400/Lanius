@@ -19,7 +19,9 @@ from mitmproxy_rs.local import LocalRedirector
 
 from .addons.capture import CaptureAddon
 from .addons.intercept import InterceptAddon
+from .addons.match_replace import MatchReplaceAddon
 from .addons.repeater import RepeaterAddon
+from .addons.websocket_proxy import WebSocketProxyAddon
 from .addons.intruder import IntruderAddon
 from .addons.plugins import PluginManager
 from .addons.scope import ScopeManager
@@ -174,7 +176,16 @@ class ProxyEngine:
         self.master: DumpMaster | None = None
         self.scope = ScopeManager(store, broker)
         self.capture = CaptureAddon(store, broker, self.scope)
-        self.intercept = InterceptAddon(broker)
+        self.match_replace = MatchReplaceAddon(store, broker)
+        self.intercept = InterceptAddon(
+            broker,
+            store=store,
+            # A request edited while held does not fire the request hook a
+            # second time. Persist it immediately so History can show the
+            # final "Modified request" even before a response arrives.
+            on_forwarded=self.capture.request_updated,
+        )
+        self.websockets = WebSocketProxyAddon(broker)
         self.repeater = RepeaterAddon(store)
         self.intruder = IntruderAddon(self.repeater, broker)
         self.plugins = PluginManager(
@@ -249,12 +260,16 @@ class ProxyEngine:
         # would tear down the host application. We surface errors ourselves.
         if (errorcheck := master.addons.get("errorcheck")) is not None:
             master.addons.remove(errorcheck)
-        # Intercept runs first so it can pause before capture records the flow.
+        # Automatic replacements must be visible in Intercept, and capture
+        # stays last so it persists the final form of each message.
+        master.addons.add(self.match_replace)
         master.addons.add(self.intercept)
+        master.addons.add(self.websockets)
         master.addons.add(self.capture)
         master.addons.add(self.repeater)
         # Not via the running hook: it does not fire for every mode set.
         self.repeater.attach(master.options)
+        self.websockets.attach(master)
         self.plugins.addons = master.addons
         self.plugins.load_enabled()
         self._reorder_capture_last()
@@ -595,6 +610,7 @@ class ProxyEngine:
 
     async def stop(self) -> None:
         self.intercept.resume_all()
+        self.websockets.resume_all()
         if self.master is not None:
             await self._stop_listeners()
             self.master.shutdown()
@@ -608,6 +624,7 @@ class ProxyEngine:
         await self.capture.done()
         self._task = None
         self.master = None
+        self.websockets.master = None
         self.broker.publish("engine.stopped", {})
 
     async def _stop_listeners(self) -> None:

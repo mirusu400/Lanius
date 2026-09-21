@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -97,6 +97,15 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         """,
         # Listed by name in a picker, so that is what the index is for.
         "CREATE INDEX IF NOT EXISTS idx_payload_sets_name ON payload_sets(name)",
+    ),
+    5: (
+        # The request at three points in its lifecycle: as received, after
+        # automatic Match & Replace, and the final request in the normal flow
+        # columns. Snapshots are only stored when something changed.
+        "ALTER TABLE flows ADD COLUMN request_original TEXT",
+        "ALTER TABLE flows ADD COLUMN request_auto_modified TEXT",
+        "ALTER TABLE flows ADD COLUMN auto_modified INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE flows ADD COLUMN modified INTEGER NOT NULL DEFAULT 0",
     ),
 }
 

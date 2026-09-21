@@ -23,6 +23,25 @@ export interface FlowSummary {
   error: string | null;
   source: string;
   comment: string | null;
+  /** True when Match & Replace, Intercept, or a plugin changed the request. */
+  modified?: boolean;
+  auto_modified?: boolean;
+}
+
+export interface RequestVariant {
+  method: string;
+  scheme: string;
+  host: string;
+  port: number;
+  /** Request target including any query string. */
+  path: string;
+  http_version: string;
+  headers: [string, string][];
+  body: string;
+  charset: string;
+  content_encoding: string | null;
+  body_decoded: boolean;
+  decode_error: string | null;
 }
 
 export interface FlowDetail extends FlowSummary {
@@ -34,6 +53,21 @@ export interface FlowDetail extends FlowSummary {
    *  looks wrong if the charset was guessed badly. */
   request_charset?: string;
   response_charset?: string;
+  request_content_encoding?: string | null;
+  response_content_encoding?: string | null;
+  request_body_decoded?: boolean;
+  response_body_decoded?: boolean;
+  request_decode_error?: string | null;
+  response_decode_error?: string | null;
+  request_variants?: {
+    original: RequestVariant;
+    auto_modified: RequestVariant;
+    modified: RequestVariant;
+  } | null;
+}
+
+export interface BodyDisplaySettings {
+  auto_decompress: boolean;
 }
 
 export interface InterceptRules {
@@ -68,6 +102,59 @@ export interface FlowEdits {
   status_code?: number;
   response_headers?: [string, string][];
   response_body?: string;
+}
+
+export type MatchReplacePhase = 'request' | 'response';
+export type MatchReplaceTarget = 'url' | 'headers' | 'body';
+
+export interface MatchReplaceRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  phase: MatchReplacePhase;
+  target: MatchReplaceTarget;
+  match: string;
+  replace: string;
+  regex: boolean;
+  case_sensitive: boolean;
+}
+
+export interface WebSocketInterceptRules {
+  enabled: boolean;
+  client_messages: boolean;
+  server_messages: boolean;
+}
+
+export interface WebSocketConnection {
+  id: string;
+  host: string;
+  path: string;
+  url: string;
+  active: boolean;
+  started_at: number | null;
+}
+
+export interface WebSocketMessage {
+  id: string;
+  connection_id: string;
+  host: string;
+  path: string;
+  from_client: boolean;
+  is_text: boolean;
+  timestamp: number;
+  size: number;
+  content: string;
+  encoding: 'utf-8' | 'base64';
+  injected: boolean;
+  dropped: boolean;
+  paused: boolean;
+}
+
+export interface WebSocketState {
+  rules: WebSocketInterceptRules;
+  connections: WebSocketConnection[];
+  messages: WebSocketMessage[];
+  paused: string[];
 }
 
 export interface EngineStatus {
@@ -111,6 +198,13 @@ export type EngineEvent =
   | { type: 'intercept.paused'; data: PausedFlow }
   | { type: 'intercept.resolved'; data: { id: string; action: string } }
   | { type: 'intercept.rules'; data: InterceptRules }
+  | { type: 'match_replace.changed'; data: { rules: MatchReplaceRule[] } }
+  | { type: 'body_display.changed'; data: BodyDisplaySettings }
+  | { type: 'websocket.started' | 'websocket.ended'; data: WebSocketConnection }
+  | { type: 'websocket.message' | 'websocket.intercepted'; data: WebSocketMessage }
+  | { type: 'websocket.resolved'; data: { id: string; action: string } }
+  | { type: 'websocket.rules'; data: WebSocketInterceptRules }
+  | { type: 'websocket.cleared'; data: Record<string, never> }
   | { type: 'engine.started' | 'engine.stopped'; data: Record<string, unknown> }
   | { type: 'engine.local_capture_blocked'; data: LocalCaptureState }
   | {

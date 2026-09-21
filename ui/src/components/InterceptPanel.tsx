@@ -5,6 +5,7 @@ import type { InterceptRules, PausedFlow } from '../api/types';
 import { editsFromText, renderPaused } from '../tabs/interceptModel';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
 import { OpenBrowserButton } from './OpenBrowserButton';
+import { MatchReplaceButton } from './MatchReplaceDialog';
 
 interface Props {
   rules: InterceptRules;
@@ -67,6 +68,7 @@ export function InterceptPanel({
     <div className="intercept-panel">
       <div className="intercept-controls">
         <OpenBrowserButton />
+        <MatchReplaceButton />
         <button
           className={rules.enabled ? 'toggle on' : 'toggle'}
           onClick={() => onToggle({ enabled: !rules.enabled })}

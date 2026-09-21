@@ -168,6 +168,17 @@ pause the stream while you read, and inspect headers and bodies. Sensitive
 headers such as `Authorization` and `Cookie` are masked by default; reveal them
 with one click when you need to.
 
+Bodies carrying `Content-Encoding: gzip`, `deflate`, `br`, or `zstd` are
+decompressed for display by default in History, Intercept, Repeater and
+Intruder. The original bytes stay in the capture and edited requests are
+encoded again before sending. This can be disabled under **Settings > Proxy >
+HTTP body display**. `Accept-Encoding` only advertises acceptable response
+formats and does not mean that the request body itself is compressed.
+
+History has a **Modified** column. When Match & Replace, Intercept, or a plugin
+changes a request, its detail pane keeps **Original**, **Auto-modified**, and
+**Modified request** tabs so every stage can be compared.
+
 Right-click a request to send it to Repeater or Intruder, add it to the scope,
 or copy it as a URL. The site map, Repeater tabs and Intruder results have
 their own menus.
@@ -195,6 +206,20 @@ so a request can go into a report without the credentials going with it.
 Hold a request before it reaches the server, edit it as raw HTTP, then forward
 or drop it. You can intercept responses too, and limit interception to a single
 host so the rest of your browsing is unaffected.
+
+**Match & Replace** opens from this screen and from **Settings > Proxy**. Rules
+can rewrite request URLs, headers and bodies, or response headers and bodies.
+Plain text and regular expressions are supported, rules can be toggled without
+deleting them, and the saved rules travel with a project export. Body rules run
+against decompressed content while preserving the message's wire encoding.
+
+### WebSockets
+
+The **WebSockets** view under Proxy records text and binary messages in both
+directions. Turn interception on for client messages, server messages, or both,
+then edit and forward or drop held messages. A captured message can also be
+edited and sent again to either side of its still-active connection. Binary
+messages are shown and edited as Base64 so their bytes are not corrupted.
 
 ### Target
 

@@ -171,6 +171,14 @@ describe('ProxyTab', () => {
     expect(screen.getAllByText('live.test')).toHaveLength(1);
   });
 
+  it('marks requests changed by automatic or interactive modification', async () => {
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    MockSocket.instances[0].emit('flow.request', { ...live, modified: true });
+    expect(await screen.findByText('✓')).toBeTruthy();
+    expect(screen.getByText(t('flow.modified'))).toBeTruthy();
+  });
+
   it('shows connection state and flow count', async () => {
     render(<ProxyTab />);
     await waitFor(() => expect(screen.getByText(t('proxy.live'))).toBeTruthy());
