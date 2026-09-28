@@ -25,8 +25,8 @@ const sites = [
     scheme: 'http',
     host: 'cdn.test',
     port: 80,
-    flows: 1,
-    paths: 1,
+    flows: 4,
+    paths: 3,
     last_seen: 1,
     in_scope: false,
   },
@@ -152,7 +152,12 @@ beforeEach(() => {
         const withPaths = url.includes('with_paths=true');
         return jsonResponse({
           sites: withPaths
-            ? shown.map((s) => ({ ...s, path_items: paths }))
+            ? shown.map((s) => ({
+                ...s,
+                path_items: s.host === 'cdn.test'
+                  ? paths.map((path) => ({ ...path, id: `cdn-${path.id}` }))
+                  : paths,
+              }))
             : shown,
         });
       }
@@ -361,6 +366,97 @@ describe('TargetTab', () => {
       const call = calls.find((c) => c.url.endsWith('/api/flows/delete'));
       expect((call!.body as { ids: string[] }).ids).toHaveLength(1);
     });
+  });
+
+  it('Ctrl-selects sites and deletes them in one confirmed request', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await waitFor(() => expect(treeRows()).toHaveLength(2));
+
+    await user.click(rowFor('https://api.test')!);
+    fireEvent.click(rowFor('http://cdn.test')!, { ctrlKey: true });
+    expect(document.querySelectorAll('.sitemap-tree .tree-row.selected')).toHaveLength(2);
+    fireEvent.contextMenu(rowFor('http://cdn.test')!);
+    await user.click(await screen.findByRole('menuitem', {
+      name: t('menu.deleteSelected', { count: 2 }),
+    }));
+    expect(screen.getByText(t('delete.confirmSelected', { items: 2, count: 8 }))).toBeTruthy();
+    expect(calls.some((call) => call.url.endsWith('/api/flows/delete'))).toBe(false);
+    await user.click(screen.getByRole('button', { name: t('common.cancel') }));
+    expect(calls.some((call) => call.url.endsWith('/api/flows/delete'))).toBe(false);
+
+    fireEvent.contextMenu(rowFor('http://cdn.test')!);
+    await user.click(await screen.findByRole('menuitem', {
+      name: t('menu.deleteSelected', { count: 2 }),
+    }));
+    await user.click(screen.getByRole('button', { name: t('common.delete') }));
+    await waitFor(() => {
+      const sent = calls.filter((call) => call.url.endsWith('/api/flows/delete'));
+      expect(sent).toHaveLength(1);
+      const body = sent[0].body as {
+        ids: string[];
+        subtrees: { host: string; port: number; port_is_null: boolean; scheme: string }[];
+      };
+      expect(body.ids).toEqual([]);
+      expect(body.subtrees).toEqual([
+        { host: 'api.test', port: 443, port_is_null: false, scheme: 'https' },
+        { host: 'cdn.test', port: 80, port_is_null: false, scheme: 'http' },
+      ]);
+    });
+  });
+
+  it('Shift-selects a visible range of requests', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await expandAll(user);
+    const leaves = [...document.querySelectorAll<HTMLElement>('.tree-row.leaf')];
+    await user.click(leaves[1]);
+    fireEvent.click(leaves[3], { shiftKey: true });
+    expect(document.querySelectorAll('.sitemap-tree .tree-row.selected')).toHaveLength(3);
+
+    fireEvent.contextMenu(leaves[3]);
+    await user.click(await screen.findByRole('menuitem', {
+      name: t('menu.deleteSelected', { count: 3 }),
+    }));
+    expect(screen.getByText(t('delete.confirmSelected', { items: 3, count: 3 }))).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('common.delete') }));
+    await waitFor(() => {
+      const call = calls.find((item) => item.url.endsWith('/api/flows/delete'));
+      expect(new Set((call!.body as { ids: string[] }).ids)).toEqual(new Set(['p1', 'p3', 'p4']));
+    });
+  });
+
+  it('counts overlapping parent and child folders only once', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await expandAll(user);
+    await user.click(rowFor('users')!);
+    fireEvent.click(rowFor('api')!, { ctrlKey: true });
+    fireEvent.contextMenu(rowFor('users')!);
+    await user.click(await screen.findByRole('menuitem', {
+      name: t('menu.deleteSelected', { count: 2 }),
+    }));
+    expect(screen.getByText(t('delete.confirmSelected', { items: 2, count: 4 }))).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('common.delete') }));
+    await waitFor(() => {
+      const call = calls.find((item) => item.url.endsWith('/api/flows/delete'));
+      expect((call!.body as { subtrees: { path_prefix: string }[] }).subtrees.map(
+        (item) => item.path_prefix,
+      )).toEqual(['/api', '/api/v1/users']);
+    });
+  });
+
+  it('right-clicking an unselected row changes the deletion target to that row', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await waitFor(() => expect(treeRows()).toHaveLength(2));
+    await user.click(rowFor('https://api.test')!);
+    fireEvent.click(rowFor('http://cdn.test')!, { metaKey: true });
+
+    fireEvent.contextMenu(rowFor('api')!);
+    expect(document.querySelectorAll('.sitemap-tree .tree-row.selected')).toHaveLength(1);
+    expect(await screen.findByRole('menuitem', { name: t('menu.deletePath') })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: t('menu.deleteSelected', { count: 2 }) })).toBeNull();
   });
 
   it('deletes a folder as a subtree, not as a list of ids', async () => {

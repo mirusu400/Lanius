@@ -359,22 +359,14 @@ class FlowStore:
 
     def delete(self, flow_ids: Sequence[str]) -> int:
         """Remove flows by id. Returns how many rows went."""
-        ids = list(flow_ids)
-        if not ids:
-            return 0
-        with self._lock:
-            placeholders = ", ".join("?" for _ in ids)
-            cursor = self._conn.execute(
-                f"DELETE FROM flows WHERE id IN ({placeholders})", ids
-            )
-            self._conn.commit()
-            return cursor.rowcount
+        return self.delete_selection(flow_ids, [])
 
     def delete_by_prefix(
         self,
         *,
         host: str | None = None,
         port: int | None = None,
+        port_is_null: bool = False,
         scheme: str | None = None,
         path_prefix: str | None = None,
     ) -> int:
@@ -384,38 +376,65 @@ class FlowStore:
         at a time would mean shipping thousands of ids to say something
         the database can work out itself.
         """
-        clauses: list[str] = []
-        params: list[Any] = []
-        if host:
-            clauses.append("host = ?")
-            params.append(host)
-        if port is not None:
-            clauses.append("port = ?")
-            params.append(port)
-        if scheme:
-            clauses.append("scheme = ?")
-            params.append(scheme)
-        if path_prefix:
-            # The prefix stands for a folder, so "/api" takes "/api" and
-            # "/api/v1/x" but not "/apidocs". LIKE would also treat _ and
-            # % in a captured path as wildcards, hence the escape.
-            escaped = (
-                path_prefix.replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_")
-            )
-            clauses.append("(path = ? OR path LIKE ? ESCAPE '\\')")
-            params.extend([path_prefix, f"{escaped.rstrip('/')}/%"])
-        if not clauses:
+        if not any((host, port is not None, port_is_null, scheme, path_prefix)):
             # Refuse to read an empty filter as "everything": clear() is
             # the way to do that, and it is not reached by accident.
             return 0
+        return self.delete_selection([], [(host, port, port_is_null, scheme, path_prefix)])
+
+    def delete_selection(
+        self,
+        flow_ids: Sequence[str],
+        subtrees: Sequence[tuple[str | None, int | None, bool, str | None, str | None]],
+    ) -> int:
+        """Delete mixed request and folder selections in one transaction.
+
+        A parent folder and its selected child can overlap; row counts only
+        include rows actually deleted. IDs are batched for SQLite's bind limit.
+        """
+        if not flow_ids and not subtrees:
+            return 0
+        deleted = 0
         with self._lock:
-            cursor = self._conn.execute(
-                f"DELETE FROM flows WHERE {' AND '.join(clauses)}", params
-            )
-            self._conn.commit()
-            return cursor.rowcount
+            with self._conn:
+                for offset in range(0, len(flow_ids), 500):
+                    batch = flow_ids[offset : offset + 500]
+                    placeholders = ", ".join("?" for _ in batch)
+                    cursor = self._conn.execute(
+                        f"DELETE FROM flows WHERE id IN ({placeholders})", batch
+                    )
+                    deleted += cursor.rowcount
+                for host, port, port_is_null, scheme, path_prefix in subtrees:
+                    clauses: list[str] = []
+                    params: list[Any] = []
+                    if host:
+                        clauses.append("host = ?")
+                        params.append(host)
+                    if port_is_null:
+                        clauses.append("port IS NULL")
+                    elif port is not None:
+                        clauses.append("port = ?")
+                        params.append(port)
+                    if scheme:
+                        clauses.append("scheme = ?")
+                        params.append(scheme)
+                    if path_prefix:
+                        # Match a folder and its descendants, but not a
+                        # sibling prefix; escape LIKE wildcards in paths.
+                        escaped = (
+                            path_prefix.replace("\\", "\\\\")
+                            .replace("%", "\\%")
+                            .replace("_", "\\_")
+                        )
+                        clauses.append("(path = ? OR path LIKE ? ESCAPE '\\')")
+                        params.extend([path_prefix, f"{escaped.rstrip('/')}/%"])
+                    if not clauses:
+                        raise ValueError("empty subtree cannot be deleted")
+                    cursor = self._conn.execute(
+                        f"DELETE FROM flows WHERE {' AND '.join(clauses)}", params
+                    )
+                    deleted += cursor.rowcount
+        return deleted
 
     def reclaim_space(self) -> None:
         """Hand freed pages back to the filesystem.

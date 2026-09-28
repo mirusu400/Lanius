@@ -1615,6 +1615,12 @@ pre.body {
   padding: 8px;
 }
 
+.sitemap-selection-hint {
+  color: var(--muted);
+  font-size: 0.85em;
+  margin: 8px 12px 0;
+}
+
 .tree-row {
   align-items: center;
   border-radius: 3px;
@@ -2349,7 +2355,7 @@ pre.body {
   gap: 8px;
 }
 
-.tree-row.leaf.selected {
+.tree-row.selected {
   background: var(--accent-dim);
 }
 

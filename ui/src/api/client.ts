@@ -111,6 +111,7 @@ export function clearFlows(): Promise<{ ok: boolean }> {
  *  database file actually gets smaller. */
 export function deleteFlows(target: {
   ids?: string[];
+  subtrees?: { host: string; port?: number | null; scheme?: string; pathPrefix?: string }[];
   host?: string;
   port?: number | null;
   scheme?: string;
@@ -121,8 +122,16 @@ export function deleteFlows(target: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       ids: target.ids,
+      subtrees: target.subtrees?.map((subtree) => ({
+        host: subtree.host,
+        port: subtree.port ?? undefined,
+        port_is_null: subtree.port === null,
+        scheme: subtree.scheme,
+        path_prefix: subtree.pathPrefix,
+      })),
       host: target.host,
       port: target.port ?? undefined,
+      port_is_null: target.port === null,
       scheme: target.scheme,
       path_prefix: target.pathPrefix,
     }),

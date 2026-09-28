@@ -13,29 +13,50 @@ import { useT } from '../i18n';
 
 interface Props {
   trees: SiteTree[];
-  selectedFlowId: string | null;
-  onSelectFlow: (flow: SitePath) => void;
-  /** Right-click on a request row. */
-  onFlowContextMenu?: (event: React.MouseEvent, flow: SitePath) => void;
-  /** Right-click on a folder, which stands for a path prefix. */
-  onNodeContextMenu?: (event: React.MouseEvent, node: TreeNode) => void;
+  selectedKeys: ReadonlySet<string>;
+  onSelectRow: (event: React.MouseEvent, target: SitemapRowTarget) => void;
+  onRowContextMenu: (event: React.MouseEvent, target: SitemapRowTarget) => void;
   /** Open/closed state, owned by the tab so its toolbar can drive it. */
   expansion: ReturnType<typeof useSitemapExpansion>;
+}
+
+export type SitemapRowTarget =
+  | { kind: 'flow'; flow: SitePath }
+  | { kind: 'node'; node: TreeNode };
+
+export function sitemapRowKey(target: SitemapRowTarget): string {
+  return target.kind === 'flow' ? `flow:${target.flow.id}` : `node:${target.node.path}`;
+}
+
+/** Rows in visual order. Shift selection uses only rows currently visible. */
+export function sitemapRows(trees: SiteTree[], expanded?: ReadonlySet<string>): SitemapRowTarget[] {
+  const rows: SitemapRowTarget[] = [];
+  const walk = (node: TreeNode) => {
+    rows.push({ kind: 'node', node });
+    if (expanded && !expanded.has(node.path)) return;
+    for (const flow of node.flows) rows.push({ kind: 'flow', flow });
+    node.children.forEach(walk);
+  };
+  for (const { site, root } of trees) {
+    const label = siteLabel(site);
+    walk({ ...prefixPaths(root, label, site), name: label, path: label, site });
+  }
+  return rows;
 }
 
 /** Requests attached to a node, one row per method + query combination. */
 function FlowRows({
   flows,
   depth,
-  selectedFlowId,
-  onSelectFlow,
-  onFlowContextMenu,
+  selectedKeys,
+  onSelectRow,
+  onRowContextMenu,
 }: {
   flows: SitePath[];
   depth: number;
-  selectedFlowId: string | null;
-  onSelectFlow: (flow: SitePath) => void;
-  onFlowContextMenu?: (event: React.MouseEvent, flow: SitePath) => void;
+  selectedKeys: ReadonlySet<string>;
+  onSelectRow: Props['onSelectRow'];
+  onRowContextMenu: Props['onRowContextMenu'];
 }) {
   return (
     <>
@@ -43,15 +64,11 @@ function FlowRows({
         <div
           key={flow.id}
           className={
-            flow.id === selectedFlowId ? 'tree-row leaf selected' : 'tree-row leaf'
+            selectedKeys.has(`flow:${flow.id}`) ? 'tree-row leaf selected' : 'tree-row leaf'
           }
           style={{ paddingLeft: `${depth * 14 + 22}px` }}
-          onClick={() => onSelectFlow(flow)}
-          onContextMenu={(event) => {
-            // Act on the row that was clicked, not the current selection.
-            onSelectFlow(flow);
-            onFlowContextMenu?.(event, flow);
-          }}
+          onClick={(event) => onSelectRow(event, { kind: 'flow', flow })}
+          onContextMenu={(event) => onRowContextMenu(event, { kind: 'flow', flow })}
         >
           <span className="tree-method mono">{flow.method}</span>
           <span className="tree-query mono">
@@ -71,19 +88,17 @@ function Node({
   depth,
   expanded,
   toggle,
-  selectedFlowId,
-  onSelectFlow,
-  onFlowContextMenu,
-  onNodeContextMenu,
+  selectedKeys,
+  onSelectRow,
+  onRowContextMenu,
 }: {
   node: TreeNode;
   depth: number;
   expanded: Set<string>;
   toggle: (path: string) => void;
-  selectedFlowId: string | null;
-  onSelectFlow: (flow: SitePath) => void;
-  onFlowContextMenu?: (event: React.MouseEvent, flow: SitePath) => void;
-  onNodeContextMenu?: (event: React.MouseEvent, node: TreeNode) => void;
+  selectedKeys: ReadonlySet<string>;
+  onSelectRow: Props['onSelectRow'];
+  onRowContextMenu: Props['onRowContextMenu'];
 }) {
   // A node folds if anything hangs off it. The requests count: a path
   // with fifty query variations was a wall of rows with no way to
@@ -96,10 +111,13 @@ function Node({
   return (
     <div className="tree-node">
       <div
-        className="tree-row"
+        className={selectedKeys.has(`node:${node.path}`) ? 'tree-row selected' : 'tree-row'}
         style={{ paddingLeft: `${depth * 14}px` }}
-        onClick={() => canFold && toggle(node.path)}
-        onContextMenu={(event) => onNodeContextMenu?.(event, node)}
+        onClick={(event) => {
+          onSelectRow(event, { kind: 'node', node });
+          if (canFold && !event.shiftKey && !event.ctrlKey && !event.metaKey) toggle(node.path);
+        }}
+        onContextMenu={(event) => onRowContextMenu(event, { kind: 'node', node })}
       >
         <span className="twisty">
           {canFold ? (open ? '\u25be' : '\u25b8') : '\u00b7'}
@@ -122,9 +140,9 @@ function Node({
           <FlowRows
             flows={node.flows}
             depth={depth}
-            selectedFlowId={selectedFlowId}
-            onSelectFlow={onSelectFlow}
-            onFlowContextMenu={onFlowContextMenu}
+            selectedKeys={selectedKeys}
+            onSelectRow={onSelectRow}
+            onRowContextMenu={onRowContextMenu}
           />
           {node.children.map((child) => (
             <Node
@@ -133,10 +151,9 @@ function Node({
               depth={depth + 1}
               expanded={expanded}
               toggle={toggle}
-              selectedFlowId={selectedFlowId}
-              onSelectFlow={onSelectFlow}
-              onFlowContextMenu={onFlowContextMenu}
-              onNodeContextMenu={onNodeContextMenu}
+              selectedKeys={selectedKeys}
+              onSelectRow={onSelectRow}
+              onRowContextMenu={onRowContextMenu}
             />
           ))}
         </>
@@ -177,7 +194,8 @@ export function useSitemapExpansion(trees: SiteTree[]) {
   // helpful, but a real capture is hundreds of hosts and the map opened
   // as a page of rows you had to scroll past to find anything.
   useEffect(() => {
-    setExpanded(new Set());
+    const valid = allFoldablePaths(trees);
+    setExpanded((current) => new Set([...current].filter((path) => valid.has(path))));
   }, [trees]);
 
   const toggle = useCallback((path: string) => {
@@ -203,10 +221,9 @@ export function useSitemapExpansion(trees: SiteTree[]) {
 
 export function SitemapTree({
   trees,
-  selectedFlowId,
-  onSelectFlow,
-  onFlowContextMenu,
-  onNodeContextMenu,
+  selectedKeys,
+  onSelectRow,
+  onRowContextMenu,
   expansion,
 }: Props) {
   const t = useT();
@@ -229,10 +246,9 @@ export function SitemapTree({
             depth={0}
             expanded={expanded}
             toggle={toggle}
-            selectedFlowId={selectedFlowId}
-            onSelectFlow={onSelectFlow}
-            onFlowContextMenu={onFlowContextMenu}
-            onNodeContextMenu={onNodeContextMenu}
+            selectedKeys={selectedKeys}
+            onSelectRow={onSelectRow}
+            onRowContextMenu={onRowContextMenu}
           />
         );
       })}

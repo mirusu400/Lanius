@@ -20,7 +20,13 @@ import type {
   SitePath,
 } from '../api/types';
 import { ScopeEditor } from '../components/ScopeEditor';
-import { SitemapTree, useSitemapExpansion } from '../components/SitemapTree';
+import {
+  SitemapTree,
+  sitemapRowKey,
+  sitemapRows,
+  useSitemapExpansion,
+  type SitemapRowTarget,
+} from '../components/SitemapTree';
 import { ContextMenu, useContextMenu, type MenuItem } from '../components/ContextMenu';
 import { useReportBusy } from '../components/busy';
 import { useCodegenMenu } from '../components/useCodegenMenu';
@@ -42,12 +48,21 @@ import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 
 type View = 'sitemap' | 'endpoints' | 'scope';
 
+function flowIdsUnder(node: TreeNode): string[] {
+  return [
+    ...node.flows.map((flow) => flow.id),
+    ...node.children.flatMap(flowIdsUnder),
+  ];
+}
+
 export function TargetTab() {
   const t = useT();
   const [view, setView] = useState<View>('sitemap');
   const [sites, setSites] = useState<Site[]>([]);
   const [trees, setTrees] = useState<SiteTree[]>([]);
   const [selectedFlow, setSelectedFlow] = useState<SitePath | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [anchorKey, setAnchorKey] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<FlowSummary | null>(null);
   const [endpoints, setEndpoints] = useState<EndpointGroup[]>([]);
   const [scope, setScope] = useState<ScopeState>({
@@ -62,9 +77,67 @@ export function TargetTab() {
 
   useReportBusy('target', loading);
 
-  const menu = useContextMenu<TreeMenuTarget>();
+  const menu = useContextMenu<{ clicked: SitemapRowTarget; selected: SitemapRowTarget[] }>();
   const codegen = useCodegenMenu(setError);
   const expansion = useSitemapExpansion(trees);
+  const visibleRows = useMemo(
+    () => sitemapRows(trees, expansion.expanded),
+    [trees, expansion.expanded],
+  );
+  const selectedRows = useMemo(
+    () => {
+      const seen = new Set<string>();
+      return visibleRows.filter((row) => {
+        const key = sitemapRowKey(row);
+        if (!selectedKeys.has(key) || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    },
+    [visibleRows, selectedKeys],
+  );
+
+  const selectRow = (event: React.MouseEvent, target: SitemapRowTarget) => {
+    const key = sitemapRowKey(target);
+    const additive = event.ctrlKey || event.metaKey;
+    if (event.shiftKey) {
+      event.preventDefault();
+      const keys = visibleRows.map(sitemapRowKey);
+      const start = anchorKey === null ? -1 : keys.indexOf(anchorKey);
+      const end = keys.indexOf(key);
+      if (start >= 0 && end >= 0) {
+        const range = keys.slice(Math.min(start, end), Math.max(start, end) + 1);
+        setSelectedKeys((current) => new Set(additive ? [...current, ...range] : range));
+      } else {
+        setSelectedKeys(new Set([key]));
+        setAnchorKey(key);
+      }
+    } else if (additive) {
+      setSelectedKeys((current) => {
+        const next = new Set(current);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      setAnchorKey(key);
+    } else {
+      setSelectedKeys(new Set([key]));
+      setAnchorKey(key);
+    }
+    if (target.kind === 'flow') setSelectedFlow(target.flow);
+  };
+
+  const openRowMenu = (event: React.MouseEvent, target: SitemapRowTarget) => {
+    const key = sitemapRowKey(target);
+    const selected = selectedKeys.has(key) && selectedRows.length > 0
+      ? selectedRows : [target];
+    if (!selectedKeys.has(key)) {
+      setSelectedKeys(new Set([key]));
+      setAnchorKey(key);
+    }
+    if (target.kind === 'flow') setSelectedFlow(target.flow);
+    menu.open(event, { clicked: target, selected });
+  };
   const refreshScope = useCallback(async () => {
     try {
       setScope(await getScope());
@@ -87,19 +160,55 @@ export function TargetTab() {
     }
   }, [inScopeOnly]);
 
-  const [pendingDelete, setPendingDelete] = useState<TreeMenuTarget | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<SitemapRowTarget[] | null>(null);
 
   /** What the confirmation says, and what it will remove. */
   const deletion = useMemo(() => {
-    if (!pendingDelete) return null;
-    if (pendingDelete.kind === 'flow') {
-      const { flow } = pendingDelete;
+    if (!pendingDelete?.length) return null;
+    if (pendingDelete.length > 1) {
+      const previewIds = new Set<string>();
+      const idsToDelete = new Set<string>();
+      const subtrees: { host: string; port: number | null; scheme: string; pathPrefix?: string }[] = [];
+      for (const target of pendingDelete) {
+        if (target.kind === 'flow') {
+          previewIds.add(target.flow.id);
+          idsToDelete.add(target.flow.id);
+        } else {
+          const nodeIds = flowIdsUnder(target.node);
+          nodeIds.forEach((id) => previewIds.add(id));
+          const subtree = deletionTarget(target.node, target.node.site);
+          if (subtree?.host && subtree.scheme) {
+            subtrees.push({
+              host: subtree.host,
+              port: subtree.port ?? null,
+              scheme: subtree.scheme,
+              pathPrefix: subtree.pathPrefix,
+            });
+          } else {
+            nodeIds.forEach((id) => idsToDelete.add(id));
+          }
+        }
+      }
+      return {
+        message: t('delete.confirmSelected', {
+          items: pendingDelete.length,
+          count: previewIds.size,
+        }),
+        run: () => deleteFlows({
+          ids: [...idsToDelete],
+          subtrees,
+        }),
+      };
+    }
+    const selected = pendingDelete[0];
+    if (selected.kind === 'flow') {
+      const { flow } = selected;
       return {
         message: t('delete.confirmFlow'),
         run: () => deleteFlows({ ids: [flow.id] }),
       };
     }
-    const { node } = pendingDelete;
+    const { node } = selected;
     const target = deletionTarget(node, node.site);
     if (!target) return null;
     return {
@@ -109,7 +218,9 @@ export function TargetTab() {
         count: countFlows(node),
         name: node.name,
       }),
-      run: () => deleteFlows(target),
+      run: () => target.host
+        ? deleteFlows(target)
+        : deleteFlows({ ids: flowIdsUnder(node) }),
     };
   }, [pendingDelete, t]);
 
@@ -120,6 +231,8 @@ export function TargetTab() {
     try {
       await pending.run();
       setSelectedFlow(null);
+      setSelectedKeys(new Set());
+      setAnchorKey(null);
       await refreshSites();
     } catch (err) {
       setError(rawMsg((err as Error).message));
@@ -310,16 +423,16 @@ export function TargetTab() {
       ) : (
         <div className="proxy-split">
           <div className="sitemap-pane">
+            <p className="sitemap-selection-hint">
+              {selectedRows.length > 1
+                ? t('target.selectedRows', { count: selectedRows.length })
+                : t('target.multiSelectHint')}
+            </p>
             <SitemapTree
               trees={trees}
-              selectedFlowId={selectedFlow?.id ?? null}
-              onSelectFlow={setSelectedFlow}
-              onFlowContextMenu={(event, flow) =>
-                menu.open(event, { kind: 'flow', flow })
-              }
-              onNodeContextMenu={(event, node) =>
-                menu.open(event, { kind: 'node', node })
-              }
+              selectedKeys={selectedKeys}
+              onSelectRow={selectRow}
+              onRowContextMenu={openRowMenu}
               expansion={expansion}
             />
             <ConfirmDialog
@@ -334,13 +447,19 @@ export function TargetTab() {
               position={menu.position}
               items={
                 menu.target
-                  ? treeMenuItems(
-                      menu.target,
-                      t,
-                      refreshScope,
-                      codegen,
-                      setPendingDelete,
-                    )
+                  ? menu.target.selected.length > 1
+                    ? [{
+                        label: t('menu.deleteSelected', { count: menu.target.selected.length }),
+                        danger: true,
+                        onSelect: () => setPendingDelete(menu.target!.selected),
+                      }]
+                    : treeMenuItems(
+                        menu.target.clicked,
+                        t,
+                        refreshScope,
+                        codegen,
+                        (target) => setPendingDelete([target]),
+                      )
                   : []
               }
               onClose={menu.close}
@@ -358,21 +477,17 @@ export function TargetTab() {
   );
 }
 
-type TreeMenuTarget =
-  | { kind: 'flow'; flow: SitePath }
-  | { kind: 'node'; node: TreeNode };
-
 /** What right-clicking the site map offers.
  *
  * A folder in the tree stands for a path prefix, so scoping it is the
  * action people reach for; a request row behaves like one in the history.
  */
 function treeMenuItems(
-  target: TreeMenuTarget,
+  target: SitemapRowTarget,
   t: ReturnType<typeof useT>,
   onScopeChanged: () => void,
   codegen: ReturnType<typeof useCodegenMenu>,
-  onDelete: (target: TreeMenuTarget) => void,
+  onDelete: (target: SitemapRowTarget) => void,
 ): MenuItem[] {
   const copy = (text: string) => {
     void navigator.clipboard?.writeText(text);

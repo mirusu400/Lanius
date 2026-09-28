@@ -167,6 +167,57 @@ class TestByPath:
         assert "10" in ids(client)
 
 
+class TestMixedSelection:
+    def test_deletes_overlapping_rows_and_folders_once(self, client) -> None:
+        response = client.post(
+            "/api/flows/delete",
+            json={
+                "ids": ["1", "4"],
+                "subtrees": [
+                    {
+                        "host": "a.test",
+                        "port": 443,
+                        "scheme": "https",
+                        "path_prefix": "/api/v1",
+                    },
+                    {"host": "b.test", "port": 443, "scheme": "https"},
+                ],
+            },
+        )
+        assert response.json() == {"deleted": 4}
+        assert ids(client) == {"3", "5", "7"}
+
+    def test_invalid_subtree_prevents_the_whole_deletion(self, client) -> None:
+        response = client.post(
+            "/api/flows/delete",
+            json={"ids": ["1"], "subtrees": [{"host": ""}]},
+        )
+        assert response.status_code == 422
+        assert "1" in ids(client)
+
+    def test_large_id_selection_uses_batches(self, client) -> None:
+        for number in range(500, 1002):
+            add(client, id=str(number))
+        selected = [str(number) for number in range(500, 1002)]
+        response = client.post("/api/flows/delete", json={"ids": selected})
+        assert response.json() == {"deleted": len(selected)}
+        assert "1" in ids(client)
+
+    def test_null_port_site_does_not_delete_other_ports(self, client) -> None:
+        add(client, id="null-port", port=None, path="/api/v1/users")
+        response = client.post(
+            "/api/flows/delete",
+            json={
+                "subtrees": [
+                    {"host": "a.test", "scheme": "https", "port_is_null": True}
+                ]
+            },
+        )
+        assert response.json() == {"deleted": 1}
+        assert "null-port" not in ids(client)
+        assert {"1", "7"} <= ids(client)
+
+
 class TestRefusals:
     def test_an_empty_body_is_refused(self, client) -> None:
         # Otherwise an empty filter reads as "match everything", and a UI

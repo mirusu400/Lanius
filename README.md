@@ -236,6 +236,9 @@ messages are shown and edited as Base64 so their bytes are not corrupted.
 A site map of everything you have visited, grouped by host and path. Lanius
 also collapses dynamic paths into endpoints, so `/users/1`, `/users/2` and
 `/users/3` become a single `/users/{id}` entry with the parameters it saw.
+In the site map, Ctrl/⌘-click to select separate sites, folders or requests,
+or Shift-click to select a visible range. Right-click a selected row to delete
+the selection together after reviewing the affected request count.
 
 Define a **scope** with include and exclude rules to keep your attention on the
 application under test. Scope rules persist across restarts, and you can tell

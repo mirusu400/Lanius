@@ -126,6 +126,14 @@ class CodegenBody(BaseModel):
     body: str = ""
 
 
+class DeleteSubtree(BaseModel):
+    host: str = Field(min_length=1)
+    port: int | None = None
+    port_is_null: bool = False
+    scheme: str | None = None
+    path_prefix: str | None = None
+
+
 class DeleteFlowsBody(BaseModel):
     """What to remove from the history.
 
@@ -134,9 +142,11 @@ class DeleteFlowsBody(BaseModel):
     describe something the database can select itself.
     """
 
-    ids: list[str] = []
+    ids: list[str] = Field(default_factory=list)
+    subtrees: list[DeleteSubtree] = Field(default_factory=list)
     host: str | None = None
     port: int | None = None
+    port_is_null: bool = False
     scheme: str | None = None
     path_prefix: str | None = None
 
@@ -844,13 +854,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         several ids, and a site map folder is a filter rather than a
         list, neither of which fits in a path.
         """
-        if payload.ids:
+        if payload.subtrees:
+            if len(payload.subtrees) > 5000:
+                raise HTTPException(status_code=422, detail="too many subtrees selected")
+            deleted = await asyncio.to_thread(
+                store.delete_selection,
+                payload.ids,
+                [
+                    (item.host, item.port, item.port_is_null, item.scheme, item.path_prefix)
+                    for item in payload.subtrees
+                ],
+            )
+        elif payload.ids:
             deleted = await asyncio.to_thread(store.delete, payload.ids)
         elif payload.host or payload.path_prefix:
             deleted = await asyncio.to_thread(
                 store.delete_by_prefix,
                 host=payload.host,
                 port=payload.port,
+                port_is_null=payload.port_is_null,
                 scheme=payload.scheme,
                 path_prefix=payload.path_prefix,
             )
