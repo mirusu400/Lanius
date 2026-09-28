@@ -101,7 +101,7 @@ def test_parse_args_defaults() -> None:
 
     settings, watch = parse_args([])
     assert settings.proxy_port == 8080
-    assert settings.api_port == 8081
+    assert settings.api_port == 12954
     assert watch is False
 
 

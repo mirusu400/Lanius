@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import {
   getMcpState,
+  isDesktop,
+  setDesktopApiPort,
   setMcpEnabled,
 } from '../../api/client';
 import type { McpState } from '../../api/types';
@@ -17,13 +19,17 @@ import {
 export function McpSection() {
   const { t } = useI18n();
   const [state, setState] = useState<McpState | null>(null);
+  const [port, setPort] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Message | null>(null);
   const [error, setError] = useState<Message | null>(null);
 
   useEffect(() => {
     getMcpState()
-      .then((next) => setState({ ...next, tools: next.tools ?? [] }))
+      .then((next) => {
+        setState({ ...next, tools: next.tools ?? [] });
+        setPort(String(next.port));
+      })
       .catch((err) => setError(rawMsg((err as Error).message)));
   }, []);
 
@@ -36,6 +42,28 @@ export function McpSection() {
     try {
       const next = await setMcpEnabled(enabled);
       setState({ ...next, tools: next.tools ?? [] });
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const applyPort = async () => {
+    const wanted = Number(port);
+    if (!Number.isInteger(wanted) || wanted < 1 || wanted > 65535) {
+      setError(msg('mcp.portInvalid'));
+      return;
+    }
+    setBusy(true);
+    setNote(null);
+    setError(null);
+    try {
+      await setDesktopApiPort(wanted);
+      const next = await getMcpState();
+      setState({ ...next, tools: next.tools ?? [] });
+      setPort(String(next.port));
+      setNote(msg('mcp.portApplied', { port: next.port }));
     } catch (err) {
       setError(rawMsg((err as Error).message));
     } finally {
@@ -92,6 +120,29 @@ export function McpSection() {
             <dd>{state.url}</dd>
           </dl>
           <p className="muted">{t('mcp.localOnly')}</p>
+
+          {isDesktop() && (
+            <div className="settings-row">
+              <label htmlFor="mcp-port">{t('mcp.port')}</label>
+              <input
+                id="mcp-port"
+                type="number"
+                min="1"
+                max="65535"
+                value={port}
+                disabled={busy}
+                onChange={(event) => setPort(event.target.value)}
+              />
+              <button
+                type="button"
+                disabled={busy || port === String(state.port)}
+                onClick={() => void applyPort()}
+              >
+                {t('mcp.applyPort')}
+              </button>
+              <span className="muted">{t('mcp.portHelp')}</span>
+            </div>
+          )}
 
           <div className="settings-row">
             <button type="button" disabled={busy} onClick={() => void copyConfig()}>

@@ -1,6 +1,7 @@
 .project-picker {
   height: 100%;
   overflow: auto;
+  overscroll-behavior-y: none;
   padding: 48px 24px;
   background: var(--bg);
 }
@@ -20,6 +21,15 @@
 .project-picker h1 { margin: 18px 0 4px; font-size: 2em; }
 .project-picker h2 { margin: 0 0 8px; font-size: 1.12em; }
 .project-picker p { margin: 0 0 18px; }
+
+.project-picker-port {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+.project-picker-port input { width: 100px; }
 
 .project-picker-grid {
   display: grid;

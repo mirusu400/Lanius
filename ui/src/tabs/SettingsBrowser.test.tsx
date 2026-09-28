@@ -75,9 +75,9 @@ beforeEach(() => {
         return jsonResponse({
           available: true,
           enabled: true,
-          url: 'http://127.0.0.1:8081/mcp/mcp',
+          url: 'http://127.0.0.1:12954/mcp/mcp',
           host: '127.0.0.1',
-          port: 8081,
+          port: 12954,
           tools: [],
         });
       }

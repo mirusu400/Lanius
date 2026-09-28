@@ -231,7 +231,7 @@ cd shell && npm run tauri dev
 | M0 | DB 쓰기는 `asyncio.to_thread` 오프로드 | 애드온 훅이 이벤트 루프를 블로킹하지 않도록(§5 동시성 제약). 브로커 publish는 논블로킹 |
 | M0 | 브로커 큐는 바운디드 + 최신 우선 | 느린 WS 구독자가 엔진을 스톨시키지 않도록 가장 오래된 이벤트를 드롭 |
 | M1 | 초기 GUI는 브라우저(Vite dev server) | 셸(Tauri) 선택 전에도 UI 반복 개발 가능. 셸은 이 정적 번들을 그대로 로드하면 됨 |
-| M1 | 엔진에 localhost 전용 CORS 허용 | UI dev server(5173)와 엔진(8081) 포트가 달라 필요. `127.0.0.1`/`localhost` origin만 허용 |
+| M1 | 엔진에 localhost 전용 CORS 허용 | UI dev server(5173)와 엔진(12954) 포트가 달라 필요. `127.0.0.1`/`localhost` origin만 허용 |
 | M1 | UI 로직은 순수 함수로 분리(`proxyModel.ts`) | 머지/필터/포맷을 DOM 없이 단위 테스트. 컴포넌트는 jsdom + RTL로 검증 |
 | M2 | mitmproxy `flow.intercept()/resume()` 사용 | 커넥션 보류 로직을 직접 만들지 않음(§9 엔진 우회 금지) |
 | M2 | Drop은 `resume()` → `kill()` 순서 | `kill()`이 resume 이벤트를 발생시키지 않고 `intercepted`만 해제해, 순서가 반대면 클라이언트가 영구 대기(실측 후 회귀 테스트 추가) |

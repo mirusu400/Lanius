@@ -175,7 +175,7 @@ const en: DocPage[] = [
           },
           {
             kind: 'code',
-            body: '{\n  "mcpServers": {\n    "lanius": {\n      "url": "http://127.0.0.1:8081/mcp/mcp"\n    }\n  }\n}',
+            body: '{\n  "mcpServers": {\n    "lanius": {\n      "url": "http://127.0.0.1:12954/mcp/mcp"\n    }\n  }\n}',
           },
           {
             kind: 'text',
@@ -417,7 +417,7 @@ const en: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Choose a temporary, new, or existing project at launch. Captured traffic, scope, proxy settings, and the tabs you have open in Repeater and Decoder are written to that project as you work. Use the project button in the top bar to switch projects.',
+            body: 'Choose a temporary, new, or existing project at launch. Captured traffic, scope, proxy settings, and the tabs you have open in Repeater and Decoder are written to that project as you work. Use Settings > Project to switch projects.',
           },
         ],
       },
@@ -606,7 +606,7 @@ const ko: DocPage[] = [
           },
           {
             kind: 'code',
-            body: '{\n  "mcpServers": {\n    "lanius": {\n      "url": "http://127.0.0.1:8081/mcp/mcp"\n    }\n  }\n}',
+            body: '{\n  "mcpServers": {\n    "lanius": {\n      "url": "http://127.0.0.1:12954/mcp/mcp"\n    }\n  }\n}',
           },
           {
             kind: 'text',
@@ -843,7 +843,7 @@ const ko: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: '시작할 때 임시, 새 프로젝트, 기존 프로젝트 중 하나를 선택합니다. 캡처한 트래픽, 범위, 프록시 설정, Repeater와 Decoder에 열어 둔 탭이 해당 프로젝트에 자동 저장됩니다. 상단의 프로젝트 버튼으로 다른 프로젝트를 선택할 수 있습니다.',
+            body: '시작할 때 임시, 새 프로젝트, 기존 프로젝트 중 하나를 선택합니다. 캡처한 트래픽, 범위, 프록시 설정, Repeater와 Decoder에 열어 둔 탭이 해당 프로젝트에 자동 저장됩니다. Settings > Project에서 다른 프로젝트를 선택할 수 있습니다.',
           },
         ],
       },

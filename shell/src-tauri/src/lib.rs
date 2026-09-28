@@ -9,7 +9,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 
 mod projects;
@@ -18,7 +18,7 @@ mod projects;
 pub struct ProjectSession(Mutex<Option<projects::Project>>);
 
 const API_HOST: &str = "127.0.0.1";
-const DEFAULT_API_PORT: u16 = 8081;
+const DEFAULT_API_PORT: u16 = 12954;
 const DEFAULT_PROXY_PORT: u16 = 8080;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -73,9 +73,38 @@ fn port_override(var: &str, default: u16) -> u16 {
     }
 }
 
+#[derive(Deserialize, Serialize)]
+struct DesktopSettings {
+    api_port: u16,
+}
+
+fn desktop_settings_path() -> Result<PathBuf, String> {
+    Ok(projects::home()?.join("desktop.json"))
+}
+
+fn saved_api_port() -> Option<u16> {
+    let path = desktop_settings_path().ok()?;
+    let data = std::fs::read(path).ok()?;
+    let settings: DesktopSettings = serde_json::from_slice(&data).ok()?;
+    (settings.api_port > 0).then_some(settings.api_port)
+}
+
+fn save_api_port(port: u16) -> Result<(), String> {
+    let path = desktop_settings_path()?;
+    std::fs::create_dir_all(path.parent().ok_or("invalid settings path")?)
+        .map_err(|err| err.to_string())?;
+    let data = serde_json::to_vec_pretty(&DesktopSettings { api_port: port })
+        .map_err(|err| err.to_string())?;
+    std::fs::write(path, data).map_err(|err| err.to_string())
+}
+
 /// The API port this run should use.
 fn api_port() -> u16 {
-    port_override("LANIUS_API_PORT", DEFAULT_API_PORT)
+    if std::env::var_os("LANIUS_API_PORT").is_some() {
+        port_override("LANIUS_API_PORT", DEFAULT_API_PORT)
+    } else {
+        saved_api_port().unwrap_or(DEFAULT_API_PORT)
+    }
 }
 
 /// The proxy port this run should use.
@@ -129,10 +158,9 @@ const ENGINE_BINARY: &str = "lanius-engine";
 
 /// Arguments that terminate a process *tree* on Windows.
 ///
-/// `/T` includes children, which matters because a frozen PyInstaller binary
-/// re-executes itself: killing only the pid we spawned would strand the real
-/// engine and leave the proxy port bound. Defined for every platform so the
-/// argument order stays under test on POSIX CI too.
+/// `/T` includes children, so helpers started by the frozen engine cannot
+/// keep the proxy port bound after the shell exits. Defined for every platform
+/// so the argument order stays under test on POSIX CI too.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn taskkill_args(pid: u32) -> [String; 4] {
     [
@@ -254,8 +282,8 @@ fn start_engine(
         // The engine watches us and exits if we die without cleanup
         // (SIGKILL, crash), so it can never orphan the proxy ports.
         .env("LANIUS_WATCH_PARENT", "1")
-        // Explicit PID: PyInstaller's bootloader is the engine's direct
-        // parent, so getppid() would never notice our death.
+        // Explicit PID lets the engine watch the shell even if a frozen
+        // bootloader starts another process between them.
         .env("LANIUS_SUPERVISOR_PID", std::process::id().to_string())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -317,9 +345,8 @@ fn start_engine(
 fn stop_engine(state: &EngineProcess) {
     if let Some(mut child) = state.0.lock().expect("engine lock").take() {
         log::info!("stopping engine");
-        // PyInstaller's bootloader re-execs as a child. SIGTERM lets it
-        // shut down cleanly, but it can outlive the bootloader; ensure the
-        // entire group is gone before another project uses the same ports.
+        // SIGTERM lets the engine shut down cleanly. Ensure any child in
+        // its process group is gone before another project uses the ports.
         #[cfg(unix)]
         unsafe {
             let group = child.id() as i32;
@@ -334,8 +361,7 @@ fn stop_engine(state: &EngineProcess) {
             }
             libc::killpg(group, libc::SIGKILL);
         }
-        // On Windows a frozen PyInstaller binary spawns a child of its own, so
-        // kill the whole tree rather than just the process we launched.
+        // On Windows, kill the whole tree in case the engine started helpers.
         #[cfg(windows)]
         {
             let _ = Command::new("taskkill")
@@ -385,6 +411,64 @@ fn engine_info(state: State<'_, EngineProcess>) -> EngineInfo {
 #[tauri::command]
 fn engine_running() -> bool {
     port_open(api_port())
+}
+
+/// Change the local API/MCP port and restart the active project's engine.
+#[tauri::command]
+async fn set_api_port(port: u16, app: tauri::AppHandle) -> Result<EngineInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || change_api_port(port, &app))
+        .await
+        .map_err(|err| err.to_string())?
+}
+
+fn change_api_port(port: u16, app: &tauri::AppHandle) -> Result<EngineInfo, String> {
+    let engine = app.state::<EngineProcess>();
+    let session = app.state::<ProjectSession>();
+    if port == 0 {
+        return Err("port must be between 1 and 65535".to_string());
+    }
+    if std::env::var_os("LANIUS_API_PORT").is_some() {
+        return Err(
+            "LANIUS_API_PORT overrides the port; remove it before changing Settings".to_string(),
+        );
+    }
+    let old_port = api_port();
+    if port == old_port {
+        return Ok(engine_info(engine));
+    }
+    if port_open(port) {
+        return Err(format!("port {port} is already in use"));
+    }
+    // Keep project switches out of the middle of a port change.
+    let active = session.0.lock().expect("project lock");
+    let project = active.clone();
+    if project.is_some() {
+        stop_engine(&engine);
+    }
+    if let Err(err) = save_api_port(port) {
+        if let Some(project) = &project {
+            if let Some(dir) = project.db_path.parent() {
+                let _ = start_engine(&app, &engine, dir);
+            }
+        }
+        return Err(err);
+    }
+    if let Some(project) = &project {
+        let dir = project
+            .db_path
+            .parent()
+            .ok_or("invalid project directory")?;
+        if let Err(err) = start_engine(&app, &engine, dir) {
+            let rollback = save_api_port(old_port).and_then(|_| start_engine(&app, &engine, dir));
+            return Err(match rollback {
+                Ok(()) => format!("could not use port {port}: {err}; previous port restored"),
+                Err(rollback_err) => {
+                    format!("could not use port {port}: {err}; restore failed: {rollback_err}")
+                }
+            });
+        }
+    }
+    Ok(engine_info(engine))
 }
 
 fn begin_project(
@@ -453,9 +537,9 @@ fn start_temp_project(
 }
 
 fn end_project(engine: &EngineProcess, session: &ProjectSession) {
+    let mut active = session.0.lock().expect("project lock");
     stop_engine(engine);
-    let active = session.0.lock().expect("project lock").take();
-    if let Some(project) = active {
+    if let Some(project) = active.take() {
         if project.temporary {
             if let Some(dir) = project.db_path.parent() {
                 if let Err(err) = std::fs::remove_dir_all(dir) {
@@ -506,6 +590,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             engine_info,
             engine_running,
+            set_api_port,
             set_window_theme,
             list_projects,
             current_project,
@@ -619,7 +704,7 @@ mod tests {
     #[test]
     fn engine_info_reports_the_default_local_endpoints() {
         // The shell and the UI must agree on where the engine lives.
-        assert_eq!(DEFAULT_API_PORT, 8081);
+        assert_eq!(DEFAULT_API_PORT, 12954);
         assert_eq!(DEFAULT_PROXY_PORT, 8080);
         assert_eq!(API_HOST, "127.0.0.1", "engine stays on loopback");
     }
@@ -638,7 +723,7 @@ mod tests {
         // Regression: Tauri rewrites out-of-crate resources to `_up_/_up_/...`,
         // so a direct `resource_dir/lanius-engine` lookup found nothing.
         let base = std::env::temp_dir().join("lanius-res-test");
-        let nested = base.join("_up_/_up_/engine/dist");
+        let nested = base.join("_up_/_up_/engine/dist/lanius-engine");
         std::fs::create_dir_all(&nested).expect("mkdir");
         let target = nested.join(ENGINE_BINARY);
         std::fs::write(&target, b"#!/bin/sh\n").expect("write");
@@ -662,7 +747,8 @@ mod tests {
         let base = std::env::temp_dir().join("lanius-linux-prefix");
         let lib = base.join("usr/lib/lanius");
         std::fs::create_dir_all(&lib).expect("mkdir");
-        let target = lib.join(ENGINE_BINARY);
+        let target = lib.join("lanius-engine").join(ENGINE_BINARY);
+        std::fs::create_dir_all(target.parent().expect("engine dir")).expect("mkdir engine");
         std::fs::write(&target, b"#!/bin/sh\n").expect("write");
 
         assert_eq!(find_engine_binary(&lib).as_ref(), Some(&target));

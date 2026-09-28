@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { API_BASE, setDesktopApiPort } from './api/client';
 import { useT } from './i18n';
 import {
   createProject,
@@ -16,6 +17,9 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentPort, setCurrentPort] = useState(new URL(API_BASE).port);
+  const [port, setPort] = useState(currentPort);
+  const [portNote, setPortNote] = useState(false);
 
   useEffect(() => {
     void listProjects()
@@ -35,6 +39,26 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
     }
   };
 
+  const applyPort = async () => {
+    const wanted = Number(port);
+    if (!Number.isInteger(wanted) || wanted < 1 || wanted > 65535) {
+      setError(t('mcp.portInvalid'));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setPortNote(false);
+    try {
+      await setDesktopApiPort(wanted);
+      setCurrentPort(String(wanted));
+      setPortNote(true);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="project-picker">
       <div className="project-picker-main">
@@ -44,12 +68,29 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
 
         {error && <div className="banner error" role="alert">{error}</div>}
 
+        <div className="project-picker-port">
+          <label htmlFor="startup-api-port">{t('mcp.port')}</label>
+          <input
+            id="startup-api-port"
+            type="number"
+            min="1"
+            max="65535"
+            value={port}
+            disabled={busy}
+            onChange={(event) => setPort(event.target.value)}
+          />
+          <button type="button" disabled={busy || port === currentPort} onClick={() => void applyPort()}>
+            {t('mcp.applyPort')}
+          </button>
+          <span className="muted">{portNote ? t('startup.portApplied') : t('startup.portHelp')}</span>
+        </div>
+
         <div className="project-picker-grid">
           <section className="project-picker-card">
             <h2>{t('startup.tempTitle')}</h2>
             <p className="muted">{t('startup.tempHelp')}</p>
             <button disabled={busy} onClick={() => void start(startTempProject)}>
-              {t('startup.tempStart')}
+              {busy ? t('startup.starting') : t('startup.tempStart')}
             </button>
           </section>
 
@@ -71,7 +112,7 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
               placeholder={t('startup.namePlaceholder')}
             />
             <button type="submit" disabled={busy || !name.trim()}>
-              {t('startup.createStart')}
+              {busy ? t('startup.starting') : t('startup.createStart')}
             </button>
           </form>
         </div>
@@ -88,7 +129,7 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
                       <span className="muted mono">{project.dbPath}</span>
                     </div>
                     <button disabled={busy} onClick={() => void start(() => openProject(project.id))}>
-                      {t('startup.open')}
+                      {busy ? t('startup.starting') : t('startup.open')}
                     </button>
                   </li>
                 ))}

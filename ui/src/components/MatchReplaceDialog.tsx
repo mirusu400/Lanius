@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { getMatchReplaceRules, putMatchReplaceRules } from '../api/client';
+import { getMatchReplaceRules, previewMatchReplace, putMatchReplaceRules } from '../api/client';
 import type { MatchReplaceRule } from '../api/types';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
 import { Dialog } from './Dialog';
@@ -43,6 +43,11 @@ export function MatchReplaceDialog({
   const [rules, setRules] = useState<MatchReplaceRule[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Message | null>(null);
+  const [previewPhase, setPreviewPhase] = useState<MatchReplaceRule['phase']>('request');
+  const [previewRaw, setPreviewRaw] = useState('');
+  const [previewResult, setPreviewResult] = useState<string | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewError, setPreviewError] = useState<Message | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -55,6 +60,8 @@ export function MatchReplaceDialog({
   }, [open]);
 
   const update = (id: string, patch: Partial<MatchReplaceRule>) => {
+    setPreviewResult(null);
+    setPreviewError(null);
     setRules((current) =>
       current.map((rule) => {
         if (rule.id !== id) return rule;
@@ -63,6 +70,23 @@ export function MatchReplaceDialog({
         return next;
       }),
     );
+  };
+
+  const runPreview = async () => {
+    setPreviewBusy(true);
+    setPreviewError(null);
+    setPreviewResult(null);
+    try {
+      // A new draft rule may still be blank. The save action validates it;
+      // preview runs the rules that currently have a match expression.
+      const active = rules.filter((rule) => rule.match);
+      const result = await previewMatchReplace(active, previewPhase, previewRaw);
+      setPreviewResult(result.raw);
+    } catch (err) {
+      setPreviewError(errorMessage(err));
+    } finally {
+      setPreviewBusy(false);
+    }
   };
 
   const save = async () => {
@@ -86,7 +110,11 @@ export function MatchReplaceDialog({
       className="match-replace-dialog"
       footer={
         <>
-          <button type="button" onClick={() => setRules((value) => [...value, newRule()])}>
+          <button type="button" onClick={() => {
+            setRules((value) => [...value, newRule()]);
+            setPreviewResult(null);
+            setPreviewError(null);
+          }}>
             {t('matchReplace.add')}
           </button>
           <span className="spacer" />
@@ -105,60 +133,100 @@ export function MatchReplaceDialog({
         <div className="match-replace-rules">
           {rules.map((rule) => (
             <section className="match-replace-rule" key={rule.id}>
-              <label className="match-enabled">
+              <div className="match-replace-rule-head">
+                <label className="match-enabled">
+                  <input type="checkbox" checked={rule.enabled} onChange={(event) => update(rule.id, { enabled: event.target.checked })} />
+                  {t('common.enabled')}
+                </label>
                 <input
-                  type="checkbox"
-                  checked={rule.enabled}
-                  onChange={(event) => update(rule.id, { enabled: event.target.checked })}
+                  aria-label={t('common.name')}
+                  placeholder={t('matchReplace.namePlaceholder')}
+                  value={rule.name}
+                  onChange={(event) => update(rule.id, { name: event.target.value })}
                 />
-                {t('common.enabled')}
-              </label>
-              <input
-                aria-label={t('common.name')}
-                placeholder={t('matchReplace.namePlaceholder')}
-                value={rule.name}
-                onChange={(event) => update(rule.id, { name: event.target.value })}
-              />
-              <select
-                aria-label={t('matchReplace.phase')}
-                value={rule.phase}
-                onChange={(event) => update(rule.id, { phase: event.target.value as MatchReplaceRule['phase'] })}
-              >
-                <option value="request">{t('detail.request')}</option>
-                <option value="response">{t('detail.response')}</option>
-              </select>
-              <select
-                aria-label={t('matchReplace.target')}
-                value={rule.target}
-                onChange={(event) => update(rule.id, { target: event.target.value as MatchReplaceRule['target'] })}
-              >
-                {rule.phase === 'request' && <option value="url">URL</option>}
-                <option value="headers">{t('detail.headers')}</option>
-                <option value="body">{t('detail.body')}</option>
-              </select>
-              <textarea
-                aria-label={t('matchReplace.match')}
-                className="mono"
-                placeholder={t('matchReplace.match')}
-                value={rule.match}
-                onChange={(event) => update(rule.id, { match: event.target.value })}
-              />
-              <textarea
-                aria-label={t('matchReplace.replace')}
-                className="mono"
-                placeholder={t('matchReplace.replace')}
-                value={rule.replace}
-                onChange={(event) => update(rule.id, { replace: event.target.value })}
-              />
-              <label><input type="checkbox" checked={rule.regex} onChange={(event) => update(rule.id, { regex: event.target.checked })} />{t('matchReplace.regex')}</label>
-              <label><input type="checkbox" checked={rule.case_sensitive} onChange={(event) => update(rule.id, { case_sensitive: event.target.checked })} />{t('matchReplace.caseSensitive')}</label>
-              <button type="button" className="danger" onClick={() => setRules((value) => value.filter((item) => item.id !== rule.id))}>
-                {t('common.delete')}
-              </button>
+                <button type="button" className="danger" onClick={() => {
+                  setRules((value) => value.filter((item) => item.id !== rule.id));
+                  setPreviewResult(null);
+                  setPreviewError(null);
+                }}>{t('common.delete')}</button>
+              </div>
+              <div className="match-replace-rule-options">
+                <label>{t('matchReplace.phase')}
+                  <select
+                    value={rule.phase}
+                    onChange={(event) => update(rule.id, { phase: event.target.value as MatchReplaceRule['phase'] })}
+                  >
+                    <option value="request">{t('detail.request')}</option>
+                    <option value="response">{t('detail.response')}</option>
+                  </select>
+                </label>
+                <label>{t('matchReplace.target')}
+                  <select
+                    value={rule.target}
+                    onChange={(event) => update(rule.id, { target: event.target.value as MatchReplaceRule['target'] })}
+                  >
+                    {rule.phase === 'request' && <option value="url">URL</option>}
+                    <option value="headers">{t('detail.headers')}</option>
+                    <option value="body">{t('detail.body')}</option>
+                    <option value="message">{t(rule.phase === 'request' ? 'matchReplace.wholeRequest' : 'matchReplace.wholeResponse')}</option>
+                  </select>
+                </label>
+                <label className="match-replace-check"><input type="checkbox" checked={rule.regex} onChange={(event) => update(rule.id, { regex: event.target.checked })} />{t('matchReplace.regex')}</label>
+                <label className="match-replace-check"><input type="checkbox" checked={rule.case_sensitive} onChange={(event) => update(rule.id, { case_sensitive: event.target.checked })} />{t('matchReplace.caseSensitive')}</label>
+              </div>
+              <div className="match-replace-fields">
+                <label>{t('matchReplace.match')}
+                  <textarea className="mono" value={rule.match} onChange={(event) => update(rule.id, { match: event.target.value })} />
+                </label>
+                <label>{t('matchReplace.replace')}
+                  <textarea className="mono" value={rule.replace} onChange={(event) => update(rule.id, { replace: event.target.value })} />
+                </label>
+              </div>
             </section>
           ))}
         </div>
       )}
+      <section className="match-replace-preview">
+        <div className="match-replace-preview-head">
+          <div>
+            <h4>{t('matchReplace.previewTitle')}</h4>
+            <p className="muted">{t('matchReplace.previewHelp')}</p>
+          </div>
+          <select
+            aria-label={t('matchReplace.previewPhase')}
+            value={previewPhase}
+            onChange={(event) => {
+              setPreviewPhase(event.target.value as MatchReplaceRule['phase']);
+              setPreviewResult(null);
+              setPreviewError(null);
+            }}
+          >
+            <option value="request">{t('detail.request')}</option>
+            <option value="response">{t('detail.response')}</option>
+          </select>
+          <button type="button" disabled={busy || previewBusy || !previewRaw.trim()} onClick={() => void runPreview()}>
+            {t('matchReplace.previewButton')}
+          </button>
+        </div>
+        {previewError && <div className="banner error">{renderMessage(previewError, t)}</div>}
+        <div className="match-replace-preview-panes">
+          <label>{t(previewPhase === 'request' ? 'matchReplace.rawRequest' : 'matchReplace.rawResponse')}
+            <textarea
+              className="mono"
+              value={previewRaw}
+              placeholder={previewPhase === 'request' ? 'GET /old HTTP/1.1\r\nHost: example.com\r\n\r\n' : 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n'}
+              onChange={(event) => {
+                setPreviewRaw(event.target.value);
+                setPreviewResult(null);
+                setPreviewError(null);
+              }}
+            />
+          </label>
+          <label>{t('matchReplace.previewResult')}
+            <textarea className="mono" value={previewResult ?? ''} readOnly />
+          </label>
+        </div>
+      </section>
     </Dialog>
   );
 }

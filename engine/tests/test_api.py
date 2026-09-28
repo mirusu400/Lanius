@@ -3,6 +3,7 @@ from __future__ import annotations
 import socket
 import time
 import gzip
+import json
 
 from unittest import mock
 
@@ -201,6 +202,24 @@ def test_match_replace_rejects_invalid_regex(client) -> None:
         },
     )
     assert response.status_code == 422
+
+
+def test_match_replace_preview_uses_unsaved_whole_message_rules(client) -> None:
+    response = client.post(
+        "/api/match-replace/preview",
+        json={
+            "phase": "response",
+            "raw": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nold",
+            "rules": [
+                {"phase": "response", "target": "message", "match": "200 OK", "replace": "404 Missing"},
+                {"phase": "response", "target": "message", "match": "old", "replace": "new"},
+            ],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["raw"].startswith("HTTP/1.1 404 Missing")
+    assert response.json()["raw"].endswith("\r\n\r\nnew")
+    assert client.get("/api/match-replace").json()["rules"] == []
 
 
 def test_body_display_defaults_on_and_can_be_disabled(client) -> None:
@@ -570,6 +589,21 @@ def test_imported_scope_takes_effect_immediately(client) -> None:
 
 def test_import_refuses_a_document_that_is_not_a_project(client) -> None:
     assert client.post("/api/project/import", json={"format": "junk"}).status_code == 422
+
+
+def test_import_accepts_a_raw_json_file_and_rejects_broken_json(client) -> None:
+    payload = {"format": "lanius-project", "version": 1, "scope": []}
+    result = client.post(
+        "/api/project/import",
+        content=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    assert result.status_code == 200
+    assert result.json()["ok"] is True
+    assert client.post(
+        "/api/project/import", content=b"{broken",
+        headers={"Content-Type": "application/json"},
+    ).status_code == 422
 
 
 def test_import_refuses_a_future_version(client) -> None:

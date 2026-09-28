@@ -304,6 +304,11 @@ class FlowStore:
 
     # --- writes -----------------------------------------------------------
     def upsert(self, record: FlowRecord) -> None:
+        with self._lock:
+            self._upsert_uncommitted(record)
+            self._conn.commit()
+
+    def _upsert_uncommitted(self, record: FlowRecord) -> None:
         values = (
             record.id,
             record.type,
@@ -337,12 +342,10 @@ class FlowStore:
             int(record.modified),
         )
         placeholders = ", ".join(["?"] * len(values))
-        with self._lock:
-            self._conn.execute(
-                f"INSERT OR REPLACE INTO flows ({_COLUMNS}) VALUES ({placeholders})",
-                values,
-            )
-            self._conn.commit()
+        self._conn.execute(
+            f"INSERT OR REPLACE INTO flows ({_COLUMNS}) VALUES ({placeholders})",
+            values,
+        )
 
     def log_event(self, ts: float, level: str, message: str) -> None:
         with self._lock:
@@ -736,6 +739,7 @@ class FlowStore:
         settings = data.get("settings") or {}
         flows = data.get("flows") or []
 
+        imported_flows = 0
         with self._lock:
             with self._conn:  # transaction
                 self._conn.execute("DELETE FROM scope_rules")
@@ -769,15 +773,13 @@ class FlowStore:
                         "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
                         (key, str(value)),
                     )
-
-        imported_flows = 0
-        for flow in flows:
-            try:
-                self.upsert(_record_from_export(flow))
-                imported_flows += 1
-            except Exception:
-                # One malformed flow must not abandon the rest.
-                logger.warning("skipping an unreadable flow during import")
+                for flow in flows:
+                    try:
+                        self._upsert_uncommitted(_record_from_export(flow))
+                        imported_flows += 1
+                    except Exception:
+                        # One malformed flow must not abandon the rest.
+                        logger.warning("skipping an unreadable flow during import")
 
         return {
             "scope": len(scope),

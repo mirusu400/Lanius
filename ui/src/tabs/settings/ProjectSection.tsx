@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import {
   exportProject,
-  importProject,
+  importProjectFile,
 } from '../../api/client';
+import type { Project } from '../../projects';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import {
   msg,
   rawMsg,
@@ -13,12 +15,21 @@ import {
   type Message,
 } from '../../i18n';
 
+interface ProjectSectionProps {
+  project?: Project | null;
+  onSwitchProject?: () => Promise<void>;
+  switchingProject?: boolean;
+  switchError?: string | null;
+}
+
 /** Export and import, plus a reminder that work is saved as you go. */
-export function ProjectSection() {
+export function ProjectSection({ project, onSwitchProject, switchingProject = false, switchError }: ProjectSectionProps = {}) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Message | null>(null);
   const [error, setError] = useState<Message | null>(null);
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
 
   const download = async (includeFlows: boolean) => {
     setBusy(true);
@@ -49,7 +60,7 @@ export function ProjectSection() {
     setError(null);
     setNote(null);
     try {
-      const result = await importProject(JSON.parse(await file.text()));
+      const result = await importProjectFile(file);
       setNote(
         msg('project.imported', {
           flows: String(result.flows ?? 0),
@@ -68,6 +79,24 @@ export function ProjectSection() {
       <h3>{t('project.section')}</h3>
       <p className="muted">{t('project.help')}</p>
 
+      {project && onSwitchProject && (
+        <div className="project-current">
+          <span>
+            {t('project.current')}: <strong>{project.id === 'legacy'
+              ? t('startup.legacyName')
+              : project.temporary ? t('startup.tempName') : project.name}</strong>
+          </span>
+          <button
+            type="button"
+            disabled={busy || switchingProject}
+            onClick={() => setSwitchOpen(true)}
+          >
+            {t('startup.switch')}
+          </button>
+        </div>
+      )}
+      {switchError && <div className="banner error" role="alert">{switchError}</div>}
+
       <div className="project-actions">
         <button type="button" disabled={busy} onClick={() => void download(true)}>
           {t('project.export')}
@@ -84,10 +113,7 @@ export function ProjectSection() {
             disabled={busy}
             onChange={(event) => {
               const file = event.target.files?.[0];
-              // Importing throws away the open project, so ask first.
-              if (file && window.confirm(t('project.confirmImport'))) {
-                void upload(file);
-              }
+              if (file) setImportFile(file);
               event.target.value = '';
             }}
           />
@@ -96,6 +122,28 @@ export function ProjectSection() {
 
       {note && <p className="muted">{renderMessage(note, t)}</p>}
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
+      <ConfirmDialog
+        open={switchOpen}
+        title={t('startup.switch')}
+        message={t(project?.temporary ? 'project.confirmSwitchTemp' : 'project.confirmSwitch')}
+        confirmLabel={t('startup.switch')}
+        onCancel={() => setSwitchOpen(false)}
+        onConfirm={() => {
+          setSwitchOpen(false);
+          void onSwitchProject?.();
+        }}
+      />
+      <ConfirmDialog
+        open={importFile !== null}
+        title={t('project.import')}
+        message={t('project.confirmImport')}
+        confirmLabel={t('project.import')}
+        onCancel={() => setImportFile(null)}
+        onConfirm={() => {
+          if (importFile) void upload(importFile);
+          setImportFile(null);
+        }}
+      />
     </section>
   );
 }

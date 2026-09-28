@@ -113,6 +113,8 @@ html,
 body,
 #root {
   height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
   margin: 0;
 }
 
@@ -230,20 +232,6 @@ pre.body,
   opacity: 0.85;
 }
 
-.project-switch {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 250px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-}
-
-.project-switch span { color: var(--muted); font-weight: 400; }
-
 .brand:hover,
 .brand.active {
   opacity: 1;
@@ -292,47 +280,124 @@ pre.body,
 .content {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* --- Match & Replace -------------------------------------------------- */
 .match-replace-dialog {
-  width: min(1120px, 94vw);
+  width: min(960px, 94vw);
+}
+
+.match-replace-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.match-replace-dialog .dialog-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: none;
 }
 
 .match-replace-rules {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 62vh;
+  gap: 10px;
+  max-height: 32vh;
   overflow: auto;
+  overscroll-behavior-y: none;
 }
 
 .match-replace-rule {
-  display: grid;
-  grid-template-columns: auto minmax(110px, 1fr) 110px 105px minmax(140px, 1.4fr) minmax(140px, 1.4fr) auto auto auto;
-  align-items: center;
-  gap: 7px;
-  padding: 8px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--bg-row);
 }
 
-.match-replace-rule textarea {
-  min-height: 3.2em;
-  resize: vertical;
+.match-replace-rule-head,
+.match-replace-rule-options,
+.match-replace-preview-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.match-replace-rule-head input:not([type='checkbox']) {
+  flex: 1;
+  min-width: 150px;
+}
+
+.match-replace-rule-options {
+  margin: 10px 0;
+}
+
+.match-replace-rule-options > label {
+  gap: 6px;
+}
+
+.match-replace-fields,
+.match-replace-preview-panes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.match-replace-fields label,
+.match-replace-preview-panes label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.match-replace-fields textarea,
+.match-replace-preview-panes textarea {
+  width: 100%;
+  height: 76px;
+  resize: none;
   border: 1px solid var(--border);
   border-radius: 3px;
   background: var(--bg);
   color: var(--fg);
-  padding: 5px;
+  padding: 7px;
 }
 
-.match-replace-rule label {
+.match-replace-rule .match-enabled,
+.match-replace-rule .match-replace-check {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   white-space: nowrap;
+}
+
+.match-replace-preview {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.match-replace-preview-head {
+  margin-bottom: 10px;
+}
+
+.match-replace-preview-head > div {
+  flex: 1;
+  min-width: 220px;
+}
+
+.match-replace-preview-head h4,
+.match-replace-preview-head p {
+  margin: 0;
+}
+
+.match-replace-preview-panes textarea {
+  height: 190px;
+}
+
+.match-replace-preview-panes textarea[readonly] {
+  background: var(--bg-sunken);
 }
 
 /* --- WebSocket proxy ------------------------------------------------- */
@@ -420,9 +485,6 @@ pre.body,
 }
 
 @media (max-width: 1000px) {
-  .match-replace-rule {
-    grid-template-columns: auto 1fr 1fr;
-  }
   .websocket-split {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(180px, 0.8fr) minmax(220px, 1fr);
@@ -430,6 +492,13 @@ pre.body,
   .websocket-list {
     border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 700px) {
+  .match-replace-fields,
+  .match-replace-preview-panes {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -609,6 +678,7 @@ pre.body,
   box-shadow: 0 16px 48px var(--shadow);
   max-width: 90vw;
   max-height: 85vh;
+  overscroll-behavior: none;
 }
 
 .dialog::backdrop {
@@ -2100,6 +2170,7 @@ pre.body {
 .settings-tab {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
 }
@@ -2109,6 +2180,7 @@ pre.body {
 .settings-body {
   flex: 1;
   overflow: auto;
+  overscroll-behavior-y: none;
   padding: 20px 24px;
   max-width: 900px;
 }
@@ -2315,6 +2387,10 @@ pre.body {
   border-radius: 3px;
   color: var(--fg);
   padding: 5px 10px;
+}
+
+.settings-row #mcp-port {
+  width: 100px;
 }
 
 
@@ -3078,6 +3154,14 @@ pre.body {
 }
 
 /* --- project --- */
+.project-current {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 14px 0;
+}
+
 .project-actions {
   display: flex;
   flex-wrap: wrap;

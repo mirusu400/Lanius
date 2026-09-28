@@ -1,5 +1,5 @@
 /** Logger + Settings tabs against a mocked engine. */
-import {cleanup, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor, within } from '@testing-library/react';
 import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,7 @@ import { LoggerTab } from './LoggerTab';
 import { CaSection } from './settings/CaSection';
 import { EngineSection } from './settings/EngineSection';
 import { SettingsTab } from './SettingsTab';
+import { ProjectSection } from './settings/ProjectSection';
 
 class MockSocket {
   static last: MockSocket | null = null;
@@ -131,6 +132,33 @@ describe('LoggerTab', () => {
 });
 
 describe('SettingsTab', () => {
+  it('puts project switching behind Settings > Project and confirms it', async () => {
+    const user = userEvent.setup();
+    const onSwitchProject = vi.fn(async () => {});
+    render(<SettingsTab project={{ id: 'p1', name: 'Demo', temporary: false, dbPath: '/tmp/demo', lastOpened: 0 }} onSwitchProject={onSwitchProject} />);
+    expect(screen.queryByRole('button', { name: t('startup.switch') })).toBeNull();
+    await user.click(screen.getByRole('button', { name: t('settings.group.project') }));
+    const button = screen.getByRole('button', { name: t('startup.switch') });
+    await user.click(button);
+    expect(onSwitchProject).not.toHaveBeenCalled();
+    await user.click(within(screen.getByRole('dialog', { name: t('startup.switch') })).getByRole('button', { name: t('common.cancel') }));
+    expect(onSwitchProject).not.toHaveBeenCalled();
+    await user.click(button);
+    await user.click(within(screen.getByRole('dialog', { name: t('startup.switch') })).getByRole('button', { name: t('startup.switch') }));
+    expect(onSwitchProject).toHaveBeenCalledOnce();
+  });
+
+  it('uploads a project file directly without parsing it in the UI', async () => {
+    const user = userEvent.setup();
+    render(<ProjectSection />);
+    const file = new File(['{"format":"lanius-project","version":1}'], 'project.json', { type: 'application/json' });
+    await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+    await user.click(within(screen.getByRole('dialog', { name: t('project.import') })).getByRole('button', { name: t('project.import') }));
+    await waitFor(() => expect(screen.getByText(t('project.imported', { flows: '0', scope: '0' }))).toBeTruthy());
+    const fetchMock = vi.mocked(fetch);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/project/import'), expect.objectContaining({ body: file }));
+  });
+
   it('shows engine and proxy status', async () => {
     render(<EngineSection />);
     expect(await screen.findByText(t('settings.running'))).toBeTruthy();

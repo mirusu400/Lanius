@@ -3,7 +3,9 @@
 import type { EngineEvent } from './types';
 import { API_BASE } from './client';
 
-export const WS_URL = `${API_BASE.replace(/^http/, 'ws')}/ws`;
+export function websocketUrl(): string {
+  return `${API_BASE.replace(/^http/, 'ws')}/ws`;
+}
 
 export type ConnectionState = 'connecting' | 'open' | 'closed';
 
@@ -22,7 +24,7 @@ export function connectStream(handlers: StreamHandlers): () => void {
   const open = () => {
     if (disposed) return;
     handlers.onState?.('connecting');
-    socket = new WebSocket(WS_URL);
+    socket = new WebSocket(websocketUrl());
 
     socket.onopen = () => {
       attempt = 0;

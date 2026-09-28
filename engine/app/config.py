@@ -21,7 +21,7 @@ class Settings:
     proxy_host: str = "127.0.0.1"
     proxy_port: int = 8080
     api_host: str = "127.0.0.1"  # local-only binding (codex.md §10)
-    api_port: int = 8081
+    api_port: int = 12954
     data_dir: Path = None  # type: ignore[assignment]
     db_path: Path = None  # type: ignore[assignment]
     confdir: Path = None  # type: ignore[assignment]
@@ -61,7 +61,7 @@ class Settings:
             proxy_host=os.environ.get("LANIUS_PROXY_HOST", "127.0.0.1"),
             proxy_port=int(os.environ.get("LANIUS_PROXY_PORT", "8080")),
             api_host=os.environ.get("LANIUS_API_HOST", "127.0.0.1"),
-            api_port=int(os.environ.get("LANIUS_API_PORT", "8081")),
+            api_port=int(os.environ.get("LANIUS_API_PORT", "12954")),
             log_level=os.environ.get("LANIUS_LOG_LEVEL", "info"),
         )
 

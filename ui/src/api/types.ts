@@ -105,7 +105,7 @@ export interface FlowEdits {
 }
 
 export type MatchReplacePhase = 'request' | 'response';
-export type MatchReplaceTarget = 'url' | 'headers' | 'body';
+export type MatchReplaceTarget = 'url' | 'headers' | 'body' | 'message';
 
 export interface MatchReplaceRule {
   id: string;

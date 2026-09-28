@@ -12,6 +12,7 @@
 import { useState } from "react";
 
 import { useT } from "../i18n";
+import type { Project } from "../projects";
 import { AboutSection } from "./settings/AboutSection";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { BrowserHelpSection } from "./settings/BrowserHelpSection";
@@ -47,7 +48,14 @@ function initialGroup(): Group {
   return GROUPS.includes(stored as Group) ? (stored as Group) : "proxy";
 }
 
-export function SettingsTab() {
+interface SettingsTabProps {
+  project?: Project | null;
+  onSwitchProject?: () => Promise<void>;
+  switchingProject?: boolean;
+  switchError?: string | null;
+}
+
+export function SettingsTab({ project, onSwitchProject, switchingProject = false, switchError }: SettingsTabProps = {}) {
   const t = useT();
   const [group, setGroup] = useState<Group>(initialGroup);
   const [error, setError] = useState<string | null>(null);
@@ -106,7 +114,12 @@ export function SettingsTab() {
 
         {group === "project" && (
           <>
-            <ProjectSection />
+            <ProjectSection
+              project={project}
+              onSwitchProject={onSwitchProject}
+              switchingProject={switchingProject}
+              switchError={switchError}
+            />
             <ProjectCompactSection />
           </>
         )}

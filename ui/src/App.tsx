@@ -147,16 +147,8 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
             </button>
           ))}
         </nav>
-        {project && (
-          <button className="project-switch" type="button" onClick={() => void switchProject()}>
-            {project.id === 'legacy' ? t('startup.legacyName') :
-              project.temporary ? t('startup.tempName') : project.name}
-            <span>{t('startup.switch')}</span>
-          </button>
-        )}
         {showSpinner && <Spinner />}
       </header>
-      {switchError && <div className="banner error" role="alert">{switchError}</div>}
       <main className="content">
         <BusyProvider onChange={onBusyChange}>
           {tab === "Dashboard" ? (
@@ -178,7 +170,12 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
           ) : tab === "Logger" ? (
             <LoggerTab />
           ) : tab === "Settings" ? (
-            <SettingsTab />
+            <SettingsTab
+              project={project}
+              onSwitchProject={switchProject}
+              switchingProject={switching}
+              switchError={switchError}
+            />
           ) : tab === "Docs" ? (
             <DocsTab />
           ) : null}

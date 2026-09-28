@@ -4,20 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import sqlite3
 import time
 from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from .. import __version__
 from ..addons.intercept import InterceptError
-from ..addons.match_replace import MatchReplaceError
+from ..addons.match_replace import MatchReplaceError, preview as preview_match_replace
 from ..addons.repeater import RepeaterError, build_flow, render_raw
 from ..addons.websocket_proxy import WebSocketProxyError
 from ..addons.endpoints import build_endpoints
@@ -88,6 +89,11 @@ class RepeaterRequest(BaseModel):
 
 class MatchReplaceBody(BaseModel):
     rules: list[dict[str, Any]] = []
+
+
+class MatchReplacePreviewBody(MatchReplaceBody):
+    phase: str
+    raw: str
 
 
 class BodyDisplayPatch(BaseModel):
@@ -451,8 +457,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return data
 
     @app.post("/api/project/import")
-    async def import_project(payload: dict[str, Any]) -> dict[str, Any]:
+    async def import_project(request: Request) -> dict[str, Any]:
         """Load a project document, replacing what is currently open."""
+        try:
+            payload = await asyncio.to_thread(json.loads, await request.body())
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=422, detail="invalid project JSON") from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=422, detail="not a Lanius project")
         if payload.get("format") != "lanius-project":
             raise HTTPException(status_code=422, detail="not a Lanius project")
         version = payload.get("version")
@@ -938,6 +950,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except MatchReplaceError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return {"rules": rules}
+
+    @app.post("/api/match-replace/preview")
+    async def match_replace_preview(payload: MatchReplacePreviewBody) -> dict[str, str]:
+        try:
+            result = await asyncio.to_thread(
+                preview_match_replace, payload.raw, payload.phase, payload.rules
+            )
+        except MatchReplaceError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"raw": result}
 
     # --- body display ----------------------------------------------------
     @app.get("/api/body-display")

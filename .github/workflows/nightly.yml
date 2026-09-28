@@ -183,15 +183,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          # PyInstaller appends .exe on Windows.
-          engine=./engine/dist/lanius-engine
-          [ -x "$engine" ] || engine=./engine/dist/lanius-engine.exe
+          # The onedir build starts without unpacking on every launch.
+          engine=./engine/dist/lanius-engine/lanius-engine
+          [ -x "$engine" ] || engine=./engine/dist/lanius-engine/lanius-engine.exe
 
           "$engine" --proxy-port 18080 --api-port 18081 &
           engine_pid=$!
           trap 'kill "$engine_pid" 2>/dev/null || true' EXIT
 
-          # The frozen binary needs a moment to unpack and bind.
+          # Allow time for first launch and API startup.
           for _ in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:18081/api/status >/dev/null 2>&1; then
               break

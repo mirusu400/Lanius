@@ -2,7 +2,7 @@
 
 Usage::
 
-    python -m app.main [--proxy-port 8080] [--api-port 8081]
+    python -m app.main [--proxy-port 8080] [--api-port 12954]
 """
 
 from __future__ import annotations
@@ -37,9 +37,8 @@ def watch_parent(parent_pid: int) -> None:
     hard (SIGKILL, crash), its cleanup never runs, and without this watchdog
     the proxy would keep holding its ports forever.
 
-    The PID is explicit rather than ``os.getppid()`` because PyInstaller's
-    bootloader stays alive as our direct parent, so the parent PID would
-    never change even after the shell is gone.
+    The PID is explicit rather than ``os.getppid()`` because a frozen
+    bootloader can sit between the engine and the desktop shell.
     """
 
     def _watch() -> None:

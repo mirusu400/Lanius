@@ -14,16 +14,34 @@ import type {
   WebSocketState,
 } from './types';
 
-/** Engine base URL.
- *
- * In the Tauri shell the engine runs as a sidecar on the default port; in the
- * browser dev setup VITE_LANIUS_API can point elsewhere.
- */
-export const API_BASE =
+/** Engine base URL. The desktop shell can change it while the UI is open. */
+export let API_BASE =
   (typeof window !== 'undefined' &&
     (window as { __LANIUS_API__?: string }).__LANIUS_API__) ||
   import.meta.env.VITE_LANIUS_API ||
-  'http://127.0.0.1:8081';
+  'http://127.0.0.1:12954';
+
+export function setApiBase(url: string): void {
+  API_BASE = url;
+}
+
+export async function syncApiBaseWithShell(): Promise<void> {
+  if (!isDesktop()) return;
+  const internals = (window as unknown as {
+    __TAURI_INTERNALS__: { invoke(cmd: string): Promise<{ api_url: string }> };
+  }).__TAURI_INTERNALS__;
+  const info = await internals.invoke('engine_info');
+  setApiBase(info.api_url);
+}
+
+export async function setDesktopApiPort(port: number): Promise<void> {
+  if (!isDesktop()) throw new Error('Desktop shell is unavailable');
+  const internals = (window as unknown as {
+    __TAURI_INTERNALS__: { invoke(cmd: string, args: { port: number }): Promise<{ api_url: string }> };
+  }).__TAURI_INTERNALS__;
+  const info = await internals.invoke('set_api_port', { port });
+  setApiBase(info.api_url);
+}
 
 /** True when running inside the desktop shell. */
 export function isDesktop(): boolean {
@@ -194,6 +212,18 @@ export async function putMatchReplaceRules(
     body: JSON.stringify({ rules }),
   });
   return data.rules ?? [];
+}
+
+export function previewMatchReplace(
+  rules: MatchReplaceRule[],
+  phase: MatchReplaceRule['phase'],
+  raw: string,
+): Promise<{ raw: string }> {
+  return request('/api/match-replace/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rules, phase, raw }),
+  });
 }
 
 // --- body display --------------------------------------------------------
@@ -646,6 +676,18 @@ export function importProject(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(document),
+  });
+}
+
+/** Send a project file as a Blob so large captures never need to be
+ * parsed and serialized again on the UI thread. */
+export function importProjectFile(
+  file: File,
+): Promise<{ ok: boolean; flows: number; scope: number; workspace: number }> {
+  return request('/api/project/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: file,
   });
 }
 

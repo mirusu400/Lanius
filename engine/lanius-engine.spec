@@ -70,9 +70,16 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 exe = EXE(
-    pyz, a.scripts, a.binaries, a.datas, [],
+    pyz, a.scripts, [],
     name="lanius-engine",
     console=True,
+    exclude_binaries=True,
+    strip=False,
+    upx=False,
+)
+coll = COLLECT(
+    exe, a.binaries, a.datas,
+    name="lanius-engine",
     strip=False,
     upx=False,
 )

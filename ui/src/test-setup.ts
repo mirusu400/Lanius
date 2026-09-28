@@ -1,7 +1,7 @@
 /** Global test setup.
  *
  * Components open a WebSocket to the engine on mount. Without a stub the real
- * undici client tries to reach 127.0.0.1:8081, which makes the suite depend on
+ * undici client tries to reach 127.0.0.1:12954, which makes the suite depend on
  * a running engine and throws after tests finish. Individual tests may still
  * install their own richer mock.
  */

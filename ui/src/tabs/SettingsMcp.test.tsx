@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { McpSection } from './settings/McpSection';
+import { setApiBase } from '../api/client';
 import { renderWithI18n as render, t } from '../test-utils';
 
 const TOOLS = [
@@ -20,9 +21,9 @@ const TOOLS = [
 let mcp = {
   available: true,
   enabled: true,
-  url: 'http://127.0.0.1:8081/mcp',
+  url: 'http://127.0.0.1:12954/mcp/mcp',
   host: '127.0.0.1',
-  port: 8081,
+  port: 12954,
   tools: TOOLS,
 };
 let posted: boolean[] = [];
@@ -42,9 +43,9 @@ beforeEach(() => {
   mcp = {
     available: true,
     enabled: true,
-    url: 'http://127.0.0.1:8081/mcp',
+    url: 'http://127.0.0.1:12954/mcp/mcp',
     host: '127.0.0.1',
-    port: 8081,
+    port: 12954,
     tools: TOOLS,
   };
   posted = [];
@@ -110,6 +111,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  delete (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  setApiBase('http://127.0.0.1:12954');
 });
 
 const mcpSection = () => {
@@ -123,7 +126,7 @@ describe('MCP settings', () => {
   it('shows where an agent connects', async () => {
     render(<McpSection />);
     await waitFor(() => expect(screen.getByText(t('mcp.section'))).toBeTruthy());
-    expect(mcpSection().getByText('http://127.0.0.1:8081/mcp')).toBeTruthy();
+    expect(mcpSection().getByText('http://127.0.0.1:12954/mcp/mcp')).toBeTruthy();
     expect(mcpSection().getByText(t('mcp.localOnly'))).toBeTruthy();
   });
 
@@ -186,7 +189,7 @@ describe('MCP settings', () => {
     const config = JSON.parse(copied[0]) as {
       mcpServers: { lanius: { url: string } };
     };
-    expect(config.mcpServers.lanius.url).toBe('http://127.0.0.1:8081/mcp');
+    expect(config.mcpServers.lanius.url).toBe('http://127.0.0.1:12954/mcp/mcp');
     expect(await screen.findByText(t('mcp.copied'))).toBeTruthy();
   });
 
@@ -194,5 +197,31 @@ describe('MCP settings', () => {
     mcp = { ...mcp, available: false, tools: [] };
     render(<McpSection />);
     expect(await screen.findByText(t('mcp.unavailable'))).toBeTruthy();
+  });
+
+  it('changes the shared MCP/API port and shows the new endpoint', async () => {
+    const invoke = vi.fn(async (command: string, args?: { port: number }) => {
+      if (command !== 'set_api_port') throw new Error(`unexpected command: ${command}`);
+      mcp = {
+        ...mcp,
+        port: args!.port,
+        url: `http://127.0.0.1:${args!.port}/mcp/mcp`,
+      };
+      return { api_url: `http://127.0.0.1:${args!.port}` };
+    });
+    Object.defineProperty(window, '__TAURI_INTERNALS__', {
+      configurable: true,
+      value: { invoke },
+    });
+    const user = userEvent.setup();
+    render(<McpSection />);
+    const field = await screen.findByLabelText(t('mcp.port'));
+    await user.clear(field);
+    await user.type(field, '13001');
+    await user.click(screen.getByRole('button', { name: t('mcp.applyPort') }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('set_api_port', { port: 13001 }));
+    expect(await screen.findByText('http://127.0.0.1:13001/mcp/mcp')).toBeTruthy();
+    expect((field as HTMLInputElement).value).toBe('13001');
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith('http://127.0.0.1:13001/api/mcp', undefined);
   });
 });

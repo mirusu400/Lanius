@@ -136,7 +136,10 @@ to this machine's address and the port shown. Anyone who can reach that
 address can send traffic through your proxy, so prefer a specific address over
 all interfaces on a network you do not control.
 
-The API port can also be moved, though only before launching:
+The API and MCP share a local port (default `12954`). Change it in **Settings >
+AI agents**; Lanius restarts the active project's engine on the new port. The
+project picker also lets you change it before opening a project if the current
+port is busy. A launch-time override is also available:
 
 ```bash
 LANIUS_API_PORT=8091 open -a Lanius
@@ -159,8 +162,8 @@ At launch, choose a temporary project or a named project. Each named project
 has its own database and data directory under `~/.lanius/projects/`, so
 captured traffic, scope, proxy settings and open tabs stay separate. The
 previous single-database workspace remains available as **Previous work**.
-Temporary projects are removed when closed. Use the project button in the
-top bar to return to the chooser.
+Temporary projects are removed when closed. Use **Settings > Project > Switch**
+to return to the chooser.
 
 Work is saved as you go. **Settings > Project** exports the current project
 as one JSON file, with a second button that leaves the capture out when you
@@ -218,7 +221,9 @@ or drop it. You can intercept responses too, and limit interception to a single
 host so the rest of your browsing is unaffected.
 
 **Match & Replace** opens from this screen and from **Settings > Proxy**. Rules
-can rewrite request URLs, headers and bodies, or response headers and bodies.
+can rewrite request URLs, headers and bodies, an entire raw request, or an
+entire raw response. Paste a sample HTTP message into **Replace Preview** to
+see the enabled rules' result before saving them.
 Plain text and regular expressions are supported, rules can be toggled without
 deleting them, and the saved rules travel with a project export. Body rules run
 against decompressed content while preserving the message's wire encoding.
@@ -371,7 +376,7 @@ cd ../shell && npm ci && npx tauri build
 To run the pieces separately while developing:
 
 ```bash
-cd engine && python -m app.main    # proxy on :8080, API on :8081
+cd engine && python -m app.main    # proxy on :8080, API/MCP on :12954
 cd ui && npm run dev               # interface on :5173
 ```
 

@@ -142,11 +142,11 @@ jobs:
       - name: Placeholder engine binary
         shell: bash
         run: |
-          mkdir -p engine/dist
+          mkdir -p engine/dist/lanius-engine
           if [ "$RUNNER_OS" = "Windows" ]; then
-            : > engine/dist/lanius-engine.exe
+            : > engine/dist/lanius-engine/lanius-engine.exe
           else
-            : > engine/dist/lanius-engine
+            : > engine/dist/lanius-engine/lanius-engine
           fi
 
       - name: Format check
