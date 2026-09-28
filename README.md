@@ -49,7 +49,9 @@ On Windows, SmartScreen will warn about an unrecognised publisher. Choose
 
 ## Getting started
 
-**1. Open Lanius.** The proxy starts automatically on `127.0.0.1:8080`.
+**1. Open Lanius and choose a project.** Start a temporary project for one
+session, create a named project, or reopen an existing one. The proxy then
+starts on `127.0.0.1:8080`.
 
 **2. Click Open browser.** It is next to the history in the **Proxy** tab.
 A Chromium browser starts already pointed at the proxy and already trusting
@@ -153,11 +155,19 @@ an export.
 
 ### Projects
 
-Captured traffic, your scope and the tabs you have open are saved as you
-work, so closing Lanius and opening it again puts you back where you were.
-**Settings > Project** exports the lot as one JSON file, with a second button
-that leaves the capture out when you only want to pass on a scope and a set
-of requests.
+At launch, choose a temporary project or a named project. Each named project
+has its own database and data directory under `~/.lanius/projects/`, so
+captured traffic, scope, proxy settings and open tabs stay separate. The
+previous single-database workspace remains available as **Previous work**.
+Temporary projects are removed when closed. Use the project button in the
+top bar to return to the chooser.
+
+Work is saved as you go. **Settings > Project** exports the current project
+as one JSON file, with a second button that leaves the capture out when you
+only want to pass on a scope and a set of requests. The same screen shows
+which captured targets use space. Select targets to remove their requests and
+compact the database, or compact only to reclaim pages freed earlier. The
+preview shows request counts and the confirmation names what will be deleted.
 
 ## Features
 

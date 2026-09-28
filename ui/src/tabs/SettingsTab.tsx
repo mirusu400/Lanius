@@ -25,6 +25,7 @@ import { ListenerSection } from "./settings/ListenerSection";
 import { McpSection } from "./settings/McpSection";
 import { MatchReplaceSection } from "./settings/MatchReplaceSection";
 import { ProjectSection } from "./settings/ProjectSection";
+import { ProjectCompactSection } from "./settings/ProjectCompactSection";
 import { TlsSection } from "./settings/TlsSection";
 
 const GROUPS = [
@@ -103,7 +104,12 @@ export function SettingsTab() {
 
         {group === "integrations" && <McpSection />}
 
-        {group === "project" && <ProjectSection />}
+        {group === "project" && (
+          <>
+            <ProjectSection />
+            <ProjectCompactSection />
+          </>
+        )}
 
         {group === "about" && <AboutSection />}
       </div>

@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { autosave } from './autosave';
+import { autosave, flushAutosaves } from './autosave';
 
 let puts: { key: string; value: unknown }[] = [];
 let stored: Record<string, unknown> = {};
@@ -113,5 +113,16 @@ describe('autosave', () => {
     // Loading must not count as a change, or a slow load would overwrite
     // the saved state with the empty one it replaced.
     expect(puts).toHaveLength(0);
+  });
+
+  it('flushes the latest edit before changing projects', async () => {
+    const store = makeStore({ tabs: [] as string[] });
+    const dispose = autosave('repeater', (l) => store.subscribe(l), () => {});
+    await vi.runOnlyPendingTimersAsync();
+
+    store.set({ tabs: ['unsaved edit'] });
+    await flushAutosaves();
+    expect(puts).toEqual([{ key: 'repeater', value: { tabs: ['unsaved edit'] } }]);
+    dispose();
   });
 });

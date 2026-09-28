@@ -640,6 +640,44 @@ export function importProject(
   });
 }
 
+export interface CompactSite {
+  scheme: string | null;
+  host: string | null;
+  port: number | null;
+  flows: number;
+  content_bytes: number;
+  in_scope: boolean;
+}
+
+export interface CompactOverview {
+  db_bytes: number;
+  reclaimable_bytes: number;
+  total_flows: number;
+  sites: CompactSite[];
+}
+
+export interface CompactResult {
+  deleted: number;
+  before_bytes: number;
+  after_bytes: number;
+  reclaimed_bytes: number;
+  reclaim_error: string | null;
+}
+
+export function getCompactOverview(): Promise<CompactOverview> {
+  return request('/api/project/compact');
+}
+
+export function compactProject(sites: CompactSite[]): Promise<CompactResult> {
+  return request('/api/project/compact', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      sites: sites.map(({ scheme, host, port, flows }) => ({ scheme, host, port, flows })),
+    }),
+  });
+}
+
 /** What the copy-as menus can offer, including plugin formats. */
 export function listCodegenFormats(): Promise<{
   formats: { kind: string; label: string; source: string }[];

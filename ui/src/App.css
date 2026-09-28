@@ -201,6 +201,8 @@ pre.body,
   height: 100%;
 }
 
+.app.switching { pointer-events: none; }
+
 /* --- title bar / tabs --- */
 .titlebar {
   display: flex;
@@ -227,6 +229,20 @@ pre.body,
   cursor: pointer;
   opacity: 0.85;
 }
+
+.project-switch {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.project-switch span { color: var(--muted); font-weight: 400; }
 
 .brand:hover,
 .brand.active {
@@ -3076,6 +3092,44 @@ pre.body {
 .import-button input {
   display: none;
 }
+
+.compact-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 14px 0;
+}
+
+.compact-summary span { color: var(--muted); }
+
+.compact-actions,
+.compact-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.compact-actions input { min-width: 220px; }
+
+.compact-section h4 { margin: 24px 0 6px; }
+
+.compact-table-wrap {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.compact-table { width: 100%; border-collapse: collapse; }
+.compact-table th,
+.compact-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-soft); text-align: left; }
+.compact-table th { position: sticky; top: 0; background: var(--bg-alt); }
+.compact-table td:first-child { max-width: 400px; overflow-wrap: anywhere; }
+.compact-table td label { cursor: pointer; }
+.compact-table td:not(:first-child) { white-space: nowrap; }
+.compact-footer { justify-content: space-between; }
 
 .rule-list input.invalid {
   border-color: var(--danger-muted);

@@ -432,6 +432,69 @@ class FlowStore:
             self._conn.execute("VACUUM")
             self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
+    def compact_overview(self) -> dict[str, Any]:
+        """Disk use and captured sites for a project cleanup preview.
+
+        Content bytes count the bytes stored in body, header and snapshot
+        columns. They are useful for ranking sites, but are not a promise
+        about how much VACUUM will return to the filesystem.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT scheme, host, port, COUNT(*) AS flows,"
+                " SUM(COALESCE(length(request_body), 0)"
+                " + COALESCE(length(response_body), 0)"
+                " + COALESCE(length(CAST(request_headers AS BLOB)), 0)"
+                " + COALESCE(length(CAST(response_headers AS BLOB)), 0)"
+                " + COALESCE(length(CAST(request_original AS BLOB)), 0)"
+                " + COALESCE(length(CAST(request_auto_modified AS BLOB)), 0))"
+                " AS content_bytes"
+                " FROM flows GROUP BY scheme, host, port"
+                " ORDER BY content_bytes DESC, flows DESC"
+            ).fetchall()
+            page_size = int(self._conn.execute("PRAGMA page_size").fetchone()[0])
+            free_pages = int(self._conn.execute("PRAGMA freelist_count").fetchone()[0])
+            total_flows = int(self._conn.execute("SELECT COUNT(*) FROM flows").fetchone()[0])
+        path = Path(self.path)
+        db_bytes = (
+            sum(
+                candidate.stat().st_size if candidate.exists() else 0
+                for candidate in (path, Path(f"{self.path}-wal"))
+            )
+            if self.path != ":memory:"
+            else 0
+        )
+        return {
+            "db_bytes": db_bytes,
+            "reclaimable_bytes": page_size * free_pages,
+            "total_flows": total_flows,
+            "sites": [dict(row) for row in rows],
+        }
+
+    def delete_sites(
+        self, sites: Sequence[tuple[str | None, str | None, int | None, int]]
+    ) -> int:
+        """Delete exact sites only if their previewed counts still match."""
+        if not sites:
+            return 0
+        with self._lock:
+            before = self._conn.total_changes
+            with self._conn:
+                for scheme, host, port, expected in sites:
+                    count = self._conn.execute(
+                        "SELECT COUNT(*) FROM flows"
+                        " WHERE scheme IS ? AND host IS ? AND port IS ?",
+                        (scheme, host, port),
+                    ).fetchone()[0]
+                    if count != expected:
+                        raise ValueError("capture changed; refresh the cleanup preview")
+                for scheme, host, port, _ in sites:
+                    self._conn.execute(
+                        "DELETE FROM flows WHERE scheme IS ? AND host IS ? AND port IS ?",
+                        (scheme, host, port),
+                    )
+            return self._conn.total_changes - before
+
     # --- reads ------------------------------------------------------------
     def get(self, flow_id: str) -> FlowRecord | None:
         with self._lock:

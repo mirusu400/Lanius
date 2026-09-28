@@ -1,0 +1,62 @@
+.project-picker {
+  height: 100%;
+  overflow: auto;
+  padding: 48px 24px;
+  background: var(--bg);
+}
+
+.project-picker-main {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.project-picker-brand {
+  color: var(--accent);
+  font-size: 1.25em;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.project-picker h1 { margin: 18px 0 4px; font-size: 2em; }
+.project-picker h2 { margin: 0 0 8px; font-size: 1.12em; }
+.project-picker p { margin: 0 0 18px; }
+
+.project-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 30px;
+}
+
+.project-picker-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 220px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-alt);
+}
+
+.project-picker-card p { flex: 1; }
+.project-picker-card label { margin-bottom: 6px; }
+.project-picker-card input { width: 100%; margin-bottom: 12px; }
+.project-picker-card button { margin-top: auto; }
+
+.project-picker-existing { margin-top: 36px; }
+.project-picker-existing ul { list-style: none; padding: 0; margin: 12px 0; }
+.project-picker-existing li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-top: 1px solid var(--border);
+  padding: 14px 4px;
+}
+.project-picker-existing li > div { display: flex; flex-direction: column; min-width: 0; }
+.project-picker-existing .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .project-picker-grid { grid-template-columns: 1fr; }
+}

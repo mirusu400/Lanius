@@ -417,7 +417,7 @@ const en: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Captured traffic, your scope, and the tabs you have open in Repeater and Decoder are written to the project database as you work. Closing Lanius and opening it again puts you back where you were; there is nothing to remember to save.',
+            body: 'Choose a temporary, new, or existing project at launch. Captured traffic, scope, proxy settings, and the tabs you have open in Repeater and Decoder are written to that project as you work. Use the project button in the top bar to switch projects.',
           },
         ],
       },
@@ -439,7 +439,16 @@ const en: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'The database sits in ~/.lanius, and Settings shows the exact path. An exported project is plain JSON, so it can be read, diffed and kept in version control.',
+            body: 'Named projects sit under ~/.lanius/projects/. The previous single-database workspace is listed as Previous work, so old captures stay available. Temporary projects are removed when closed. Settings shows the exact database path.',
+          },
+        ],
+      },
+      {
+        heading: 'Freeing disk space',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Settings > Project > Compact project shows captured targets, request counts and stored content sizes. Select targets to permanently remove their captured requests and shrink the database. Select out-of-scope can help find noise, but review the selection before confirming. Compact database only reclaims pages freed by earlier edits without deleting requests.',
           },
         ],
       },
@@ -834,7 +843,7 @@ const ko: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: '캡처한 트래픽, 범위, Repeater와 Decoder에 열어 둔 탭이 작업하는 동안 프로젝트 데이터베이스에 기록됩니다. Lanius를 닫았다 열면 하던 곳으로 돌아오며, 따로 저장할 것이 없습니다.',
+            body: '시작할 때 임시, 새 프로젝트, 기존 프로젝트 중 하나를 선택합니다. 캡처한 트래픽, 범위, 프록시 설정, Repeater와 Decoder에 열어 둔 탭이 해당 프로젝트에 자동 저장됩니다. 상단의 프로젝트 버튼으로 다른 프로젝트를 선택할 수 있습니다.',
           },
         ],
       },
@@ -856,7 +865,16 @@ const ko: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: '데이터베이스는 ~/.lanius에 있고 정확한 경로는 Settings에 표시됩니다. 내보낸 프로젝트는 평범한 JSON이므로 열어 보고 비교하고 버전 관리에 넣을 수 있습니다.',
+            body: '이름을 붙인 프로젝트는 ~/.lanius/projects/ 아래에 저장됩니다. 이전 단일 데이터베이스는 기존 작업으로 목록에 남고, 임시 프로젝트는 닫을 때 삭제됩니다. 정확한 DB 경로는 Settings에 표시됩니다.',
+          },
+        ],
+      },
+      {
+        heading: '디스크 공간 정리',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Settings > 프로젝트 > 프로젝트 압축에서 수집된 Target별 요청 수와 저장된 내용 크기를 확인할 수 있습니다. 불필요한 Target을 선택하면 해당 요청을 영구 삭제하고 DB 파일을 줄입니다. 범위 밖 선택을 사용하더라도 삭제 전 목록을 확인하세요. DB 파일만 압축은 요청을 지우지 않고 이전 작업에서 비워진 공간을 회수합니다.',
           },
         ],
       },

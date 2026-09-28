@@ -12,6 +12,11 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::{Manager, State};
 
+mod projects;
+
+#[derive(Default)]
+pub struct ProjectSession(Mutex<Option<projects::Project>>);
+
 const API_HOST: &str = "127.0.0.1";
 const DEFAULT_API_PORT: u16 = 8081;
 const DEFAULT_PROXY_PORT: u16 = 8080;
@@ -225,21 +230,23 @@ fn repo_root() -> Option<PathBuf> {
     None
 }
 
-fn start_engine(app: &tauri::AppHandle, state: &EngineProcess) -> EngineInfo {
-    let info = EngineInfo::local();
-
-    // Reuse an engine the user already started (e.g. `python -m app.main`).
+fn start_engine(
+    app: &tauri::AppHandle,
+    state: &EngineProcess,
+    data_dir: &std::path::Path,
+) -> Result<(), String> {
+    // Reusing another engine would silently put this project's traffic into
+    // that engine's database. Make the port conflict visible instead.
     if port_open(api_port()) {
-        log::info!("reusing engine already listening on {}", api_port());
-        return info;
+        return Err(format!("API port {} is already in use", api_port()));
     }
 
     let Some(mut command) = engine_command(app) else {
-        log::error!("engine executable not found; start it manually");
-        return info;
+        return Err("engine executable was not found".to_string());
     };
 
     command
+        .env("LANIUS_DATA_DIR", data_dir)
         // Ports are overridable: another tool may already hold 8080, and
         // hardcoding it would leave the app unable to start at all.
         .env("LANIUS_API_PORT", api_port().to_string())
@@ -252,6 +259,12 @@ fn start_engine(app: &tauri::AppHandle, state: &EngineProcess) -> EngineInfo {
         .env("LANIUS_SUPERVISOR_PID", std::process::id().to_string())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+
+    // Plugin files are installed once per machine. Which plugins are
+    // enabled remains a setting in each project's own database.
+    if std::env::var_os("LANIUS_PLUGINS_DIR").is_none() {
+        command.env("LANIUS_PLUGINS_DIR", projects::home()?.join("plugins"));
+    }
 
     // Put the engine in its own process group and have it die with us.
     // Without this, a SIGTERM/crash of the shell (which skips our exit hooks)
@@ -270,38 +283,56 @@ fn start_engine(app: &tauri::AppHandle, state: &EngineProcess) -> EngineInfo {
 
     match command.spawn() {
         Ok(child) => {
+            let pid = child.id();
             *state.0.lock().expect("engine lock") = Some(child);
             let deadline = Instant::now() + STARTUP_TIMEOUT;
             while Instant::now() < deadline {
                 if port_open(api_port()) {
                     log::info!("engine ready on {}", api_port());
-                    return EngineInfo {
-                        managed: true,
-                        ..info
-                    };
+                    return Ok(());
+                }
+                if state
+                    .0
+                    .lock()
+                    .expect("engine lock")
+                    .as_mut()
+                    .and_then(|c| c.try_wait().ok())
+                    .flatten()
+                    .is_some()
+                {
+                    stop_engine(state);
+                    return Err(format!("engine process {pid} exited during startup"));
                 }
                 std::thread::sleep(Duration::from_millis(150));
             }
-            log::error!("engine did not become ready within {STARTUP_TIMEOUT:?}");
-            EngineInfo {
-                managed: true,
-                ..info
-            }
+            stop_engine(state);
+            Err(format!(
+                "engine did not become ready within {STARTUP_TIMEOUT:?}"
+            ))
         }
-        Err(err) => {
-            log::error!("failed to spawn engine: {err}");
-            info
-        }
+        Err(err) => Err(format!("failed to spawn engine: {err}")),
     }
 }
 
 fn stop_engine(state: &EngineProcess) {
     if let Some(mut child) = state.0.lock().expect("engine lock").take() {
         log::info!("stopping engine");
-        // Kill the whole group: the engine may have spawned helpers.
+        // PyInstaller's bootloader re-execs as a child. SIGTERM lets it
+        // shut down cleanly, but it can outlive the bootloader; ensure the
+        // entire group is gone before another project uses the same ports.
         #[cfg(unix)]
         unsafe {
-            libc::killpg(child.id() as i32, libc::SIGTERM);
+            let group = child.id() as i32;
+            libc::killpg(group, libc::SIGTERM);
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while Instant::now() < deadline {
+                let _ = child.try_wait();
+                if libc::killpg(group, 0) != 0 {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            libc::killpg(group, libc::SIGKILL);
         }
         // On Windows a frozen PyInstaller binary spawns a child of its own, so
         // kill the whole tree rather than just the process we launched.
@@ -333,7 +364,10 @@ fn install_signal_handlers(handle: tauri::AppHandle) {
         let mut signal: libc::c_int = 0;
         if unsafe { libc::sigwait(&mask, &mut signal) } == 0 {
             log::info!("received signal {signal}; shutting down");
-            stop_engine(&handle.state::<EngineProcess>());
+            end_project(
+                &handle.state::<EngineProcess>(),
+                &handle.state::<ProjectSession>(),
+            );
             std::process::exit(0);
         }
     });
@@ -351,6 +385,90 @@ fn engine_info(state: State<'_, EngineProcess>) -> EngineInfo {
 #[tauri::command]
 fn engine_running() -> bool {
     port_open(api_port())
+}
+
+fn begin_project(
+    app: &tauri::AppHandle,
+    engine: &EngineProcess,
+    session: &ProjectSession,
+    project: projects::Project,
+) -> Result<projects::Project, String> {
+    let mut active = session.0.lock().expect("project lock");
+    if active.is_some() {
+        return Err("a project is already open".to_string());
+    }
+    let data_dir = project
+        .db_path
+        .parent()
+        .ok_or("invalid project directory")?;
+    if let Err(err) = start_engine(app, engine, data_dir) {
+        if project.temporary {
+            let _ = std::fs::remove_dir_all(data_dir);
+        }
+        return Err(err);
+    }
+    *active = Some(project.clone());
+    Ok(project)
+}
+
+#[tauri::command]
+fn list_projects() -> Result<Vec<projects::Project>, String> {
+    projects::list(&projects::home()?)
+}
+
+#[tauri::command]
+fn current_project(session: State<'_, ProjectSession>) -> Option<projects::Project> {
+    session.0.lock().expect("project lock").clone()
+}
+
+#[tauri::command]
+fn create_project(
+    name: String,
+    app: tauri::AppHandle,
+    engine: State<'_, EngineProcess>,
+    session: State<'_, ProjectSession>,
+) -> Result<projects::Project, String> {
+    let project = projects::create(&projects::home()?, &name)?;
+    begin_project(&app, &engine, &session, project)
+}
+
+#[tauri::command]
+fn open_project(
+    id: String,
+    app: tauri::AppHandle,
+    engine: State<'_, EngineProcess>,
+    session: State<'_, ProjectSession>,
+) -> Result<projects::Project, String> {
+    let project = projects::open(&projects::home()?, &id)?;
+    begin_project(&app, &engine, &session, project)
+}
+
+#[tauri::command]
+fn start_temp_project(
+    app: tauri::AppHandle,
+    engine: State<'_, EngineProcess>,
+    session: State<'_, ProjectSession>,
+) -> Result<projects::Project, String> {
+    begin_project(&app, &engine, &session, projects::temporary()?)
+}
+
+fn end_project(engine: &EngineProcess, session: &ProjectSession) {
+    stop_engine(engine);
+    let active = session.0.lock().expect("project lock").take();
+    if let Some(project) = active {
+        if project.temporary {
+            if let Some(dir) = project.db_path.parent() {
+                if let Err(err) = std::fs::remove_dir_all(dir) {
+                    log::warn!("could not remove temporary project: {err}");
+                }
+            }
+        }
+    }
+}
+
+#[tauri::command]
+fn close_project(engine: State<'_, EngineProcess>, session: State<'_, ProjectSession>) {
+    end_project(&engine, &session);
 }
 
 /// Match the window chrome to the theme the page is using.
@@ -384,10 +502,17 @@ fn parse_theme(theme: Option<&str>) -> Option<tauri::Theme> {
 pub fn run() {
     tauri::Builder::default()
         .manage(EngineProcess::default())
+        .manage(ProjectSession::default())
         .invoke_handler(tauri::generate_handler![
             engine_info,
             engine_running,
-            set_window_theme
+            set_window_theme,
+            list_projects,
+            current_project,
+            create_project,
+            open_project,
+            start_temp_project,
+            close_project
         ])
         .setup(|app| {
             app.handle().plugin(
@@ -395,22 +520,26 @@ pub fn run() {
                     .level(log::LevelFilter::Info)
                     .build(),
             )?;
-            let state = app.state::<EngineProcess>();
-            start_engine(app.handle(), &state);
             #[cfg(unix)]
             install_signal_handlers(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
-                stop_engine(&window.state::<EngineProcess>());
+                end_project(
+                    &window.state::<EngineProcess>(),
+                    &window.state::<ProjectSession>(),
+                );
             }
         })
         .build(tauri::generate_context!())
         .expect("error while building lanius")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
-                stop_engine(&app.state::<EngineProcess>());
+                end_project(
+                    &app.state::<EngineProcess>(),
+                    &app.state::<ProjectSession>(),
+                );
             }
         });
 }

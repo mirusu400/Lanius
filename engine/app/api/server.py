@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import sqlite3
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -12,7 +13,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .. import __version__
 from ..addons.intercept import InterceptError
@@ -138,6 +139,17 @@ class DeleteFlowsBody(BaseModel):
     port: int | None = None
     scheme: str | None = None
     path_prefix: str | None = None
+
+
+class CompactSite(BaseModel):
+    scheme: str | None
+    host: str | None
+    port: int | None
+    flows: int = Field(gt=0)
+
+
+class CompactProjectBody(BaseModel):
+    sites: list[CompactSite] = Field(default_factory=list)
 
 
 class ScopeRuleBody(BaseModel):
@@ -446,6 +458,65 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         broker.publish("scope.changed", scope.as_dict())
         broker.publish("project.imported", counts)
         return {"ok": True, **counts}
+
+    @app.get("/api/project/compact")
+    async def compact_preview() -> dict[str, Any]:
+        """Show actual file use and exact captured targets before deletion."""
+        overview = await asyncio.to_thread(store.compact_overview)
+        paths_by_site = await asyncio.to_thread(store.paths_by_site)
+        for site in overview["sites"]:
+            key = (site["scheme"], site["host"], site["port"])
+            paths = {row["path"] for row in paths_by_site.get(key, []) if row.get("path")}
+            site["in_scope"] = bool(site["host"]) and any(
+                engine.scope.contains(site["scheme"], site["host"], site["port"], path)
+                for path in (paths or {"/"})
+            )
+        return overview
+
+    @app.post("/api/project/compact")
+    async def compact_project(payload: CompactProjectBody) -> dict[str, Any]:
+        """Delete selected exact sites, then return unused DB pages to disk.
+
+        An empty selection only VACUUMs free pages left by earlier edits.
+        Scope, project settings, and saved editor tabs are never cleared.
+        """
+        if len(payload.sites) > 5000:
+            raise HTTPException(status_code=422, detail="too many sites selected")
+        before = await asyncio.to_thread(store.compact_overview)
+        available = {
+            (site["scheme"], site["host"], site["port"]): site["flows"]
+            for site in before["sites"]
+        }
+        selected = {
+            (site.scheme, site.host, site.port): site.flows for site in payload.sites
+        }
+        if not selected.keys() <= available.keys():
+            raise HTTPException(status_code=422, detail="a selected site no longer exists")
+        try:
+            deleted = await asyncio.to_thread(
+                store.delete_sites,
+                [(*key, count) for key, count in selected.items()],
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        reclaim_error = None
+        try:
+            await asyncio.to_thread(store.reclaim_space)
+        except (sqlite3.Error, OSError) as exc:
+            # Deletion has committed. Report that accurately so the UI does
+            # not suggest retrying a destructive action that already ran.
+            reclaim_error = str(exc)
+            logger.exception("could not compact project database")
+        if deleted:
+            broker.publish("flows.deleted", {"count": deleted})
+        after = await asyncio.to_thread(store.compact_overview)
+        return {
+            "deleted": deleted,
+            "before_bytes": before["db_bytes"],
+            "after_bytes": after["db_bytes"],
+            "reclaimed_bytes": max(0, before["db_bytes"] - after["db_bytes"]),
+            "reclaim_error": reclaim_error,
+        }
 
     @app.get("/api/processes")
     async def processes(visible_only: bool = True) -> dict[str, Any]:

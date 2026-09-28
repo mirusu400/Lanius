@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import { isDesktop, putWorkspace } from "./api/client";
+import { ProjectPicker } from "./ProjectPicker";
+import { closeProject, currentProject, type Project } from "./projects";
 
 import { DashboardTab } from "./tabs/DashboardTab";
 import { ProxyTab } from "./tabs/ProxyTab";
@@ -12,14 +15,16 @@ import { LoggerTab } from "./tabs/LoggerTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { DocsTab } from "./tabs/DocsTab";
 import { useT } from "./i18n";
-import { autosave } from "./tabs/autosave";
+import { autosave, flushAutosaves } from "./tabs/autosave";
 import {
   getTabs,
+  resetTabs,
   setTabs,
   subscribe as subscribeRepeater,
 } from "./tabs/repeaterStore";
 import {
   getDecoderTabs,
+  resetDecoderTabs,
   setDecoderTabs,
   subscribe as subscribeDecoder,
 } from "./tabs/decoderStore";
@@ -44,6 +49,38 @@ const TABS = [
 export type Tab = (typeof TABS)[number];
 
 export default function App() {
+  const desktop = isDesktop();
+  const [project, setProject] = useState<Project | null>(null);
+  const [checking, setChecking] = useState(desktop);
+
+  useEffect(() => {
+    if (!desktop) return;
+    void currentProject()
+      .then(setProject)
+      .catch(() => setProject(null))
+      .finally(() => setChecking(false));
+  }, [desktop]);
+
+  const leaveProject = async () => {
+    // Persist the editor tabs before stopping the engine. The regular
+    // autosave is debounced and may still have a pending write.
+    await flushAutosaves();
+    await Promise.all([
+      putWorkspace('repeater', getTabs()),
+      putWorkspace('decoder', getDecoderTabs()),
+    ]);
+    await closeProject();
+    setProject(null);
+    resetTabs();
+    resetDecoderTabs();
+  };
+
+  if (checking) return <div className="project-picker" />;
+  if (desktop && !project) return <ProjectPicker onOpen={setProject} />;
+  return <WorkspaceApp project={project} onLeave={leaveProject} />;
+}
+
+function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: () => Promise<void> }) {
   const t = useT();
   const [tab, setTab] = useState<Tab>("Dashboard");
   const [busy, setBusy] = useState(false);
@@ -51,6 +88,20 @@ export default function App() {
   // loads in a few frames does not flash a spinner.
   const showSpinner = useDelayedBusy(busy);
   const onBusyChange = useCallback((value: boolean) => setBusy(value), []);
+  const [switchError, setSwitchError] = useState<string | null>(null);
+  const [switching, setSwitching] = useState(false);
+
+  const switchProject = async () => {
+    if (switching) return;
+    setSwitching(true);
+    setSwitchError(null);
+    try {
+      await onLeave();
+    } catch (err) {
+      setSwitchError(String(err));
+      setSwitching(false);
+    }
+  };
 
   // Persist what you were working on, so closing Lanius does not throw
   // away your open requests.
@@ -71,7 +122,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app">
+    <div className={switching ? "app switching" : "app"}>
       <header className="titlebar">
         <button
           type="button"
@@ -96,8 +147,16 @@ export default function App() {
             </button>
           ))}
         </nav>
+        {project && (
+          <button className="project-switch" type="button" onClick={() => void switchProject()}>
+            {project.id === 'legacy' ? t('startup.legacyName') :
+              project.temporary ? t('startup.tempName') : project.name}
+            <span>{t('startup.switch')}</span>
+          </button>
+        )}
         {showSpinner && <Spinner />}
       </header>
+      {switchError && <div className="banner error" role="alert">{switchError}</div>}
       <main className="content">
         <BusyProvider onChange={onBusyChange}>
           {tab === "Dashboard" ? (
