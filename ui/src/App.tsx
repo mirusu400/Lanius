@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { isDesktop, putWorkspace } from "./api/client";
 import { ProjectPicker } from "./ProjectPicker";
 import { closeProject, currentProject, type Project } from "./projects";
@@ -30,6 +30,7 @@ import {
 } from "./tabs/decoderStore";
 import { BusyProvider } from "./components/busy";
 import { Spinner, useDelayedBusy } from "./components/Spinner";
+import { useShortcuts } from "./useShortcut";
 import "./App.css";
 
 const TABS = [
@@ -90,6 +91,13 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   const onBusyChange = useCallback((value: boolean) => setBusy(value), []);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
+  const navigationShortcuts = useMemo<Record<string, () => void>>(
+    () => Object.fromEntries(
+      TABS.map((name) => [`app.${name.toLowerCase()}`, () => setTab(name)]),
+    ),
+    [],
+  );
+  useShortcuts(navigationShortcuts, !switching);
 
   const switchProject = async () => {
     if (switching) return;

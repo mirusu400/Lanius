@@ -156,6 +156,15 @@ change it.
 These belong to the machine rather than the project, so they are not part of
 an export.
 
+### Keyboard shortcuts
+
+Switch between Lanius screens with **⌘+Option+0–9** on macOS or
+**Ctrl+Alt+0–9** on Linux and Windows (Dashboard is 0, Proxy is 1, and the
+remaining screens follow the tab bar). Use **⌘+Option+D** or **Ctrl+Alt+D**
+for Docs. **Settings > Shortcuts** lists every screen and Repeater action, and
+lets you record, disable, or reset each shortcut. These choices are saved on
+this machine.
+
 ### Projects
 
 At launch, choose a temporary project or a named project. Each named project
@@ -252,7 +261,10 @@ Lanius to stop recording out of scope traffic entirely.
 ### Repeater
 
 Send a request again, as many times as you like, tweaking it between attempts.
-Open several tabs to compare different variations side by side.
+Open several tabs to compare different variations side by side. Send the active
+request with **⌘+Enter** on macOS or **Ctrl+Enter** on Linux and Windows. Change,
+disable, or restore shortcuts under **Settings > Shortcuts**. Repeater also has
+shortcuts for creating, duplicating, closing, and moving between request tabs.
 
 ### Intruder
 

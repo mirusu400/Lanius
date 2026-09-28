@@ -176,7 +176,7 @@
 - **Comparer:** 두 요청/응답 바이트·단어 단위 비교.
 - **Logger:** 실시간 이벤트 스트림 + 저장된 이벤트 로그, 필터/일시정지.
 - **Plugins:** 설치/활성/비활성, 플러그인 제공 탭 마운트.
-- **Settings:** 엔진/프록시 상태, HTTP 본문 자동 압축 해제, Match & Replace 규칙, CA 내보내기(pem/cer/p12) 및 `mitm.it` 안내, 인터페이스 언어 선택.
+- **Settings:** 엔진/프록시 상태, HTTP 본문 자동 압축 해제, Match & Replace 규칙, OS별 기본값과 사용자 지정 키보드 단축키, CA 내보내기(pem/cer/p12) 및 `mitm.it` 안내, 인터페이스 언어 선택.
 
 ---
 

@@ -27,10 +27,12 @@ import { McpSection } from "./settings/McpSection";
 import { MatchReplaceSection } from "./settings/MatchReplaceSection";
 import { ProjectSection } from "./settings/ProjectSection";
 import { ProjectCompactSection } from "./settings/ProjectCompactSection";
+import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { TlsSection } from "./settings/TlsSection";
 
 const GROUPS = [
   "proxy",
+  "shortcuts",
   "browser",
   "appearance",
   "integrations",
@@ -102,6 +104,8 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
             <BrowserHelpSection />
           </>
         )}
+
+        {group === "shortcuts" && <ShortcutsSection />}
 
         {group === "appearance" && (
           <>

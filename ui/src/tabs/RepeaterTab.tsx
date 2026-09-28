@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { sendRepeaterRequest } from '../api/client';
 import {
   emptyTab,
+  nextTabId,
   renderResponseText,
   toSendPayload,
   trimResponse,
@@ -21,6 +22,7 @@ import { formatMessageBody, minify, splitMessage } from '../components/bodyForma
 import { useEditorMenu } from '../components/useEditorMenu';
 import { sendTextToIntruder } from './intruderStore';
 import { errorMessage, renderMessage, useT } from '../i18n';
+import { useShortcut } from '../useShortcut';
 
 export function RepeaterTabView() {
   const t = useT();
@@ -42,6 +44,30 @@ export function RepeaterTabView() {
   }, [tabs, activeId]);
 
   const active = tabs.find((t) => t.id === activeId) ?? null;
+  const sendingIds = useRef(new Set<string>());
+
+  const createTab = () => {
+    const next = addTab(emptyTab());
+    setActiveId(next.id);
+  };
+
+  const duplicateTab = (source: RepeaterTab) => {
+    const next = addTab({ ...source, id: nextTabId(), sending: false, error: null });
+    setActiveId(next.id);
+  };
+
+  const closeTab = (id: string) => {
+    const index = tabs.findIndex((item) => item.id === id);
+    if (index < 0) return;
+    setActiveId(tabs[index + 1]?.id ?? tabs[index - 1]?.id ?? null);
+    removeTab(id);
+  };
+
+  const selectRelativeTab = (step: number) => {
+    if (!active || tabs.length < 2) return;
+    const index = tabs.findIndex((item) => item.id === active.id);
+    setActiveId(tabs[(index + step + tabs.length) % tabs.length].id);
+  };
 
   // The request here has been edited, so carrying it to Intruder as text
   // keeps those edits; going back to the history would lose them.
@@ -99,16 +125,31 @@ export function RepeaterTabView() {
   );
 
   const send = async () => {
-    if (!active) return;
+    if (!active || active.sending || sendingIds.current.has(active.id)) return;
+    const requestId = active.id;
+    sendingIds.current.add(requestId);
     updateTab(active.id, { sending: true, error: null });
     try {
       const payload = toSendPayload(active.url, active.text);
       const response = await sendRepeaterRequest(payload);
-      updateTab(active.id, { response: trimResponse(response), sending: false });
+      updateTab(requestId, { response: trimResponse(response), sending: false });
     } catch (err) {
-      updateTab(active.id, { sending: false, error: errorMessage(err) });
+      updateTab(requestId, { sending: false, error: errorMessage(err) });
+    } finally {
+      sendingIds.current.delete(requestId);
     }
   };
+
+  useShortcut('repeater.send', send, Boolean(active && !active.sending));
+  useShortcut('repeater.new', createTab);
+  useShortcut('repeater.duplicate', () => {
+    if (active) duplicateTab(active);
+  }, Boolean(active));
+  useShortcut('repeater.close', () => {
+    if (active) closeTab(active.id);
+  }, Boolean(active));
+  useShortcut('repeater.previous', () => selectRelativeTab(-1), Boolean(active && tabs.length > 1));
+  useShortcut('repeater.next', () => selectRelativeTab(1), Boolean(active && tabs.length > 1));
 
   return (
     <div className="repeater-tab">
@@ -129,14 +170,14 @@ export function RepeaterTabView() {
               aria-label={t('repeater.closeTab', { title: tab.title })}
               onClick={(e) => {
                 e.stopPropagation();
-                removeTab(tab.id);
+                closeTab(tab.id);
               }}
             >
               ×
             </span>
           </button>
         ))}
-        <button className="new-tab" onClick={() => addTab(emptyTab())}>
+        <button className="new-tab" onClick={createTab}>
           +
         </button>
         <ContextMenu
@@ -150,13 +191,13 @@ export function RepeaterTabView() {
                       const source = tabs.find((tab) => tab.id === menu.target);
                       // Copying a request to try a variation without
                       // losing the original is the common Repeater move.
-                      if (source) addTab({ ...source, id: `r${Date.now()}` });
+                      if (source) duplicateTab(source);
                     },
                   },
                   {
                     label: t('menu.closeTab'),
                     separator: true,
-                    onSelect: () => removeTab(menu.target as string),
+                    onSelect: () => closeTab(menu.target as string),
                   },
                   {
                     label: t('menu.closeOthers'),

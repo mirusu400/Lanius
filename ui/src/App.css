@@ -2393,6 +2393,50 @@ pre.body {
   width: 100px;
 }
 
+.shortcut-list {
+  margin-top: 8px;
+}
+
+.shortcut-group + .shortcut-group {
+  margin-top: 24px;
+}
+
+.shortcut-group h4 {
+  color: var(--muted);
+  font-size: 0.9em;
+  margin: 16px 0 0;
+}
+
+.shortcut-row {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(180px, 1fr) minmax(110px, auto) auto auto;
+  padding: 10px 0;
+}
+
+.shortcut-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.shortcut-bind {
+  min-width: 110px;
+}
+
+@media (max-width: 720px) {
+  .shortcut-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .shortcut-info {
+    grid-column: 1 / -1;
+  }
+}
+
 
 /* --- site map (combined tree) --- */
 .sitemap-pane {
