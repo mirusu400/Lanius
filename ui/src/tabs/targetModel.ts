@@ -118,6 +118,9 @@ export function countNodes(node: TreeNode): number {
 
 /** Human-readable one-liner for a scope rule. */
 export function describeRule(rule: ScopeRule): string {
+  if (rule.protocol === 'any' && rule.port === null && rule.path === '.*' && rule.match_type === 'regex') {
+    return `${rule.host} (regex)`;
+  }
   if (rule.protocol === 'any' && rule.port === null && rule.path === '/*' && rule.match_type === 'glob') {
     return rule.host;
   }

@@ -326,11 +326,12 @@ export function addScopeRule(
 export function addScopeFromUrl(
   url: string,
   kind: 'include' | 'exclude' = 'include',
+  regex = false,
 ): Promise<import('./types').ScopeRule> {
   return request('/api/scope/from-url', {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ url, kind }),
+    body: JSON.stringify({ url, kind, regex }),
   });
 }
 

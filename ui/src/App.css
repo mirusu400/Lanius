@@ -1122,6 +1122,12 @@ table.resizable-table th {
   white-space: nowrap;
 }
 
+.resizable-table .column-fill {
+  padding: 0;
+  border-left: 0;
+  border-right: 0;
+}
+
 .column-resize-handle {
   position: absolute;
   top: 0;

@@ -133,21 +133,65 @@ class Scope:
         }
 
 
-def rule_from_url(url: str, kind: RuleKind = "include", prefix: bool = True) -> ScopeRule:
-    """Build a rule from a URL or scheme-free host pattern.
+def rule_from_url(
+    url: str, kind: RuleKind = "include", prefix: bool = True, regex: bool = False
+) -> ScopeRule:
+    """Build a rule from a URL, a scheme-free host glob, or a host regex.
 
-    A host pattern such as ``*.files.com`` applies to both HTTP and HTTPS.
-    The leading ``*.`` matches subdomains, not the apex host.
+    A plain scheme-free host is matched as a substring. Explicit ``*`` and
+    ``?`` wildcards keep their glob meaning; regex mode uses Python regexes.
     """
     value = url.strip()
+    if not value:
+        raise ScopeError("host pattern is empty")
+    if regex:
+        if "://" in value:
+            raise ScopeError("regex mode expects a host pattern without a URL scheme")
+        return ScopeRule(
+            kind=kind,
+            host=value,
+            path=".*",
+            protocol="any",
+            match_type="regex",
+        )
     has_scheme = "://" in value
+    if not has_scheme:
+        host_port, separator, rest = value.partition("/")
+        if not host_port or any(c.isspace() for c in host_port) or any(c in host_port for c in "@#"):
+            raise ScopeError(f"invalid host pattern: {url!r}")
+        port: int | None = None
+        host = host_port
+        if host_port.startswith("["):
+            try:
+                parsed = urlsplit(f"//{host_port}")
+                host = parsed.hostname or ""
+                port = parsed.port
+            except ValueError as exc:
+                raise ScopeError(f"invalid host pattern: {url!r}") from exc
+        elif ":" in host_port:
+            host, _, raw_port = host_port.rpartition(":")
+            if not raw_port.isdecimal() or ":" in host:
+                raise ScopeError(f"invalid host pattern: {url!r}")
+            port = int(raw_port)
+            if port > 65535:
+                raise ScopeError(f"invalid host pattern: {url!r}")
+        if not host or "#" in rest:
+            raise ScopeError(f"invalid host pattern: {url!r}")
+        path = f"/{rest}" if separator else "/"
+        return ScopeRule(
+            kind=kind,
+            host=host if any(wildcard in host for wildcard in "*?") else f"*{host}*",
+            path=f"{path.rstrip('/')}/*" if prefix else path,
+            protocol="any",
+            port=port,
+        )
     try:
-        parts = urlsplit(value if has_scheme else f"//{value}")
+        parts = urlsplit(value)
         port = parts.port
     except ValueError as exc:
         raise ScopeError(f"invalid url or host pattern: {url!r}") from exc
     if (
-        (has_scheme and parts.scheme not in ("http", "https"))
+        parts.scheme not in ("http", "https")
         or not parts.hostname
         or parts.username is not None
         or parts.password is not None
@@ -160,7 +204,7 @@ def rule_from_url(url: str, kind: RuleKind = "include", prefix: bool = True) -> 
         kind=kind,
         host=parts.hostname,
         path=f"{path.rstrip('/')}/*" if prefix else path,
-        protocol=parts.scheme if has_scheme else "any",
+        protocol=parts.scheme,
         port=port,
     )
 

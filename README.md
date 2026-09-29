@@ -284,9 +284,11 @@ edges. These sizes are remembered on this machine.
 Define a **scope** with include and exclude rules to keep your attention on the
 application under test. Scope rules persist across restarts, and you can tell
 Lanius to stop recording out of scope traffic entirely.
-The Scope field accepts full URLs or scheme-free host patterns. For example,
-`*.files.com` includes HTTP and HTTPS on subdomains such as
-`cdn.files.com`; add `files.com` separately to include the root domain.
+The Scope field accepts full URLs or scheme-free host patterns. A plain domain
+matches any host containing that text, on both HTTP and HTTPS. In the default
+mode, `*` matches any number of characters and `?` matches one character.
+Enable **Regex** to match host names with a regular expression instead; use
+`.*` for any number of characters and `?` to make the preceding item optional.
 When a scheme is omitted, all ports match unless a port is specified.
 
 ### Repeater

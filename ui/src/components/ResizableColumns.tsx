@@ -1,6 +1,6 @@
 /** Shared, persistent column widths for data tables. */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const MIN_WIDTH = 48;
 const MAX_WIDTH = 2000;
@@ -85,13 +85,39 @@ export function ResizableTable({
   className: string;
   children: React.ReactNode;
 }) {
+  const table = useRef<HTMLTableElement | null>(null);
+  const [available, setAvailable] = useState(0);
+
+  useEffect(() => {
+    const parent = table.current?.parentElement;
+    if (!parent) return;
+    const update = () => setAvailable(parent.clientWidth);
+    update();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(update);
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, []);
+
   const total = columns.widths.reduce((sum, width) => sum + width, 0);
+  const fill = Math.max(0, available - total);
   return (
-    <table className={`${className} resizable-table`} style={{ width: `${total}px` }}>
-      <colgroup>{columns.widths.map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
+    <table ref={table} className={`${className} resizable-table`} style={{ width: `${total + fill}px` }}>
+      <colgroup>
+        {columns.widths.map((width, index) => <col key={index} style={{ width }} />)}
+        <col style={{ width: fill }} />
+      </colgroup>
       {children}
     </table>
   );
+}
+
+export function ResizableFillHeader() {
+  return <th className="column-fill" aria-hidden="true" />;
+}
+
+export function ResizableFillCell() {
+  return <td className="column-fill" aria-hidden="true" />;
 }
 
 export function ResizableHeader({

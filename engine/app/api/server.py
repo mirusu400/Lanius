@@ -193,6 +193,7 @@ class ScopeFromUrl(BaseModel):
     url: str
     kind: str = "include"
     prefix: bool = True
+    regex: bool = False
 
 
 class CaptureRestriction(BaseModel):
@@ -1101,7 +1102,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/scope/from-url")
     async def add_scope_from_url(body: ScopeFromUrl) -> dict[str, Any]:
         try:
-            template = rule_from_url(body.url, kind=body.kind, prefix=body.prefix)  # type: ignore[arg-type]
+            template = rule_from_url(body.url, kind=body.kind, prefix=body.prefix, regex=body.regex)  # type: ignore[arg-type]
             fields = template.as_dict()
             fields.pop("id", None)
             rule = await asyncio.to_thread(lambda: engine.scope.add_rule(**fields))

@@ -5,7 +5,7 @@ import { connectStream } from '../api/stream';
 import { formatTime } from './proxyModel';
 import { useT } from '../i18n';
 import { useReportBusy } from '../components/busy';
-import { ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
+import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 
 const MAX_LIVE = 500;
 
@@ -107,11 +107,13 @@ export function LoggerTab() {
               {[t('flow.time'), t('logger.eventType'), t('logger.detail')].map((label, index) => (
                 <ResizableHeader key={index} label={label} index={index} columns={liveColumns} resizeLabel={t('table.resizeColumn', { column: label })} />
               ))}
+              <ResizableFillHeader />
             </tr></thead>
             <tbody>
               {visible.length === 0 && (
                 <tr>
                   <td colSpan={3} className="empty">{t('logger.noEvents')}</td>
+                  <ResizableFillCell />
                 </tr>
               )}
               {visible.map((entry) => (
@@ -119,8 +121,10 @@ export function LoggerTab() {
                   <td className="mono col-time">{formatTime(entry.ts)}</td>
                   <td className="mono log-type">{entry.type}</td>
                   <td className="mono log-detail">{entry.detail}</td>
+                  <ResizableFillCell />
                 </tr>
               ))}
+              <ResizableFillHeader />
             </tbody>
           </ResizableTable>
         </div>
@@ -137,6 +141,7 @@ export function LoggerTab() {
                 <tr key={event.id}>
                   <td className="mono col-time">{formatTime(event.ts)}</td>
                   <td className="mono log-detail">{event.message}</td>
+                  <ResizableFillCell />
                 </tr>
               ))}
             </tbody>

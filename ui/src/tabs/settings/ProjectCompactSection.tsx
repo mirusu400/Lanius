@@ -10,7 +10,7 @@ import {
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useT } from '../../i18n';
 import { formatBytes } from '../dashboardModel';
-import { ResizableHeader, ResizableTable, useResizableColumns } from '../../components/ResizableColumns';
+import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../../components/ResizableColumns';
 
 const siteKey = (site: CompactSite) => JSON.stringify([site.scheme, site.host, site.port]);
 
@@ -125,6 +125,7 @@ export function ProjectCompactSection() {
               {[t('compact.target'), t('compact.scope'), t('compact.flows'), t('compact.content')].map((label, index) => (
                 <ResizableHeader key={index} label={label} index={index} columns={columns} resizeLabel={t('table.resizeColumn', { column: label })} />
               ))}
+              <ResizableFillHeader />
             </tr></thead>
             <tbody>
               {visibleSites.map((site) => {
@@ -138,6 +139,7 @@ export function ProjectCompactSection() {
                     <td>{site.in_scope ? t('compact.inScope') : t('compact.outOfScope')}</td>
                     <td>{site.flows.toLocaleString()}</td>
                     <td>{formatBytes(site.content_bytes)}</td>
+                    <ResizableFillCell />
                   </tr>
                 );
               })}

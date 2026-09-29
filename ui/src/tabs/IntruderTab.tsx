@@ -29,7 +29,7 @@ import { useEditorMenu } from '../components/useEditorMenu';
 import { sendToRepeater } from './repeaterStore';
 import { getFlow } from '../api/client';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
-import { ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
+import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 
 const DEFAULT_TEMPLATE = 'GET /?q=\u00a7test\u00a7 HTTP/1.1\nHost: example.com\n\n';
 
@@ -368,6 +368,7 @@ export function IntruderTab() {
                 {['#', t('intruder.payload'), t('flow.status'), t('intruder.length'), t('flow.time')].map((label, index) => (
                   <ResizableHeader key={index} label={label} index={index} columns={resultColumns} resizeLabel={t('table.resizeColumn', { column: label })} />
                 ))}
+                <ResizableFillHeader />
               </tr>
             </thead>
             <tbody>
@@ -388,6 +389,7 @@ export function IntruderTab() {
                       ? ''
                       : `${Math.round(result.duration_ms)} ms`}
                   </td>
+                  <ResizableFillCell />
                 </tr>
               ))}
             </tbody>

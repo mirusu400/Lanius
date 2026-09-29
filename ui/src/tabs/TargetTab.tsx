@@ -44,7 +44,7 @@ import {
 } from './targetModel';
 import { FlowDetailView } from '../components/FlowDetail';
 import { Split } from '../components/Split';
-import { ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
+import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 import { connectStream } from '../api/stream';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 
@@ -365,8 +365,8 @@ export function TargetTab() {
       {view === 'scope' ? (
         <ScopeEditor
           scope={scope}
-          onAddUrl={async (url, kind) => {
-            await addScopeFromUrl(url, kind);
+          onAddUrl={async (url, kind, regex) => {
+            await addScopeFromUrl(url, kind, regex);
             await refreshScope();
             await refreshSites();
           }}
@@ -400,6 +400,7 @@ export function TargetTab() {
                     resizeLabel={t('table.resizeColumn', { column: label })}
                   />
                 ))}
+                <ResizableFillHeader />
               </tr>
             </thead>
             <tbody>
@@ -408,6 +409,7 @@ export function TargetTab() {
                   <td colSpan={6} className="empty">
                     {t('target.noEndpoints')}
                   </td>
+                  <ResizableFillCell />
                 </tr>
               )}
               {endpoints.map((endpoint) => (
@@ -424,6 +426,7 @@ export function TargetTab() {
                     ))}
                   </td>
                   <td className="mono">{endpoint.statuses.join(', ')}</td>
+                  <ResizableFillCell />
                 </tr>
               ))}
             </tbody>

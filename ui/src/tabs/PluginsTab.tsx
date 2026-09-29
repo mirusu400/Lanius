@@ -4,7 +4,7 @@ import { listPlugins, reloadPlugin, setPluginEnabled } from '../api/client';
 import type { PluginInfo } from '../api/types';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { useReportBusy } from '../components/busy';
-import { ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
+import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 
 export function PluginsTab() {
   const t = useT();
@@ -76,6 +76,7 @@ export function PluginsTab() {
               {[t('plugins.use'), t('common.name'), t('common.description'), t('plugins.hooks'), t('common.status'), t('plugins.reload')].map((label, index) => (
                 <ResizableHeader key={index} label={label} index={index} columns={columns} resizeLabel={t('table.resizeColumn', { column: label })} />
               ))}
+              <ResizableFillHeader />
             </tr>
           </thead>
           <tbody>
@@ -125,6 +126,7 @@ export function PluginsTab() {
                     {t('plugins.reload')}
                   </button>
                 </td>
+                <ResizableFillCell />
               </tr>
             ))}
           </tbody>

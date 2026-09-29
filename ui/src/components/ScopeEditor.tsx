@@ -3,11 +3,11 @@ import { useState } from 'react';
 import type { ScopeState } from '../api/types';
 import { describeRule, summarizeScope } from '../tabs/targetModel';
 import { useT } from '../i18n';
-import { ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
+import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
 
 interface Props {
   scope: ScopeState;
-  onAddUrl: (url: string, kind: 'include' | 'exclude') => Promise<void>;
+  onAddUrl: (url: string, kind: 'include' | 'exclude', regex: boolean) => Promise<void>;
   onToggle: (id: number, enabled: boolean) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
   onRestrictCapture: (value: boolean) => Promise<void>;
@@ -24,13 +24,14 @@ export function ScopeEditor({
   const columns = useResizableColumns('lanius.columns.scope', [120, 480, 100, 100]);
   const [url, setUrl] = useState('');
   const [kind, setKind] = useState<'include' | 'exclude'>('include');
+  const [regex, setRegex] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const summary = summarizeScope(scope.rules);
 
   const add = async () => {
     if (!url.trim()) return;
     try {
-      await onAddUrl(url.trim(), kind);
+      await onAddUrl(url.trim(), kind, regex);
       setUrl('');
       setError(null);
     } catch (err) {
@@ -58,6 +59,10 @@ export function ScopeEditor({
           onKeyDown={(e) => e.key === 'Enter' && void add()}
         />
         <button onClick={() => void add()}>{t('scope.addRule')}</button>
+        <label>
+          <input type="checkbox" checked={regex} onChange={(e) => setRegex(e.target.checked)} />
+          {t('scope.regex')}
+        </label>
         <span className="spacer" />
         <label>
           <input
@@ -68,7 +73,7 @@ export function ScopeEditor({
           {t('scope.restrictCapture')}
         </label>
       </div>
-      <p className="muted scope-pattern-hint">{t('scope.hostPatternHint')}</p>
+      <p className="muted scope-pattern-hint">{t(regex ? 'scope.regexHint' : 'scope.hostPatternHint')}</p>
       {error && <div className="banner error">{error}</div>}
       <div className="scope-summary muted">
         {t('scope.summary', {
@@ -83,6 +88,7 @@ export function ScopeEditor({
             {[t('scope.kind'), t('scope.rule'), t('common.enabled'), t('common.delete')].map((label, index) => (
               <ResizableHeader key={index} label={label} index={index} columns={columns} resizeLabel={t('table.resizeColumn', { column: label })} />
             ))}
+            <ResizableFillHeader />
           </tr>
         </thead>
         <tbody>
@@ -91,6 +97,7 @@ export function ScopeEditor({
               <td colSpan={4} className="empty">
                 {t('scope.noRules')}
               </td>
+              <ResizableFillCell />
             </tr>
           )}
           {scope.rules.map((rule) => (
@@ -118,6 +125,7 @@ export function ScopeEditor({
                   {t('common.delete')}
                 </button>
               </td>
+              <ResizableFillCell />
             </tr>
           ))}
         </tbody>

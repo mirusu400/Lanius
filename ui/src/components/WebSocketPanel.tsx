@@ -15,7 +15,7 @@ import type {
   WebSocketMessage,
 } from '../api/types';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
-import { ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
+import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
 
 const DEFAULT_RULES: WebSocketInterceptRules = {
   enabled: false,
@@ -169,6 +169,7 @@ export function WebSocketPanel() {
               {[t('websocket.direction'), t('flow.host'), t('flow.size'), t('common.status')].map((label, index) => (
                 <ResizableHeader key={index} label={label} index={index} columns={columns} resizeLabel={t('table.resizeColumn', { column: label })} />
               ))}
+              <ResizableFillHeader />
             </tr></thead>
             <tbody>
               {messages.map((message) => (
@@ -177,6 +178,7 @@ export function WebSocketPanel() {
                   <td className="mono">{message.host}{message.path}</td>
                   <td>{message.size}</td>
                   <td>{message.paused ? t('websocket.held') : message.dropped ? t('websocket.dropped') : message.injected ? t('websocket.repeated') : ''}</td>
+                  <ResizableFillCell />
                 </tr>
               ))}
             </tbody>

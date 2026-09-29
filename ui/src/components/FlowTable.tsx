@@ -1,6 +1,6 @@
 import type { FlowSummary } from '../api/types';
 import { useT } from '../i18n';
-import { ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
+import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
 import {
   formatBytes,
   formatDuration,
@@ -39,6 +39,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu }: Props)
                 resizeLabel={t('table.resizeColumn', { column: label })}
               />
             ))}
+            <ResizableFillHeader />
           </tr>
         </thead>
         <tbody>
@@ -47,6 +48,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu }: Props)
               <td colSpan={8} className="empty">
                 {t('proxy.emptyTable')}
               </td>
+              <ResizableFillCell />
             </tr>
           )}
           {flows.map((flow) => (
@@ -79,6 +81,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu }: Props)
               </td>
               <td className="mono num">{formatBytes(flow.response_size)}</td>
               <td className="mono num">{formatDuration(flow.duration_ms)}</td>
+              <ResizableFillCell />
             </tr>
           ))}
         </tbody>
