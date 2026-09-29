@@ -17,6 +17,7 @@ import {
 } from './bodyFormat';
 import { useT } from '../i18n';
 import type { Translator } from '../i18n';
+import { ResponsePreview } from './ResponsePreview';
 
 interface Props {
   flow: FlowSummary | null;
@@ -31,7 +32,7 @@ interface Props {
  * over the wire, and hex is the only one that answers questions about
  * encoding or invisible bytes.
  */
-type View = 'parsed' | 'raw' | 'hex';
+type View = 'parsed' | 'raw' | 'hex' | 'preview';
 type RequestStage = 'original' | 'auto_modified' | 'modified';
 
 function HeaderList({
@@ -75,6 +76,7 @@ function Half({
   onRequestStage,
   onContextMenu,
   views,
+  previewFlowId,
   t,
 }: {
   title: string;
@@ -95,6 +97,7 @@ function Half({
   /** Which views make sense here. A raw TCP stream has no headers, so
    * offering to parse it would only produce an empty table. */
   views: View[];
+  previewFlowId?: string;
   t: Translator;
 }) {
   const hex = view === 'hex' ? hexPreview(raw) : null;
@@ -188,6 +191,7 @@ function Half({
             )}
           </>
         )}
+        {view === 'preview' && previewFlowId && <ResponsePreview flowId={previewFlowId} />}
       </div>
     </section>
   );
@@ -242,8 +246,9 @@ export function FlowDetailView({ flow, onSentToRepeater, splitStorageKey = 'lani
 
   const isTcp = flow.type === 'tcp';
   // A TCP stream is bytes, not a message with headers.
-  const views: View[] = isTcp ? ['raw', 'hex'] : ['parsed', 'raw', 'hex'];
-  const pick = (view: View) => (views.includes(view) ? view : views[0]);
+  const requestViews: View[] = isTcp ? ['raw', 'hex'] : ['parsed', 'raw', 'hex'];
+  const responseViews: View[] = isTcp ? ['raw', 'hex'] : ['parsed', 'raw', 'hex', 'preview'];
+  const pick = (view: View, views: View[]) => (views.includes(view) ? view : views[0]);
 
   const openMenu = (event: React.MouseEvent) => {
     target.current = { flow, detail };
@@ -310,9 +315,9 @@ export function FlowDetailView({ flow, onSentToRepeater, splitStorageKey = 'lani
       // "3 messages": a TCP stream is several exchanges concatenated,
       // and without the count the pane looks like one message.
       note={isTcp ? flow.comment : null}
-      view={pick(requestView)}
+      view={pick(requestView, requestViews)}
       onView={setRequestView}
-      views={views}
+      views={requestViews}
       bodyView={requestBodyView}
       onBodyView={setRequestBodyView}
       body={selectedVariant?.body ?? detail?.request_body ?? ''}
@@ -343,9 +348,10 @@ export function FlowDetailView({ flow, onSentToRepeater, splitStorageKey = 'lani
               flow.status_code ? `(${flow.status_code})` : ''
             }`.trim()
       }
-      view={pick(responseView)}
+      view={pick(responseView, responseViews)}
       onView={setResponseView}
-      views={views}
+      views={responseViews}
+      previewFlowId={flow.id}
       bodyView={responseBodyView}
       onBodyView={setResponseBodyView}
       headers={detail?.response_headers ?? null}

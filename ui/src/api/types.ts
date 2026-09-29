@@ -66,6 +66,16 @@ export interface FlowDetail extends FlowSummary {
   } | null;
 }
 
+export type ResponsePreview =
+  | { kind: 'html'; text: string }
+  | { kind: 'image'; mime: string; data: string }
+  | { kind: 'pdf'; data: string }
+  | { kind: 'text'; text: string }
+  | { kind: 'csv'; rows: string[][] }
+  | { kind: 'archive'; total_entries: number; entries: { name: string; size: number; compressed_size: number; directory: boolean; text: string | null }[] }
+  | { kind: 'spreadsheet'; total_sheets: number; sheets: { name: string; rows: { number: string; cells: { ref: string; value: string }[] }[] }[] }
+  | { kind: 'unavailable'; reason: string };
+
 export interface BodyDisplaySettings {
   auto_decompress: boolean;
 }

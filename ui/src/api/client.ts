@@ -7,6 +7,7 @@ import type {
   FlowEdits,
   FlowFilters,
   FlowSummary,
+  ResponsePreview,
   InterceptRules,
   MatchReplaceRule,
   PausedFlow,
@@ -118,6 +119,10 @@ export async function listFlows(
 
 export function getFlow(id: string, reveal = false): Promise<FlowDetail> {
   return request<FlowDetail>(`/api/flows/${id}${reveal ? '?reveal=true' : ''}`);
+}
+
+export function getResponsePreview(id: string): Promise<ResponsePreview> {
+  return request<ResponsePreview>(`/api/flows/${encodeURIComponent(id)}/response-preview`);
 }
 
 export function clearFlows(): Promise<{ ok: boolean }> {

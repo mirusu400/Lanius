@@ -50,6 +50,7 @@ from ..db.store import FlowStore
 from ..events import EventBroker
 from ..processes import list_processes
 from ..proxy import ProxyEngine, ProxyStartError, local_capture_state
+from ..preview import response_preview
 
 logger = logging.getLogger(__name__)
 
@@ -808,6 +809,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         variant.get("headers"), reveal=reveal
                     )
         return data
+
+    @app.get("/api/flows/{flow_id}/response-preview")
+    async def get_response_preview(flow_id: str) -> dict[str, Any]:
+        record = await asyncio.to_thread(store.get, flow_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="flow not found")
+        return await asyncio.to_thread(response_preview, record)
 
     @app.get("/api/about")
     async def about() -> dict[str, Any]:
