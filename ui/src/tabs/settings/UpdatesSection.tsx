@@ -179,7 +179,6 @@ export function UpdatesSection() {
   return (
     <section>
       <h3>{t('updates.section')}</h3>
-      <p className="muted">{t('updates.help')}</p>
 
       <div className="settings-row">
         <label htmlFor="update-channel">{t('updates.channel')}</label>
@@ -223,7 +222,6 @@ export function UpdatesSection() {
           {t('updates.auto')}
         </label>
       </div>
-      <p className="muted">{t('updates.autoHelp')}</p>
 
       <div className="settings-row">
         <span className="muted">
