@@ -448,7 +448,7 @@ fn change_api_port(port: u16, app: &tauri::AppHandle) -> Result<EngineInfo, Stri
     if let Err(err) = save_api_port(port) {
         if let Some(project) = &project {
             if let Some(dir) = project.db_path.parent() {
-                let _ = start_engine(&app, &engine, dir);
+                let _ = start_engine(app, &engine, dir);
             }
         }
         return Err(err);
@@ -458,8 +458,8 @@ fn change_api_port(port: u16, app: &tauri::AppHandle) -> Result<EngineInfo, Stri
             .db_path
             .parent()
             .ok_or("invalid project directory")?;
-        if let Err(err) = start_engine(&app, &engine, dir) {
-            let rollback = save_api_port(old_port).and_then(|_| start_engine(&app, &engine, dir));
+        if let Err(err) = start_engine(app, &engine, dir) {
+            let rollback = save_api_port(old_port).and_then(|_| start_engine(app, &engine, dir));
             return Err(match rollback {
                 Ok(()) => format!("could not use port {port}: {err}; previous port restored"),
                 Err(rollback_err) => {
