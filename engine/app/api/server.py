@@ -515,6 +515,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=422, detail=f"unsupported project version: {version!r}"
             )
         counts = await asyncio.to_thread(store.import_project, payload)
+        # Project exports carry this setting too. Apply an imported switch
+        # before any pending product request can continue.
+        lockdown.set_project(lockdown.project_enabled)
         # The scope lives in memory once loaded, so without this the
         # imported rules sit in the database and affect nothing.
         scope = await asyncio.to_thread(engine.scope.reload)

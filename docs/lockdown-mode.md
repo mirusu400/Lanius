@@ -9,6 +9,8 @@ The global checkbox is stored in `~/.lanius/desktop.json` and applies to every
 project. `LANIUS_LOCKDOWN=1` forces it on before the project picker appears.
 The project checkbox is stored in that project's SQLite settings and is
 included in project exports. The effective value is global OR project.
+Importing a project applies its saved setting immediately and restarts the
+desktop engine when project Lockdown is enabled.
 
 Blocked product operations include GitHub update checks and installation,
 remote SecLists downloads and user plugins. The Python engine guards its
