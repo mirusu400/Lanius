@@ -398,22 +398,32 @@ pre.body,
 
 .brand {
   flex: none;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--accent);
-  padding: 8px 0;
-  /* It is a button now (it opens the dashboard), so drop the chrome. */
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 2px;
   background: none;
   border: none;
-  font-size: 1.08em;
-  font-family: inherit;
+  border-radius: 5px;
   cursor: pointer;
   opacity: 0.85;
+}
+
+.brand-mark {
+  display: block;
+  width: 34px;
+  height: 34px;
 }
 
 .brand:hover,
 .brand.active {
   opacity: 1;
+}
+
+.brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .tabs {
