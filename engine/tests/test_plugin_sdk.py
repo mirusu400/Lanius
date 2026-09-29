@@ -160,7 +160,7 @@ def test_disabling_sdk_plugin_removes_every_contribution(sdk_manager) -> None:
 def test_sdk_resources_are_read_only_and_path_bounded(tmp_path) -> None:
     resources = tmp_path / "resources"
     (resources / "payloads").mkdir(parents=True)
-    (resources / "payloads" / "names.txt").write_text("admin\nroot\n")
+    (resources / "payloads" / "names.txt").write_bytes(b"admin\nroot\n")
     registry = ContributionRegistry(None)
     context = registry.context("sdk", resources)
 
