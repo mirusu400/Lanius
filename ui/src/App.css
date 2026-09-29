@@ -412,8 +412,11 @@ pre.body,
 
 .brand-mark {
   display: block;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
+  background: var(--fg);
+  -webkit-mask: url('/lanius-bird.svg') center / contain no-repeat;
+  mask: url('/lanius-bird.svg') center / contain no-repeat;
 }
 
 .brand:hover,

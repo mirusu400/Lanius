@@ -185,7 +185,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
           onClick={() => setTab("Dashboard")}
           aria-label={t("dash.home")}
         >
-          <img className="brand-mark" src="/lanius-bird.svg" alt="" aria-hidden="true" />
+          <span className="brand-mark" aria-hidden="true" />
         </button>
         <nav className="tabs">
           {TABS.map((name) => (
