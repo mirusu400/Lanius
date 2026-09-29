@@ -13,6 +13,12 @@ outbound connection must be reviewed against it before the connection starts.
   requested Repeater/Intruder traffic are user traffic and remain available.
 - Plugins are arbitrary Python and can bypass an in-process HTTP wrapper.
   Keep plugin loading and execution suspended while Lockdown Mode is active.
+  `PluginManager.suspended` is the one predicate for this; it covers safe mode
+  and Lockdown Mode together, and every load path goes through `_load`.
+- Guard a download where the bytes arrive, not only at the endpoint. The
+  plugin catalogue does both: `PluginCatalogueManager.fetch` refuses, and the
+  endpoints refuse first so a blocked install leaves the working plugin
+  running.
 - Global mode is stored outside projects and overrides project mode. Project
   mode belongs in the project database so exports carry it. Apply both before
   loading plugins or making any product-owned network request.

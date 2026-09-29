@@ -467,14 +467,20 @@ fn engine_running() -> bool {
 }
 
 const LOCKDOWN_BLOCKED: &str = "LOCKDOWN_MODE_BLOCKED";
+/// Still a refusal, and still matched by the UI's prefix check, but it says
+/// the engine never answered rather than blaming a setting the user did not
+/// make. A restarting engine is the common cause.
+const UNCONFIRMED: &str =
+    "LOCKDOWN_MODE_BLOCKED: the engine did not confirm whether this project is locked";
 
 #[tauri::command]
 fn get_global_lockdown() -> Result<GlobalLockdown, String> {
-    let forced = lockdown_forced();
-    let saved = read_desktop_settings()?;
+    // Report the value the engine will actually be started with, including
+    // the locked reading of a settings file that cannot be parsed. Returning
+    // an error here would disable the checkbox and leave no way out.
     Ok(GlobalLockdown {
-        enabled: forced || saved.lockdown_global,
-        forced,
+        enabled: global_lockdown(),
+        forced: lockdown_forced(),
     })
 }
 
@@ -510,8 +516,12 @@ fn change_global_lockdown(enabled: bool, app: &tauri::AppHandle) -> Result<Globa
     if lockdown_forced() && !enabled {
         return Err("LANIUS_LOCKDOWN forces Lockdown Mode on".to_string());
     }
-    let mut settings = read_desktop_settings()?;
-    if settings.lockdown_global == enabled {
+    // A settings file that cannot be parsed reads as locked. Start from the
+    // defaults so the user's own toggle can rewrite it, which is the only way
+    // back out of that state.
+    let was = global_lockdown();
+    let mut settings = read_desktop_settings().unwrap_or_default();
+    if was == enabled && settings.lockdown_global == enabled {
         return get_global_lockdown();
     }
     let old = settings.lockdown_global;
@@ -548,33 +558,57 @@ fn require_product_egress() -> Result<(), String> {
     if global_lockdown() {
         return Err(LOCKDOWN_BLOCKED.to_string());
     }
+    project_egress_allowed().map_err(|_| UNCONFIRMED.to_string())?
+}
+
+/// Ask the running engine whether the open project is locked.
+///
+/// `Err` means the answer never arrived, which is not the same as a locked
+/// project; both refuse, but only one of them is the user's own setting.
+fn project_egress_allowed() -> Result<Result<(), String>, ()> {
     let address = format!("{API_HOST}:{}", api_port());
-    let socket = address.parse().map_err(|_| LOCKDOWN_BLOCKED.to_string())?;
-    let mut stream = TcpStream::connect_timeout(&socket, Duration::from_millis(500))
-        .map_err(|_| LOCKDOWN_BLOCKED.to_string())?;
+    let socket = address.parse().map_err(|_| ())?;
+    let mut stream =
+        TcpStream::connect_timeout(&socket, Duration::from_millis(500)).map_err(|_| ())?;
     stream
         .set_read_timeout(Some(Duration::from_millis(500)))
-        .map_err(|_| LOCKDOWN_BLOCKED.to_string())?;
+        .map_err(|_| ())?;
     stream
-        .write_all(b"GET /api/lockdown HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-        .map_err(|_| LOCKDOWN_BLOCKED.to_string())?;
+        .write_all(
+            b"GET /api/lockdown HTTP/1.1
+
+Host: localhost
+
+Connection: close
+
+
+
+",
+        )
+        .map_err(|_| ())?;
     let mut response = Vec::new();
     stream
         .take(4096)
         .read_to_end(&mut response)
-        .map_err(|_| LOCKDOWN_BLOCKED.to_string())?;
-    let response = String::from_utf8(response).map_err(|_| LOCKDOWN_BLOCKED.to_string())?;
+        .map_err(|_| ())?;
+    let response = String::from_utf8(response).map_err(|_| ())?;
     let (headers, body) = response
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| LOCKDOWN_BLOCKED.to_string())?;
+        .split_once(
+            "
+
+
+
+",
+        )
+        .ok_or(())?;
     if !headers.starts_with("HTTP/1.1 200 ") {
-        return Err(LOCKDOWN_BLOCKED.to_string());
+        return Err(());
     }
-    let status: serde_json::Value =
-        serde_json::from_str(body).map_err(|_| LOCKDOWN_BLOCKED.to_string())?;
+    let status: serde_json::Value = serde_json::from_str(body).map_err(|_| ())?;
     match status.get("effective").and_then(serde_json::Value::as_bool) {
-        Some(false) => Ok(()),
-        _ => Err(LOCKDOWN_BLOCKED.to_string()),
+        Some(false) => Ok(Ok(())),
+        Some(true) => Ok(Err(LOCKDOWN_BLOCKED.to_string())),
+        None => Err(()),
     }
 }
 

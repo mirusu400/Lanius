@@ -14,7 +14,9 @@ desktop engine when project Lockdown is enabled. An import can turn project
 Lockdown on but never off; only the project checkbox can disable it.
 
 Blocked product operations include GitHub update checks and installation,
-remote SecLists downloads and user plugins. The Python engine guards its
+remote SecLists downloads, plugin catalogue refreshes and installs, and user
+plugins. Plugins are suspended rather than disabled: their enabled flags stay
+on disk, so turning Lockdown Mode off loads the same set again. The Python engine guards its
 outbound paths; the desktop shell independently guards its updater and fails
 closed when it cannot confirm the active project policy. A blocked API request
 returns HTTP 423 and the UI displays an error toast.
