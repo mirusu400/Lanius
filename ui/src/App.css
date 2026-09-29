@@ -1636,22 +1636,68 @@ td.empty {
   color: var(--accent);
 }
 
-.response-preview-image {
+.image-preview {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   width: 100%;
   height: 100%;
-  overflow: auto;
+  min-height: 0;
+}
+
+.image-preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  padding: 0 0 6px;
+}
+
+.image-preview-toolbar button {
+  min-width: 28px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-alt);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.image-preview-toolbar button:disabled {
+  color: var(--fg-disabled);
+  cursor: default;
+}
+
+.image-preview-toolbar .mono {
+  min-width: 44px;
+  text-align: center;
+  font-size: 0.85em;
+}
+
+.response-preview-image {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 3px;
   background: repeating-conic-gradient(#d3d5d9 0 25%, #f3f4f5 0 50%) 0 0 / 20px 20px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.response-preview-image.dragging {
+  cursor: grabbing;
 }
 
 .response-preview-image img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  pointer-events: none;
+  transform-origin: center center;
 }
 
 .response-preview-text,
@@ -2091,6 +2137,39 @@ pre.body {
   white-space: pre;
 }
 
+.response-inspector {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.response-inspector-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.response-inspector-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.response-inspector-body .repeater-response {
+  min-height: 0;
+  padding: 0;
+}
+
 .to-repeater {
   margin-left: 12px;
 }
@@ -2429,6 +2508,19 @@ pre.body {
   flex: 1;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.intruder-response-split {
+  flex: 1;
+  min-height: 0;
+}
+
+.intruder-results-list {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
 }
 

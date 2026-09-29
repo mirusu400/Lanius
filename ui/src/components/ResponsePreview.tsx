@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getResponsePreview } from '../api/client';
 import type { ResponsePreview as PreviewData } from '../api/types';
 import { useT } from '../i18n';
+import { ImagePreview } from './ImagePreview';
 
 const PREVIEW_CSP = "default-src 'none'; script-src 'none'; connect-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'; navigate-to 'none'";
 
@@ -84,7 +85,7 @@ function PreviewContent({ preview }: { preview: PreviewData }) {
     return <div className="response-preview-html"><p className="response-preview-note muted">{t('detail.preview.htmlSafety')}</p><iframe className="response-preview-frame" title={t('detail.preview.htmlTitle')} sandbox="" referrerPolicy="no-referrer" srcDoc={srcDoc} /></div>;
   }
   if (preview.kind === 'image') {
-    return <div className="response-preview-image"><img alt={t('detail.preview.imageAlt')} src={`data:${preview.mime};base64,${preview.data}`} /></div>;
+    return <ImagePreview mime={preview.mime} data={preview.data} />;
   }
   if (preview.kind === 'pdf') {
     return <PdfPreview data={preview.data} />;
