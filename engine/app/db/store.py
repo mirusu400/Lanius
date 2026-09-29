@@ -582,7 +582,7 @@ class FlowStore:
         status_classes: Sequence[int] | None = None,
         extensions: Sequence[str] | None = None,
         exclude_extensions: Sequence[str] | None = None,
-    ) -> tuple[str, list[Any]]:
+    ) -> tuple[str, List[Any]]:
         clauses: list[str] = []
         params: list[Any] = []
         if host:
@@ -980,50 +980,185 @@ class FlowStore:
             for row in rows
         ]
 
-    def endpoint_candidates(self, host: str | None = None) -> List[dict[str, Any]]:
-        """All HTTP requests with only the fields needed for grouping."""
+    def page_endpoints(
+        self, *, host: str | None = None, limit: int = 5000,
+        offset: int = 0,
+        scope_predicate: Callable[[str | None, str | None, int | None, str | None], bool] | None = None,
+        scope_site_wide: bool = False,
+    ) -> dict[str, Any]:
+        """Read materialized groups; path-dependent scope uses a full scan."""
+        from ..addons.endpoints import build_endpoints
+
         params: list[Any] = []
-        where = "WHERE type = 'http' AND host IS NOT NULL"
+        where = ""
         if host:
-            where += " AND host LIKE ?"
-            params.append(f"%{host}%")
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT method, scheme, host, port, path, query, status_code,"
-                f" started_at FROM flows {where} ORDER BY started_at DESC, rowid DESC",
-                params,
+            where = "WHERE host LIKE ? ESCAPE '\\'"
+            params.append(f"%{_like_literal(host)}%")
+        with self._read_lock:
+            if scope_site_wide and scope_predicate is not None:
+                self._read_conn.create_function(
+                    "lanius_scope_site", 3,
+                    lambda scheme, name, port: int(scope_predicate(
+                        scheme, name, None if port == -1 else port, "/",
+                    )),
+                )
+                where += (" AND " if where else "WHERE ") + (
+                    "lanius_scope_site(scheme, host, port) = 1"
+                )
+            if scope_predicate is None or scope_site_wide:
+                from ..addons.endpoints import Endpoint, templatize
+
+                total = self._read_conn.execute(
+                    f"SELECT COUNT(*) FROM flow_endpoint_stats {where}", params,
+                ).fetchone()[0]
+                groups = self._read_conn.execute(
+                    "SELECT scheme, host, port, method, template, flows, last_seen"
+                    f" FROM flow_endpoint_stats {where}"
+                    " ORDER BY host, template, method LIMIT ? OFFSET ?",
+                    (*params, limit, offset),
+                ).fetchall()
+                items: list[dict[str, Any]] = []
+                for group in groups:
+                    key = tuple(group[column] for column in (
+                        "scheme", "host", "port", "method", "template",
+                    ))
+                    statuses = self._read_conn.execute(
+                        "SELECT status_code FROM flow_endpoint_status_stats"
+                        " WHERE scheme = ? AND host = ? AND port = ?"
+                        " AND method = ? AND template = ? ORDER BY status_code", key,
+                    ).fetchall()
+                    names = self._read_conn.execute(
+                        "SELECT name FROM flow_endpoint_query_stats"
+                        " WHERE scheme = ? AND host = ? AND port = ?"
+                        " AND method = ? AND template = ? ORDER BY name", key,
+                    ).fetchall()
+                    samples = self._read_conn.execute(
+                        "SELECT path, query FROM flow_endpoint_keys"
+                        " WHERE scheme = ? AND host = ? AND port = ?"
+                        " AND method = ? AND template = ?"
+                        " ORDER BY started_at DESC LIMIT 100", key,
+                    ).fetchall()
+                    examples: list[str] = []
+                    path_params: set[str] = set()
+                    for sample in samples:
+                        path = sample["path"] or "/"
+                        example = path + (f"?{sample['query']}" if sample["query"] else "")
+                        if len(examples) < 5 and example not in examples:
+                            examples.append(example)
+                        if len(path_params) < 100:
+                            path_params.update(
+                                value if len(value) <= 32 else f"{value[:29]}…"
+                                for value in templatize(path)[1]
+                            )
+                    endpoint = Endpoint(
+                        method=group["method"], scheme=group["scheme"],
+                        host=group["host"],
+                        port=None if group["port"] == -1 else group["port"],
+                        template=group["template"], count=group["flows"],
+                        statuses=[row[0] for row in statuses],
+                        query_params=[row[0] for row in names],
+                        path_params=sorted(path_params)[:100],
+                        examples=examples, last_seen=group["last_seen"],
+                    )
+                    items.append(endpoint.as_dict())
+                return {"items": items, "count": int(total)}
+
+            def in_scope(scheme: str, name: str, port: int, path: str | None) -> int:
+                return int(scope_predicate(
+                    scheme, name, None if port == -1 else port, path,
+                ))
+
+            self._read_conn.create_function("lanius_scope_contains", 4, in_scope)
+            scope_where = (where + " AND " if where else "WHERE ") + (
+                "lanius_scope_contains(scheme, host, port, path) = 1"
+            )
+            rows = self._read_conn.execute(
+                "SELECT scheme, host, port, method, template,"
+                " COUNT(*) AS flows, MAX(started_at) AS last_seen"
+                " FROM flow_endpoint_keys"
+                f" {scope_where}"
+                " GROUP BY scheme, host, port, method, template"
+                " ORDER BY host, template, method LIMIT ? OFFSET ?",
+                (*params, limit, offset),
             ).fetchall()
-        return [dict(row) for row in rows]
+            # Count groups across the whole scope, including later pages.
+            total = self._read_conn.execute(
+                "SELECT COUNT(*) FROM ("
+                "SELECT 1 FROM flow_endpoint_keys"
+                f" {scope_where}"
+                " GROUP BY scheme, host, port, method, template)", params,
+            ).fetchone()[0]
+            scoped_items: list[dict[str, Any]] = []
+            for group in rows:
+                key = tuple(group[column] for column in (
+                    "scheme", "host", "port", "method", "template",
+                ))
+                cursor = self._read_conn.execute(
+                    "SELECT method, scheme, host, port, path, query, status_code,"
+                    " started_at FROM flow_endpoint_keys"
+                    " WHERE scheme = ? AND host = ? AND port = ?"
+                    " AND method = ? AND template = ?"
+                    " AND lanius_scope_contains(scheme, host, port, path) = 1"
+                    " ORDER BY started_at DESC", key,
+                )
 
-    def paths_for_endpoint(
-        self, scheme: str, host: str, port: int | None, method: str, template: str
-    ) -> List[dict[str, Any]]:
-        """Every captured request belonging to one endpoint template."""
-        from ..addons.endpoints import templatize
+                def candidates() -> Iterable[dict[str, Any]]:
+                    for row in cursor:
+                        item = dict(row)
+                        item["port"] = None if item["port"] == -1 else item["port"]
+                        yield item
 
+                scoped_items.extend(item.as_dict() for item in build_endpoints(candidates()))
+            return {"items": scoped_items, "count": int(total)}
+
+    def page_endpoint_flows(
+        self, scheme: str, host: str, port: int | None, method: str,
+        template: str, *, limit: int = 200, offset: int = 0,
+        scope_predicate: Callable[[str | None, str | None, int | None, str | None], bool] | None = None,
+        scope_site_wide: bool = False,
+    ) -> dict[str, Any]:
+        """Page one template through its indexed flow keys."""
         clauses = [
-            "type = 'http'", "COALESCE(scheme, 'http') = ?", "host = ?",
-            "upper(COALESCE(method, 'GET')) = ?",
+            "scheme = ?", "host = ?", "method = ?", "port = ?",
+            "template = ?",
         ]
-        params: list[Any] = [scheme, host, method.upper()]
-        if port is None:
-            clauses.append("port IS NULL")
-        else:
-            clauses.append("port = ?")
-            params.append(port)
-        with self._lock:
-            rows = self._conn.execute(
+        params: list[Any] = [scheme, host, method.upper(), -1 if port is None else port, template]
+        items: list[dict[str, Any]] = []
+        count = 0
+        with self._read_lock:
+            if scope_site_wide and scope_predicate is not None:
+                if not scope_predicate(scheme, host, port, "/"):
+                    return {"items": [], "count": 0}
+                scope_predicate = None
+            if scope_predicate is None:
+                total = self._read_conn.execute(
+                    "SELECT flows FROM flow_endpoint_stats"
+                    f" WHERE {' AND '.join(clauses)}", params,
+                ).fetchone()
+                rows = self._read_conn.execute(
+                    "SELECT id, method, path, query, status_code, response_size,"
+                    " started_at FROM flow_endpoint_keys"
+                    f" WHERE {' AND '.join(clauses)}"
+                    " ORDER BY started_at DESC, id DESC LIMIT ? OFFSET ?",
+                    (*params, limit, offset),
+                ).fetchall()
+                return {"items": [dict(row) for row in rows],
+                        "count": int(total[0]) if total else 0}
+            cursor = self._read_conn.execute(
                 "SELECT id, method, path, query, status_code, response_size,"
-                " started_at FROM flows"
+                " started_at FROM flow_endpoint_keys"
                 f" WHERE {' AND '.join(clauses)}"
-                " ORDER BY started_at DESC, rowid DESC",
+                " ORDER BY started_at DESC, id DESC",
                 params,
-            ).fetchall()
-        return [
-            {**dict(row), "method": row["method"] or "GET"}
-            for row in rows
-            if templatize(row["path"] or "/")[0] == template
-        ]
+            )
+            for row in cursor:
+                path = row["path"] or "/"
+                if scope_predicate is not None and not scope_predicate(scheme, host, port, path):
+                    continue
+                if offset <= count < offset + limit:
+                    items.append({**dict(row), "method": row["method"] or "GET"})
+                count += 1
+        return {"items": items, "count": count}
 
     def distinct_paths_for_site(
         self, scheme: str, host: str, port: int | None
@@ -1036,6 +1171,15 @@ class FlowStore:
                 (scheme or "", host, -1 if port is None else port),
             ).fetchall()
         return [row["path"] for row in rows]
+
+    def all_paths_start_with_slash(self) -> bool:
+        """Whether a /* scope rule applies equally to every saved path."""
+        with self._read_lock:
+            row = self._read_conn.execute(
+                "SELECT 1 FROM flow_path_stats"
+                " WHERE path != '' AND substr(path, 1, 1) != '/' LIMIT 1"
+            ).fetchone()
+        return row is None
 
     def any_path_for_site(
         self,
@@ -1063,6 +1207,7 @@ class FlowStore:
         offset: int = 0,
         path_prefix: str | None = None,
         port_is_null: bool = False,
+        scope_predicate: Callable[[str | None, str | None, int | None, str | None], bool] | None = None,
     ) -> dict[str, Any]:
         """Fetch one bounded site or folder page for the Target tree."""
         clauses = ["scheme IS ?", "host = ?"]
@@ -1079,6 +1224,24 @@ class FlowStore:
             clauses.append("(path = ? OR (path >= ? AND path < ?))")
             params.extend([path_prefix, low, high])
         with self._read_lock:
+            if scope_predicate is not None:
+                cursor = self._read_conn.execute(
+                    "SELECT id, method, path, query, status_code, response_size,"
+                    " started_at, port FROM flows"
+                    f" WHERE {' AND '.join(clauses)}"
+                    " ORDER BY path, method, id", params,
+                )
+                items: list[dict[str, Any]] = []
+                matched = 0
+                for row in cursor:
+                    if not scope_predicate(scheme, host, row["port"], row["path"]):
+                        continue
+                    if offset <= matched < offset + limit:
+                        item = dict(row)
+                        item.pop("port")
+                        items.append(item)
+                    matched += 1
+                return {"items": items, "count": matched}
             if path_prefix:
                 total = self._read_conn.execute(
                     "SELECT COALESCE(SUM(flows), 0) FROM flow_path_stats"
@@ -1100,6 +1263,80 @@ class FlowStore:
                 (*params, limit, offset),
             ).fetchall()
         return {"items": [dict(row) for row in rows], "count": int(total)}
+
+    def page_folders_for_site(
+        self, scheme: str | None, host: str, port: int | None, *,
+        path_prefix: str | None = None, limit: int = 200, offset: int = 0,
+        port_is_null: bool = False,
+        scope_predicate: Callable[[str | None, str | None, int | None, str | None], bool] | None = None,
+    ) -> dict[str, Any]:
+        """List immediate child paths, even when their flows are on late pages."""
+        base = path_prefix.rstrip("/") if path_prefix else ""
+        low = f"{base}/"
+        high = f"{base}0" if base else "0"
+        clauses = ["scheme = ?", "host = ?", "path >= ?", "path < ?"]
+        params: list[Any] = [scheme or "", host, low, high]
+        if port is not None or port_is_null:
+            clauses.append("port = ?")
+            params.append(-1 if port is None else port)
+        items: list[str] = []
+        cursor_path = low
+        found = 0
+        seen: set[str] = set()
+        with self._read_lock:
+            if scope_predicate is not None:
+                cursor = self._read_conn.execute(
+                    "SELECT path, port FROM flow_path_stats"
+                    f" WHERE {' AND '.join(clauses)} ORDER BY path", params,
+                )
+                for row in cursor:
+                    path = row["path"]
+                    if not scope_predicate(
+                        scheme, host, None if row["port"] == -1 else row["port"], path
+                    ):
+                        continue
+                    child = path[len(low):].split("/", 1)[0]
+                    if not child:
+                        continue
+                    folder = low + child
+                    if folder in seen:
+                        continue
+                    seen.add(folder)
+                    found += 1
+                    if found > offset:
+                        if len(items) == limit:
+                            return {"items": items, "has_more": True}
+                        items.append(folder)
+                return {"items": items, "has_more": False}
+            while True:
+                row = self._read_conn.execute(
+                    "SELECT path FROM flow_path_stats"
+                    f" WHERE {' AND '.join(clauses)} AND path >= ?"
+                    " ORDER BY path LIMIT 1",
+                    (*params, cursor_path),
+                ).fetchone()
+                if row is None:
+                    break
+                child = row["path"][len(low):].split("/", 1)[0]
+                if not child:
+                    cursor_path = row["path"] + "\x00"
+                    continue
+                folder = low + child
+                if folder in seen:
+                    cursor_path = f"{folder}0"
+                    continue
+                seen.add(folder)
+                found += 1
+                if found > offset:
+                    if len(items) == limit:
+                        return {"items": items, "has_more": True}
+                    items.append(folder)
+                # An exact path sorts before sibling names containing '-'
+                # or '.', which in turn sort before '/'. Scan those siblings
+                # before jumping over this folder's descendants.
+                cursor_path = (row["path"] + "\x00"
+                               if row["path"] == folder else f"{folder}0")
+        return {"items": items, "has_more": False}
 
     def paths_for_site(
         self, scheme: str, host: str, port: int | None

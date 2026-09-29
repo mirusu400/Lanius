@@ -11,6 +11,7 @@ let rules: ScopeRule[] = [];
 let restrict = false;
 let calls: { url: string; method: string; body?: unknown }[] = [];
 let extraPaths: typeof paths = [];
+let discoveredFolders: string[] = [];
 
 const sites = [
   {
@@ -102,6 +103,7 @@ function jsonResponse(body: unknown) {
 
 beforeEach(() => {
   extraPaths = [];
+  discoveredFolders = [];
   rules = [];
   restrict = false;
   calls = [];
@@ -142,6 +144,16 @@ beforeEach(() => {
       }
       if (url.includes('/api/scope')) {
         return jsonResponse({ rules, restrict_capture: restrict });
+      }
+      if (url.includes('/api/sitemap/folders')) {
+        const params = new URL(url).searchParams;
+        const offset = Number(params.get('offset') ?? 0);
+        const limit = Number(params.get('limit') ?? 200);
+        const matching = params.has('path_prefix') ? [] : discoveredFolders;
+        return jsonResponse({
+          items: matching.slice(offset, offset + limit),
+          has_more: offset + limit < matching.length,
+        });
       }
       if (url.includes('/api/sitemap/paths')) {
         const params = new URL(url).searchParams;
@@ -265,6 +277,26 @@ describe('TargetTab', () => {
       .toContain('offset=200');
     await waitFor(() => expect(screen.queryByRole('button', { name: t('target.loadMore') }))
       .toBeNull());
+  });
+
+  it('shows a folder whose requests are beyond the first site page', async () => {
+    extraPaths = [
+      ...Array.from({ length: 201 }, (_, index) => ({
+        id: `aaa-${index}`, method: 'GET', path: `/aaa/${index}`,
+        query: null, status_code: 200, response_size: 1, started_at: index + 10,
+      })),
+      { id: 'old', method: 'GET', path: '/zzz/old', query: null,
+        status_code: 200, response_size: 1, started_at: 1 },
+    ];
+    discoveredFolders = ['/aaa', '/zzz'];
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await waitFor(() => expect(rowFor('https://api.test')).toBeTruthy());
+    await user.click(rowFor('https://api.test')!);
+    await waitFor(() => expect(rowFor('zzz')).toBeTruthy());
+    await user.click(rowFor('zzz')!);
+    await waitFor(() => expect(treeText()).toContain('old'));
+    expect(calls.some((call) => call.url.includes('path_prefix=%2Fzzz'))).toBe(true);
   });
 
   it('starts with every site closed', async () => {
@@ -601,6 +633,13 @@ describe('TargetTab', () => {
     await screen.findByText('http://cdn.test');
     await user.click(screen.getByLabelText(t('target.inScopeOnly')));
     await waitFor(() => expect(screen.queryByText('http://cdn.test')).toBeNull());
+    await user.click(rowFor('https://api.test')!);
+    await waitFor(() => expect(calls.some((call) =>
+      call.url.includes('/api/sitemap/paths') && call.url.includes('in_scope_only=true')
+    )).toBe(true));
+    expect(calls.some((call) =>
+      call.url.includes('/api/sitemap/folders') && call.url.includes('in_scope_only=true')
+    )).toBe(true);
   });
 
   it('shows grouped endpoints', async () => {

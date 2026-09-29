@@ -18,10 +18,16 @@ const PAGE_SIZE = 200;
 
 export function EndpointExplorer({
   endpoints,
+  endpointCount,
+  onLoadMoreEndpoints,
+  loadingEndpoints,
   inScopeOnly,
   onChanged,
 }: {
   endpoints: EndpointGroup[];
+  endpointCount: number;
+  onLoadMoreEndpoints: () => Promise<void>;
+  loadingEndpoints: boolean;
   inScopeOnly: boolean;
   onChanged: () => Promise<void>;
 }) {
@@ -34,6 +40,7 @@ export function EndpointExplorer({
   const [requestCount, setRequestCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingMoreEndpoints, setLoadingMoreEndpoints] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<FlowDetail | null>(null);
   const [pendingDelete, setPendingDelete] = useState<SitePath | null>(null);
@@ -171,7 +178,7 @@ export function EndpointExplorer({
             <ResizableFillHeader />
           </tr></thead>
           <tbody>
-            {endpoints.length === 0 && <tr><td colSpan={6} className="empty">{t('target.noEndpoints')}</td><ResizableFillCell /></tr>}
+            {endpoints.length === 0 && <tr><td colSpan={6} className="empty">{loadingEndpoints ? t('common.loading') : t('target.noEndpoints')}</td><ResizableFillCell /></tr>}
             {endpoints.map((item) => (
               <tr key={item.key} className={item.key === endpointKey ? 'selected' : ''} onClick={() => setEndpointKey(item.key)}>
                 <td className="mono">{item.method}</td>
@@ -185,6 +192,12 @@ export function EndpointExplorer({
             ))}
           </tbody>
         </ResizableTable>
+        {endpoints.length < endpointCount && <button className="endpoint-load-more" disabled={loadingMoreEndpoints} onClick={() => {
+          setLoadingMoreEndpoints(true);
+          void onLoadMoreEndpoints()
+            .catch((err: Error) => setError(err.message))
+            .finally(() => setLoadingMoreEndpoints(false));
+        }}>{t('target.loadMoreEndpoints')}</button>}
       </div>}
       second={endpoint ? <Split
         direction="horizontal"

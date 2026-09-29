@@ -81,6 +81,70 @@ def test_failed_large_migration_rolls_back_its_schema(tmp_path) -> None:
     ).fetchone() is None
     conn.close()
 
+
+def test_endpoint_index_follows_replacement_and_delete() -> None:
+    store = FlowStore()
+    store.upsert(FlowRecord(
+        id="a", scheme="https", host="api.test", port=443,
+        method="GET", path="/users/1", query="page=1", status_code=200,
+        started_at=1,
+    ))
+    store.upsert(FlowRecord(
+        id="b", scheme="https", host="api.test", port=443,
+        method="GET", path="/users/2", query="sort=asc", status_code=404,
+        started_at=2,
+    ))
+    group = store.page_endpoints()["items"][0]
+    assert group["count"] == 2
+    assert group["statuses"] == [200, 404]
+    assert group["query_params"] == ["page", "sort"]
+    assert group["last_seen"] == 2
+
+    store.upsert(FlowRecord(
+        id="b", scheme="https", host="api.test", port=443,
+        method="POST", path="/orders/2", query="new=1", status_code=201,
+        started_at=3,
+    ))
+    groups = {group["template"]: group for group in store.page_endpoints()["items"]}
+    assert groups["/users/{id}"]["count"] == 1
+    assert groups["/users/{id}"]["statuses"] == [200]
+    assert groups["/users/{id}"]["query_params"] == ["page"]
+    assert groups["/users/{id}"]["last_seen"] == 1
+    assert groups["/orders/{id}"]["count"] == 1
+    store.delete(["a"])
+    assert [group["template"] for group in store.page_endpoints()["items"]] == ["/orders/{id}"]
+    store.close()
+
+
+def test_endpoint_index_backfills_existing_v6_history(tmp_path) -> None:
+    path = tmp_path / "v6.sqlite"
+    conn = sqlite3.connect(path)
+    conn.execute("PRAGMA recursive_triggers=ON")
+    for version in range(1, 7):
+        for statement in _MIGRATIONS[version]:
+            conn.execute(statement)
+    conn.execute("PRAGMA user_version=6")
+    conn.executemany(
+        "INSERT INTO flows(id, type, scheme, host, port, method, path, query,"
+        " status_code, started_at) VALUES (?, 'http', 'https', 'api.test',"
+        " 443, 'GET', ?, ?, ?, ?)",
+        [("old-1", "/users/1", "page=1", 200, 1),
+         ("old-2", "/users/2", "sort=asc", 404, 2)],
+    )
+    conn.commit()
+    conn.close()
+
+    store = FlowStore(path)
+    group = store.page_endpoints()["items"][0]
+    assert group["template"] == "/users/{id}"
+    assert group["count"] == 2
+    assert group["statuses"] == [200, 404]
+    assert group["query_params"] == ["page", "sort"]
+    assert store.page_endpoint_flows(
+        "https", "api.test", 443, "GET", "/users/{id}", limit=1,
+    )["count"] == 2
+    store.close()
+
 def test_upsert_and_get_roundtrip() -> None:
     store = FlowStore()
     store.upsert(make_record("a"))

@@ -615,6 +615,15 @@ pre.body,
   min-height: 0;
 }
 
+.history-pages {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 5px;
+  border-top: 1px solid var(--border);
+}
+
 /* A typed size next to the sizes worth one click. */
 .size-field {
   display: inline-flex;

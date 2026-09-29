@@ -77,8 +77,9 @@ async function errorDetail(res: Response): Promise<string> {
   return res.statusText ? `${res.status} ${res.statusText}` : `HTTP ${res.status}`;
 }
 
-export function buildFlowQuery(filters: FlowFilters, limit = 200): string {
+export function buildFlowQuery(filters: FlowFilters, limit = 200, offset = 0): string {
   const params = new URLSearchParams({ limit: String(limit) });
+  if (offset) params.set('offset', String(offset));
   if (filters.host) params.set('host', filters.host);
   if (filters.method) params.set('method', filters.method);
   if (filters.statusCode !== undefined && !Number.isNaN(filters.statusCode)) {
@@ -114,6 +115,15 @@ export async function listFlows(
   // else) must not hand back undefined: callers treat this as a list and
   // would crash on the first .find().
   return data?.items ?? [];
+}
+
+export async function listFlowPage(
+  filters: FlowFilters = {}, offset = 0, limit = 200,
+): Promise<{ items: FlowSummary[]; has_more: boolean }> {
+  const data = await request<{ items: FlowSummary[]; has_more?: boolean }>(
+    `/api/flows?${buildFlowQuery(filters, limit, offset)}`,
+  );
+  return { items: data?.items ?? [], has_more: data?.has_more ?? false };
 }
 
 export function getFlow(id: string, reveal = false): Promise<FlowDetail> {
@@ -375,7 +385,7 @@ export function getSitePaths(
   host: string,
   scheme: string,
   port: number | null,
-  options: { limit?: number; offset?: number; pathPrefix?: string } = {},
+  options: { limit?: number; offset?: number; pathPrefix?: string; inScopeOnly?: boolean } = {},
 ): Promise<{ items: import('./types').SitePath[]; count: number }> {
   const params = new URLSearchParams({ host, scheme });
   if (port !== null) params.set('port', String(port));
@@ -383,15 +393,34 @@ export function getSitePaths(
   params.set('limit', String(options.limit ?? 200));
   params.set('offset', String(options.offset ?? 0));
   if (options.pathPrefix) params.set('path_prefix', options.pathPrefix);
+  if (options.inScopeOnly) params.set('in_scope_only', 'true');
   return request(`/api/sitemap/paths?${params}`);
+}
+
+export function getSiteFolders(
+  host: string, scheme: string, port: number | null,
+  options: { limit?: number; offset?: number; pathPrefix?: string; inScopeOnly?: boolean } = {},
+): Promise<{ items: string[]; has_more: boolean }> {
+  const params = new URLSearchParams({ host, scheme });
+  if (port !== null) params.set('port', String(port));
+  else params.set('port_is_null', 'true');
+  params.set('limit', String(options.limit ?? 200));
+  params.set('offset', String(options.offset ?? 0));
+  if (options.pathPrefix) params.set('path_prefix', options.pathPrefix);
+  if (options.inScopeOnly) params.set('in_scope_only', 'true');
+  return request(`/api/sitemap/folders?${params}`);
 }
 
 export function getEndpoints(
   host?: string,
   inScopeOnly = false,
+  limit = 200,
+  offset = 0,
 ): Promise<{ items: import('./types').EndpointGroup[]; count: number }> {
   const params = new URLSearchParams({ in_scope_only: String(inScopeOnly) });
   if (host) params.set('host', host);
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
   return request(`/api/endpoints?${params}`);
 }
 

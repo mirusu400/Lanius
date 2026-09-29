@@ -220,10 +220,15 @@ Intruder. The original bytes stay in the capture and edited requests are
 encoded again before sending. This can be disabled under **Settings > Proxy >
 HTTP body display**. `Accept-Encoding` only advertises acceptable response
 formats and does not mean that the request body itself is compressed.
+Captured request and response bodies are stored up to 5 MiB each.
 
 History has a **Modified** column. When Match & Replace, Intercept, or a plugin
 changes a request, its detail pane keeps **Original**, **Auto-modified**, and
 **Modified request** tabs so every stage can be compared.
+History shows 200 requests per page; **Older** and **Newer** move through the
+whole project. Search checks the stored host, path and query on every page,
+including old captures. It does not search headers or bodies. The scope filter
+also applies before paging, so a rare old in-scope request remains reachable.
 Drag a table column header's right edge to resize it in History and other
 headed data tables. Column widths are remembered on this machine.
 Drag the divider between side-by-side panes to resize them in Proxy,
@@ -273,6 +278,8 @@ directions. Turn interception on for client messages, server messages, or both,
 then edit and forward or drop held messages. A captured message can also be
 edited and sent again to either side of its still-active connection. Binary
 messages are shown and edited as Base64 so their bytes are not corrupted.
+WebSocket message history currently keeps the latest 2,000 messages in memory;
+it is cleared when the engine restarts. HTTP history is stored in the project.
 
 ### Target
 
@@ -281,7 +288,12 @@ also collapses dynamic paths into endpoints, so `/users/1`, `/users/2` and
 `/users/3` become a single `/users/{id}` entry with the parameters it saw.
 The map first loads site summaries. Opening a site or folder loads up to 200
 requests; **Load more requests** fetches the next page. This keeps a long
-capture from loading every request into the interface at once. **Expand all**
+capture from loading every request into the interface at once. Folder names
+are discovered separately, so a folder whose requests are on a later page is
+visible immediately. **Load more folders** pages unusually large directories.
+**In scope only** applies to the requests and folders inside each site as well
+as to the site list.
+**Expand all**
 is available for smaller projects; open sites individually in a large one.
 In the site map, Ctrl/⌘-click to select separate sites, folders or requests,
 or Shift-click to select a visible range. Right-click a selected row to delete
@@ -292,6 +304,9 @@ pane. Endpoint and Scope table columns can also be resized from their header
 edges. These sizes are remembered on this machine.
 Click an endpoint to browse every captured request in that group, inspect its
 request and response, or right-click it to send it to Repeater or Intruder.
+Endpoint counts, status codes and query parameter names cover the full saved
+history. Requests within an endpoint load in pages. The displayed path values
+and example URLs are samples of captured requests.
 The request and response panes have a draggable divider; raw text wraps long
 lines and its editor height can be adjusted.
 

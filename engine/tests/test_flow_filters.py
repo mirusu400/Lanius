@@ -193,3 +193,31 @@ class TestScope:
     def test_combines_with_the_other_filters(self, client) -> None:
         include(client, "a.test")
         assert ids(client.get("/api/flows?in_scope_only=true&methods=POST")) == {"4", "6"}
+
+    def test_finds_old_scoped_results_beyond_the_first_candidate_window(self, client) -> None:
+        add(client, id="old", host="old.test", path="/only", started_at=1)
+        for i in range(50):
+            add(client, id=f"noise-{i}", host="noise.test", started_at=100 + i)
+        include(client, "old.test")
+        page = client.get("/api/flows", params={"in_scope_only": True, "limit": 1}).json()
+        assert [item["id"] for item in page["items"]] == ["old"]
+        assert page["has_more"] is False
+
+    def test_scope_offset_counts_matches_instead_of_raw_rows(self, client) -> None:
+        for i in range(4):
+            add(client, id=f"match-{i}", host="wanted.test", started_at=100 + i)
+            add(client, id=f"other-{i}", host="noise.test", started_at=200 + i)
+        include(client, "wanted.test")
+        page = client.get("/api/flows", params={
+            "in_scope_only": True, "limit": 2, "offset": 1,
+        }).json()
+        assert [item["id"] for item in page["items"]] == ["match-2", "match-1"]
+        assert page["has_more"] is True
+
+
+def test_searches_old_history_and_treats_wildcards_literally(client) -> None:
+    add(client, id="old-search", host="a.test", path="/rare%thing", started_at=1)
+    for i in range(210):
+        add(client, id=f"recent-{i}", path=f"/recent/{i}", started_at=100 + i)
+    assert ids(client.get("/api/flows?search=rare%25thing")) == {"old-search"}
+    assert ids(client.get("/api/flows?search=rare_thing")) == set()

@@ -46,18 +46,19 @@ def truncate(text: str | None, limit: int = MAX_BODY_CHARS) -> str:
     return f"{text[:limit]}\n… [truncated, {len(text)} chars total]"
 
 
-def flow_summary(record: FlowRecord) -> dict[str, Any]:
+def flow_summary(record: FlowRecord | dict[str, Any]) -> dict[str, Any]:
+    get = record.get if isinstance(record, dict) else lambda key: getattr(record, key)
     return {
-        "id": record.id,
-        "type": record.type,
-        "method": record.method,
-        "url": f"{record.scheme}://{record.host}{record.path or ''}"
-        + (f"?{record.query}" if record.query else ""),
-        "status": record.status_code,
-        "size": record.response_size,
-        "duration_ms": record.duration_ms,
-        "source": record.source,
-        "error": record.error,
+        "id": get("id"),
+        "type": get("type"),
+        "method": get("method"),
+        "url": f"{get('scheme')}://{get('host')}{get('path') or ''}"
+        + (f"?{get('query')}" if get("query") else ""),
+        "status": get("status_code"),
+        "size": get("response_size"),
+        "duration_ms": get("duration_ms"),
+        "source": get("source"),
+        "error": get("error"),
     }
 
 
@@ -98,20 +99,23 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
     @server.tool(description="List captured flows, newest first.")
     async def list_flows(
         limit: int = 50,
+        offset: int = 0,
         host: str | None = None,
         method: str | None = None,
         status_code: int | None = None,
         search: str | None = None,
     ) -> dict[str, Any]:
-        records = await asyncio.to_thread(
-            store.list,
+        page = await asyncio.to_thread(
+            store.page_summaries,
             limit=max(1, min(limit, 500)),
+            offset=max(0, offset),
             host=host,
             method=method,
             status_code=status_code,
             search=search,
         )
-        return {"count": len(records), "flows": [flow_summary(r) for r in records]}
+        return {"count": len(page["items"]), "has_more": page["has_more"],
+                "flows": [flow_summary(item) for item in page["items"]]}
 
     @server.tool(
         description=(
@@ -133,13 +137,14 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
     @server.tool(
         description="Group captured flows into endpoint templates with parameters."
     )
-    async def list_endpoints(host: str | None = None) -> dict[str, Any]:
-        from ..addons.endpoints import build_endpoints
-
-        records = await asyncio.to_thread(store.list, limit=5000, host=host)
-        return {
-            "endpoints": [e.as_dict() for e in build_endpoints(records)],
-        }
+    async def list_endpoints(
+        host: str | None = None, limit: int = 200, offset: int = 0,
+    ) -> dict[str, Any]:
+        page = await asyncio.to_thread(
+            store.page_endpoints, host=host, limit=max(1, min(limit, 500)),
+            offset=max(0, offset),
+        )
+        return {"endpoints": page["items"], "count": page["count"]}
 
     @server.tool(description="Show the current scope rules.")
     async def get_scope() -> dict[str, Any]:

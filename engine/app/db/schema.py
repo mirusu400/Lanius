@@ -5,8 +5,9 @@ from __future__ import annotations
 import sqlite3
 
 from .metrics import MIGRATION as METRICS_MIGRATION
+from .endpoint_index import MIGRATION as ENDPOINT_MIGRATION, register_functions
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -110,11 +111,14 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         "ALTER TABLE flows ADD COLUMN modified INTEGER NOT NULL DEFAULT 0",
     ),
     6: METRICS_MIGRATION,
+    7: ENDPOINT_MIGRATION,
 }
 
 
 def migrate(conn: sqlite3.Connection) -> int:
     """Apply pending migrations; returns the resulting schema version."""
+    register_functions(conn)
+    conn.execute("PRAGMA recursive_triggers=ON")
     current = conn.execute("PRAGMA user_version").fetchone()[0]
     for version in sorted(_MIGRATIONS):
         if version <= current:

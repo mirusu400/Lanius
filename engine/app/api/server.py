@@ -21,7 +21,6 @@ from ..addons.intercept import InterceptError
 from ..addons.match_replace import MatchReplaceError, preview as preview_match_replace
 from ..addons.repeater import RepeaterError, build_flow, render_raw
 from ..addons.websocket_proxy import WebSocketProxyError
-from ..addons.endpoints import build_endpoints
 from ..addons.codecs import (
     ChainStep,
     CodecError,
@@ -769,7 +768,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             store.page_summaries,
             limit=limit,
             offset=offset,
-            scope_predicate=engine.scope.contains if in_scope_only else None,
+            scope_predicate=(engine.scope.contains if in_scope_only and any(
+                rule.enabled for rule in engine.scope.scope.rules
+            ) else None),
             host=host,
             method=method,
             status_code=status_code,
@@ -1189,35 +1190,74 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scheme: str = "https",
         port: int | None = None,
         port_is_null: bool = False,
+        in_scope_only: bool = False,
         path_prefix: str | None = None,
         limit: int = Query(200, ge=1, le=500),
         offset: int = Query(0, ge=0),
     ) -> dict[str, Any]:
+        predicate, site_wide = await endpoint_scope_mode(in_scope_only)
+        if predicate is not None and site_wide and (port is not None or port_is_null):
+            if not predicate(scheme, host, port, "/"):
+                return {"items": [], "count": 0}
+            predicate = None
         return await asyncio.to_thread(
             store.page_paths_for_site,
             scheme, host, port,
             path_prefix=path_prefix, limit=limit, offset=offset,
             port_is_null=port_is_null,
+            scope_predicate=predicate,
         )
+
+    @app.get("/api/sitemap/folders")
+    async def sitemap_folders(
+        host: str, scheme: str = "https", port: int | None = None,
+        port_is_null: bool = False, path_prefix: str | None = None,
+        in_scope_only: bool = False,
+        limit: int = Query(200, ge=1, le=500),
+        offset: int = Query(0, ge=0),
+    ) -> dict[str, Any]:
+        predicate, site_wide = await endpoint_scope_mode(in_scope_only)
+        if predicate is not None and site_wide and (port is not None or port_is_null):
+            if not predicate(scheme, host, port, "/"):
+                return {"items": [], "has_more": False}
+            predicate = None
+        return await asyncio.to_thread(
+            store.page_folders_for_site, scheme, host, port,
+            path_prefix=path_prefix, limit=limit, offset=offset,
+            port_is_null=port_is_null,
+            scope_predicate=predicate,
+        )
+
+    async def endpoint_scope_mode(in_scope_only: bool) -> tuple[Any, bool]:
+        if not in_scope_only:
+            return None, False
+        rules = [rule for rule in engine.scope.scope.rules if rule.enabled]
+        if not rules:
+            return None, False
+        def any_path(rule: Any) -> bool:
+            return rule.path in ("", "*") or (
+                rule.match_type == "regex" and rule.path == ".*"
+            )
+        site_wide = all(any_path(rule) for rule in rules)
+        if not site_wide and all(
+            any_path(rule) or (rule.match_type == "glob" and rule.path == "/*")
+            for rule in rules
+        ):
+            site_wide = await asyncio.to_thread(store.all_paths_start_with_slash)
+        return engine.scope.contains, site_wide
 
     @app.get("/api/endpoints")
     async def endpoints(
         host: str | None = None,
         in_scope_only: bool = False,
         limit: int = Query(5000, ge=1, le=20000),
+        offset: int = Query(0, ge=0),
     ) -> dict[str, Any]:
-        records = await asyncio.to_thread(store.endpoint_candidates, host)
-        if in_scope_only:
-            records = [
-                r
-                for r in records
-                if engine.scope.contains(r["scheme"], r["host"], r["port"], r["path"])
-            ]
-        grouped = build_endpoints(records)
-        return {
-            "items": [e.as_dict() for e in grouped[:limit]],
-            "count": len(grouped),
-        }
+        predicate, site_wide = await endpoint_scope_mode(in_scope_only)
+        return await asyncio.to_thread(
+            store.page_endpoints, host=host, limit=limit, offset=offset,
+            scope_predicate=predicate, scope_site_wide=site_wide,
+        )
 
     @app.get("/api/endpoints/flows")
     async def endpoint_flows(
@@ -1230,15 +1270,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         limit: int = Query(200, ge=1, le=500),
         offset: int = Query(0, ge=0),
     ) -> dict[str, Any]:
-        rows = await asyncio.to_thread(
-            store.paths_for_endpoint, scheme, host, port, method, template
+        predicate, site_wide = await endpoint_scope_mode(in_scope_only)
+        return await asyncio.to_thread(
+            store.page_endpoint_flows, scheme, host, port, method, template,
+            limit=limit, offset=offset,
+            scope_predicate=predicate, scope_site_wide=site_wide,
         )
-        if in_scope_only:
-            rows = [
-                row for row in rows
-                if engine.scope.contains(scheme, host, port, row["path"])
-            ]
-        return {"items": rows[offset:offset + limit], "count": len(rows)}
 
     # --- intruder (M5) ----------------------------------------------------
     @app.post("/api/intruder/positions")

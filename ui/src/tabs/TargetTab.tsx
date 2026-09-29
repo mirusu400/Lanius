@@ -9,6 +9,7 @@ import {
   getFlow,
   getSitemap,
   getSitePaths,
+  getSiteFolders,
   patchScopeRule,
   setRestrictCapture,
 } from '../api/client';
@@ -27,6 +28,7 @@ import {
   sitemapRows,
   useSitemapExpansion,
   type SitePageState,
+  type FolderPageState,
   type SitemapRowTarget,
 } from '../components/SitemapTree';
 import { ContextMenu, useContextMenu, type MenuItem } from '../components/ContextMenu';
@@ -37,7 +39,6 @@ import { sendToRepeater } from './repeaterStore';
 import { sendToIntruder } from './intruderStore';
 import {
   buildTree,
-  countFlows,
   deletionTarget,
   siteLabel,
   type SiteTree,
@@ -64,6 +65,11 @@ export function TargetTab() {
   const [sites, setSites] = useState<Site[]>([]);
   const [sitePaths, setSitePaths] = useState<Record<string, SitePath[]>>({});
   const [pages, setPages] = useState<Record<string, SitePageState>>({});
+  const [siteFolders, setSiteFolders] = useState<Record<string, string[]>>({});
+  const [folderPages, setFolderPages] = useState<Record<string, FolderPageState>>({});
+  const folderPagesRef = useRef(folderPages);
+  useEffect(() => { folderPagesRef.current = folderPages; }, [folderPages]);
+  const loadingFolders = useRef(new Set<string>());
   const pagesRef = useRef(pages);
   useEffect(() => { pagesRef.current = pages; }, [pages]);
   const loadingPages = useRef(new Set<string>());
@@ -74,6 +80,13 @@ export function TargetTab() {
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<FlowSummary | null>(null);
   const [endpoints, setEndpoints] = useState<EndpointGroup[]>([]);
+  const endpointsRef = useRef(endpoints);
+  endpointsRef.current = endpoints;
+  const [endpointCount, setEndpointCount] = useState(0);
+  const [loadingEndpoints, setLoadingEndpoints] = useState(false);
+  const endpointRefreshGeneration = useRef(0);
+  const endpointRefreshInFlight = useRef(false);
+  const lastEndpointRefresh = useRef(0);
   const [scope, setScope] = useState<ScopeState>({
     rules: [],
     restrict_capture: false,
@@ -170,9 +183,51 @@ export function TargetTab() {
   const resetPages = useCallback(() => {
     pageGeneration.current += 1;
     loadingPages.current.clear();
+    loadingFolders.current.clear();
     setSitePaths({});
     setPages({});
+    setSiteFolders({});
+    setFolderPages({});
   }, []);
+
+  const loadFolders = useCallback(async (node: TreeNode) => {
+    const site = node.site;
+    if (!site || loadingFolders.current.has(node.path)) return;
+    const target = deletionTarget(node, site);
+    if (!target) return;
+    const offset = folderPagesRef.current[node.path]?.loaded ?? 0;
+    const generation = pageGeneration.current;
+    loadingFolders.current.add(node.path);
+    setFolderPages((current) => ({ ...current, [node.path]: {
+      loaded: offset, hasMore: current[node.path]?.hasMore ?? false, loading: true,
+    } }));
+    try {
+      const result = await getSiteFolders(site.host, site.scheme, site.port, {
+        offset, pathPrefix: target.pathPrefix, inScopeOnly,
+      });
+      if (generation !== pageGeneration.current) return;
+      setSiteFolders((current) => ({ ...current,
+        [node.path]: [...new Set([...(current[node.path] ?? []), ...result.items])],
+      }));
+      setFolderPages((current) => ({ ...current, [node.path]: {
+        loaded: offset + result.items.length, hasMore: result.has_more, loading: false,
+      } }));
+    } catch (err) {
+      if (generation === pageGeneration.current) {
+        setError(msg('target.sitemapFailed', { message: (err as Error).message }));
+        setFolderPages((current) => {
+          const next = { ...current };
+          delete next[node.path];
+          return next;
+        });
+      }
+    } finally {
+      loadingFolders.current.delete(node.path);
+      if (generation === pageGeneration.current) setFolderPages((current) => ({ ...current,
+        ...(current[node.path] ? { [node.path]: { ...current[node.path], loading: false } } : {}),
+      }));
+    }
+  }, [inScopeOnly]);
 
   const loadPage = useCallback(async (node: TreeNode) => {
     const site = node.site;
@@ -192,7 +247,7 @@ export function TargetTab() {
     }));
     try {
       const result = await getSitePaths(site.host, site.scheme, site.port, {
-        limit: 200, offset, pathPrefix: target.pathPrefix,
+        limit: 200, offset, pathPrefix: target.pathPrefix, inScopeOnly,
       });
       if (pageGeneration.current !== generation) return;
       const label = siteLabel(site);
@@ -229,18 +284,33 @@ export function TargetTab() {
         }));
       }
     }
-  }, []);
+  }, [inScopeOnly]);
 
   const openNode = useCallback((node: TreeNode) => {
     if (!pagesRef.current[node.path]) void loadPage(node);
-  }, [loadPage]);
+    if (!folderPagesRef.current[node.path]) void loadFolders(node);
+  }, [loadPage, loadFolders]);
 
-  const refreshEndpoints = useCallback(async () => {
+  const refreshEndpoints = useCallback(async (force = true) => {
+    if (!force && (endpointRefreshInFlight.current || Date.now() - lastEndpointRefresh.current < 30_000)) return;
+    const generation = ++endpointRefreshGeneration.current;
+    endpointRefreshInFlight.current = true;
+    setLoadingEndpoints(true);
     try {
-      const data = await getEndpoints(undefined, inScopeOnly);
+      const data = await getEndpoints(
+        undefined, inScopeOnly, Math.min(20_000, Math.max(200, endpointsRef.current.length)),
+      );
+      if (generation !== endpointRefreshGeneration.current) return;
       setEndpoints(data.items);
+      setEndpointCount(data.count);
+      lastEndpointRefresh.current = Date.now();
     } catch (err) {
-      setError(rawMsg((err as Error).message));
+      if (generation === endpointRefreshGeneration.current) setError(rawMsg((err as Error).message));
+    } finally {
+      if (generation === endpointRefreshGeneration.current) {
+        endpointRefreshInFlight.current = false;
+        setLoadingEndpoints(false);
+      }
     }
   }, [inScopeOnly]);
 
@@ -297,12 +367,16 @@ export function TargetTab() {
     const { node } = selected;
     const target = deletionTarget(node, node.site);
     if (!target) return null;
+    const isSite = Boolean(node.site && node.path === siteLabel(node.site));
+    const deleteCount = isSite
+      ? node.site?.flows
+      : inScopeOnly ? undefined : pages[node.path]?.count;
     return {
       // Says how many and which folder: "delete everything under here"
       // is not a question anyone can answer without those two facts.
-      message: pages[node.path] || (node.site && node.path === siteLabel(node.site))
+      message: deleteCount !== undefined
         ? t('delete.confirmSubtree', {
-            count: pages[node.path]?.count ?? node.site?.flows ?? countFlows(node),
+            count: deleteCount,
             name: node.name,
           })
         : t('delete.confirmSubtreeUnknown', { name: node.name }),
@@ -310,7 +384,7 @@ export function TargetTab() {
         ? deleteFlows(target)
         : deleteFlows({ ids: flowIdsUnder(node) }),
     };
-  }, [pendingDelete, pages, t]);
+  }, [pendingDelete, pages, inScopeOnly, t]);
 
   const runDeletion = useCallback(async () => {
     const pending = deletion;
@@ -337,6 +411,10 @@ export function TargetTab() {
     void refreshSites();
   }, [refreshSites]);
 
+  useEffect(() => {
+    resetPages();
+  }, [inScopeOnly, resetPages]);
+
   // Refresh the map as traffic arrives, coalescing bursts so a busy proxy
   // does not trigger a reload per request.
   useEffect(() => {
@@ -346,7 +424,7 @@ export function TargetTab() {
       timer = window.setTimeout(() => {
         timer = undefined;
         void refreshSites();
-        if (view === 'endpoints') void refreshEndpoints();
+        if (view === 'endpoints') void refreshEndpoints(false);
       }, 1500);
     };
     const disconnect = connectStream({
@@ -371,9 +449,15 @@ export function TargetTab() {
     // The paths arrive with the sites, so the trees are built from what
     // is already in hand rather than fetched again.
     setTrees(
-      sites.map((site) => ({ site, root: buildTree(sitePaths[siteLabel(site)] ?? []) })),
+      sites.map((site) => {
+        const label = siteLabel(site);
+        const folders = Object.entries(siteFolders)
+          .filter(([key]) => key === label || key.startsWith(`${label}/`))
+          .flatMap(([, paths]) => paths);
+        return { site, root: buildTree(sitePaths[label] ?? [], folders) };
+      }),
     );
-  }, [sites, sitePaths]);
+  }, [sites, sitePaths, siteFolders]);
 
   useEffect(() => {
     if (view !== 'endpoints') return;
@@ -445,6 +529,7 @@ export function TargetTab() {
               sites.forEach((site) => {
                 const label = siteLabel(site);
                 void loadPage({ name: label, path: label, site, children: [], flows: [] });
+                void loadFolders({ name: label, path: label, site, children: [], flows: [] });
               });
             }}
           >
@@ -466,15 +551,18 @@ export function TargetTab() {
           scope={scope}
           onAddUrl={async (url, kind, regex) => {
             await addScopeFromUrl(url, kind, regex);
+            resetPages();
             await refreshScope();
             await refreshSites();
           }}
           onToggle={async (id, enabled) => {
             setScope(await patchScopeRule(id, { enabled }));
+            resetPages();
             await refreshSites();
           }}
           onDelete={async (id) => {
             await deleteScopeRule(id);
+            resetPages();
             await refreshScope();
             await refreshSites();
           }}
@@ -485,8 +573,20 @@ export function TargetTab() {
       ) : view === 'endpoints' ? (
         <EndpointExplorer
           endpoints={endpoints}
+          loadingEndpoints={loadingEndpoints}
+          endpointCount={endpointCount}
+          onLoadMoreEndpoints={async () => {
+            const data = await getEndpoints(undefined, inScopeOnly, 200, endpoints.length);
+            setEndpoints((current) => {
+              const byKey = new Map(current.map((item) => [item.key, item]));
+              data.items.forEach((item) => byKey.set(item.key, item));
+              return [...byKey.values()];
+            });
+            setEndpointCount(data.count);
+          }}
           inScopeOnly={inScopeOnly}
           onChanged={async () => {
+            resetPages();
             await Promise.all([refreshScope(), refreshSites(), refreshEndpoints()]);
           }}
         />
@@ -505,8 +605,10 @@ export function TargetTab() {
             <SitemapTree
               trees={trees}
               pages={pages}
+              folderPages={folderPages}
               onOpenNode={openNode}
               onLoadMore={(node) => void loadPage(node)}
+              onLoadMoreFolders={(node) => void loadFolders(node)}
               selectedKeys={selectedKeys}
               onSelectRow={selectRow}
               onRowContextMenu={openRowMenu}
@@ -533,7 +635,10 @@ export function TargetTab() {
                     : treeMenuItems(
                         menu.target.clicked,
                         t,
-                        refreshScope,
+                        () => {
+                          resetPages();
+                          void Promise.all([refreshScope(), refreshSites(), refreshEndpoints()]);
+                        },
                         codegen,
                         (target) => setPendingDelete([target]),
                       )

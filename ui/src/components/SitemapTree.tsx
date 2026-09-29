@@ -14,8 +14,10 @@ import { useT } from '../i18n';
 interface Props {
   trees: SiteTree[];
   pages: Readonly<Record<string, SitePageState>>;
+  folderPages: Readonly<Record<string, FolderPageState>>;
   onOpenNode: (node: TreeNode) => void;
   onLoadMore: (node: TreeNode) => void;
+  onLoadMoreFolders: (node: TreeNode) => void;
   selectedKeys: ReadonlySet<string>;
   onSelectRow: (event: React.MouseEvent, target: SitemapRowTarget) => void;
   onRowContextMenu: (event: React.MouseEvent, target: SitemapRowTarget) => void;
@@ -26,6 +28,12 @@ interface Props {
 export interface SitePageState {
   loaded: number;
   count: number;
+  loading: boolean;
+}
+
+export interface FolderPageState {
+  loaded: number;
+  hasMore: boolean;
   loading: boolean;
 }
 
@@ -98,8 +106,10 @@ function Node({
   expanded,
   toggle,
   pages,
+  folderPages,
   onOpenNode,
   onLoadMore,
+  onLoadMoreFolders,
   selectedKeys,
   onSelectRow,
   onRowContextMenu,
@@ -109,8 +119,10 @@ function Node({
   expanded: Set<string>;
   toggle: (path: string) => void;
   pages: Props['pages'];
+  folderPages: Props['folderPages'];
   onOpenNode: Props['onOpenNode'];
   onLoadMore: Props['onLoadMore'];
+  onLoadMoreFolders: Props['onLoadMoreFolders'];
   selectedKeys: ReadonlySet<string>;
   onSelectRow: Props['onSelectRow'];
   onRowContextMenu: Props['onRowContextMenu'];
@@ -121,10 +133,11 @@ function Node({
   // collapse it, because only child *nodes* used to make a row foldable.
   const isSite = node.site && node.path === siteLabel(node.site);
   const canFold = Boolean(isSite && node.site!.flows > 0)
-    || node.children.length > 0 || node.flows.length > 0;
+    || node.children.length > 0 || node.flows.length > 0 || Boolean(node.knownFolder);
   const open = expanded.has(node.path);
   const page = pages[node.path];
-  const total = isSite ? node.site!.flows : page?.count ?? countFlows(node);
+  const folderPage = folderPages[node.path];
+  const total = isSite ? page?.count ?? node.site!.flows : page?.count ?? countFlows(node);
   const statuses = statusesUnder(node);
 
   return (
@@ -174,8 +187,10 @@ function Node({
               expanded={expanded}
               toggle={toggle}
               pages={pages}
+              folderPages={folderPages}
               onOpenNode={onOpenNode}
               onLoadMore={onLoadMore}
+              onLoadMoreFolders={onLoadMoreFolders}
               selectedKeys={selectedKeys}
               onSelectRow={onSelectRow}
               onRowContextMenu={onRowContextMenu}
@@ -188,6 +203,11 @@ function Node({
               onClick={() => onLoadMore(node)}
             >
               {page.loading ? t('target.loading') : t('target.loadMore')}
+            </button>
+          )}
+          {folderPage?.hasMore && (
+            <button className="tree-load-more" disabled={folderPage.loading} onClick={() => onLoadMoreFolders(node)}>
+              {folderPage.loading ? t('target.loading') : t('target.loadMoreFolders')}
             </button>
           )}
         </>
@@ -208,7 +228,7 @@ export function allFoldablePaths(trees: SiteTree[]): Set<string> {
     paths.add(label);
     const walk = (node: TreeNode) => {
       for (const child of node.children) {
-        if (child.children.length > 0 || child.flows.length > 0) {
+        if (child.children.length > 0 || child.flows.length > 0 || child.knownFolder) {
           paths.add(`${label}${child.path}`);
         }
         walk(child);
@@ -264,8 +284,10 @@ export function useSitemapExpansion(trees: SiteTree[]) {
 export function SitemapTree({
   trees,
   pages,
+  folderPages,
   onOpenNode,
   onLoadMore,
+  onLoadMoreFolders,
   selectedKeys,
   onSelectRow,
   onRowContextMenu,
@@ -292,8 +314,10 @@ export function SitemapTree({
             expanded={expanded}
             toggle={toggle}
             pages={pages}
+            folderPages={folderPages}
             onOpenNode={onOpenNode}
             onLoadMore={onLoadMore}
+            onLoadMoreFolders={onLoadMoreFolders}
             selectedKeys={selectedKeys}
             onSelectRow={onSelectRow}
             onRowContextMenu={onRowContextMenu}
