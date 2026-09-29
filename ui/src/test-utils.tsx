@@ -8,6 +8,7 @@ import { render, type RenderOptions, type RenderResult } from '@testing-library/
 import type { ReactElement, ReactNode } from 'react';
 
 import { I18nProvider, makeTranslator, type Locale, type Translator } from './i18n';
+import { ToastProvider } from './components/Toast';
 
 // Overridable so CI can run the whole suite in another language and prove no
 // assertion depends on a hardcoded string (see `npm run test:locales`).
@@ -26,7 +27,7 @@ export function renderWithI18n(
   { locale = TEST_LOCALE, ...options }: RenderOptions & { locale?: Locale } = {},
 ): RenderResult {
   const Wrapper = ({ children }: { children: ReactNode }) => (
-    <I18nProvider initial={locale}>{children}</I18nProvider>
+    <I18nProvider initial={locale}><ToastProvider>{children}</ToastProvider></I18nProvider>
   );
   return render(ui, { wrapper: Wrapper, ...options });
 }

@@ -48,3 +48,29 @@ it('loads captured messages and repeats the edited payload', async () => {
   expect(repeated?.content).toBe('changed');
   expect(repeated?.to_client).toBe(false);
 });
+
+it('pages through persisted older messages', async () => {
+  const message = (id: string, seq: number) => ({
+    id, seq, connection_id: 'c1', host: 'example.com', path: `/${id}`,
+    from_client: true, is_text: true, timestamp: seq, size: 1,
+    content: id, encoding: 'utf-8', injected: false, dropped: false, paused: false,
+  });
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    const data = url.includes('before=2')
+      ? { items: [message('old', 1)], has_more: false, next_before: 1 }
+      : url.includes('/messages?')
+        ? { items: [message('new', 2)], has_more: true, next_before: 2 }
+        : { rules: { enabled: false, client_messages: true, server_messages: true },
+          connections: [], messages: [message('new', 2)],
+          has_more: true, next_before: 2, paused: [] };
+    return { ok: true, status: 200, json: async () => data } as Response;
+  }));
+  const user = userEvent.setup();
+  render(<WebSocketPanel />);
+  await screen.findByText('example.com/new');
+  await user.click(screen.getByRole('button', { name: t('proxy.olderHistory') }));
+  await screen.findByText('example.com/old');
+  await user.click(screen.getByRole('button', { name: t('proxy.newerHistory') }));
+  await screen.findByText('example.com/new');
+});

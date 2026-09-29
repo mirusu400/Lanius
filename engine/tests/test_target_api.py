@@ -190,6 +190,88 @@ def test_sitemap_paths_for_one_site(client) -> None:
     assert {i["path"] for i in data["items"]} == {"/x", "/y"}
 
 
+def test_sitemap_paths_are_paged_and_can_target_a_folder(client) -> None:
+    for path in ("/api/a", "/api/b", "/other"):
+        seed(client, host="a.test", path=path)
+    page = client.get("/api/sitemap/paths", params={
+        "host": "a.test", "scheme": "https", "port": 443,
+        "path_prefix": "/api", "limit": 1, "offset": 1,
+    }).json()
+    assert page["count"] == 2
+    assert len(page["items"]) == 1
+    assert page["items"][0]["path"] == "/api/b"
+
+
+def test_sitemap_discovers_folders_outside_the_first_flow_page(client) -> None:
+    for i in range(205):
+        seed(client, host="a.test", path=f"/aaa/{i:03d}")
+    seed(client, host="a.test", path="/zzz/old")
+    first = client.get("/api/sitemap/paths", params={
+        "host": "a.test", "scheme": "https", "port": 443,
+    }).json()
+    assert all(not row["path"].startswith("/zzz") for row in first["items"])
+    folders = client.get("/api/sitemap/folders", params={
+        "host": "a.test", "scheme": "https", "port": 443, "limit": 1,
+    }).json()
+    assert folders == {"items": ["/aaa"], "has_more": True}
+    next_page = client.get("/api/sitemap/folders", params={
+        "host": "a.test", "scheme": "https", "port": 443,
+        "limit": 1, "offset": 1,
+    }).json()
+    assert next_page == {"items": ["/zzz"], "has_more": False}
+    child = client.get("/api/sitemap/folders", params={
+        "host": "a.test", "scheme": "https", "port": 443,
+        "path_prefix": "/zzz",
+    }).json()
+    assert child["items"] == ["/zzz/old"]
+
+
+def test_sitemap_folder_names_do_not_hide_dotted_or_dashed_siblings(client) -> None:
+    for path in ("/api", "/api-v2", "/api.json", "/api/child"):
+        seed(client, host="a.test", path=path)
+    folders = client.get("/api/sitemap/folders", params={
+        "host": "a.test", "scheme": "https", "port": 443,
+    }).json()
+    assert folders["items"] == ["/api", "/api-v2", "/api.json"]
+
+
+def test_sitemap_scope_applies_to_requests_and_discovered_folders(client) -> None:
+    for path in ("/allow/a", "/allow/b", "/deny/c"):
+        seed(client, host="a.test", path=path)
+    client.post("/api/scope/rules", json={
+        "host": "a.test", "path": "/allow/*", "kind": "include",
+    })
+    page = client.get("/api/sitemap/paths", params={
+        "host": "a.test", "scheme": "https", "port": 443,
+        "in_scope_only": True, "limit": 1, "offset": 1,
+    }).json()
+    assert page["count"] == 2
+    assert [item["path"] for item in page["items"]] == ["/allow/b"]
+    folders = client.get("/api/sitemap/folders", params={
+        "host": "a.test", "scheme": "https", "port": 443,
+        "in_scope_only": True,
+    }).json()
+    assert folders["items"] == ["/allow"]
+
+
+def test_sitemap_site_list_does_not_load_all_flows(client, monkeypatch) -> None:
+    seed(client, host="a.test", path="/one")
+
+    def fail() -> None:
+        raise AssertionError("site list loaded every flow")
+
+    monkeypatch.setattr(client.app.state.store, "paths_by_site", fail)
+    response = client.get("/api/sitemap")
+    assert response.status_code == 200
+    assert response.json()["sites"][0]["flows"] == 1
+
+
+def test_legacy_combined_sitemap_refuses_a_large_capture(client, monkeypatch) -> None:
+    monkeypatch.setattr(client.app.state.store, "count", lambda: 50_001)
+    response = client.get("/api/sitemap?with_paths=true")
+    assert response.status_code == 413
+
+
 def test_endpoints_group_dynamic_paths(client) -> None:
     for i in range(3):
         seed(client, path=f"/users/{i}", query="page=1")
@@ -203,12 +285,58 @@ def test_endpoints_group_dynamic_paths(client) -> None:
     assert "/login" in templates
 
 
+def test_endpoints_include_old_flows_and_page_groups(client) -> None:
+    seed(client, path="/legacy", started_at=1)
+    for i in range(5001):
+        seed(client, path="/new", started_at=100 + i)
+    first = client.get("/api/endpoints", params={"limit": 1}).json()
+    second = client.get("/api/endpoints", params={"limit": 1, "offset": 1}).json()
+    assert first["count"] == second["count"] == 2
+    groups = first["items"] + second["items"]
+    assert {group["template"]: group["count"] for group in groups} == {
+        "/legacy": 1, "/new": 5001,
+    }
+    requests = client.get("/api/endpoints/flows", params={
+        "scheme": "https", "host": "api.test", "port": 443,
+        "method": "GET", "template": "/new", "limit": 1, "offset": 5000,
+    }).json()
+    assert requests["count"] == 5001
+    assert len(requests["items"]) == 1
+
+
 def test_endpoints_respect_scope_filter(client) -> None:
     seed(client, host="a.test", path="/a")
     seed(client, host="b.test", path="/b")
     client.post("/api/scope/rules", json={"host": "a.test"})
     items = client.get("/api/endpoints", params={"in_scope_only": True}).json()["items"]
     assert {i["host"] for i in items} == {"a.test"}
+
+
+def test_endpoint_detail_scope_filters_every_path_in_the_template(client) -> None:
+    seed(client, host="api.test", path="/users/1")
+    seed(client, host="api.test", path="/users/2")
+    client.post("/api/scope/rules", json={
+        "host": "api.test", "path": "/users/1", "kind": "include",
+    })
+    groups = client.get("/api/endpoints", params={"in_scope_only": True}).json()
+    assert groups["items"][0]["count"] == 1
+    details = client.get("/api/endpoints/flows", params={
+        "scheme": "https", "host": "api.test", "port": 443,
+        "method": "GET", "template": "/users/{id}",
+        "in_scope_only": True,
+    }).json()
+    assert details["count"] == 1
+    assert [item["path"] for item in details["items"]] == ["/users/1"]
+
+
+def test_host_scope_keeps_non_slash_requests_out_of_endpoint_groups(client) -> None:
+    seed(client, host="api.test", path="/ok")
+    seed(client, host="api.test", path="*")
+    client.post("/api/scope/rules", json={
+        "host": "api.test", "path": "/*", "kind": "include",
+    })
+    groups = client.get("/api/endpoints", params={"in_scope_only": True}).json()
+    assert [group["template"] for group in groups["items"]] == ["/ok"]
 
 
 def test_endpoints_host_filter(client) -> None:

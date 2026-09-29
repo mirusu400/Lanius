@@ -9,6 +9,8 @@ export interface TreeNode {
   flows: SitePath[];
   /** Set on the top level of the combined tree. */
   site?: Site;
+  /** A folder known from the path index before any request page is loaded. */
+  knownFolder?: boolean;
 }
 
 /** One site plus the paths captured for it. */
@@ -84,7 +86,7 @@ export function endpointHost(endpoint: EndpointGroup): string {
 }
 
 /** Build a path tree for one site's flows. */
-export function buildTree(paths: SitePath[]): TreeNode {
+export function buildTree(paths: SitePath[], folders: string[] = []): TreeNode {
   const root: TreeNode = { name: '/', path: '/', children: [], flows: [] };
 
   for (const entry of paths) {
@@ -101,6 +103,22 @@ export function buildTree(paths: SitePath[]): TreeNode {
       node = child;
     }
     node.flows.push(entry);
+  }
+
+  for (const folder of folders) {
+    const segments = folder.split('/').filter(Boolean);
+    let node = root;
+    let prefix = '';
+    for (const segment of segments) {
+      prefix += `/${segment}`;
+      let child = node.children.find((candidate) => candidate.name === segment);
+      if (!child) {
+        child = { name: segment, path: prefix, children: [], flows: [] };
+        node.children.push(child);
+      }
+      node = child;
+    }
+    node.knownFolder = true;
   }
 
   sortTree(root);

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 5
+from .metrics import MIGRATION as METRICS_MIGRATION
+from .endpoint_index import MIGRATION as ENDPOINT_MIGRATION, register_functions
+from .search_index import MIGRATION as SEARCH_MIGRATION, register_functions as register_search_functions
+
+SCHEMA_VERSION = 8
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -107,18 +111,51 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         "ALTER TABLE flows ADD COLUMN auto_modified INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE flows ADD COLUMN modified INTEGER NOT NULL DEFAULT 0",
     ),
+    6: METRICS_MIGRATION,
+    7: ENDPOINT_MIGRATION,
+    8: SEARCH_MIGRATION + (
+        """CREATE TABLE websocket_messages (
+            seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            id TEXT NOT NULL UNIQUE,
+            connection_id TEXT NOT NULL,
+            host TEXT NOT NULL,
+            path TEXT NOT NULL,
+            from_client INTEGER NOT NULL,
+            is_text INTEGER NOT NULL,
+            timestamp REAL NOT NULL,
+            content BLOB NOT NULL,
+            injected INTEGER NOT NULL,
+            dropped INTEGER NOT NULL,
+            paused INTEGER NOT NULL
+        )""",
+        "CREATE INDEX idx_websocket_messages_connection ON websocket_messages(connection_id, seq DESC)",
+        "CREATE INDEX idx_websocket_messages_paused ON websocket_messages(paused) WHERE paused = 1",
+    ),
 }
 
 
 def migrate(conn: sqlite3.Connection) -> int:
     """Apply pending migrations; returns the resulting schema version."""
+    register_functions(conn)
+    register_search_functions(conn)
+    conn.execute("PRAGMA recursive_triggers=ON")
     current = conn.execute("PRAGMA user_version").fetchone()[0]
     for version in sorted(_MIGRATIONS):
         if version <= current:
             continue
-        for statement in _MIGRATIONS[version]:
-            conn.execute(statement)
-        conn.execute(f"PRAGMA user_version = {version}")
+        # A large existing capture can take seconds to backfill. Keep each
+        # version atomic so a crash cannot leave half-created summary tables
+        # while user_version still points to the older schema.
+        conn.execute("SAVEPOINT lanius_migration")
+        try:
+            for statement in _MIGRATIONS[version]:
+                conn.execute(statement)
+            conn.execute(f"PRAGMA user_version = {version}")
+            conn.execute("RELEASE SAVEPOINT lanius_migration")
+        except Exception:
+            conn.execute("ROLLBACK TO SAVEPOINT lanius_migration")
+            conn.execute("RELEASE SAVEPOINT lanius_migration")
+            raise
         current = version
     conn.commit()
     return current

@@ -58,6 +58,14 @@ describe('mergeFlow', () => {
     );
     expect(mergeFlow(many, flow({ id: 'new' }))).toHaveLength(MAX_FLOWS);
   });
+
+  it('keeps the visible history page bounded while capture continues', () => {
+    const page = Array.from({ length: 200 }, (_, i) => flow({ id: `f${i}` }));
+    const next = mergeFlow(page, flow({ id: 'new' }), 200);
+    expect(next).toHaveLength(200);
+    expect(next[0].id).toBe('new');
+    expect(next.some((item) => item.id === 'f199')).toBe(false);
+  });
 });
 
 describe('matchesFilters', () => {

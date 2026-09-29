@@ -169,8 +169,8 @@ describe('translate', () => {
   });
 
   it('interpolates values', () => {
-    expect(translate('en', 'proxy.flowCount', { count: 7 })).toBe('7 flows');
-    expect(translate('ko', 'proxy.flowCount', { count: 7 })).toBe('flow 7건');
+    expect(translate('en', 'proxy.flowCount', { count: 7 })).toBe('7 shown');
+    expect(translate('ko', 'proxy.flowCount', { count: 7 })).toBe('7건 표시');
   });
 
   it('falls back to English for an unknown locale', () => {

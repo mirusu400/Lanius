@@ -69,6 +69,7 @@ class MockSocket {
 
 // Set by the locale test to make the next flow listing fail.
 let failListFlows = false;
+let paginateHistory = false;
 let calls: { url: string; method: string; body?: unknown }[] = [];
 
 beforeEach(() => {
@@ -77,6 +78,7 @@ beforeEach(() => {
   // switch, which also means it survives between tests.
   clearSelection();
   failListFlows = false;
+  paginateHistory = false;
   MockSocket.instances = [];
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
   vi.stubGlobal(
@@ -128,6 +130,12 @@ beforeEach(() => {
       if (failListFlows) {
         throw new Error('engine down');
       }
+      if (paginateHistory && url.includes('/api/flows?')) {
+        const offset = Number(new URL(url).searchParams.get('offset') ?? 0);
+        return jsonResponse(offset === 0
+          ? { items: [seeded], count: 1, has_more: true }
+          : { items: [{ ...seeded, id: 'old-1', path: '/old' }], count: 1, has_more: false });
+      }
       return jsonResponse({ items: [seeded], count: 1 });
     }),
   );
@@ -152,6 +160,26 @@ describe('ProxyTab', () => {
     render(<ProxyTab />);
     expect(await screen.findByText('seeded.test')).toBeTruthy();
     expect(screen.getByText('/seeded')).toBeTruthy();
+  });
+
+  it('pages into older history without holding every flow in the table', async () => {
+    paginateHistory = true;
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('/seeded');
+    await user.click(screen.getByRole('button', { name: t('proxy.olderHistory') }));
+    await screen.findByText('/old');
+    expect(screen.queryByText('/seeded')).toBeNull();
+    expect(calls.some((call) => call.url.includes('offset=200'))).toBe(true);
+    await user.click(screen.getByRole('button', { name: t('proxy.newerHistory') }));
+    await screen.findByText('/seeded');
+    const page = screen.getByRole('spinbutton', { name: t('proxy.historyPageLabel') });
+    await user.clear(page);
+    await user.type(page, '10000');
+    await user.click(screen.getByRole('button', { name: t('proxy.jumpToPage') }));
+    await waitFor(() => expect(calls.some((call) =>
+      call.url.includes('offset=1999800')
+    )).toBe(true));
   });
 
   it('appends flows arriving over the WebSocket and updates them in place', async () => {

@@ -156,6 +156,18 @@ async def test_list_flows_filters(store) -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_flows_searches_bodies_and_keeps_page_anchor(store) -> None:
+    store.upsert(record("old", started_at=1, path="/other", response_body=b"body-needle"))
+    store.upsert(record("newer", started_at=2, path="/other"))
+    server = build_server(store)
+    first = await call(server, "list_flows", limit=1)
+    store.upsert(record("latest", started_at=3))
+    second = await call(server, "list_flows", limit=1, offset=1, anchor=first["anchor"])
+    assert [item["id"] for item in second["flows"]] == ["old"]
+    assert (await call(server, "list_flows", search="body-needle"))["flows"][0]["id"] == "old"
+
+
+@pytest.mark.asyncio
 async def test_get_flow_redacts_by_default(store) -> None:
     store.upsert(record("a"))
     server = build_server(store)

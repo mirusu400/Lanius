@@ -8,6 +8,7 @@ export const MAX_FLOWS = 5000;
 export function mergeFlow(
   flows: FlowSummary[],
   incoming: FlowSummary,
+  maxFlows = MAX_FLOWS,
 ): FlowSummary[] {
   const index = flows.findIndex((f) => f.id === incoming.id);
   if (index >= 0) {
@@ -15,14 +16,14 @@ export function mergeFlow(
     next[index] = { ...next[index], ...incoming };
     return next;
   }
-  return [incoming, ...flows].slice(0, MAX_FLOWS);
+  return [incoming, ...flows].slice(0, maxFlows);
 }
 
 export function matchesFilters(
   flow: FlowSummary,
   filters: FlowFilters,
 ): boolean {
-  if (filters.host && !(flow.host ?? '').includes(filters.host)) return false;
+  if (filters.host && !(flow.host ?? '').toLowerCase().includes(filters.host.toLowerCase())) return false;
   if (filters.method && flow.method !== filters.method.toUpperCase()) {
     return false;
   }
@@ -33,6 +34,12 @@ export function matchesFilters(
   ) {
     return false;
   }
+  if (filters.methods?.length && !filters.methods.some((method) => method.toUpperCase() === flow.method)) return false;
+  if (filters.statusClasses?.length && !filters.statusClasses.includes(Math.floor((flow.status_code ?? 0) / 100))) return false;
+  const filename = (flow.path ?? '').split('/').pop() ?? '';
+  const extension = filename.includes('.') ? filename.split('.').pop()?.toLowerCase() : undefined;
+  if (filters.extensions?.length && !filters.extensions.some((ext) => ext.toLowerCase().replace(/^\./, '') === extension)) return false;
+  if (filters.excludeExtensions?.some((ext) => ext.toLowerCase().replace(/^\./, '') === extension)) return false;
   if (filters.search) {
     const needle = filters.search.toLowerCase();
     const haystack =

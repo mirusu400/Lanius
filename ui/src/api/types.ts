@@ -145,6 +145,7 @@ export interface WebSocketConnection {
 }
 
 export interface WebSocketMessage {
+  seq?: number;
   id: string;
   connection_id: string;
   host: string;
@@ -164,6 +165,8 @@ export interface WebSocketState {
   rules: WebSocketInterceptRules;
   connections: WebSocketConnection[];
   messages: WebSocketMessage[];
+  has_more?: boolean;
+  next_before?: number | null;
   paused: string[];
 }
 

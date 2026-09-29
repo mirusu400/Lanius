@@ -8,11 +8,14 @@ import time
 import uuid
 from collections import deque
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mitmproxy import http
 
 from ..events import EventBroker
+
+if TYPE_CHECKING:
+    from ..db.store import FlowStore
 
 
 class WebSocketProxyError(ValueError):
@@ -39,8 +42,14 @@ class HeldMessage:
 class WebSocketProxyAddon:
     """Owns the live WebSocket workflow exposed to the UI."""
 
-    def __init__(self, broker: EventBroker, history_limit: int = 2000) -> None:
+    def __init__(
+        self, broker: EventBroker, history_limit: int = 2000,
+        store: FlowStore | None = None,
+        flow_history_limit: int = 2000,
+    ) -> None:
         self.broker = broker
+        self.store = store
+        self.flow_history_limit = max(1, flow_history_limit)
         self.rules = WebSocketInterceptRules()
         self.active: dict[str, http.HTTPFlow] = {}
         self.messages: deque[dict[str, Any]] = deque(maxlen=history_limit)
@@ -68,7 +77,17 @@ class WebSocketProxyAddon:
             )
         )
         item = self._message(flow, message_id, message, paused=should_hold)
-        self.messages.append(item)
+        if self.store is not None:
+            item["seq"] = await asyncio.to_thread(
+                self.store.append_websocket_message, item, bytes(message.content)
+            )
+            # mitmproxy keeps every frame on the live flow as well. Once an
+            # older frame is durable, bound that copy for connections that
+            # stay open for days. The current frame remains for later addons.
+            if len(flow.websocket.messages) > self.flow_history_limit:
+                del flow.websocket.messages[:-self.flow_history_limit]
+        if self.store is None:
+            self.messages.append(item)
         self.broker.publish(
             "websocket.intercepted" if should_hold else "websocket.message", item
         )
@@ -93,10 +112,13 @@ class WebSocketProxyAddon:
         self.websocket_end(flow)
 
     def state(self) -> dict[str, Any]:
+        page = self.store.page_websocket_messages() if self.store else None
         return {
             "rules": self.rules.as_dict(),
-            "connections": [self._connection(flow) for flow in self.active.values()],
-            "messages": list(self.messages),
+            "connections": [self._connection(flow) for flow in self.active.copy().values()],
+            "messages": list(reversed(page["items"])) if page else list(self.messages),
+            "has_more": page["has_more"] if page else False,
+            "next_before": page["next_before"] if page else None,
             "paused": list(self.paused),
         }
 
@@ -148,7 +170,9 @@ class WebSocketProxyAddon:
             is_text,
         )
 
-    def clear(self) -> None:
+    def clear(self, *, persist: bool = True) -> None:
+        if persist and self.store is not None:
+            self.store.clear_websocket_messages()
         self.messages.clear()
         self.broker.publish("websocket.cleared", {})
 
@@ -160,6 +184,10 @@ class WebSocketProxyAddon:
 
     def _resolve(self, message_id: str, action: str) -> None:
         held = self._held(message_id)
+        if self.store is not None:
+            self.store.update_websocket_message(
+                message_id, bytes(held.message.content), dropped=action == "drop"
+            )
         for item in reversed(self.messages):
             if item["id"] == message_id:
                 item["paused"] = False
@@ -178,8 +206,7 @@ class WebSocketProxyAddon:
                 continue
             if drop:
                 held.message.drop()
-            if not held.future.done():
-                held.future.set_result(None)
+            self._resolve(message_id, "drop" if drop else "forward")
 
     @staticmethod
     def _connection(flow: http.HTTPFlow) -> dict[str, Any]:

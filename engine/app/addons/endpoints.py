@@ -132,9 +132,11 @@ def build_endpoints(flows: Iterable[Any]) -> list[Endpoint]:
         if status is not None:
             statuses[key].add(int(status))
         for name in query_params(get("query")):
-            qparams[key].add(name)
+            if len(qparams[key]) < 100:
+                qparams[key].add(name)
         for index, value in enumerate(values):
-            pparams[key].add(value if len(value) <= 32 else f"{value[:29]}…")
+            if len(pparams[key]) < 100:
+                pparams[key].add(value if len(value) <= 32 else f"{value[:29]}…")
             del index
 
         example = path + (f"?{get('query')}" if get("query") else "")

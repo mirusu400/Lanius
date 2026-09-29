@@ -4,6 +4,8 @@ import socket
 import time
 import gzip
 import json
+import sqlite3
+from urllib.parse import quote
 
 from unittest import mock
 
@@ -58,7 +60,10 @@ def test_status_reports_running_proxy(client) -> None:
 
 
 def test_list_flows_empty(client) -> None:
-    assert client.get("/api/flows").json() == {"items": [], "count": 0}
+    assert client.get("/api/flows").json() == {
+        "items": [], "count": 0, "has_more": False,
+        "anchor": 0, "next_cursor": None,
+    }
 
 
 def test_list_and_filter_flows(client) -> None:
@@ -68,6 +73,32 @@ def test_list_and_filter_flows(client) -> None:
     assert len(items) == 2
     assert client.get("/api/flows?method=POST").json()["items"][0]["id"] == "b"
     assert client.get("/api/flows?host=a.com").json()["count"] == 1
+
+
+def test_full_text_search_anchor_and_raw_body_endpoint(client) -> None:
+    seed(client, "old", started_at=1, path="/other", request_body=b"\xffneedle-tail")
+    seed(client, "next", started_at=2, path="/other", response_headers=[("X-Trace", "search-header")])
+    page = client.get("/api/flows?limit=1").json()
+    assert [item["id"] for item in page["items"]] == ["next"]
+    seed(client, "new", started_at=3)
+    older = client.get(f"/api/flows?limit=1&offset=1&anchor={page['anchor']}").json()
+    assert [item["id"] for item in older["items"]] == ["old"]
+    assert client.get("/api/flows?search=search-header").json()["items"][0]["id"] == "next"
+    client.app.state.store.delete(["next"])
+    cursor_page = client.get(
+        f"/api/flows?limit=1&anchor={page['anchor']}&cursor={quote(page['next_cursor'])}"
+    ).json()
+    assert [item["id"] for item in cursor_page["items"]] == ["old"]
+    assert client.get("/api/flows?search=needle-tail").json()["items"][0]["id"] == "old"
+    assert client.get("/api/flows/old/body/request").content == b"\xffneedle-tail"
+    assert client.get("/api/flows?cursor=invalid").status_code == 422
+
+
+def test_flow_list_preserves_boolean_summary_fields(client) -> None:
+    seed(client, "modified", auto_modified=True, modified=True)
+    item = client.get("/api/flows").json()["items"][0]
+    assert item["auto_modified"] is True
+    assert item["modified"] is True
 
 
 def test_get_flow_redacts_sensitive_headers_by_default(client) -> None:
@@ -550,6 +581,26 @@ def test_export_describes_itself(client) -> None:
     assert data["format"] == "lanius-project"
     assert data["version"] == 1
     assert "scope" in data and "workspace" in data
+
+
+def test_sqlite_backup_contains_raw_history_and_websockets(client, tmp_path) -> None:
+    seed(client, "raw", request_body=b"\xff\x00whole-body")
+    client.app.state.store.append_websocket_message({
+        "id": "ws1", "connection_id": "c", "host": "example.com", "path": "/ws",
+        "from_client": True, "is_text": False, "timestamp": 1.0,
+        "injected": False, "dropped": False, "paused": False,
+    }, b"\xff\x01frame")
+    response = client.get("/api/project/backup")
+    assert response.status_code == 200
+    saved = tmp_path / "saved.sqlite"
+    saved.write_bytes(response.content)
+    with sqlite3.connect(saved) as conn:
+        assert conn.execute("SELECT request_body FROM flows WHERE id='raw'").fetchone()[0] == b"\xff\x00whole-body"
+        assert conn.execute("SELECT content FROM websocket_messages WHERE id='ws1'").fetchone()[0] == b"\xff\x01frame"
+    assert client.get("/api/websockets/messages/ws1/raw").content == b"\xff\x01frame"
+    assert client.get("/api/websockets/messages?limit=1").json()["items"][0]["id"] == "ws1"
+    assert client.delete("/api/websockets").status_code == 200
+    assert client.get("/api/websockets/messages").json()["items"] == []
 
 
 def test_export_can_leave_out_the_capture(client) -> None:

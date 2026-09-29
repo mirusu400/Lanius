@@ -13,11 +13,28 @@ import { useT } from '../i18n';
 
 interface Props {
   trees: SiteTree[];
+  pages: Readonly<Record<string, SitePageState>>;
+  folderPages: Readonly<Record<string, FolderPageState>>;
+  onOpenNode: (node: TreeNode) => void;
+  onLoadMore: (node: TreeNode) => void;
+  onLoadMoreFolders: (node: TreeNode) => void;
   selectedKeys: ReadonlySet<string>;
   onSelectRow: (event: React.MouseEvent, target: SitemapRowTarget) => void;
   onRowContextMenu: (event: React.MouseEvent, target: SitemapRowTarget) => void;
   /** Open/closed state, owned by the tab so its toolbar can drive it. */
   expansion: ReturnType<typeof useSitemapExpansion>;
+}
+
+export interface SitePageState {
+  loaded: number;
+  count: number;
+  loading: boolean;
+}
+
+export interface FolderPageState {
+  loaded: number;
+  hasMore: boolean;
+  loading: boolean;
 }
 
 export type SitemapRowTarget =
@@ -88,6 +105,11 @@ function Node({
   depth,
   expanded,
   toggle,
+  pages,
+  folderPages,
+  onOpenNode,
+  onLoadMore,
+  onLoadMoreFolders,
   selectedKeys,
   onSelectRow,
   onRowContextMenu,
@@ -96,16 +118,26 @@ function Node({
   depth: number;
   expanded: Set<string>;
   toggle: (path: string) => void;
+  pages: Props['pages'];
+  folderPages: Props['folderPages'];
+  onOpenNode: Props['onOpenNode'];
+  onLoadMore: Props['onLoadMore'];
+  onLoadMoreFolders: Props['onLoadMoreFolders'];
   selectedKeys: ReadonlySet<string>;
   onSelectRow: Props['onSelectRow'];
   onRowContextMenu: Props['onRowContextMenu'];
 }) {
+  const t = useT();
   // A node folds if anything hangs off it. The requests count: a path
   // with fifty query variations was a wall of rows with no way to
   // collapse it, because only child *nodes* used to make a row foldable.
-  const canFold = node.children.length > 0 || node.flows.length > 0;
+  const isSite = node.site && node.path === siteLabel(node.site);
+  const canFold = Boolean(isSite && node.site!.flows > 0)
+    || node.children.length > 0 || node.flows.length > 0 || Boolean(node.knownFolder);
   const open = expanded.has(node.path);
-  const total = countFlows(node);
+  const page = pages[node.path];
+  const folderPage = folderPages[node.path];
+  const total = isSite ? page?.count ?? node.site!.flows : page?.count ?? countFlows(node);
   const statuses = statusesUnder(node);
 
   return (
@@ -115,7 +147,10 @@ function Node({
         style={{ paddingLeft: `${depth * 14}px` }}
         onClick={(event) => {
           onSelectRow(event, { kind: 'node', node });
-          if (canFold && !event.shiftKey && !event.ctrlKey && !event.metaKey) toggle(node.path);
+          if (canFold && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+            if (!open) onOpenNode(node);
+            toggle(node.path);
+          }
         }}
         onContextMenu={(event) => onRowContextMenu(event, { kind: 'node', node })}
       >
@@ -151,11 +186,30 @@ function Node({
               depth={depth + 1}
               expanded={expanded}
               toggle={toggle}
+              pages={pages}
+              folderPages={folderPages}
+              onOpenNode={onOpenNode}
+              onLoadMore={onLoadMore}
+              onLoadMoreFolders={onLoadMoreFolders}
               selectedKeys={selectedKeys}
               onSelectRow={onSelectRow}
               onRowContextMenu={onRowContextMenu}
             />
           ))}
+          {page && page.loaded < page.count && (
+            <button
+              className="tree-load-more"
+              disabled={page.loading}
+              onClick={() => onLoadMore(node)}
+            >
+              {page.loading ? t('target.loading') : t('target.loadMore')}
+            </button>
+          )}
+          {folderPage?.hasMore && (
+            <button className="tree-load-more" disabled={folderPage.loading} onClick={() => onLoadMoreFolders(node)}>
+              {folderPage.loading ? t('target.loading') : t('target.loadMoreFolders')}
+            </button>
+          )}
         </>
       )}
     </div>
@@ -174,7 +228,7 @@ export function allFoldablePaths(trees: SiteTree[]): Set<string> {
     paths.add(label);
     const walk = (node: TreeNode) => {
       for (const child of node.children) {
-        if (child.children.length > 0 || child.flows.length > 0) {
+        if (child.children.length > 0 || child.flows.length > 0 || child.knownFolder) {
           paths.add(`${label}${child.path}`);
         }
         walk(child);
@@ -189,16 +243,20 @@ export function allFoldablePaths(trees: SiteTree[]): Set<string> {
  *  expand-all and collapse-all without owning the tree's internals. */
 export function useSitemapExpansion(trees: SiteTree[]) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expandAllActive, setExpandAllActive] = useState(false);
 
   // Everything starts closed. Opening the spine of every site sounded
   // helpful, but a real capture is hundreds of hosts and the map opened
   // as a page of rows you had to scroll past to find anything.
   useEffect(() => {
     const valid = allFoldablePaths(trees);
-    setExpanded((current) => new Set([...current].filter((path) => valid.has(path))));
-  }, [trees]);
+    setExpanded((current) => expandAllActive
+      ? valid
+      : new Set([...current].filter((path) => valid.has(path))));
+  }, [trees, expandAllActive]);
 
   const toggle = useCallback((path: string) => {
+    setExpandAllActive(false);
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(path)) {
@@ -211,16 +269,25 @@ export function useSitemapExpansion(trees: SiteTree[]) {
   }, []);
 
   const expandAll = useCallback(() => {
+    setExpandAllActive(true);
     setExpanded(allFoldablePaths(trees));
   }, [trees]);
 
-  const collapseAll = useCallback(() => setExpanded(new Set()), []);
+  const collapseAll = useCallback(() => {
+    setExpandAllActive(false);
+    setExpanded(new Set());
+  }, []);
 
   return { expanded, toggle, expandAll, collapseAll, anyOpen: expanded.size > 0 };
 }
 
 export function SitemapTree({
   trees,
+  pages,
+  folderPages,
+  onOpenNode,
+  onLoadMore,
+  onLoadMoreFolders,
   selectedKeys,
   onSelectRow,
   onRowContextMenu,
@@ -246,6 +313,11 @@ export function SitemapTree({
             depth={0}
             expanded={expanded}
             toggle={toggle}
+            pages={pages}
+            folderPages={folderPages}
+            onOpenNode={onOpenNode}
+            onLoadMore={onLoadMore}
+            onLoadMoreFolders={onLoadMoreFolders}
             selectedKeys={selectedKeys}
             onSelectRow={onSelectRow}
             onRowContextMenu={onRowContextMenu}

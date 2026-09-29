@@ -9,11 +9,13 @@ import logging
 import sqlite3
 import time
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
+from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
 from .. import __version__
@@ -21,7 +23,6 @@ from ..addons.intercept import InterceptError
 from ..addons.match_replace import MatchReplaceError, preview as preview_match_replace
 from ..addons.repeater import RepeaterError, build_flow, render_raw
 from ..addons.websocket_proxy import WebSocketProxyError
-from ..addons.endpoints import build_endpoints
 from ..addons.codecs import (
     ChainStep,
     CodecError,
@@ -445,6 +446,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         and sharing a scope and a set of Repeater requests is the common
         case.
         """
+        if include_flows and await asyncio.to_thread(store.count) > 100_000:
+            raise HTTPException(
+                status_code=413,
+                detail="JSON export is limited to 100,000 flows; use the complete SQLite backup",
+            )
         data: dict[str, Any] = {
             "format": "lanius-project",
             "version": 1,
@@ -458,6 +464,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             flows = await asyncio.to_thread(lambda: store.list(limit=100000))
             data["flows"] = [flow.detail() for flow in flows]
         return data
+
+    @app.get("/api/project/backup")
+    async def backup_project() -> FileResponse:
+        path = await asyncio.to_thread(store.backup_database)
+        return FileResponse(
+            path, filename="lanius-project.sqlite",
+            media_type="application/x-sqlite3",
+            background=BackgroundTask(Path(path).unlink, missing_ok=True),
+        )
 
     @app.post("/api/project/import")
     async def import_project(request: Request) -> dict[str, Any]:
@@ -754,6 +769,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def list_flows(
         limit: int = Query(100, ge=1, le=1000),
         offset: int = Query(0, ge=0),
+        anchor: int | None = Query(None, ge=0),
+        cursor: str | None = None,
         host: str | None = None,
         method: str | None = None,
         status_code: int | None = None,
@@ -766,28 +783,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         exclude_extensions: list[str] | None = Query(None),
         in_scope_only: bool = False,
     ) -> dict[str, Any]:
-        records = await asyncio.to_thread(
-            store.list,
-            # Scope is decided in Python, so the database cannot do the
-            # paging for it; fetch a wider slice and cut it afterwards.
-            limit=limit if not in_scope_only else min(limit * 20, 20_000),
-            offset=offset,
-            host=host,
-            method=method,
-            status_code=status_code,
-            search=search,
-            methods=methods,
-            status_classes=status_classes,
-            extensions=extensions,
-            exclude_extensions=exclude_extensions,
-        )
-        if in_scope_only:
-            records = [
-                r
-                for r in records
-                if engine.scope.contains(r.scheme, r.host, r.port, r.path)
-            ][:limit]
-        return {"items": [r.summary() for r in records], "count": len(records)}
+        try:
+            page = await asyncio.to_thread(
+                store.page_summaries,
+                limit=limit,
+                offset=offset,
+                anchor=anchor,
+                cursor=cursor,
+                scope_predicate=(engine.scope.contains if in_scope_only and any(
+                    rule.enabled for rule in engine.scope.scope.rules
+                ) else None),
+                host=host,
+                method=method,
+                status_code=status_code,
+                search=search,
+                methods=methods,
+                status_classes=status_classes,
+                extensions=extensions,
+                exclude_extensions=exclude_extensions,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {**page, "count": len(page["items"])}
 
     @app.get("/api/flows/{flow_id}")
     async def get_flow(flow_id: str, reveal: bool = False) -> dict[str, Any]:
@@ -810,6 +827,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     )
         return data
 
+    @app.get("/api/flows/{flow_id}/body/{side}")
+    async def get_flow_body(flow_id: str, side: str) -> Response:
+        if side not in {"request", "response"}:
+            raise HTTPException(status_code=400, detail="side must be request or response")
+        body = await asyncio.to_thread(store.get_body_bytes, flow_id, side)
+        if body is None:
+            raise HTTPException(status_code=404, detail="body not found")
+        return Response(body, media_type="application/octet-stream")
     @app.get("/api/flows/{flow_id}/response-preview")
     async def get_response_preview(flow_id: str) -> dict[str, Any]:
         record = await asyncio.to_thread(store.get, flow_id)
@@ -1026,7 +1051,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # --- WebSocket proxy -------------------------------------------------
     @app.get("/api/websockets")
     async def websocket_state() -> dict[str, Any]:
-        return engine.websockets.state()
+        return await asyncio.to_thread(engine.websockets.state)
+
+    @app.get("/api/websockets/messages")
+    async def websocket_messages(
+        limit: int = Query(200, ge=1, le=1000),
+        before: int | None = Query(None, ge=1),
+    ) -> dict[str, Any]:
+        return await asyncio.to_thread(store.page_websocket_messages, limit=limit, before=before)
+
+    @app.get("/api/websockets/messages/{message_id}/raw")
+    async def websocket_message_raw(message_id: str) -> Response:
+        body = await asyncio.to_thread(store.get_websocket_message_bytes, message_id)
+        if body is None:
+            raise HTTPException(status_code=404, detail="message not found")
+        return Response(body, media_type="application/octet-stream")
 
     @app.patch("/api/websockets/intercept")
     async def patch_websocket_intercept(
@@ -1070,7 +1109,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.delete("/api/websockets")
     async def clear_websocket_messages() -> dict[str, bool]:
-        engine.websockets.clear()
+        await asyncio.to_thread(store.clear_websocket_messages)
+        engine.websockets.clear(persist=False)
         return {"ok": True}
 
     # --- repeater (M3) ----------------------------------------------------
@@ -1155,26 +1195,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def sitemap(
         in_scope_only: bool = False, with_paths: bool = False
     ) -> dict[str, Any]:
-        """The site map, optionally with each site's paths included.
-
-        with_paths exists because the tree needs them for every host it
-        draws. Fetching them per host meant one request and one query per
-        host, so opening Target on a real capture took seconds and got
-        worse with every new host.
-        """
+        """Site summaries; small legacy callers can include all paths."""
         sites = await asyncio.to_thread(store.distinct_sites)
-        by_site = await asyncio.to_thread(store.paths_by_site)
+        # Keep small legacy callers working without letting a combined
+        # response materialize millions of Python objects again.
+        if with_paths and await asyncio.to_thread(store.count) > 50_000:
+            raise HTTPException(
+                status_code=413,
+                detail="site map is too large; use /api/sitemap/paths pages",
+            )
+        by_site = await asyncio.to_thread(store.paths_by_site) if with_paths else {}
+        active_rules = [rule for rule in engine.scope.scope.rules if rule.enabled]
         items = []
         for site in sites:
             key = (site["scheme"], site["host"], site["port"])
             rows = by_site.get(key, [])
-            # A site counts as in scope when any of its recorded paths is, so a
-            # rule like /users/* still marks the host as a target.
-            paths = {row["path"] for row in rows if row.get("path")}
-            inside = any(
-                engine.scope.contains(site["scheme"], site["host"], site["port"], p)
-                for p in (paths or {"/"})
+            path_independent_scope = all(
+                rule.path in ({"", "*"} if rule.match_type == "glob" else {".*"})
+                or (rule.match_type == "glob" and rule.path == "/*"
+                    and site["scheme"] in {"http", "https"})
+                for rule in active_rules
             )
+            if not active_rules:
+                inside = True
+            elif path_independent_scope or site["paths"] == 0:
+                inside = engine.scope.contains(*key, "/")
+            else:
+                def matches_site_path(path: str) -> bool:
+                    return engine.scope.contains(*key, path)
+
+                inside = await asyncio.to_thread(
+                    store.any_path_for_site,
+                    *key,
+                    matches_site_path,
+                )
             if in_scope_only and not inside:
                 continue
             item = {**site, "in_scope": inside}
@@ -1186,29 +1240,78 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/sitemap/paths")
     async def sitemap_paths(
-        host: str, scheme: str = "https", port: int | None = None
+        host: str,
+        scheme: str = "https",
+        port: int | None = None,
+        port_is_null: bool = False,
+        in_scope_only: bool = False,
+        path_prefix: str | None = None,
+        limit: int = Query(200, ge=1, le=500),
+        offset: int = Query(0, ge=0),
     ) -> dict[str, Any]:
-        rows = await asyncio.to_thread(store.paths_for_site, scheme, host, port)
-        return {"items": rows, "count": len(rows)}
+        predicate, site_wide = await endpoint_scope_mode(in_scope_only)
+        if predicate is not None and site_wide and (port is not None or port_is_null):
+            if not predicate(scheme, host, port, "/"):
+                return {"items": [], "count": 0}
+            predicate = None
+        return await asyncio.to_thread(
+            store.page_paths_for_site,
+            scheme, host, port,
+            path_prefix=path_prefix, limit=limit, offset=offset,
+            port_is_null=port_is_null,
+            scope_predicate=predicate,
+        )
+
+    @app.get("/api/sitemap/folders")
+    async def sitemap_folders(
+        host: str, scheme: str = "https", port: int | None = None,
+        port_is_null: bool = False, path_prefix: str | None = None,
+        in_scope_only: bool = False,
+        limit: int = Query(200, ge=1, le=500),
+        offset: int = Query(0, ge=0),
+    ) -> dict[str, Any]:
+        predicate, site_wide = await endpoint_scope_mode(in_scope_only)
+        if predicate is not None and site_wide and (port is not None or port_is_null):
+            if not predicate(scheme, host, port, "/"):
+                return {"items": [], "has_more": False}
+            predicate = None
+        return await asyncio.to_thread(
+            store.page_folders_for_site, scheme, host, port,
+            path_prefix=path_prefix, limit=limit, offset=offset,
+            port_is_null=port_is_null,
+            scope_predicate=predicate,
+        )
+
+    async def endpoint_scope_mode(in_scope_only: bool) -> tuple[Any, bool]:
+        if not in_scope_only:
+            return None, False
+        rules = [rule for rule in engine.scope.scope.rules if rule.enabled]
+        if not rules:
+            return None, False
+        def any_path(rule: Any) -> bool:
+            return rule.path in ("", "*") or (
+                rule.match_type == "regex" and rule.path == ".*"
+            )
+        site_wide = all(any_path(rule) for rule in rules)
+        if not site_wide and all(
+            any_path(rule) or (rule.match_type == "glob" and rule.path == "/*")
+            for rule in rules
+        ):
+            site_wide = await asyncio.to_thread(store.all_paths_start_with_slash)
+        return engine.scope.contains, site_wide
 
     @app.get("/api/endpoints")
     async def endpoints(
         host: str | None = None,
         in_scope_only: bool = False,
         limit: int = Query(5000, ge=1, le=20000),
+        offset: int = Query(0, ge=0),
     ) -> dict[str, Any]:
-        records = await asyncio.to_thread(store.endpoint_candidates, host)
-        if in_scope_only:
-            records = [
-                r
-                for r in records
-                if engine.scope.contains(r["scheme"], r["host"], r["port"], r["path"])
-            ]
-        grouped = build_endpoints(records)
-        return {
-            "items": [e.as_dict() for e in grouped[:limit]],
-            "count": len(grouped),
-        }
+        predicate, site_wide = await endpoint_scope_mode(in_scope_only)
+        return await asyncio.to_thread(
+            store.page_endpoints, host=host, limit=limit, offset=offset,
+            scope_predicate=predicate, scope_site_wide=site_wide,
+        )
 
     @app.get("/api/endpoints/flows")
     async def endpoint_flows(
@@ -1221,15 +1324,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         limit: int = Query(200, ge=1, le=500),
         offset: int = Query(0, ge=0),
     ) -> dict[str, Any]:
-        rows = await asyncio.to_thread(
-            store.paths_for_endpoint, scheme, host, port, method, template
+        predicate, site_wide = await endpoint_scope_mode(in_scope_only)
+        return await asyncio.to_thread(
+            store.page_endpoint_flows, scheme, host, port, method, template,
+            limit=limit, offset=offset,
+            scope_predicate=predicate, scope_site_wide=site_wide,
         )
-        if in_scope_only:
-            rows = [
-                row for row in rows
-                if engine.scope.contains(scheme, host, port, row["path"])
-            ]
-        return {"items": rows[offset:offset + limit], "count": len(rows)}
 
     # --- intruder (M5) ----------------------------------------------------
     @app.post("/api/intruder/positions")

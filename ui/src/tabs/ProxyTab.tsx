@@ -6,7 +6,7 @@ import {
   getFlow,
   getInterceptState,
   getStatus,
-  listFlows,
+  listFlowPage,
   patchInterceptRules,
 } from '../api/client';
 import { connectStream, type ConnectionState } from '../api/stream';
@@ -55,6 +55,12 @@ export function ProxyTab() {
   const t = useT();
   const [view, setView] = useState<View>('history');
   const [flows, setFlows] = useState<FlowSummary[]>([]);
+  const flowsRef = useRef(flows);
+  flowsRef.current = flows;
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyPageInput, setHistoryPageInput] = useState('1');
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
   // Outside the component: switching tabs unmounts this one, and a
   // selection kept here would be gone when you came back to it.
   const [selected, setSelected] = useState<string | null>(getSelectedFlow);
@@ -71,6 +77,14 @@ export function ProxyTab() {
 
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
+  const historyPageRef = useRef(historyPage);
+  historyPageRef.current = historyPage;
+  const historyAnchor = useRef<number | undefined>(undefined);
+  const historyCursors = useRef<Record<number, string>>({});
+  const [nextHistoryCursor, setNextHistoryCursor] = useState<string | null>(null);
+  const requestGeneration = useRef(0);
+  const scopeReloadTimer = useRef<number | null>(null);
+  const previousSearch = useRef(filters.search);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
 
@@ -80,19 +94,61 @@ export function ProxyTab() {
   useReportBusy('proxy', loading);
 
   const reload = useCallback(async () => {
+    const generation = ++requestGeneration.current;
+    setHistoryLoading(true);
     try {
-      setFlows(await listFlows(filtersRef.current));
+      const page = await listFlowPage(
+        filtersRef.current, historyPageRef.current * 200, 200,
+        historyAnchor.current, historyCursors.current[historyPageRef.current],
+      );
+      if (generation !== requestGeneration.current) return;
+      historyAnchor.current = page.anchor;
+      setFlows(page.items);
+      setHasMoreHistory(page.has_more);
+      setNextHistoryCursor(page.next_cursor ?? null);
       setError(null);
     } catch (err) {
-      setError(msg('proxy.engineUnreachable', { message: (err as Error).message }));
+      if (generation === requestGeneration.current) {
+        setError(msg('proxy.engineUnreachable', { message: (err as Error).message }));
+      }
     } finally {
-      setLoading(false);
+      if (generation === requestGeneration.current) {
+        setLoading(false);
+        setHistoryLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    void reload();
-  }, [filters, reload]);
+    const searchChanged = filters.search !== previousSearch.current;
+    previousSearch.current = filters.search;
+    if (!searchChanged) {
+      void reload();
+      return;
+    }
+    requestGeneration.current += 1;
+    const timer = window.setTimeout(() => void reload(), 300);
+    return () => window.clearTimeout(timer);
+  }, [filters, historyPage, reload]);
+
+  useEffect(() => setHistoryPageInput(String(historyPage + 1)), [historyPage]);
+
+  const jumpToHistoryPage = () => {
+    const page = Number(historyPageInput);
+    if (Number.isSafeInteger(page) && page > 0) {
+      if (page === 1) {
+        historyAnchor.current = undefined;
+        historyCursors.current = {};
+        setNextHistoryCursor(null);
+      }
+      setHistoryPage(page - 1);
+    }
+    else setHistoryPageInput(String(historyPage + 1));
+  };
+
+  useEffect(() => () => {
+    if (scopeReloadTimer.current !== null) window.clearTimeout(scopeReloadTimer.current);
+  }, []);
 
   useEffect(() => {
     getInterceptState()
@@ -125,7 +181,11 @@ export function ProxyTab() {
         onEvent: (event) => {
           switch (event.type) {
             case 'flows.cleared':
+              historyAnchor.current = undefined;
+              historyCursors.current = {};
+              setNextHistoryCursor(null);
               setFlows([]);
+              setHasMoreHistory(false);
               clearSelection();
               return;
             case 'intercept.rules':
@@ -146,8 +206,31 @@ export function ProxyTab() {
             case 'flow.error': {
               if (pausedRef.current) return;
               const flow = event.data;
-              if (!matchesFilters(flow, filtersRef.current)) return;
-              setFlows((prev) => mergeFlow(prev, flow));
+              if (historyPageRef.current === 0) {
+                historyAnchor.current = undefined;
+                historyCursors.current = {};
+                setNextHistoryCursor(null);
+              }
+              if (filtersRef.current.inScopeOnly || filtersRef.current.search) {
+                if (scopeReloadTimer.current !== null) window.clearTimeout(scopeReloadTimer.current);
+                scopeReloadTimer.current = window.setTimeout(() => void reload(), 500);
+                return;
+              }
+              if (historyPageRef.current === 0
+                && matchesFilters(flow, filtersRef.current)
+                && flowsRef.current.length >= 200
+                && !flowsRef.current.some((item) => item.id === flow.id)) {
+                setHasMoreHistory(true);
+              }
+              setFlows((prev) => {
+                if (!matchesFilters(flow, filtersRef.current)) {
+                  return prev.filter((item) => item.id !== flow.id);
+                }
+                if (historyPageRef.current > 0 && !prev.some((item) => item.id === flow.id)) {
+                  return prev;
+                }
+                return mergeFlow(prev, flow, 200);
+              });
               return;
             }
             default:
@@ -155,7 +238,7 @@ export function ProxyTab() {
           }
         },
       }),
-    [],
+    [reload],
   );
 
   const onToggleIntercept = useCallback(
@@ -199,7 +282,11 @@ export function ProxyTab() {
 
   const onClear = useCallback(async () => {
     await clearFlows();
+    historyAnchor.current = undefined;
+    historyCursors.current = {};
+    setNextHistoryCursor(null);
     setFlows([]);
+    setHasMoreHistory(false);
     clearSelection();
   }, []);
 
@@ -263,7 +350,7 @@ export function ProxyTab() {
         <>
           <FilterBar
             filters={filters}
-            onChange={setFilters}
+            onChange={(next) => { historyAnchor.current = undefined; historyCursors.current = {}; setNextHistoryCursor(null); setHistoryPage(0); setHistoryPageInput('1'); setFilters(next); }}
             paused={paused}
             onTogglePause={() => setPaused((p) => !p)}
             onClear={onClear}
@@ -277,7 +364,7 @@ export function ProxyTab() {
             open={filterOpen}
             filters={filters}
             onClose={() => setFilterOpen(false)}
-            onApply={setFilters}
+            onApply={(next) => { setHistoryPage(0); setHistoryPageInput('1'); setFilters(next); }}
           />
           {error && <div className="banner error">{renderMessage(error, t)}</div>}
           <Split
@@ -295,6 +382,27 @@ export function ProxyTab() {
             }
             second={<FlowDetailView flow={selectedFlow} />}
           />
+          <div className="history-pages">
+            <button disabled={historyPage === 0 || historyLoading} onClick={() => {
+              if (historyPage === 1) {
+                historyAnchor.current = undefined;
+                historyCursors.current = {};
+                setNextHistoryCursor(null);
+              }
+              setHistoryPage((page) => page - 1);
+            }}>{t('proxy.newerHistory')}</button>
+            <label>{t('proxy.historyPageLabel')}
+              <input type="number" min="1" value={historyPageInput}
+                onChange={(event) => setHistoryPageInput(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter') jumpToHistoryPage(); }} />
+            </label>
+            <button disabled={historyLoading} onClick={jumpToHistoryPage}>{t('proxy.jumpToPage')}</button>
+            <button disabled={!hasMoreHistory || historyLoading} onClick={() => {
+              if (nextHistoryCursor) historyCursors.current[historyPage + 1] = nextHistoryCursor;
+              else delete historyCursors.current[historyPage + 1];
+              setHistoryPage((page) => page + 1);
+            }}>{t('proxy.olderHistory')}</button>
+          </div>
           <ConfirmDialog
             open={pendingDelete !== null}
             title={t('menu.deleteFlow')}

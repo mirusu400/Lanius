@@ -12,6 +12,7 @@ import type {
   MatchReplaceRule,
   PausedFlow,
   WebSocketInterceptRules,
+  WebSocketMessage,
   WebSocketState,
 } from './types';
 
@@ -78,8 +79,11 @@ async function errorDetail(res: Response): Promise<string> {
   return res.statusText ? `${res.status} ${res.statusText}` : `HTTP ${res.status}`;
 }
 
-export function buildFlowQuery(filters: FlowFilters, limit = 200): string {
+export function buildFlowQuery(filters: FlowFilters, limit = 200, offset = 0, anchor?: number, cursor?: string): string {
   const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set('cursor', cursor);
+  else if (offset) params.set('offset', String(offset));
+  if (anchor !== undefined) params.set('anchor', String(anchor));
   if (filters.host) params.set('host', filters.host);
   if (filters.method) params.set('method', filters.method);
   if (filters.statusCode !== undefined && !Number.isNaN(filters.statusCode)) {
@@ -115,6 +119,16 @@ export async function listFlows(
   // else) must not hand back undefined: callers treat this as a list and
   // would crash on the first .find().
   return data?.items ?? [];
+}
+
+export async function listFlowPage(
+  filters: FlowFilters = {}, offset = 0, limit = 200, anchor?: number, cursor?: string,
+): Promise<{ items: FlowSummary[]; has_more: boolean; anchor?: number; next_cursor?: string | null }> {
+  const data = await request<{ items: FlowSummary[]; has_more?: boolean; anchor?: number; next_cursor?: string | null }>(
+    `/api/flows?${buildFlowQuery(filters, limit, offset, anchor, cursor)}`,
+  );
+  return { items: data?.items ?? [], has_more: data?.has_more ?? false,
+    anchor: data?.anchor, next_cursor: data?.next_cursor };
 }
 
 export function getFlow(id: string, reveal = false): Promise<FlowDetail> {
@@ -253,6 +267,12 @@ export function getWebSocketState(): Promise<WebSocketState> {
   return request('/api/websockets');
 }
 
+export function listWebSocketMessages(before?: number): Promise<{
+  items: WebSocketMessage[]; has_more: boolean; next_before: number | null;
+}> {
+  return request(`/api/websockets/messages?limit=200${before ? `&before=${before}` : ''}`);
+}
+
 export function patchWebSocketIntercept(
   patch: Partial<WebSocketInterceptRules>,
 ): Promise<WebSocketInterceptRules> {
@@ -380,18 +400,42 @@ export function getSitePaths(
   host: string,
   scheme: string,
   port: number | null,
+  options: { limit?: number; offset?: number; pathPrefix?: string; inScopeOnly?: boolean } = {},
 ): Promise<{ items: import('./types').SitePath[]; count: number }> {
   const params = new URLSearchParams({ host, scheme });
   if (port !== null) params.set('port', String(port));
+  else params.set('port_is_null', 'true');
+  params.set('limit', String(options.limit ?? 200));
+  params.set('offset', String(options.offset ?? 0));
+  if (options.pathPrefix) params.set('path_prefix', options.pathPrefix);
+  if (options.inScopeOnly) params.set('in_scope_only', 'true');
   return request(`/api/sitemap/paths?${params}`);
+}
+
+export function getSiteFolders(
+  host: string, scheme: string, port: number | null,
+  options: { limit?: number; offset?: number; pathPrefix?: string; inScopeOnly?: boolean } = {},
+): Promise<{ items: string[]; has_more: boolean }> {
+  const params = new URLSearchParams({ host, scheme });
+  if (port !== null) params.set('port', String(port));
+  else params.set('port_is_null', 'true');
+  params.set('limit', String(options.limit ?? 200));
+  params.set('offset', String(options.offset ?? 0));
+  if (options.pathPrefix) params.set('path_prefix', options.pathPrefix);
+  if (options.inScopeOnly) params.set('in_scope_only', 'true');
+  return request(`/api/sitemap/folders?${params}`);
 }
 
 export function getEndpoints(
   host?: string,
   inScopeOnly = false,
+  limit = 200,
+  offset = 0,
 ): Promise<{ items: import('./types').EndpointGroup[]; count: number }> {
   const params = new URLSearchParams({ in_scope_only: String(inScopeOnly) });
   if (host) params.set('host', host);
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
   return request(`/api/endpoints?${params}`);
 }
 
@@ -704,6 +748,10 @@ export function putWorkspace(key: string, value: unknown): Promise<{ ok: boolean
 
 export function exportProject(includeFlows = true): Promise<Record<string, unknown>> {
   return request(`/api/project/export?include_flows=${includeFlows}`);
+}
+
+export function projectBackupUrl(): string {
+  return `${API_BASE}/api/project/backup`;
 }
 
 export function importProject(
