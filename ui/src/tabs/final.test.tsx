@@ -77,6 +77,9 @@ beforeEach(() => {
       if (url.includes('/api/project/compact')) {
         return jsonResponse({ db_bytes: 0, reclaimable_bytes: 0, total_flows: 0, sites: [] });
       }
+      if (url.includes('/api/upstream')) {
+        return jsonResponse({ enabled: false, hops: [], url: null });
+      }
       return jsonResponse({});
     }),
   );
