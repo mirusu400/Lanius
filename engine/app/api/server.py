@@ -707,6 +707,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def listener() -> dict[str, Any]:
         return engine.listener_state()
 
+    @app.get("/api/upstream")
+    async def upstream() -> dict[str, Any]:
+        return engine.upstream_state()
+
+    @app.post("/api/upstream")
+    async def set_upstream(payload: dict[str, Any]) -> dict[str, Any]:
+        hops = payload.get("hops") if "hops" in payload else payload.get("url")
+        if hops is not None and not (
+            isinstance(hops, str)
+            or (isinstance(hops, list) and all(isinstance(hop, str) for hop in hops))
+        ):
+            raise HTTPException(status_code=422, detail="hops must be a list of proxy URLs")
+        try:
+            return await engine.set_upstream(hops)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except ProxyStartError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     @app.post("/api/listener")
     async def set_listener(payload: dict[str, Any]) -> dict[str, Any]:
         """Move the proxy to a different address or port.

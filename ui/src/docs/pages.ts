@@ -209,6 +209,19 @@ const en: DocPage[] = [
       'Choose the port, and let other devices reach the proxy.',
     sections: [
       {
+        heading: 'Sending through another proxy',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'In Settings > Proxy > Upstream proxy, choose Use upstream proxy and enter HTTP, HTTPS, or SOCKS5 proxy URLs. Add and reorder hops to choose the route from Lanius to the destination. Your browser still connects to Lanius. The chain is saved with the project and takes effect when applied.',
+          },
+          {
+            kind: 'note',
+            body: 'HTTPS proxy certificates are verified. Proxy authentication and SOCKS5 UDP relay are not supported.',
+          },
+        ],
+      },
+      {
         heading: 'Changing the port',
         blocks: [
           {
@@ -638,6 +651,19 @@ const ko: DocPage[] = [
     title: '프록시 리스너',
     summary: '포트를 고르고, 다른 기기에서도 접속할 수 있게 합니다.',
     sections: [
+      {
+        heading: '다른 프록시를 통해 보내기',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Settings > 프록시 > 상위 프록시에서 상위 프록시 사용을 고르고 http://127.0.0.1:8081 같은 HTTP 또는 HTTPS 프록시 URL을 입력하세요. 브라우저는 계속 Lanius에 연결하고, 해당 리스너가 받은 요청은 상위 프록시로 보냅니다. 경로는 프로젝트에 저장되며 적용 시 바로 바뀝니다.',
+          },
+          {
+            kind: 'note',
+            body: '현재는 인증이 없는 프록시 한 곳만 지정할 수 있습니다. SOCKS5와 여러 홉은 별도 연결 계층이 필요하며 아직 지원하지 않습니다.',
+          },
+        ],
+      },
       {
         heading: '포트 바꾸기',
         blocks: [

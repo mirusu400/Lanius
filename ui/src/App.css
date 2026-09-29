@@ -1102,6 +1102,23 @@ pre.body,
   z-index: 1;
 }
 
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.column-resize-handle:hover,
+.column-resize-handle:focus-visible,
+.column-resize-handle.dragging {
+  background: var(--accent);
+  outline: none;
+}
+
 .flow-table td {
   padding: 4px 8px;
   border-bottom: 1px solid var(--border-soft);
@@ -1138,6 +1155,9 @@ pre.body,
 }
 .col-modified {
   width: 82px;
+  text-align: center;
+}
+.flow-table th.modified-header {
   text-align: center;
 }
 .col-modified.is-modified {
@@ -2433,6 +2453,33 @@ pre.body {
   width: 100px;
 }
 
+.upstream-hops {
+  margin: 14px 0;
+}
+
+.upstream-hop {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.upstream-hop label {
+  color: var(--muted);
+  min-width: 68px;
+}
+
+.upstream-hop .upstream-url {
+  flex: 1;
+  min-width: 220px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  padding: 5px 10px;
+}
+
 .shortcut-list {
   margin-top: 8px;
 }
@@ -2480,10 +2527,8 @@ pre.body {
 
 /* --- site map (combined tree) --- */
 .sitemap-pane {
-  border-right: 1px solid var(--border);
   overflow: auto;
-  width: 46%;
-  min-width: 320px;
+  width: 100%;
 }
 
 .tree-name {

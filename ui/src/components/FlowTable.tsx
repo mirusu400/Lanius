@@ -1,5 +1,6 @@
 import type { FlowSummary } from '../api/types';
 import { useT } from '../i18n';
+import { ResizableHeader, useResizableColumns } from './ResizableColumns';
 import {
   formatBytes,
   formatDuration,
@@ -18,19 +19,27 @@ interface Props {
 
 export function FlowTable({ flows, selectedId, onSelect, onContextMenu }: Props) {
   const t = useT();
+  const columns = useResizableColumns('lanius.columns.history', [84, 70, 180, 260, 66, 82, 78, 84]);
+  const headers = [
+    t('flow.time'), t('flow.method'), t('flow.host'), t('flow.url'),
+    t('flow.status'), t('flow.modified'), t('flow.size'), t('flow.time'),
+  ];
   return (
     <div className="flow-table-wrap">
-      <table className="flow-table">
+      <table className="flow-table" style={{ width: `max(100%, ${columns.widths.reduce((sum, width) => sum + width, 0)}px)` }}>
+        <colgroup>{columns.widths.map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
         <thead>
           <tr>
-            <th className="col-time">{t('flow.time')}</th>
-            <th className="col-method">{t('flow.method')}</th>
-            <th className="col-host">{t('flow.host')}</th>
-            <th className="col-url">{t('flow.url')}</th>
-            <th className="col-status">{t('flow.status')}</th>
-            <th className="col-modified">{t('flow.modified')}</th>
-            <th className="col-size">{t('flow.size')}</th>
-            <th className="col-time">{t('flow.time')}</th>
+            {headers.map((label, index) => (
+              <ResizableHeader
+                key={index}
+                label={label}
+                index={index}
+                columns={columns}
+                className={index === 5 ? 'modified-header' : undefined}
+                resizeLabel={t('table.resizeColumn', { column: label })}
+              />
+            ))}
           </tr>
         </thead>
         <tbody>

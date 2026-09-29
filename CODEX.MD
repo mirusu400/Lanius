@@ -176,7 +176,7 @@
 - **Comparer:** 두 요청/응답 바이트·단어 단위 비교.
 - **Logger:** 실시간 이벤트 스트림 + 저장된 이벤트 로그, 필터/일시정지.
 - **Plugins:** 설치/활성/비활성, 플러그인 제공 탭 마운트.
-- **Settings:** 엔진/프록시 상태, HTTP 본문 자동 압축 해제, Match & Replace 규칙, OS별 기본값과 사용자 지정 키보드 단축키, CA 내보내기(pem/cer/p12) 및 `mitm.it` 안내, 인터페이스 언어 선택.
+- **Settings:** 엔진/프록시 상태, HTTP/HTTPS 상위 프록시 한 홉, HTTP 본문 자동 압축 해제, Match & Replace 규칙, OS별 기본값과 사용자 지정 키보드 단축키, CA 내보내기(pem/cer/p12) 및 `mitm.it` 안내, 인터페이스 언어 선택.
 
 ---
 
@@ -282,6 +282,7 @@ cd shell && npm run tauri dev
 | 셸 | `libc`는 `[target.'cfg(unix)'.dependencies]`로 분리 | 윈도우 빌드에서 불필요한 의존성이 걸리지 않도록 |
 | 엔진 | 워치독은 `os.name`으로 분기 | 윈도우는 자기 자신에게 SIGTERM을 못 보내 SIGINT를 쓰고, `os.kill(pid,0)` 대신 `OpenProcess`로 생존 확인 |
 | 셸 | 리소스 탐색은 macOS·Linux·AppImage 레이아웃을 모두 후보로 | `Contents/Resources`만 보면 deb(`/usr/bin` → `/usr/lib/<name>`)와 AppImage(`$APPDIR`)에서 번들 엔진을 못 찾음(Linux 잡 추가 시 발견) |
+| 상위 프록시 | HTTP/HTTPS 한 홉은 mitmproxy upstream mode, SOCKS5 또는 여러 홉은 번들 GOST v3.3.0 체인을 루프백에서 실행 | mitmproxy가 브라우저 리스너와 캡처를 담당하고 GOST가 순서형 HTTP/HTTPS/SOCKS5 TCP 연결을 처리. HTTPS 홉은 인증서 검증 활성화 |
 
 ---
 

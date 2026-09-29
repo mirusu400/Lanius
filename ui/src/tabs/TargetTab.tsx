@@ -43,6 +43,8 @@ import {
   type TreeNode,
 } from './targetModel';
 import { FlowDetailView } from '../components/FlowDetail';
+import { Split } from '../components/Split';
+import { ResizableHeader, useResizableColumns } from '../components/ResizableColumns';
 import { connectStream } from '../api/stream';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 
@@ -57,6 +59,7 @@ function flowIdsUnder(node: TreeNode): string[] {
 
 export function TargetTab() {
   const t = useT();
+  const endpointColumns = useResizableColumns('lanius.columns.endpoints', [70, 180, 300, 78, 180, 180]);
   const [view, setView] = useState<View>('sitemap');
   const [sites, setSites] = useState<Site[]>([]);
   const [trees, setTrees] = useState<SiteTree[]>([]);
@@ -382,15 +385,22 @@ export function TargetTab() {
         />
       ) : view === 'endpoints' ? (
         <div className="endpoint-list">
-          <table className="flow-table">
+          <table className="flow-table" style={{ width: `max(100%, ${endpointColumns.widths.reduce((sum, width) => sum + width, 0)}px)` }}>
+            <colgroup>{endpointColumns.widths.map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
             <thead>
               <tr>
-                <th className="col-method">{t('flow.method')}</th>
-                <th className="col-host">{t('flow.host')}</th>
-                <th>{t('target.endpoint')}</th>
-                <th className="col-size">{t('target.count')}</th>
-                <th>{t('target.params')}</th>
-                <th className="col-host">{t('target.statuses')}</th>
+                {[
+                  t('flow.method'), t('flow.host'), t('target.endpoint'),
+                  t('target.count'), t('target.params'), t('target.statuses'),
+                ].map((label, index) => (
+                  <ResizableHeader
+                    key={index}
+                    label={label}
+                    index={index}
+                    columns={endpointColumns}
+                    resizeLabel={t('table.resizeColumn', { column: label })}
+                  />
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -421,8 +431,12 @@ export function TargetTab() {
           </table>
         </div>
       ) : (
-        <div className="proxy-split">
-          <div className="sitemap-pane">
+        <Split
+          direction="horizontal"
+          storageKey="lanius.split.sitemap"
+          initial={0.46}
+          className="proxy-split"
+          first={<div className="sitemap-pane">
             <p className="sitemap-selection-hint">
               {selectedRows.length > 1
                 ? t('target.selectedRows', { count: selectedRows.length })
@@ -464,14 +478,11 @@ export function TargetTab() {
               }
               onClose={menu.close}
             />
-          </div>
-          {/* The host cards that used to sit here repeated what the tree
-              already shows, and their only action, adding a site to
-              scope, is on the tree's own right-click menu. */}
-          <div className="site-detail">
+          </div>}
+          second={<div className="site-detail">
             {selectedDetail && <FlowDetailView flow={selectedDetail} />}
-          </div>
-        </div>
+          </div>}
+        />
       )}
     </div>
   );

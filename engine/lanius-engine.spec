@@ -57,6 +57,11 @@ for package in ("mitmproxy", "mcp"):
     hiddenimports += h
 hiddenimports += collect_submodules("app")
 hiddenimports += ["uvicorn.logging", "uvicorn.protocols", "uvicorn.lifespan"]
+gost_binary = Path("vendor/gost/gost.exe" if os.name == "nt" else "vendor/gost/gost")
+if not gost_binary.is_file():
+    raise RuntimeError("GOST binary missing; run python scripts/fetch_gost.py before PyInstaller")
+binaries.append((str(gost_binary), "."))
+datas.append(("vendor/gost/LICENSE", "gost-license"))
 excludes = ["mcp.cli", "typer", "tkinter", "matplotlib", "PyInstaller"]
 
 a = Analysis(

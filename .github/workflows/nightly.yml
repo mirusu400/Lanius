@@ -205,7 +205,9 @@ jobs:
           LANIUS_BUILD_RELEASE: >-
             nightly-${{ needs.meta.outputs.date }}-${{ needs.meta.outputs.short_sha }}
           LANIUS_BUILD_DATE: ${{ needs.meta.outputs.date }}
-        run: pyinstaller --clean --noconfirm lanius-engine.spec
+        run: |
+          python ../scripts/fetch_gost.py
+          pyinstaller --clean --noconfirm lanius-engine.spec
 
       - name: Smoke-test the frozen engine
         shell: bash

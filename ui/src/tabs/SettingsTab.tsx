@@ -30,6 +30,7 @@ import { ProjectCompactSection } from "./settings/ProjectCompactSection";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { TlsSection } from "./settings/TlsSection";
 import { UpdatesSection } from "./settings/UpdatesSection";
+import { UpstreamSection } from "./settings/UpstreamSection";
 
 const GROUPS = [
   "proxy",
@@ -94,6 +95,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
         {group === "proxy" && (
           <>
             <ListenerSection />
+            <UpstreamSection />
             <BodyDisplaySection />
             <MatchReplaceSection />
             <EngineSection />

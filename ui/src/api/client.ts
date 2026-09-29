@@ -613,6 +613,18 @@ export function getListener(): Promise<import('./types').ListenerState> {
   return request('/api/listener');
 }
 
+export function getUpstream(): Promise<import('./types').UpstreamState> {
+  return request('/api/upstream');
+}
+
+export function setUpstream(hops: string[]): Promise<import('./types').UpstreamState> {
+  return request('/api/upstream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hops }),
+  });
+}
+
 export function setListener(
   host: string,
   port: number,

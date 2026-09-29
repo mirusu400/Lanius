@@ -150,6 +150,23 @@ port is busy. A launch-time override is also available:
 LANIUS_API_PORT=8091 open -a Lanius
 ```
 
+### Upstream proxy
+
+To send browser traffic through other proxies, open **Settings > Proxy >
+Upstream proxy**, choose **Use upstream proxy**, and enter HTTP, HTTPS, or
+SOCKS5 proxy URLs such as `http://127.0.0.1:8081` and
+`socks5://127.0.0.1:1080`. Add and reorder hops to choose the path from
+Lanius to the destination. The browser still connects to Lanius. The chain
+is saved with the project and takes effect when applied. HTTPS proxy
+certificates are verified. Proxy authentication is not supported yet.
+SOCKS5 routing covers TCP connections; UDP relay is not part of the browser
+listener.
+
+Multi-hop and SOCKS5 routing use a bundled [GOST](https://github.com/go-gost/gost)
+v3.3.0 bridge on a loopback port. Run `python3 scripts/fetch_gost.py` before
+freezing the engine locally; release builds fetch the pinned, hash-checked
+binary automatically. GOST is licensed under MIT.
+
 ### Appearance
 
 **Settings > Appearance** has a dark and a light theme, and follows the system
@@ -205,6 +222,8 @@ formats and does not mean that the request body itself is compressed.
 History has a **Modified** column. When Match & Replace, Intercept, or a plugin
 changes a request, its detail pane keeps **Original**, **Auto-modified**, and
 **Modified request** tabs so every stage can be compared.
+Drag a History column header's right edge to resize it. Column widths are
+remembered on this machine.
 
 Right-click a request to send it to Repeater or Intruder, add it to the scope,
 or copy it as a URL. The site map, Repeater tabs and Intruder results have
@@ -258,6 +277,9 @@ also collapses dynamic paths into endpoints, so `/users/1`, `/users/2` and
 In the site map, Ctrl/⌘-click to select separate sites, folders or requests,
 or Shift-click to select a visible range. Right-click a selected row to delete
 the selection together after reviewing the affected request count.
+Drag the divider between the site tree and request detail to resize either
+pane. Endpoint columns can also be resized from their header edges. These
+sizes are remembered on this machine.
 
 Define a **scope** with include and exclude rules to keep your attention on the
 application under test. Scope rules persist across restarts, and you can tell

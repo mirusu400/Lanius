@@ -431,6 +431,12 @@ export interface ListenerState {
   addresses: BindAddress[];
 }
 
+export interface UpstreamState {
+  enabled: boolean;
+  hops: string[];
+  url: string | null;
+}
+
 export interface TlsState {
   profile: string;
   custom_ciphers: string | null;

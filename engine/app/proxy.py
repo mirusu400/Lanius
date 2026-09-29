@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import re
 import ipaddress
@@ -12,8 +13,10 @@ import subprocess
 import sys
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
 from mitmproxy import options
+from mitmproxy.proxy.mode_specs import ProxyMode
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy_rs.local import LocalRedirector
 
@@ -35,6 +38,7 @@ from .tls import (
     patch_version_probe,
     validate_ciphers,
 )
+from .upstream import UpstreamBridge
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +168,54 @@ class ProxyStartError(RuntimeError):
     """The proxy could not bind its listen address."""
 
 
+def normalize_upstream_url(value: str) -> str:
+    """Accept an explicit HTTP, HTTPS or SOCKS5 proxy URL."""
+    try:
+        parsed = urlsplit(value.strip())
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("invalid upstream proxy address") from exc
+    if (
+        parsed.scheme not in {"http", "https", "socks5"}
+        or not parsed.hostname
+        or any(character.isspace() for character in parsed.hostname)
+        or "," in parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("use an HTTP, HTTPS or SOCKS5 proxy URL without credentials or a path")
+    if port is None:
+        port = {"http": 80, "https": 443, "socks5": 1080}[parsed.scheme]
+    if not 1 <= port <= 65535:
+        raise ValueError("upstream proxy port must be between 1 and 65535")
+    host = parsed.hostname
+    authority = f"[{host}]" if ":" in host else host
+    normalized = f"{parsed.scheme}://{authority}:{port}"
+    if parsed.scheme != "socks5":
+        try:
+            ProxyMode.parse(f"upstream:{normalized}@8080")
+        except ValueError as exc:
+            raise ValueError("invalid upstream proxy address") from exc
+    return normalized
+
+
+def _upstream_loops_back(url: str, listen_host: str, listen_port: int) -> bool:
+    parsed = urlsplit(url)
+    if parsed.port != listen_port:
+        return False
+    host = parsed.hostname or ""
+    if host == listen_host:
+        return True
+    if _is_loopback(host):
+        return listen_host in {ALL_INTERFACES, "::", ""} or _is_loopback(listen_host)
+    if listen_host in {ALL_INTERFACES, "::", ""}:
+        return host in {entry["host"] for entry in _bindable_addresses()}
+    return False
+
+
 class ProxyEngine:
     """Runs mitmproxy inside the app's asyncio loop."""
 
@@ -201,9 +253,14 @@ class ProxyEngine:
         # A saved listener overrides the defaults and the environment, since
         # it is the one a user chose deliberately.
         self._apply_saved_listener()
+        self.upstream_hops: list[str] = []
+        self._upstream_bridge: UpstreamBridge | None = None
+        self._apply_saved_upstream()
 
     LISTEN_HOST_SETTING = "listen_host"
     LISTEN_PORT_SETTING = "listen_port"
+    UPSTREAM_SETTING = "upstream_proxy_url"
+    UPSTREAM_HOPS_SETTING = "upstream_proxy_hops"
 
     def _apply_saved_listener(self) -> None:
         host = self.store.get_setting(self.LISTEN_HOST_SETTING)
@@ -216,6 +273,28 @@ class ProxyEngine:
             except ValueError:
                 logger.warning("ignoring saved listener port %r", port)
 
+    def _apply_saved_upstream(self) -> None:
+        saved = self.store.get_setting(self.UPSTREAM_HOPS_SETTING)
+        if saved is None:
+            legacy = self.store.get_setting(self.UPSTREAM_SETTING)
+            saved = json.dumps([legacy]) if legacy else None
+        if saved:
+            try:
+                hops = json.loads(saved)
+                if not isinstance(hops, list) or not all(isinstance(hop, str) for hop in hops):
+                    raise ValueError("invalid saved upstream chain")
+                hops = [normalize_upstream_url(hop) for hop in hops]
+                if any(_upstream_loops_back(hop, self.settings.proxy_host, self.settings.proxy_port) for hop in hops):
+                    raise ValueError("upstream proxy points back to the listener")
+                self.upstream_hops = hops
+            except (ValueError, TypeError) as exc:
+                logger.warning("ignoring saved upstream proxy: %s", exc)
+
+    def _needs_upstream_bridge(self) -> bool:
+        return len(self.upstream_hops) > 1 or (
+            bool(self.upstream_hops) and self.upstream_hops[0].startswith("socks5://")
+        )
+
     @property
     def running(self) -> bool:
         return self._task is not None and not self._task.done()
@@ -226,7 +305,11 @@ class ProxyEngine:
         ``extra`` overrides the saved local-capture setting, so a caller
         switching it off is not handed the old value back.
         """
-        modes = [f"regular@{self.settings.proxy_port}"]
+        upstream = self._upstream_bridge.url if self._upstream_bridge else (
+            self.upstream_hops[0] if self.upstream_hops else None
+        )
+        listener = f"upstream:{upstream}@{self.settings.proxy_port}" if upstream else f"regular@{self.settings.proxy_port}"
+        modes = [listener]
         modes.extend(self.settings.extra_modes)
         if extra is None:
             if (spec := self.local_capture_spec()) is not None:
@@ -297,9 +380,21 @@ class ProxyEngine:
         except ProxyStartError as exc:
             self.start_error = str(exc)
             raise
-        self.master = self._build_master()
-        self._task = asyncio.create_task(self.master.run(), name="lanius-proxy")
-        await self._await_bind()
+        try:
+            if self._needs_upstream_bridge():
+                bridge = UpstreamBridge(self.upstream_hops)
+                try:
+                    await bridge.start()
+                except (OSError, RuntimeError) as exc:
+                    raise ProxyStartError(f"upstream chain could not start: {exc}") from exc
+                self._upstream_bridge = bridge
+            self.master = self._build_master()
+            self._task = asyncio.create_task(self.master.run(), name="lanius-proxy")
+            await self._await_bind()
+        except Exception as exc:
+            self.start_error = str(exc)
+            await self.stop()
+            raise
         self.broker.publish(
             "engine.started",
             {"host": self.settings.proxy_host, "port": self.settings.proxy_port},
@@ -325,6 +420,49 @@ class ProxyEngine:
             "addresses": _bindable_addresses(),
         }
 
+    def upstream_state(self) -> dict[str, Any]:
+        return {
+            "enabled": bool(self.upstream_hops),
+            "hops": list(self.upstream_hops),
+            "url": self.upstream_hops[0] if len(self.upstream_hops) == 1 else None,
+        }
+
+    async def set_upstream(self, hops: list[str] | str | None) -> dict[str, Any]:
+        """Apply an ordered proxy chain to the regular listener."""
+        if isinstance(hops, str):
+            hops = [hops]
+        wanted = [normalize_upstream_url(hop) for hop in hops] if hops is not None else []
+        if len(wanted) > 16:
+            raise ValueError("an upstream chain can contain at most 16 hops")
+        if any(_upstream_loops_back(hop, self.settings.proxy_host, self.settings.proxy_port) for hop in wanted):
+            raise ValueError("upstream proxy points back to the listener")
+        if wanted == self.upstream_hops:
+            return self.upstream_state()
+
+        previous = self.upstream_hops
+        was_running = self.running
+        if was_running:
+            await self.stop()
+        self.upstream_hops = wanted
+        try:
+            if was_running:
+                await self.start()
+        except Exception:
+            self.upstream_hops = previous
+            if was_running:
+                with contextlib.suppress(Exception):
+                    await self.start()
+            raise
+
+        self.store.delete_setting(self.UPSTREAM_SETTING)
+        if not wanted:
+            self.store.delete_setting(self.UPSTREAM_HOPS_SETTING)
+        else:
+            self.store.set_setting(self.UPSTREAM_HOPS_SETTING, json.dumps(wanted))
+        state = self.upstream_state()
+        self.broker.publish("engine.upstream_changed", state)
+        return state
+
     async def set_listener(self, host: str, port: int) -> dict[str, Any]:
         """Move the proxy to a new address, keeping the old one on failure.
 
@@ -338,6 +476,8 @@ class ProxyEngine:
             raise ProxyStartError("bind address must not be empty")
         if not 1 <= port <= 65535:
             raise ProxyStartError(f"port {port} is out of range (1-65535)")
+        if any(_upstream_loops_back(hop, host, port) for hop in self.upstream_hops):
+            raise ProxyStartError("upstream proxy points back to the listener")
 
         previous = (self.settings.proxy_host, self.settings.proxy_port)
         if (host, port) == previous and self.running:
@@ -542,17 +682,19 @@ class ProxyEngine:
     def _check_port_available(self) -> None:
         """Fail fast with a clear message when the listen port is taken.
 
-        SO_REUSEADDR is deliberately not set. On POSIX it only permits
-        reusing a port in TIME_WAIT, but on Windows it allows binding a
-        port another process is actively listening on, so the probe would
-        report every port as free and the check would do nothing there.
+        A route change restarts the listener on the same port. On POSIX,
+        SO_REUSEADDR permits that while old connections are in TIME_WAIT;
+        listen() still refuses a second live listener. Windows needs its
+        exclusive-address option instead of SO_REUSEADDR.
         """
         probe = socket.socket()
         try:
             if sys.platform == "win32":  # pragma: no cover - platform specific
-                # Ask Windows for the POSIX meaning: refuse a port in use.
                 probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            else:
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             probe.bind((self.settings.proxy_host, self.settings.proxy_port))
+            probe.listen(1)
         except OSError as exc:
             raise ProxyStartError(
                 f"proxy port {self.settings.proxy_host}:"
@@ -624,6 +766,9 @@ class ProxyEngine:
         await self.capture.done()
         self._task = None
         self.master = None
+        if self._upstream_bridge is not None:
+            await self._upstream_bridge.stop()
+            self._upstream_bridge = None
         self.websockets.master = None
         self.broker.publish("engine.stopped", {})
 

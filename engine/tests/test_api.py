@@ -661,6 +661,35 @@ def test_listener_rejects_nonsense(client) -> None:
     assert client.post("/api/listener", json={"host": ""}).status_code == 409
 
 
+def test_upstream_route_can_be_set_and_cleared(client) -> None:
+    assert client.get("/api/upstream").json() == {"enabled": False, "hops": [], "url": None}
+    configured = client.post(
+        "/api/upstream", json={"url": "http://127.0.0.1:18081"}
+    )
+    assert configured.status_code == 200
+    assert configured.json() == {
+        "enabled": True,
+        "hops": ["http://127.0.0.1:18081"],
+        "url": "http://127.0.0.1:18081",
+    }
+    assert client.get("/api/upstream").json() == configured.json()
+    assert client.post("/api/upstream", json={"url": None}).json() == {
+        "enabled": False,
+        "hops": [],
+        "url": None,
+    }
+
+
+def test_upstream_rejects_invalid_addresses_without_changing_route(client) -> None:
+    for url in ("ftp://127.0.0.1:1080", "http://user:pass@proxy:8080"):
+        assert client.post("/api/upstream", json={"url": url}).status_code == 422
+    listener_port = client.get("/api/listener").json()["port"]
+    assert client.post(
+        "/api/upstream", json={"url": f"http://127.0.0.1:{listener_port}"}
+    ).status_code == 422
+    assert client.get("/api/upstream").json() == {"enabled": False, "hops": [], "url": None}
+
+
 def test_the_api_survives_a_proxy_port_that_is_already_taken(tmp_path) -> None:
     """The failure the released build showed: another tool holding the port
     took the whole app down, so the UI could not even offer a new one."""

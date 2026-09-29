@@ -12,13 +12,28 @@ import pytest
 from app.config import Settings
 from app.db.store import FlowStore
 from app.events import EventBroker
-from app.proxy import ProxyEngine, ProxyStartError
+from app.proxy import ProxyEngine, ProxyStartError, normalize_upstream_url
 
 
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return int(s.getsockname()[1])
+
+
+def test_upstream_address_validation() -> None:
+    assert normalize_upstream_url("http://proxy.example") == "http://proxy.example:80"
+    assert normalize_upstream_url("https://[::1]:8443/") == "https://[::1]:8443"
+    assert normalize_upstream_url("socks5://proxy.example") == "socks5://proxy.example:1080"
+    for bad in (
+        "http://user:pass@proxy.example:8080",
+        "http://proxy.example:8080/path",
+        "http://proxy.example:0",
+        "http://proxy.example:abc",
+        "proxy.example:8080",
+    ):
+        with pytest.raises(ValueError):
+            normalize_upstream_url(bad)
 
 
 def engine(tmp_path, port: int) -> ProxyEngine:
@@ -663,6 +678,63 @@ def _reopen(tmp_path, port: int) -> ProxyEngine:
         confdir=tmp_path / "mitm",
     )
     return ProxyEngine(settings, FlowStore(settings.db_path), EventBroker())
+
+
+@pytest.mark.asyncio
+async def test_upstream_forwards_http_and_is_saved(tmp_path) -> None:
+    seen: list[bytes] = []
+
+    async def other_proxy(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        request = await reader.readuntil(b"\r\n\r\n")
+        seen.append(request)
+        writer.write(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 16\r\n"
+            b"Connection: close\r\n\r\nthrough-upstream"
+        )
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    other = await asyncio.start_server(other_proxy, "127.0.0.1", 0)
+    upstream_port = other.sockets[0].getsockname()[1]
+    port = free_port()
+    proxy = engine(tmp_path, port)
+    await proxy.start()
+    try:
+        state = await proxy.set_upstream(f"http://127.0.0.1:{upstream_port}")
+        assert state == {
+            "enabled": True,
+            "hops": [f"http://127.0.0.1:{upstream_port}"],
+            "url": f"http://127.0.0.1:{upstream_port}",
+        }
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        writer.write(
+            b"GET http://example.invalid/through HTTP/1.1\r\n"
+            b"Host: example.invalid\r\nConnection: close\r\n\r\n"
+        )
+        await writer.drain()
+        response = await asyncio.wait_for(reader.read(), timeout=5)
+        writer.close()
+        await writer.wait_closed()
+        assert b"through-upstream" in response
+        assert seen and seen[0].startswith(b"GET http://example.invalid/through ")
+
+        revived = _reopen(tmp_path, port)
+        assert revived.upstream_state() == state
+        assert revived._modes()[0] == f"upstream:http://127.0.0.1:{upstream_port}@{port}"
+        revived.store.close()
+
+        with pytest.raises(ValueError, match="back to the listener"):
+            await proxy.set_upstream(f"http://127.0.0.1:{port}")
+        assert proxy.upstream_state() == state
+
+        assert await proxy.set_upstream(None) == {"enabled": False, "hops": [], "url": None}
+        assert proxy._modes()[0] == f"regular@{port}"
+    finally:
+        await proxy.stop()
+        proxy.store.close()
+        other.close()
+        await other.wait_closed()
 
 
 @pytest.mark.asyncio
