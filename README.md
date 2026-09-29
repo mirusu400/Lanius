@@ -30,9 +30,10 @@ It is rebuilt from every commit that lands on `main` and passes CI, so the
 download always matches the current code. Settings, About says which commit
 a build came from, and checks whether a newer one has been published: a
 nightly is compared by commit and a tagged release by version, since every
-nightly this month reports the same version number. Nothing is downloaded
-or installed for you, and the check can be turned off for a network where
-nothing should leave the machine.
+nightly this month reports the same version number. The desktop app can
+install what it finds, in one press; nothing downloads on its own, and the
+check itself can be turned off for a network where nothing should leave
+the machine.
 
 For sensitive networks, **Settings > Lockdown Mode** has separate global and
 project switches. They block Lanius-owned external requests while browser and
@@ -398,8 +399,10 @@ choice is remembered.
 
 Plugins are ordinary mitmproxy addons. Drop a Python file into
 `~/.lanius/plugins`, then enable it from the **Plugins** tab. It applies to
-live traffic immediately, and you can reload it after an edit without
-restarting.
+live traffic immediately. Plugins can be reordered, reloaded manually, or
+watched and reloaded automatically after an edit without restarting. Set
+`LANIUS_DISABLE_PLUGINS=1` before launch to inspect a project in plugin safe
+mode.
 
 ```python
 DESCRIPTION = "Tag responses that are missing a CSP header"
@@ -424,7 +427,26 @@ class Plugin:
 ```
 
 Three working examples ship in [`plugins/`](./plugins/), and the full hook
-list is in [`plugins/README.md`](./plugins/README.md).
+list is in [`plugins/README.md`](./plugins/README.md). Actions, codecs,
+settings, namespaced storage, payload extensions, and managed tasks use the
+versioned [`lanius_sdk`](./docs/plugins-sdk.md). Declared actions appear in the
+matching History, Target, message, Repeater, Intruder, or global UI location;
+package data is available through a bounded read-only resource API.
+Per-plugin diagnostics retain recent SDK logs and contribution timing; scanner
+checks that fail five times consecutively are suspended until diagnostics are
+reset.
+Installable `.lanius-plugin` archives, signatures, and sandboxed UI are
+documented in [`docs/plugin-packages.md`](./docs/plugin-packages.md).
+The Plugins tab can browse user-configured signed catalogues, install compatible
+releases, update them with a retained backup, roll back, and reject revoked
+versions. The catalogue format is in
+[`docs/plugin-catalogues.md`](./docs/plugin-catalogues.md).
+Plugin supplied passive and active checks create deduplicated project findings
+in the **Issues** tab; limits and SDK contracts are documented in
+[`docs/plugin-scanner.md`](./docs/plugin-scanner.md).
+The complete implementation inventory, trust boundary, phase coverage, and
+recommended next extensions are in
+[`docs/plugin-platform-status.md`](./docs/plugin-platform-status.md).
 
 Plugins run inside the engine process, not a sandbox. Only enable code you
 trust.

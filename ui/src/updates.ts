@@ -4,10 +4,11 @@
  * shows the detail and owns the button, and the title bar, which shows a
  * badge no matter which tab you are on. One check answers both.
  *
- * The check is a question, not an installer. It asks GitHub what the
- * newest build is and says so; downloading stays a decision the user
- * makes, which matters for a tool that is often run somewhere with no
- * outbound access at all. That is also why it can be turned off.
+ * Checking is a question and nothing more: it asks GitHub what the newest
+ * build is and says so. Installing it is a separate press, in the section
+ * that owns that button, because a tool often run on a network with no
+ * outbound access should reach out only when asked. That is also why the
+ * automatic check can be turned off.
  */
 
 import { useEffect, useState } from 'react';

@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from app import updates, wordlists
 from app.api.server import create_app
 from app.config import Settings
+from app.lockdown import LockdownBlocked
 
 PLUGIN = textwrap.dedent(
     '''
@@ -165,3 +166,38 @@ def test_import_cannot_turn_lockdown_off(client) -> None:
     exported["settings"]["lockdown.project"] = "0"
     assert client.post("/api/project/import", json=exported).status_code == 200
     assert client.get("/api/lockdown").json()["project_enabled"] is True
+
+
+def test_catalogue_refresh_is_refused(client) -> None:
+    """A plugin catalogue is a download, so it follows the same rule."""
+    lock(client)
+    res = client.get("/api/plugin-catalogue", params={"refresh": "true"})
+    assert res.status_code == 423
+    assert res.json() == {"detail": "LOCKDOWN_MODE_BLOCKED"}
+    # The cached catalogue is local, so reading it stays allowed.
+    assert client.get("/api/plugin-catalogue").status_code == 200
+
+
+def test_catalogue_install_is_refused_before_anything_is_unloaded(client) -> None:
+    assert client.post("/api/plugins/stamp/enable").json()["loaded"] is True
+    client.put("/api/lockdown/project", json={"enabled": False})
+    lock(client)
+    res = client.post(
+        "/api/plugin-catalogue/install",
+        json={"source": "example", "plugin": "stamp", "version": "1.0.0"},
+    )
+    assert res.status_code == 423
+    plugin = next(p for p in client.get("/api/plugins").json()["items"] if p["name"] == "stamp")
+    assert plugin["enabled"] is True
+
+
+def test_catalogue_fetch_is_guarded_at_the_source(tmp_path, monkeypatch) -> None:
+    """Even a caller that forgets to check cannot reach the network."""
+    monkeypatch.delenv("LANIUS_LOCKDOWN", raising=False)
+    monkeypatch.delenv("LANIUS_LOCKDOWN_GLOBAL", raising=False)
+    app = make_app(tmp_path)
+    catalogue = app.state.engine.plugin_catalogue
+    with TestClient(app) as c:
+        lock(c)
+        with pytest.raises(LockdownBlocked):
+            catalogue.fetch("https://example.invalid/catalogue.json", 1024)

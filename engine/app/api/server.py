@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import sqlite3
 import time
 from collections.abc import AsyncIterator
@@ -40,6 +41,15 @@ from ..addons.intruder import (
 from ..db.payloads import PayloadSetError, parse_payloads
 from .. import wordlists
 from ..addons.plugins import PluginError
+from ..addons.scanner import ScannerError, request_snapshot
+from ..plugin_registry import PluginApiError
+from ..plugin_packages import (
+    MAX_ARCHIVE_BYTES,
+    PluginPackageError,
+    file_sha256,
+    load_manifest,
+)
+from ..plugin_catalogue import PluginCatalogueError
 from .. import codegen
 from ..build_info import build_info
 from ..lockdown import BLOCKED_DETAIL, LockdownBlocked, LockdownPolicy
@@ -256,6 +266,61 @@ class CompareBody(BaseModel):
     mode: str = "word"
 
 
+class PluginSettingsPatch(BaseModel):
+    values: dict[str, Any]
+
+
+class PluginActionBody(BaseModel):
+    context: dict[str, Any] = {}
+
+
+class PluginPayloadGeneratorBody(BaseModel):
+    options: dict[str, Any] = {}
+
+
+class PluginPayloadProcessorBody(BaseModel):
+    value: str
+    context: dict[str, Any] = {}
+
+
+class PluginDevelopmentInstall(BaseModel):
+    path: str
+
+
+class PluginCatalogueSourceBody(BaseModel):
+    id: str
+    title: str
+    url: str
+    public_key: str
+    key_id: str | None = None
+    enabled: bool = True
+
+
+class PluginCatalogueSourcesBody(BaseModel):
+    sources: list[PluginCatalogueSourceBody] = Field(default_factory=list)
+
+
+class PluginCatalogueInstallBody(BaseModel):
+    source: str
+    plugin: str
+    version: str | None = None
+    enable: bool = True
+
+
+class PluginRollbackBody(BaseModel):
+    version: str | None = None
+
+
+class IssueStatusPatch(BaseModel):
+    status: str
+
+
+class ActiveScanBody(BaseModel):
+    check_ids: list[str] = []
+    concurrency: int = 3
+    requests_per_second: float = 5.0
+
+
 def redact_headers(
     headers: list[tuple[str, str]] | None, *, reveal: bool = False
 ) -> list[tuple[str, str]] | None:
@@ -281,6 +346,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         "intercept.rules",
         "scope.changed",
         "plugins.changed",
+        "issues.",
+        "scanner.",
         "intruder.started",
         "intruder.finished",
         "flows.cleared",
@@ -363,13 +430,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # protocol configurations. Without those the shipped app
     # gets a 200 the webview then refuses to hand over, which surfaces as
     # "Load failed" with nothing wrong on the server.
+    allowed_origins = (
+        r"(http://(127\.0\.0\.1|localhost)(:\d+)?"
+        r"|tauri://localhost"
+        r"|https?://tauri\.localhost)"
+    )
+    allowed_origin = re.compile(allowed_origins)
+
+    @app.middleware("http")
+    async def refuse_cross_site_writes(request: Any, call_next: Any) -> Any:
+        """Stop other sites driving the API from the user's browser.
+
+        CORS only hides responses; a page can still fire a no-preflight
+        POST (for example a plugin archive to /api/plugins/install). Browsers
+        always send Origin on such requests, so any foreign one is refused.
+        Local tools that send no Origin are unaffected.
+        """
+        origin = request.headers.get("origin")
+        if (
+            request.method not in {"GET", "HEAD", "OPTIONS"}
+            and origin is not None
+            and not allowed_origin.fullmatch(origin)
+        ):
+            return JSONResponse(
+                {"detail": "cross-origin request refused"}, status_code=403
+            )
+        return await call_next(request)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=(
-            r"(http://(127\.0\.0\.1|localhost)(:\d+)?"
-            r"|tauri://localhost"
-            r"|https?://tauri\.localhost)"
-        ),
+        allow_origin_regex=allowed_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -380,6 +470,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.lockdown = lockdown
 
+    async def _apply_lockdown_to_plugins(locked: bool) -> None:
+        """Plugins are arbitrary Python, so they follow the mode both ways."""
+        if locked:
+            await engine.plugins.suspend_for_lockdown()
+        else:
+            await engine.plugins.resume_after_lockdown()
+
     @app.get("/api/lockdown")
     async def lockdown_status() -> dict[str, Any]:
         return lockdown.status()
@@ -387,10 +484,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.put("/api/lockdown/project")
     async def set_project_lockdown(body: LockdownPatch) -> dict[str, Any]:
         result = lockdown.set_project(body.enabled)
-        if result["effective"]:
-            engine.plugins.suspend_for_lockdown()
-        else:
-            engine.plugins.load_enabled()
+        await _apply_lockdown_to_plugins(result["effective"])
         return result
 
     @app.get("/api/status")
@@ -483,6 +577,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "scope": await asyncio.to_thread(store.list_scope_rules),
             "workspace": await asyncio.to_thread(store.all_workspace),
             "settings": await asyncio.to_thread(store.all_settings),
+            "issues": await asyncio.to_thread(store.all_issues),
         }
         if include_flows:
             flows = await asyncio.to_thread(lambda: store.list(limit=100000))
@@ -524,10 +619,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # imported rules sit in the database and affect nothing.
         scope = await asyncio.to_thread(engine.scope.reload)
         engine.match_replace.reload()
-        if lockdown.enabled:
-            engine.plugins.suspend_for_lockdown()
-        else:
-            engine.plugins.load_enabled()
+        await _apply_lockdown_to_plugins(lockdown.enabled)
         broker.publish("scope.changed", scope.as_dict())
         broker.publish("project.imported", counts)
         return {"ok": True, **counts}
@@ -1604,17 +1696,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # --- plugins (M7) -----------------------------------------------------
     @app.get("/api/plugins")
     async def list_plugins() -> dict[str, Any]:
-        await asyncio.to_thread(engine.plugins.discover)
+        await engine.plugins.refresh()
         return {
             "items": engine.plugins.list(),
             "directory": str(settings.plugins_dir),
+            "safe_mode": engine.plugins.safe_mode,
+            "development_mode": settings.plugin_dev_mode,
         }
 
     @app.post("/api/plugins/{name}/enable")
     async def enable_plugin(name: str) -> dict[str, Any]:
         lockdown.require_outbound("plugin execution")
         try:
-            return engine.plugins.enable(name).as_dict()
+            return (await engine.plugins.enable_async(name)).as_dict()
         except PluginError as exc:
             status = 404 if "not found" in str(exc) else 400
             raise HTTPException(status_code=status, detail=str(exc)) from exc
@@ -1622,7 +1716,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/plugins/{name}/disable")
     async def disable_plugin(name: str) -> dict[str, Any]:
         try:
-            return engine.plugins.disable(name).as_dict()
+            return (await engine.plugins.disable_async(name)).as_dict()
         except PluginError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -1630,10 +1724,415 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def reload_plugin(name: str) -> dict[str, Any]:
         lockdown.require_outbound("plugin execution")
         try:
-            return engine.plugins.reload(name).as_dict()
+            return (await engine.plugins.reload_async(name)).as_dict()
         except PluginError as exc:
             status = 404 if "not found" in str(exc) else 400
             raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @app.put("/api/plugins/order")
+    async def order_plugins(names: list[str]) -> dict[str, Any]:
+        try:
+            return {"items": await engine.plugins.set_order(names)}
+        except PluginError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.patch("/api/plugins/{name}/auto-reload")
+    async def auto_reload_plugin(name: str, enabled: bool) -> dict[str, Any]:
+        try:
+            return (await engine.plugins.set_auto_reload(name, enabled)).as_dict()
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/plugin-contributions")
+    async def plugin_contributions() -> dict[str, Any]:
+        """Serializable catalogue of every live SDK contribution."""
+
+        return engine.plugins.registry.list()
+
+    @app.post("/api/plugins/install")
+    async def install_plugin_package(
+        request: Request,
+        allow_unsigned: bool = True,
+        replace: bool = False,
+        enable: bool = False,
+    ) -> dict[str, Any]:
+        chunks: list[bytes] = []
+        size = 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > MAX_ARCHIVE_BYTES:
+                raise HTTPException(status_code=413, detail="package archive exceeds 50 MiB")
+            chunks.append(chunk)
+        archive = b"".join(chunks)
+        try:
+            result = await asyncio.to_thread(
+                engine.plugin_packages.install,
+                archive,
+                allow_unsigned=allow_unsigned,
+                replace=replace,
+            )
+            # A replaced package must not keep running the old code, and its
+            # metadata only refreshes while unloaded.
+            existing = engine.plugins.plugins.get(result["id"])
+            restore_enabled = bool(existing and existing.enabled)
+            if existing is not None and existing.loaded:
+                await engine.plugins.disable_async(existing.name)
+            await engine.plugins.refresh()
+            plugin = engine.plugins.get(result["id"])
+            if enable or restore_enabled:
+                plugin = await engine.plugins.enable_async(plugin.name)
+            return {**result, "plugin": plugin.as_dict()}
+        except PluginPackageError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except PluginError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/plugins/install-development")
+    async def install_development_plugin(
+        payload: PluginDevelopmentInstall,
+    ) -> dict[str, Any]:
+        try:
+            result = await asyncio.to_thread(
+                engine.plugin_packages.install_development, Path(payload.path)
+            )
+            await engine.plugins.refresh()
+            await engine.plugins.set_auto_reload(result["id"], True)
+            return {
+                **result,
+                "plugin": engine.plugins.get(result["id"]).as_dict(),
+            }
+        except (PluginPackageError, OSError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.delete("/api/plugins/{name}/package")
+    async def uninstall_plugin_package(name: str) -> dict[str, Any]:
+        try:
+            plugin = engine.plugins.get(name)
+            if plugin.package_root is None:
+                raise PluginPackageError(f"installed package not found: {name}")
+            if plugin.loaded or plugin.enabled:
+                await engine.plugins.disable_async(name)
+            result = await asyncio.to_thread(engine.plugin_packages.uninstall, name)
+            await engine.plugins.refresh()
+            return result
+        except PluginPackageError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/plugin-catalogue")
+    async def plugin_catalogue(refresh: bool = False) -> dict[str, Any]:
+        # Only a refresh leaves the machine; the cached catalogue is local.
+        if refresh:
+            lockdown.require_outbound("plugin catalogue refresh")
+        try:
+            result = await asyncio.to_thread(
+                engine.plugin_catalogue.catalogue, refresh=refresh
+            )
+            if refresh:
+                await engine.plugins.refresh()
+            return result
+        except PluginCatalogueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.put("/api/plugin-catalogue/sources")
+    async def save_plugin_catalogue_sources(
+        payload: PluginCatalogueSourcesBody,
+    ) -> dict[str, Any]:
+        try:
+            sources = await asyncio.to_thread(
+                engine.plugin_catalogue.save_sources,
+                [source.model_dump() for source in payload.sources],
+            )
+            broker.publish("plugins.catalogue", {"sources": sources})
+            return {"sources": sources}
+        except PluginCatalogueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/plugin-catalogue/install")
+    async def install_catalogue_plugin(
+        payload: PluginCatalogueInstallBody,
+    ) -> dict[str, Any]:
+        # Refuse before the installed plugin is torn down, so a blocked
+        # install leaves the working one running.
+        lockdown.require_outbound("plugin catalogue install")
+        existing = engine.plugins.plugins.get(payload.plugin)
+        restore_enabled = bool(existing and existing.enabled)
+        if existing is not None and (existing.loaded or existing.enabled):
+            await engine.plugins.disable_async(payload.plugin)
+        try:
+            result = await asyncio.to_thread(
+                engine.plugin_catalogue.install,
+                payload.source,
+                payload.plugin,
+                payload.version,
+            )
+            await engine.plugins.refresh()
+            plugin = engine.plugins.get(payload.plugin)
+            if payload.enable or restore_enabled:
+                plugin = await engine.plugins.enable_async(plugin.name)
+            broker.publish("plugins.catalogue", {"installed": result})
+            return {**result, "plugin": plugin.as_dict()}
+        except (PluginCatalogueError, PluginPackageError) as exc:
+            await engine.plugins.refresh()
+            if restore_enabled and payload.plugin in engine.plugins.plugins:
+                await engine.plugins.enable_async(payload.plugin)
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except PluginError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/plugins/{name}/rollback")
+    async def rollback_plugin(
+        name: str, payload: PluginRollbackBody
+    ) -> dict[str, Any]:
+        restore_enabled = False
+        try:
+            plugin = engine.plugins.get(name)
+            restore_enabled = plugin.enabled
+            if plugin.loaded or plugin.enabled:
+                await engine.plugins.disable_async(name)
+            result = await asyncio.to_thread(
+                engine.plugin_packages.rollback, name, payload.version
+            )
+            await engine.plugins.refresh()
+            plugin = engine.plugins.get(name)
+            if restore_enabled:
+                plugin = await engine.plugins.enable_async(name)
+            broker.publish("plugins.catalogue", {"rolled_back": result})
+            return {**result, "plugin": plugin.as_dict()}
+        except PluginPackageError as exc:
+            await engine.plugins.refresh()
+            if restore_enabled and name in engine.plugins.plugins:
+                await engine.plugins.enable_async(name)
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/plugin-ui/{name}/{asset:path}")
+    async def plugin_ui_asset(name: str, asset: str) -> FileResponse:
+        try:
+            plugin = engine.plugins.get(name)
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if not plugin.loaded or plugin.package_root is None or not plugin.meta.get("ui"):
+            raise HTTPException(status_code=404, detail="plugin UI is not active")
+        root = (plugin.package_root / "ui").resolve()
+        candidate = (root / asset).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail="UI asset not found") from exc
+        relative = candidate.relative_to(plugin.package_root.resolve()).as_posix()
+        integrity = load_manifest(plugin.package_root).integrity
+        if (
+            relative not in integrity
+            or not candidate.is_file()
+            or (
+                not plugin.package_root.is_symlink()
+                and file_sha256(candidate) != integrity[relative]
+            )
+        ):
+            raise HTTPException(status_code=404, detail="UI asset not found")
+        return FileResponse(
+            candidate,
+            headers={
+                "Cache-Control": "no-store" if plugin.package_root.is_symlink() else "public, max-age=31536000, immutable",
+                "Content-Security-Policy": (
+                    "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                    "img-src 'self' data:; font-src 'self'; connect-src 'none'; "
+                    "base-uri 'none'; form-action 'none'; navigate-to 'none'; "
+                    "frame-src 'none'; frame-ancestors 'self'; sandbox allow-scripts"
+                ),
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @app.get("/api/plugins/{name}/settings")
+    async def plugin_settings(name: str) -> dict[str, Any]:
+        try:
+            engine.plugins.get(name)
+            return engine.plugins.registry.settings(name)
+        except (PluginError, PluginApiError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/plugins/{name}/diagnostics")
+    async def plugin_diagnostics(name: str) -> dict[str, Any]:
+        try:
+            engine.plugins.get(name)
+            return engine.plugins.registry.diagnostics(name)
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/plugins/{name}/diagnostics/reset")
+    async def reset_plugin_diagnostics(name: str) -> dict[str, Any]:
+        try:
+            engine.plugins.get(name)
+            result = engine.plugins.registry.reset_diagnostics(name)
+            broker.publish("plugins.diagnostics", {"plugin": name, "reset": True})
+            return result
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.patch("/api/plugins/{name}/settings")
+    async def patch_plugin_settings(
+        name: str, payload: PluginSettingsPatch
+    ) -> dict[str, Any]:
+        try:
+            engine.plugins.get(name)
+            for key, value in payload.values.items():
+                engine.plugins.registry.set_setting(name, key, value)
+            broker.publish("plugins.settings", {"plugin": name})
+            return engine.plugins.registry.settings(name)
+        except PluginApiError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/plugin-actions/{action_id}/invoke")
+    async def invoke_plugin_action(
+        action_id: str, payload: PluginActionBody
+    ) -> dict[str, Any]:
+        try:
+            result = await engine.plugins.registry.invoke_action(
+                action_id, payload.context
+            )
+            return {"result": result}
+        except PluginApiError as exc:
+            status = 404 if str(exc).startswith("unknown") else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @app.post("/api/plugin-payload-generators/{generator_id}/generate")
+    async def generate_plugin_payloads(
+        generator_id: str, payload: PluginPayloadGeneratorBody
+    ) -> dict[str, Any]:
+        try:
+            values = await engine.plugins.registry.generate_payloads(
+                generator_id, payload.options
+            )
+            return {"values": values, "count": len(values)}
+        except PluginApiError as exc:
+            status = 404 if str(exc).startswith("unknown") else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @app.post("/api/plugin-payload-processors/{processor_id}/process")
+    async def process_plugin_payload(
+        processor_id: str, payload: PluginPayloadProcessorBody
+    ) -> dict[str, Any]:
+        try:
+            value = await engine.plugins.registry.process_payload(
+                processor_id, payload.value, payload.context
+            )
+            return {"value": value}
+        except PluginApiError as exc:
+            status = 404 if str(exc).startswith("unknown") else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    # --- scanner and issues ---------------------------------------------
+    @app.get("/api/issues")
+    async def list_issues(
+        status: str | None = None,
+        severity: str | None = None,
+        host: str | None = None,
+        search: str | None = None,
+        limit: int = Query(500, ge=1, le=5000),
+    ) -> dict[str, Any]:
+        if status not in (None, "open", "resolved", "false_positive"):
+            raise HTTPException(status_code=422, detail="invalid issue status")
+        if severity not in (None, "info", "low", "medium", "high", "critical"):
+            raise HTTPException(status_code=422, detail="invalid issue severity")
+        items = await asyncio.to_thread(
+            store.list_issues,
+            status=status,
+            severity=severity,
+            host=host,
+            search=search,
+            limit=limit,
+        )
+        summary = await asyncio.to_thread(store.issue_summary)
+        return {"items": items, "count": len(items), "summary": summary}
+
+    @app.get("/api/issues/{issue_id}")
+    async def get_issue(issue_id: str) -> dict[str, Any]:
+        issue = await asyncio.to_thread(store.get_issue, issue_id)
+        if issue is None:
+            raise HTTPException(status_code=404, detail="issue not found")
+        return issue
+
+    @app.patch("/api/issues/{issue_id}")
+    async def patch_issue(
+        issue_id: str, payload: IssueStatusPatch
+    ) -> dict[str, Any]:
+        if payload.status not in ("open", "resolved", "false_positive"):
+            raise HTTPException(status_code=422, detail="invalid issue status")
+        issue = await asyncio.to_thread(
+            store.set_issue_status, issue_id, payload.status
+        )
+        if issue is None:
+            raise HTTPException(status_code=404, detail="issue not found")
+        broker.publish("issues.changed", issue)
+        return issue
+
+    @app.delete("/api/issues/{issue_id}")
+    async def delete_issue(issue_id: str) -> dict[str, Any]:
+        deleted = await asyncio.to_thread(store.delete_issue, issue_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="issue not found")
+        broker.publish("issues.changed", {"id": issue_id, "deleted": True})
+        return {"id": issue_id, "deleted": True}
+
+    @app.get("/api/scanner")
+    async def scanner_state() -> dict[str, Any]:
+        contributions = engine.plugins.registry.list()
+        return {
+            "passive_enabled": engine.scanner.passive_enabled,
+            "passive_checks": contributions["passive_scanners"],
+            "active_checks": contributions["active_scanners"],
+            "jobs": [job.as_dict() for job in engine.scanner.jobs.values()],
+        }
+
+    @app.patch("/api/scanner/passive")
+    async def set_passive_scanner(enabled: bool) -> dict[str, Any]:
+        engine.scanner.set_passive_enabled(enabled)
+        return {"passive_enabled": enabled}
+
+    @app.post("/api/scanner/passive/{flow_id}")
+    async def run_passive_scanner(flow_id: str) -> dict[str, Any]:
+        record = await asyncio.to_thread(store.get, flow_id)
+        if record is None or record.type != "http":
+            raise HTTPException(status_code=404, detail="HTTP flow not found")
+        issues = await engine.scanner.scan_passive(request_snapshot(record))
+        return {"items": issues, "count": len(issues)}
+
+    @app.post("/api/scanner/active/{flow_id}")
+    async def start_active_scan(
+        flow_id: str, payload: ActiveScanBody
+    ) -> dict[str, Any]:
+        try:
+            job = await engine.scanner.start_active(
+                flow_id,
+                check_ids=payload.check_ids or None,
+                concurrency=payload.concurrency,
+                requests_per_second=payload.requests_per_second,
+            )
+            return job.as_dict()
+        except ScannerError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/scanner/jobs/{job_id}")
+    async def get_scan_job(job_id: str) -> dict[str, Any]:
+        try:
+            return engine.scanner.get_job(job_id).as_dict()
+        except ScannerError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/scanner/jobs/{job_id}/stop")
+    async def stop_scan_job(job_id: str) -> dict[str, Any]:
+        try:
+            job = engine.scanner.stop_job(job_id)
+            await asyncio.sleep(0)
+            return job.as_dict()
+        except ScannerError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.websocket("/ws")
     async def ws_stream(websocket: WebSocket) -> None:

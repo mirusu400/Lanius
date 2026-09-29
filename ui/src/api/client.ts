@@ -589,6 +589,8 @@ export function compareTexts(
 export function listPlugins(): Promise<{
   items: import('./types').PluginInfo[];
   directory: string;
+  safe_mode: boolean;
+  development_mode: boolean;
 }> {
   return request('/api/plugins');
 }
@@ -606,6 +608,198 @@ export function reloadPlugin(
   name: string,
 ): Promise<import('./types').PluginInfo> {
   return request(`/api/plugins/${name}/reload`, { method: 'POST' });
+}
+
+export function setPluginOrder(
+  names: string[],
+): Promise<{ items: import('./types').PluginInfo[] }> {
+  return request('/api/plugins/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(names),
+  });
+}
+
+export function setPluginAutoReload(
+  name: string,
+  enabled: boolean,
+): Promise<import('./types').PluginInfo> {
+  return request(`/api/plugins/${name}/auto-reload?enabled=${enabled}`, {
+    method: 'PATCH',
+  });
+}
+
+export function listPluginContributions(): Promise<
+  import('./types').PluginContributionCatalogue
+> {
+  return request('/api/plugin-contributions');
+}
+
+export function getPluginSettings(
+  name: string,
+): Promise<import('./types').PluginSettings> {
+  return request(`/api/plugins/${name}/settings`);
+}
+
+export function patchPluginSettings(
+  name: string,
+  values: Record<string, unknown>,
+): Promise<import('./types').PluginSettings> {
+  return request(`/api/plugins/${name}/settings`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ values }),
+  });
+}
+
+export function getPluginDiagnostics(
+  name: string,
+): Promise<import('./types').PluginDiagnostics> {
+  return request(`/api/plugins/${encodeURIComponent(name)}/diagnostics`);
+}
+
+export function resetPluginDiagnostics(
+  name: string,
+): Promise<import('./types').PluginDiagnostics> {
+  return request(`/api/plugins/${encodeURIComponent(name)}/diagnostics/reset`, {
+    method: 'POST',
+  });
+}
+
+export function invokePluginAction(
+  actionId: string,
+  context: Record<string, unknown>,
+): Promise<{ result: unknown }> {
+  return request(`/api/plugin-actions/${actionId}/invoke`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ context }),
+  });
+}
+
+export function installPluginPackage(
+  file: File,
+): Promise<{ plugin: import('./types').PluginInfo; trust: string }> {
+  return request('/api/plugins/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: file,
+  });
+}
+
+export function installDevelopmentPlugin(
+  path: string,
+): Promise<{ plugin: import('./types').PluginInfo; development: true }> {
+  return request('/api/plugins/install-development', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ path }),
+  });
+}
+
+export function uninstallPluginPackage(
+  name: string,
+): Promise<{ id: string; uninstalled: boolean }> {
+  return request(`/api/plugins/${name}/package`, { method: 'DELETE' });
+}
+
+export function getPluginCatalogue(refresh = false): Promise<import('./types').PluginCatalogue> {
+  return request(`/api/plugin-catalogue?refresh=${refresh}`);
+}
+
+export function savePluginCatalogueSources(
+  sources: import('./types').PluginCatalogueSource[],
+): Promise<{ sources: import('./types').PluginCatalogueSource[] }> {
+  return request('/api/plugin-catalogue/sources', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ sources }),
+  });
+}
+
+export function installCataloguePlugin(
+  source: string,
+  plugin: string,
+  version?: string,
+): Promise<{ plugin: import('./types').PluginInfo; version: string }> {
+  return request('/api/plugin-catalogue/install', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ source, plugin, version: version || null, enable: true }),
+  });
+}
+
+export function rollbackPlugin(
+  name: string,
+  version?: string,
+): Promise<{ plugin: import('./types').PluginInfo; version: string }> {
+  return request(`/api/plugins/${encodeURIComponent(name)}/rollback`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ version: version || null }),
+  });
+}
+
+export function pluginUiUrl(name: string, entrypoint: string): string {
+  const asset = entrypoint.replace(/^ui\//, '');
+  return `${API_BASE}/api/plugin-ui/${encodeURIComponent(name)}/${asset
+    .split('/')
+    .map(encodeURIComponent)
+    .join('/')}`;
+}
+
+export function listIssues(filters: {
+  status?: import('./types').IssueStatus | '';
+  severity?: import('./types').IssueSeverity | '';
+  search?: string;
+} = {}): Promise<{
+  items: import('./types').Issue[];
+  count: number;
+  summary: import('./types').IssueSummary;
+}> {
+  const params = new URLSearchParams();
+  if (filters.status) params.set('status', filters.status);
+  if (filters.severity) params.set('severity', filters.severity);
+  if (filters.search) params.set('search', filters.search);
+  return request(`/api/issues?${params}`);
+}
+
+export function setIssueStatus(
+  id: string,
+  status: import('./types').IssueStatus,
+): Promise<import('./types').Issue> {
+  return request(`/api/issues/${id}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function deleteIssue(id: string): Promise<{ id: string; deleted: true }> {
+  return request(`/api/issues/${id}`, { method: 'DELETE' });
+}
+
+export function getScannerState(): Promise<import('./types').ScannerState> {
+  return request('/api/scanner');
+}
+
+export function setPassiveScanner(enabled: boolean): Promise<{ passive_enabled: boolean }> {
+  return request(`/api/scanner/passive?enabled=${enabled}`, { method: 'PATCH' });
+}
+
+export function startActiveScan(
+  flowId: string,
+  options: { check_ids?: string[]; concurrency?: number; requests_per_second?: number } = {},
+): Promise<import('./types').ScanJob> {
+  return request(`/api/scanner/active/${encodeURIComponent(flowId)}`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(options),
+  });
+}
+
+export function stopScanJob(id: string): Promise<import('./types').ScanJob> {
+  return request(`/api/scanner/jobs/${id}/stop`, { method: 'POST' });
 }
 
 // --- logger / CA ----------------------------------------------------------

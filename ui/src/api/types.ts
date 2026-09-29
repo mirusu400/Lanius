@@ -351,6 +351,240 @@ export interface PluginInfo {
   version: string | null;
   author: string | null;
   hooks: string[];
+  order: number;
+  auto_reload: boolean;
+  sdk_api_version: string | null;
+  contributions: PluginContributionCounts;
+  package: PluginPackageInfo | null;
+  ui: { views: PluginUiView[] } | null;
+}
+
+export interface PluginPackageInfo {
+  schema: number;
+  id: string;
+  name: string;
+  permissions: string[];
+  signature_present: boolean;
+  trust: 'trusted' | 'unsigned' | 'development' | 'unmanaged';
+  development: boolean;
+  source: 'archive' | 'catalogue' | 'development' | 'unmanaged';
+  catalog_source: string | null;
+}
+
+export interface PluginCatalogueSource {
+  id: string;
+  title: string;
+  url: string;
+  public_key: string;
+  key_id: string | null;
+  enabled: boolean;
+}
+
+export interface PluginCatalogueRelease {
+  version: string;
+  url: string;
+  sha256: string;
+  package_key_id: string;
+  compatibility: { lanius: string; sdk: string };
+  published_at?: string;
+  yanked?: boolean;
+  compatible: boolean;
+  revoked: boolean;
+  revocation_reason: string | null;
+}
+
+export interface PluginCatalogueItem {
+  id: string;
+  name: string;
+  description?: string;
+  author?: string;
+  homepage?: string;
+  categories?: string[];
+  source: string;
+  source_title: string;
+  releases: PluginCatalogueRelease[];
+  latest_version: string | null;
+  installed_version: string | null;
+  update_available: boolean;
+  rollback_versions: string[];
+}
+
+export interface PluginCatalogue {
+  sources: PluginCatalogueSource[];
+  items: PluginCatalogueItem[];
+  errors: Record<string, string>;
+  refreshed: boolean;
+}
+
+export interface PluginUiView {
+  id: string;
+  title: string;
+  entrypoint: string;
+}
+
+export interface PluginContributionCounts {
+  actions?: number;
+  codecs?: number;
+  payload_generators?: number;
+  payload_processors?: number;
+  settings?: number;
+  passive_scanners?: number;
+  active_scanners?: number;
+}
+
+export interface PluginSettingField {
+  key: string;
+  title: string;
+  kind: 'string' | 'boolean' | 'integer' | 'number' | 'enum';
+  default: string | boolean | number | null;
+  description: string | null;
+  scope: 'project' | 'user';
+  choices: string[];
+}
+
+export interface PluginSettings {
+  plugin: string;
+  fields: PluginSettingField[];
+  values: Record<string, unknown>;
+}
+
+export interface PluginContributionDiagnostic {
+  id: string;
+  kind: string | null;
+  title: string | null;
+  calls: number;
+  errors: number;
+  total_ms: number;
+  average_ms: number;
+  max_ms: number;
+  last_ms: number;
+  last_called_at: number | null;
+  last_error: string | null;
+  consecutive_errors: number;
+  suspended: boolean;
+}
+
+export interface PluginLogEntry {
+  timestamp: number;
+  level: string;
+  message: string;
+}
+
+export interface PluginDiagnostics {
+  plugin: string;
+  contributions: PluginContributionDiagnostic[];
+  logs: PluginLogEntry[];
+}
+
+export type PluginActionLocation =
+  | 'global'
+  | 'history'
+  | 'flow'
+  | 'request'
+  | 'response'
+  | 'repeater'
+  | 'intruder';
+
+export interface PluginActionContribution {
+  id: string;
+  plugin: string;
+  title: string;
+  description: string | null;
+  locations: PluginActionLocation[];
+}
+
+export interface PluginContributionCatalogue {
+  actions: PluginActionContribution[];
+  codecs: Array<{
+    id: string;
+    plugin: string;
+    title: string;
+    directions: Array<'encode' | 'decode'>;
+  }>;
+  payload_generators: Array<{
+    id: string;
+    plugin: string;
+    title: string;
+    description: string | null;
+  }>;
+  payload_processors: Array<{
+    id: string;
+    plugin: string;
+    title: string;
+    description: string | null;
+  }>;
+  settings: Array<{
+    id: string;
+    plugin: string;
+    title: string;
+    kind: PluginSettingField['kind'];
+    scope: PluginSettingField['scope'];
+  }>;
+  passive_scanners: ScannerCheck[];
+  active_scanners: ScannerCheck[];
+}
+
+export type IssueSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical';
+export type IssueStatus = 'open' | 'resolved' | 'false_positive';
+
+export interface Issue {
+  id: string;
+  fingerprint: string;
+  plugin_id: string;
+  check_id: string;
+  scan_mode: 'passive' | 'active';
+  title: string;
+  severity: IssueSeverity;
+  confidence: 'tentative' | 'firm' | 'certain';
+  status: IssueStatus;
+  detail: string;
+  remediation: string | null;
+  url: string | null;
+  host: string | null;
+  path: string | null;
+  parameter: string | null;
+  flow_id: string | null;
+  evidence: Record<string, unknown> | null;
+  first_seen: number;
+  last_seen: number;
+  occurrences: number;
+}
+
+export interface IssueSummary {
+  total: number;
+  by_severity: Record<IssueSeverity, number>;
+  by_status: Record<IssueStatus, number>;
+}
+
+export interface ScannerCheck {
+  id: string;
+  plugin: string;
+  title: string;
+  description: string | null;
+  mode: 'passive' | 'active';
+}
+
+export interface ScanJob {
+  id: string;
+  flow_id: string;
+  check_ids: string[];
+  concurrency: number;
+  requests_per_second: number;
+  total: number;
+  completed: number;
+  requests: number;
+  issues: number;
+  status: 'pending' | 'running' | 'completed' | 'stopped' | 'failed';
+  error: string | null;
+  started_at: number;
+  finished_at: number | null;
+}
+
+export interface ScannerState {
+  passive_enabled: boolean;
+  passive_checks: ScannerCheck[];
+  active_checks: ScannerCheck[];
+  jobs: ScanJob[];
 }
 
 // --- dashboard ------------------------------------------------------------

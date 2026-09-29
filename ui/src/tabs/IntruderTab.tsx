@@ -28,9 +28,10 @@ import { Split } from '../components/Split';
 import { ResponseInspector } from '../components/ResponseInspector';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
+import { usePluginActions } from '../components/usePluginActions';
 import { sendToRepeater } from './repeaterStore';
 import { getFlow } from '../api/client';
-import { errorMessage, renderMessage, useT, type Message } from '../i18n';
+import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 
 const DEFAULT_TEMPLATE = 'GET /?q=\u00a7test\u00a7 HTTP/1.1\nHost: example.com\n\n';
@@ -130,6 +131,17 @@ export function IntruderTab() {
       return null;
     }
   };
+  const pluginActions = usePluginActions((message) => setError(rawMsg(message)));
+  const pluginMenu = pluginActions.buildMenu(
+    ['intruder', 'request'],
+    {
+      url,
+      raw_request: template,
+      request: codegenTarget(),
+      attack_type: attackType,
+      payload_sets: sets,
+    },
+  );
 
   const editorMenu = useEditorMenu(
     [
@@ -164,7 +176,10 @@ export function IntruderTab() {
         },
       },
     ],
-    [codegen.buildMenu(codegenTarget())],
+    [
+      codegen.buildMenu(codegenTarget()),
+      ...(pluginMenu ? [pluginMenu] : []),
+    ],
   );
   const editorRef = editorMenu.ref;
 

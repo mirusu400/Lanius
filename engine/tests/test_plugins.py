@@ -132,6 +132,33 @@ def test_plugins_start_disabled(manager) -> None:
     assert plugin.loaded is False
 
 
+def test_discovery_reads_metadata_and_all_hook_names_without_importing(manager) -> None:
+    write(
+        manager.directory,
+        "inspectable",
+        textwrap.dedent(
+            '''
+            DESCRIPTION = "visible while disabled"
+            VERSION = "2.1.0"
+            AUTHOR = "author"
+
+            class Plugin:
+                def requestheaders(self, flow):
+                    pass
+
+                def dns_response(self, flow):
+                    pass
+            '''
+        ),
+    )
+    item = manager.discover()[0].as_dict()
+    assert item["loaded"] is False
+    assert item["description"] == "visible while disabled"
+    assert item["version"] == "2.1.0"
+    assert item["author"] == "author"
+    assert item["hooks"] == ["dns_response", "requestheaders"]
+
+
 # --- enable / disable -----------------------------------------------------
 
 
@@ -209,6 +236,36 @@ def test_reload_picks_up_edits(manager) -> None:
     assert flow.request.headers["X-Plugin"] == "edited"
 
 
+def test_package_reload_purges_imported_submodules(tmp_path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+    (package / "helper.py").write_text('VALUE = "first"\n')
+    (package / "__init__.py").write_text(
+        textwrap.dedent(
+            '''
+            from .helper import VALUE
+
+            class Plugin:
+                def request(self, flow):
+                    flow.request.headers["X-Value"] = VALUE
+            '''
+        )
+    )
+    manager = PluginManager(tmp_path)
+    manager.addons = FakeAddons()
+    manager.discover()
+    manager.enable("package")
+    first = tflow.tflow(req=tutils.treq(), resp=False)
+    manager.addons.items[0].request(first)
+    assert first.request.headers["X-Value"] == "first"
+
+    (package / "helper.py").write_text('VALUE = "second"\n')
+    manager.reload("package")
+    second = tflow.tflow(req=tutils.treq(), resp=False)
+    manager.addons.items[0].request(second)
+    assert second.request.headers["X-Value"] == "second"
+
+
 def test_enabled_state_is_persisted(tmp_path) -> None:
     plugin_dir = tmp_path / "plugins"
     plugin_dir.mkdir()
@@ -249,6 +306,19 @@ def test_load_enabled_tolerates_broken_plugins(tmp_path) -> None:
     store.close()
 
 
+def test_safe_mode_keeps_persisted_plugins_disabled(tmp_path) -> None:
+    write(tmp_path, "stamp", STAMP_PLUGIN)
+    store = FlowStore(tmp_path / "safe.sqlite")
+    store.set_setting("plugins.enabled", '["stamp"]')
+    manager = PluginManager(tmp_path, store, addons=FakeAddons(), safe_mode=True)
+    manager.load_enabled()
+    assert manager.get("stamp").enabled is True
+    assert manager.get("stamp").loaded is False
+    with pytest.raises(PluginError, match="safe mode"):
+        manager.enable("stamp")
+    store.close()
+
+
 def test_manager_publishes_changes(tmp_path) -> None:
     from app.events import EventBroker
 
@@ -274,6 +344,7 @@ def client(tmp_path):
     plugin_dir = tmp_path / "plugins"
     plugin_dir.mkdir()
     write(plugin_dir, "stamp", STAMP_PLUGIN)
+    write(plugin_dir, "second", STAMP_PLUGIN)
     write(plugin_dir, "broken", BROKEN_PLUGIN)
     settings = Settings(
         proxy_port=free_port(),
@@ -333,6 +404,40 @@ def test_api_unknown_plugin_404(client) -> None:
 def test_api_reload(client) -> None:
     client.post("/api/plugins/stamp/enable")
     assert client.post("/api/plugins/stamp/reload").json()["loaded"] is True
+
+
+def test_api_reorders_plugins_and_persists_the_order(client) -> None:
+    before = client.get("/api/plugins").json()["items"]
+    names = [item["name"] for item in before]
+    wanted = list(reversed(names))
+    response = client.put("/api/plugins/order", json=wanted)
+    assert response.status_code == 200
+    assert [item["name"] for item in response.json()["items"]] == wanted
+    assert [item["name"] for item in client.get("/api/plugins").json()["items"]] == wanted
+
+
+def test_api_reorders_plugins_in_the_live_addon_chain(client) -> None:
+    client.post("/api/plugins/stamp/enable")
+    client.post("/api/plugins/second/enable")
+    current = client.get("/api/plugins").json()["items"]
+    names = [item["name"] for item in current]
+    names.remove("second")
+    names.remove("stamp")
+    wanted = ["second", "stamp", *names]
+    assert client.put("/api/plugins/order", json=wanted).status_code == 200
+
+    chain = client.app.state.engine.master.addons.chain
+    plugin_names = [
+        addon.name
+        for addon in chain
+        if getattr(addon, "name", None) in {"second", "stamp"}
+    ]
+    assert plugin_names == ["second", "stamp"]
+
+
+def test_api_rejects_an_incomplete_plugin_order(client) -> None:
+    response = client.put("/api/plugins/order", json=["stamp"])
+    assert response.status_code == 400
 
 
 # --- shipped examples -----------------------------------------------------
@@ -404,6 +509,116 @@ async def test_addons_list_objects_get_unique_names(tmp_path) -> None:
     manager.enable("multi")
     assert {"multi_0", "multi_1"} <= {a.name for a in manager.addons.chain}
     store.close()
+
+
+@pytest.mark.asyncio
+async def test_hot_lifecycle_and_mitmproxy_registries_are_reversible(tmp_path) -> None:
+    write(
+        tmp_path,
+        "lifecycle",
+        textwrap.dedent(
+            '''
+            from mitmproxy import command
+
+            class Plugin:
+                def __init__(self):
+                    self.configured = 0
+                    self.started = 0
+                    self.finished = 0
+
+                def load(self, loader):
+                    loader.add_option(
+                        name="lanius_lifecycle_probe",
+                        typespec=bool,
+                        default=False,
+                        help="test option",
+                    )
+
+                def configure(self, updated):
+                    self.configured += 1
+
+                async def running(self):
+                    self.started += 1
+
+                async def done(self):
+                    self.finished += 1
+
+                @command.command("lanius.lifecycle.probe")
+                def probe(self) -> str:
+                    return "ok"
+            '''
+        ),
+    )
+    addons = real_addon_manager()
+    manager = PluginManager(tmp_path, addons=addons)
+    manager.discover()
+    manager.mark_runtime_started()
+
+    plugin = await manager.enable_async("lifecycle")
+    addon = plugin.objects[0]
+    assert addon.configured == 1
+    assert addon.started == 1
+    assert "lanius_lifecycle_probe" in addons.master.options
+    assert "lanius.lifecycle.probe" in addons.master.commands.commands
+
+    await manager.disable_async("lifecycle")
+    assert addon.finished == 1
+    assert "lanius_lifecycle_probe" not in addons.master.options
+    assert "lanius.lifecycle.probe" not in addons.master.commands.commands
+
+
+@pytest.mark.asyncio
+async def test_refresh_removes_a_deleted_live_plugin(tmp_path) -> None:
+    path = write(tmp_path, "gone", STAMP_PLUGIN)
+    manager = PluginManager(tmp_path, addons=FakeAddons())
+    manager.discover()
+    manager.mark_runtime_started()
+    await manager.enable_async("gone")
+    assert manager.addons.items
+
+    path.unlink()
+    await manager.refresh()
+    assert manager.list() == []
+    assert manager.addons.items == []
+
+
+@pytest.mark.asyncio
+async def test_auto_reload_reloads_an_enabled_plugin_after_source_changes(
+    tmp_path,
+) -> None:
+    path = write(tmp_path, "stamp", STAMP_PLUGIN)
+    store = FlowStore(tmp_path / "auto.sqlite")
+    manager = PluginManager(tmp_path, store, addons=FakeAddons())
+    manager.discover()
+    manager.mark_runtime_started()
+    await manager.enable_async("stamp")
+    await manager.set_auto_reload("stamp", True)
+
+    path.write_text(STAMP_PLUGIN.replace('"yes"', '"changed"'))
+    await manager.refresh()
+    flow = tflow.tflow(req=tutils.treq(), resp=False)
+    manager.addons.items[0].request(flow)
+    assert flow.request.headers["X-Plugin"] == "changed"
+    assert manager.get("stamp").auto_reload is True
+    assert store.get_setting("plugins.auto_reload") == '["stamp"]'
+    store.close()
+
+
+def test_master_stopped_allows_enabled_plugins_to_load_into_a_new_master(
+    tmp_path,
+) -> None:
+    write(tmp_path, "stamp", STAMP_PLUGIN)
+    manager = PluginManager(tmp_path, addons=FakeAddons())
+    manager.discover()
+    manager.enable("stamp")
+    assert manager.get("stamp").loaded is True
+
+    manager.master_stopped()
+    replacement = FakeAddons()
+    manager.addons = replacement
+    manager.load_enabled()
+    assert manager.get("stamp").loaded is True
+    assert len(replacement.items) == 1
 
 
 def test_registration_failure_rolls_back(tmp_path) -> None:
@@ -510,6 +725,29 @@ def test_disabling_the_plugin_removes_its_format(tmp_path) -> None:
     assert not any(f["kind"] == "shout" for f in codegen.available_formats())
 
 
+def test_plugin_format_ids_cannot_overwrite_each_other(tmp_path) -> None:
+    from app import codegen
+
+    (tmp_path / "first.py").write_text(
+        'class Plugin:\n    codegen_formats = {"same": ("First", lambda spec: "first")}\n'
+    )
+    (tmp_path / "second.py").write_text(
+        'class Plugin:\n    codegen_formats = {"same": ("Second", lambda spec: "second")}\n'
+    )
+    manager = PluginManager(tmp_path)
+    manager.discover()
+    manager.enable("first")
+    manager.enable("second")
+    try:
+        spec = codegen.RequestSpec("GET", "https://x.test/")
+        assert codegen.generate("same", spec) == "first"
+        manager.disable("second")
+        assert codegen.generate("same", spec) == "first"
+    finally:
+        if manager.get("first").loaded:
+            manager.disable("first")
+
+
 def test_a_plugin_with_an_unusable_format_still_loads(tmp_path) -> None:
     """One bad entry should not stop the rest of the plugin working."""
     from app import codegen
@@ -545,3 +783,26 @@ def test_the_shipped_redaction_plugin_works(tmp_path) -> None:
         assert "abc" not in text
     finally:
         manager.disable("copy_as_python_redacted")
+
+
+@pytest.mark.asyncio
+async def test_auto_reload_recovers_a_plugin_whose_last_edit_failed(tmp_path) -> None:
+    path = write(tmp_path, "stamp", STAMP_PLUGIN)
+    store = FlowStore(tmp_path / "recover.sqlite")
+    manager = PluginManager(tmp_path, store, addons=FakeAddons())
+    manager.discover()
+    manager.mark_runtime_started()
+    await manager.enable_async("stamp")
+    await manager.set_auto_reload("stamp", True)
+
+    path.write_text("def broken(:\n")
+    await manager.refresh()
+    assert manager.get("stamp").loaded is False
+
+    path.write_text(STAMP_PLUGIN.replace('"yes"', '"fixed"'))
+    await manager.refresh()
+    assert manager.get("stamp").loaded is True
+    flow = tflow.tflow(req=tutils.treq(), resp=False)
+    manager.addons.items[0].request(flow)
+    assert flow.request.headers["X-Plugin"] == "fixed"
+    store.close()

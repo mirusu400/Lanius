@@ -16,6 +16,13 @@ def _default_data_dir() -> Path:
     return Path(os.environ.get("LANIUS_DATA_DIR", Path.home() / ".lanius"))
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(slots=True)
 class Settings:
     proxy_host: str = "127.0.0.1"
@@ -32,6 +39,12 @@ class Settings:
     # Hosts forced through the raw TCP layer instead of HTTP parsing.
     tcp_hosts: list[str] = None  # type: ignore[assignment]
     plugins_dir: Path = None  # type: ignore[assignment]
+    disable_plugins: bool = False
+    plugin_dev_mode: bool = False
+    plugin_trusted_keys: Path = None  # type: ignore[assignment]
+    plugin_catalogue_sources: Path = None  # type: ignore[assignment]
+    plugin_catalogue_cache: Path = None  # type: ignore[assignment]
+    plugin_revocations: Path = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.data_dir is None:
@@ -54,6 +67,18 @@ class Settings:
                 os.environ.get("LANIUS_PLUGINS_DIR", self.data_dir / "plugins")
             )
         self.plugins_dir = Path(self.plugins_dir)
+        if self.plugin_trusted_keys is None:
+            self.plugin_trusted_keys = self.data_dir / "plugin-trusted-keys.json"
+        self.plugin_trusted_keys = Path(self.plugin_trusted_keys)
+        if self.plugin_catalogue_sources is None:
+            self.plugin_catalogue_sources = self.data_dir / "plugin-catalogues.json"
+        self.plugin_catalogue_sources = Path(self.plugin_catalogue_sources)
+        if self.plugin_catalogue_cache is None:
+            self.plugin_catalogue_cache = self.data_dir / "plugin-catalogue-cache"
+        self.plugin_catalogue_cache = Path(self.plugin_catalogue_cache)
+        if self.plugin_revocations is None:
+            self.plugin_revocations = self.data_dir / "plugin-revocations.json"
+        self.plugin_revocations = Path(self.plugin_revocations)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -63,6 +88,8 @@ class Settings:
             api_host=os.environ.get("LANIUS_API_HOST", "127.0.0.1"),
             api_port=int(os.environ.get("LANIUS_API_PORT", "12954")),
             log_level=os.environ.get("LANIUS_LOG_LEVEL", "info"),
+            disable_plugins=_env_bool("LANIUS_DISABLE_PLUGINS"),
+            plugin_dev_mode=_env_bool("LANIUS_PLUGIN_DEV_MODE"),
         )
 
     def ensure_dirs(self) -> None:
