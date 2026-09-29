@@ -151,48 +151,49 @@
   --shadow: rgba(0, 0, 0, 0.42);
 }
 
+/* Neutral surfaces and clear blue accents, inspired by VS Code Dark Modern. */
 :root[data-theme='steel'] {
   color-scheme: dark;
-  --bg: #1a2024;
-  --bg-alt: #232b30;
-  --bg-row: #1e262b;
-  --bg-sunken: #151b1f;
-  --bg-hover: #2d383e;
-  --border: #3b474d;
-  --border-soft: #2a3439;
-  --fg: #dce4e6;
-  --muted: #98a8ac;
-  --fg-disabled: #65777c;
-  --accent: #84afc2;
-  --accent-dim: #293e48;
-  --on-accent: #142027;
-  --accent-wash: rgba(132, 175, 194, 0.08);
-  --accent-wash-strong: rgba(132, 175, 194, 0.2);
-  --accent2: #a1b5ae;
-  --accent2-wash: rgba(161, 181, 174, 0.16);
-  --ok: #8db49e;
-  --ok-bright: #a4c6af;
-  --ok-soft: #8db49e;
-  --ok-strong: #70a184;
-  --ok-border: #476e59;
-  --ok-wash: rgba(141, 180, 158, 0.16);
-  --warn: #d2b37a;
-  --warn-dim: #b9a06f;
-  --danger: #d18c84;
-  --danger-dim: #aa6e69;
-  --danger-soft: #daa29a;
-  --danger-bright: #eab9b2;
-  --danger-muted: #b67870;
-  --danger-deep: #70423f;
-  --danger-bg: #38292a;
-  --danger-border: #704548;
-  --danger-wash: rgba(209, 140, 132, 0.17);
-  --info: #91b4c4;
-  --info-soft: #a7c6d3;
-  --info-wash: rgba(145, 180, 196, 0.16);
-  --chart-2xx: #70a184;
-  --chart-3xx: #779eb2;
-  --shadow: rgba(0, 0, 0, 0.44);
+  --bg: #1f1f1f;
+  --bg-alt: #2b2b2b;
+  --bg-row: #242424;
+  --bg-sunken: #181818;
+  --bg-hover: #313131;
+  --border: #3c3c3c;
+  --border-soft: #2b2b2b;
+  --fg: #d7d7d7;
+  --muted: #9d9d9d;
+  --fg-disabled: #707070;
+  --accent: #4daafc;
+  --accent-dim: #264f78;
+  --on-accent: #101820;
+  --accent-wash: rgba(77, 170, 252, 0.09);
+  --accent-wash-strong: rgba(77, 170, 252, 0.22);
+  --accent2: #4ec9b0;
+  --accent2-wash: rgba(78, 201, 176, 0.16);
+  --ok: #4ec9b0;
+  --ok-bright: #76dfc8;
+  --ok-soft: #65d2ba;
+  --ok-strong: #32aa90;
+  --ok-border: #286a5d;
+  --ok-wash: rgba(78, 201, 176, 0.17);
+  --warn: #d7ba7d;
+  --warn-dim: #b89a5d;
+  --danger: #f48771;
+  --danger-dim: #cb6a5b;
+  --danger-soft: #f49a88;
+  --danger-bright: #ffb7a8;
+  --danger-muted: #c77062;
+  --danger-deep: #733b34;
+  --danger-bg: #3e2623;
+  --danger-border: #855047;
+  --danger-wash: rgba(244, 135, 113, 0.17);
+  --info: #75beff;
+  --info-soft: #9cdcfe;
+  --info-wash: rgba(117, 190, 255, 0.17);
+  --chart-2xx: #32aa90;
+  --chart-3xx: #569cd6;
+  --shadow: rgba(0, 0, 0, 0.45);
 }
 
 :root[data-theme='sage'] {
@@ -1667,20 +1668,13 @@ pre.body {
 }
 
 /* --- sub tabs (Proxy: Intercept / History) --- */
-/* A row of tabs that sit on the bottom border, folder style.
- *
- * The bar used to have no bottom padding, so a tab's lower edge landed
- * exactly on the container's. A button whose height works out to a
- * fraction of a pixel, which it does at most font sizes, then lost its
- * last row of pixels to rounding, and the effect is worse in the WebKit
- * webview the desktop build uses than in Chrome. There is a pixel of
- * room now, and the row is tall enough for the tallest line it holds. */
+/* A separate surface beneath the main tab bar; the active tab is raised. */
 .subtabs {
   display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  padding: 6px 8px 1px;
-  background: var(--bg-alt);
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   /* Never smaller than the content, whatever the flex context does. */
   flex: none;
@@ -1689,11 +1683,7 @@ pre.body {
 .subtabs button {
   background: transparent;
   border: 1px solid transparent;
-  /* Transparent rather than none: dropping the border made the box a
-     pixel shorter at the bottom than the top, which is the asymmetry
-     that pushed the text into the edge. */
-  border-bottom-color: transparent;
-  border-radius: 3px 3px 0 0;
+  border-radius: 4px;
   color: var(--muted);
   cursor: pointer;
   /* Korean glyphs are taller than Latin ones, and 1.4 left nothing to
@@ -1702,7 +1692,7 @@ pre.body {
 }
 
 .subtabs button.active {
-  background: var(--bg);
+  background: var(--bg-hover);
   border-color: var(--border);
   color: var(--fg);
 }

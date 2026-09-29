@@ -1,9 +1,10 @@
 # Lanius color concepts
 
 These are visual studies for the Target → Endpoints screen. They use the same
-fictional sample data so the colors can be compared directly. The app uses the
-listed palette values, while actual typography, saved column widths, and
-captured data depend on the user's settings and project.
+fictional sample data so the colors can be compared directly. The app's
+typography, saved column widths, and captured data depend on the user's
+settings and project. Steel was later updated in the app to use a sharper,
+VS Code Dark Modern-inspired palette; `steel.png` preserves the original study.
 
 | File | Direction | Background | Surface | Accent | Selection |
 | --- | --- | --- | --- | --- | --- |
