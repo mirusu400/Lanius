@@ -353,6 +353,69 @@ export interface PluginInfo {
   hooks: string[];
   order: number;
   auto_reload: boolean;
+  sdk_api_version: string | null;
+  contributions: PluginContributionCounts;
+}
+
+export interface PluginContributionCounts {
+  actions?: number;
+  codecs?: number;
+  payload_generators?: number;
+  payload_processors?: number;
+  settings?: number;
+}
+
+export interface PluginSettingField {
+  key: string;
+  title: string;
+  kind: 'string' | 'boolean' | 'integer' | 'number' | 'enum';
+  default: string | boolean | number | null;
+  description: string | null;
+  scope: 'project' | 'user';
+  choices: string[];
+}
+
+export interface PluginSettings {
+  plugin: string;
+  fields: PluginSettingField[];
+  values: Record<string, unknown>;
+}
+
+export interface PluginActionContribution {
+  id: string;
+  plugin: string;
+  title: string;
+  description: string | null;
+  locations: string[];
+}
+
+export interface PluginContributionCatalogue {
+  actions: PluginActionContribution[];
+  codecs: Array<{
+    id: string;
+    plugin: string;
+    title: string;
+    directions: Array<'encode' | 'decode'>;
+  }>;
+  payload_generators: Array<{
+    id: string;
+    plugin: string;
+    title: string;
+    description: string | null;
+  }>;
+  payload_processors: Array<{
+    id: string;
+    plugin: string;
+    title: string;
+    description: string | null;
+  }>;
+  settings: Array<{
+    id: string;
+    plugin: string;
+    title: string;
+    kind: PluginSettingField['kind'];
+    scope: PluginSettingField['scope'];
+  }>;
 }
 
 // --- dashboard ------------------------------------------------------------

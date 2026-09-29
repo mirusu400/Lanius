@@ -420,7 +420,9 @@ class Plugin:
 ```
 
 Three working examples ship in [`plugins/`](./plugins/), and the full hook
-list is in [`plugins/README.md`](./plugins/README.md).
+list is in [`plugins/README.md`](./plugins/README.md). Actions, codecs,
+settings, namespaced storage, payload extensions, and managed tasks use the
+versioned [`lanius_sdk`](./docs/plugins-sdk.md).
 
 Plugins run inside the engine process, not a sandbox. Only enable code you
 trust.

@@ -622,6 +622,40 @@ export function setPluginAutoReload(
   });
 }
 
+export function listPluginContributions(): Promise<
+  import('./types').PluginContributionCatalogue
+> {
+  return request('/api/plugin-contributions');
+}
+
+export function getPluginSettings(
+  name: string,
+): Promise<import('./types').PluginSettings> {
+  return request(`/api/plugins/${name}/settings`);
+}
+
+export function patchPluginSettings(
+  name: string,
+  values: Record<string, unknown>,
+): Promise<import('./types').PluginSettings> {
+  return request(`/api/plugins/${name}/settings`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ values }),
+  });
+}
+
+export function invokePluginAction(
+  actionId: string,
+  context: Record<string, unknown>,
+): Promise<{ result: unknown }> {
+  return request(`/api/plugin-actions/${actionId}/invoke`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ context }),
+  });
+}
+
 // --- logger / CA ----------------------------------------------------------
 
 export interface LogEvent {

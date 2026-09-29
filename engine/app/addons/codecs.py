@@ -128,6 +128,32 @@ CODECS: dict[str, dict[Direction, Callable[[str], str]]] = {
     },
 }
 
+
+def register_codec(
+    codec: str,
+    *,
+    encode: Callable[[str], str] | None = None,
+    decode: Callable[[str], str] | None = None,
+) -> None:
+    """Register a namespaced plugin codec without replacing another codec."""
+
+    if codec in CODECS or codec in HASHES:
+        raise CodecError(f"codec already registered: {codec!r}")
+    directions: dict[Direction, Callable[[str], str]] = {}
+    if encode is not None:
+        directions["encode"] = encode
+    if decode is not None:
+        directions["decode"] = decode
+    if not directions:
+        raise CodecError("a codec needs an encode or decode function")
+    CODECS[codec] = directions
+
+
+def unregister_codec(codec: str) -> None:
+    """Remove a plugin codec. Built-in codecs are never passed here."""
+
+    CODECS.pop(codec, None)
+
 HASHES = ("md5", "sha1", "sha256", "sha512")
 
 
@@ -140,7 +166,11 @@ def transform(value: str, codec: str, direction: Direction) -> str:
         raise CodecError(f"unknown codec: {codec!r}")
     if direction not in ("encode", "decode"):
         raise CodecError(f"unknown direction: {direction!r}")
-    return CODECS[codec][direction](value)
+    try:
+        transform_value = CODECS[codec][direction]
+    except KeyError as exc:
+        raise CodecError(f"{codec} does not support {direction}") from exc
+    return transform_value(value)
 
 
 @dataclass(slots=True)

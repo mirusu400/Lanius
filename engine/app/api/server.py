@@ -40,6 +40,7 @@ from ..addons.intruder import (
 from ..db.payloads import PayloadSetError, parse_payloads
 from .. import wordlists
 from ..addons.plugins import PluginError
+from ..plugin_registry import PluginApiError
 from .. import codegen
 from ..build_info import build_info
 from .. import updates
@@ -249,6 +250,23 @@ class CompareBody(BaseModel):
     left: str
     right: str
     mode: str = "word"
+
+
+class PluginSettingsPatch(BaseModel):
+    values: dict[str, Any]
+
+
+class PluginActionBody(BaseModel):
+    context: dict[str, Any] = {}
+
+
+class PluginPayloadGeneratorBody(BaseModel):
+    options: dict[str, Any] = {}
+
+
+class PluginPayloadProcessorBody(BaseModel):
+    value: str
+    context: dict[str, Any] = {}
 
 
 def redact_headers(
@@ -1614,6 +1632,74 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return (await engine.plugins.set_auto_reload(name, enabled)).as_dict()
         except PluginError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/plugin-contributions")
+    async def plugin_contributions() -> dict[str, Any]:
+        """Serializable catalogue of every live SDK contribution."""
+
+        return engine.plugins.registry.list()
+
+    @app.get("/api/plugins/{name}/settings")
+    async def plugin_settings(name: str) -> dict[str, Any]:
+        try:
+            engine.plugins.get(name)
+            return engine.plugins.registry.settings(name)
+        except (PluginError, PluginApiError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.patch("/api/plugins/{name}/settings")
+    async def patch_plugin_settings(
+        name: str, payload: PluginSettingsPatch
+    ) -> dict[str, Any]:
+        try:
+            engine.plugins.get(name)
+            for key, value in payload.values.items():
+                engine.plugins.registry.set_setting(name, key, value)
+            broker.publish("plugins.settings", {"plugin": name})
+            return engine.plugins.registry.settings(name)
+        except PluginApiError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/plugin-actions/{action_id}/invoke")
+    async def invoke_plugin_action(
+        action_id: str, payload: PluginActionBody
+    ) -> dict[str, Any]:
+        try:
+            result = await engine.plugins.registry.invoke_action(
+                action_id, payload.context
+            )
+            return {"result": result}
+        except PluginApiError as exc:
+            status = 404 if str(exc).startswith("unknown") else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @app.post("/api/plugin-payload-generators/{generator_id}/generate")
+    async def generate_plugin_payloads(
+        generator_id: str, payload: PluginPayloadGeneratorBody
+    ) -> dict[str, Any]:
+        try:
+            values = await engine.plugins.registry.generate_payloads(
+                generator_id, payload.options
+            )
+            return {"values": values, "count": len(values)}
+        except PluginApiError as exc:
+            status = 404 if str(exc).startswith("unknown") else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @app.post("/api/plugin-payload-processors/{processor_id}/process")
+    async def process_plugin_payload(
+        processor_id: str, payload: PluginPayloadProcessorBody
+    ) -> dict[str, Any]:
+        try:
+            value = await engine.plugins.registry.process_payload(
+                processor_id, payload.value, payload.context
+            )
+            return {"value": value}
+        except PluginApiError as exc:
+            status = 404 if str(exc).startswith("unknown") else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
 
     @app.websocket("/ws")
     async def ws_stream(websocket: WebSocket) -> None:

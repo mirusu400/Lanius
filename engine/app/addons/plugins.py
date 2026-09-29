@@ -12,6 +12,7 @@ import ast
 import asyncio
 import importlib
 import importlib.util
+import inspect
 import json
 import logging
 import sys
@@ -23,6 +24,8 @@ from typing import Any, List
 from mitmproxy import hooks as mitm_hooks
 
 from .. import codegen
+from ..plugin_registry import ContributionRegistry
+from lanius_sdk import API_VERSION, Disposable
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +128,7 @@ class Plugin:
     option_changes: dict[str, RegistryChange] = field(default_factory=dict)
     auto_reload: bool = False
     fingerprint: tuple[tuple[str, int, int], ...] = ()
+    uses_sdk: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -139,6 +143,8 @@ class Plugin:
             "hooks": self.meta.get("hooks", []),
             "order": self.order,
             "auto_reload": self.auto_reload,
+            "sdk_api_version": API_VERSION if self.uses_sdk else None,
+            "contributions": self.meta.get("contributions", {}),
         }
 
 
@@ -247,6 +253,8 @@ class PluginManager:
         broker: Any | None = None,
         addons: Any | None = None,
         on_chain_changed: Any | None = None,
+        user_values_path: Path | None = None,
+        registry: ContributionRegistry | None = None,
         *,
         safe_mode: bool = False,
     ) -> None:
@@ -256,6 +264,7 @@ class PluginManager:
         self.addons = addons
         self.on_chain_changed = on_chain_changed
         self.safe_mode = safe_mode
+        self.registry = registry or ContributionRegistry(store, user_values_path)
         self.runtime_started = False
         self.plugins: dict[str, Plugin] = {}
         self._lock = asyncio.Lock()
@@ -543,18 +552,38 @@ class PluginManager:
             ) from exc
         return module
 
-    def _instantiate(self, module: Any) -> List[Any]:
+    def _instantiate_legacy(self, module: Any) -> List[Any]:
         objects = getattr(module, "addons", None)
         if objects is None:
             candidate = getattr(module, "Plugin", None)
             if candidate is None:
-                raise PluginError(
-                    "plugin must define `addons = [...]` or a `Plugin` class"
-                )
+                return []
             objects = [candidate() if isinstance(candidate, type) else candidate]
         if not isinstance(objects, (list, tuple)) or not objects:
             raise PluginError("`addons` must be a non-empty list")
         return list(objects)
+
+    def _activate_sdk(self, plugin: Plugin, module: Any) -> List[Any]:
+        activate = getattr(module, "activate", None)
+        if activate is None:
+            return []
+        if not callable(activate):
+            raise PluginError("`activate` must be callable")
+        result = activate(self.registry.context(plugin.name))
+        if inspect.isawaitable(result):
+            close = getattr(result, "close", None)
+            if close is not None:
+                close()
+            raise PluginError("`activate` must be synchronous")
+        plugin.uses_sdk = True
+        if result is None:
+            return []
+        if isinstance(result, Disposable):
+            self.registry.adopt(plugin.name, result)
+            return []
+        if isinstance(result, (list, tuple)):
+            return list(result)
+        return [result]
 
     @staticmethod
     def _namespace(plugin: Plugin, objects: List[Any]) -> None:
@@ -595,13 +624,25 @@ class PluginManager:
     def _load(self, plugin: Plugin) -> Plugin:
         if self.safe_mode:
             raise PluginError("plugins are disabled by safe mode")
+        plugin.uses_sdk = False
         try:
             module = self._import(plugin)
-            objects = self._instantiate(module)
+            sdk_objects = self._activate_sdk(plugin, module)
+            objects = [*self._instantiate_legacy(module), *sdk_objects]
+            if not objects and not plugin.uses_sdk:
+                raise PluginError(
+                    "plugin must define `activate`, `addons = [...]` or a `Plugin` class"
+                )
         except PluginError as exc:
+            self.registry.dispose_owner(plugin.name)
             plugin.error = str(exc)
             plugin.loaded = False
             raise
+        except Exception as exc:
+            self.registry.dispose_owner(plugin.name)
+            plugin.error = f"{type(exc).__name__}: {exc}"
+            plugin.loaded = False
+            raise PluginError(plugin.error) from exc
 
         self._namespace(plugin, objects)
         plugin.meta = {
@@ -609,6 +650,7 @@ class PluginManager:
             "version": getattr(module, "VERSION", None),
             "author": getattr(module, "AUTHOR", None),
             "hooks": sorted({h for obj in objects for h in _module_hooks(obj)}),
+            "contributions": self.registry.counts(plugin.name),
         }
         plugin.objects = objects
         plugin.error = None
@@ -633,6 +675,8 @@ class PluginManager:
             self._capture_registry_changes(plugin, before_commands, before_options)
             self._restore_registries(plugin)
             codegen.unregister_owner(plugin.name)
+            self.registry.dispose_owner(plugin.name)
+            plugin.meta["contributions"] = self.registry.counts(plugin.name)
             plugin.objects = []
             plugin.loaded = False
             plugin.error = f"{type(exc).__name__}: {exc}"
@@ -693,6 +737,8 @@ class PluginManager:
                     logger.exception("failed to remove addon %s", plugin.name)
         self._restore_registries(plugin)
         codegen.unregister_owner(plugin.name)
+        self.registry.dispose_owner(plugin.name)
+        plugin.meta["contributions"] = self.registry.counts(plugin.name)
         plugin.objects = []
         plugin.loaded = False
         _purge_modules(plugin.name)
@@ -729,6 +775,8 @@ class PluginManager:
                 logger.exception("failed to remove addon %s", plugin.name)
         self._restore_registries(plugin)
         codegen.unregister_owner(plugin.name)
+        await self.registry.dispose_owner_async(plugin.name)
+        plugin.meta["contributions"] = self.registry.counts(plugin.name)
         plugin.objects = []
         plugin.loaded = False
         if not preserve_error:
@@ -859,6 +907,8 @@ class PluginManager:
         self._watch_task = None
         for plugin in self.plugins.values():
             codegen.unregister_owner(plugin.name)
+            self.registry.dispose_owner(plugin.name)
+            plugin.meta["contributions"] = self.registry.counts(plugin.name)
             plugin.objects = []
             plugin.loaded = False
             plugin.command_changes.clear()

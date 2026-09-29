@@ -1,5 +1,5 @@
 /** Plugins tab rendered against a mocked engine. */
-import {cleanup, screen, waitFor } from '@testing-library/react';
+import {cleanup, screen, waitFor, within } from '@testing-library/react';
 import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,6 +22,8 @@ const base: PluginInfo = {
   hooks: ['request'],
   order: 0,
   auto_reload: false,
+  sdk_api_version: null,
+  contributions: {},
 };
 
 function jsonResponse(body: unknown, ok = true) {
@@ -61,6 +63,19 @@ beforeEach(() => {
           order,
         }));
         return jsonResponse({ items: plugins });
+      }
+      if (url.endsWith('/api/plugins/stamp/settings')) {
+        const enabled = init?.method === 'PATCH'
+          ? Boolean((JSON.parse(String(init.body)) as { values: { enabled: boolean } }).values.enabled)
+          : true;
+        return jsonResponse({
+          plugin: 'stamp',
+          fields: [{
+            key: 'enabled', title: 'Feature enabled', kind: 'boolean',
+            default: true, description: 'Controls the feature', scope: 'project', choices: [],
+          }],
+          values: { enabled },
+        });
       }
       if (url.includes('/auto-reload')) {
         const name = url.split('/api/plugins/')[1].split('/')[0];
@@ -162,6 +177,25 @@ describe('PluginsTab', () => {
     await user.click(await screen.findByLabelText(t('plugins.autoReloadLabel', { name: 'stamp' })));
     await waitFor(() => expect(calls.some((call) => call.includes('/auto-reload?enabled=true'))).toBe(true));
     expect(plugins[0].auto_reload).toBe(true);
+  });
+
+  it('edits settings contributed through the SDK', async () => {
+    const user = userEvent.setup();
+    plugins = [{
+      ...base,
+      enabled: true,
+      loaded: true,
+      sdk_api_version: '1.0',
+      contributions: { settings: 1, actions: 1 },
+    }];
+    render(<PluginsTab />);
+    await user.click(await screen.findByLabelText(t('plugins.settingsLabel', { name: 'stamp' })));
+    const panel = await screen.findByLabelText(t('plugins.settingsFor', { name: 'stamp' }));
+    const checkbox = within(panel).getByRole('checkbox');
+    expect((checkbox as HTMLInputElement).checked).toBe(true);
+    await user.click(checkbox);
+    await user.click(within(panel).getByText(t('plugins.saveSettings')));
+    await waitFor(() => expect(calls.filter((call) => call.endsWith('/api/plugins/stamp/settings')).length).toBe(2));
   });
 
   it('explains an empty plugin directory', async () => {

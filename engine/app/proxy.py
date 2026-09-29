@@ -245,6 +245,7 @@ class ProxyEngine:
             store,
             broker,
             on_chain_changed=self._reorder_capture_last,
+            user_values_path=settings.data_dir / "plugin-values.json",
             safe_mode=settings.disable_plugins,
         )
         self._task: asyncio.Task[None] | None = None

@@ -2744,6 +2744,43 @@ pre.body {
   color: var(--accent);
 }
 
+.plugin-settings-panel {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+  max-height: 40%;
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+.plugin-settings-heading,
+.plugin-setting-field {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.plugin-settings-heading button {
+  font-size: 1.2em;
+}
+
+.plugin-setting-field > span:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.plugin-setting-field small {
+  font-size: 0.8em;
+  font-weight: normal;
+}
+
+.plugin-setting-field input[type='text'],
+.plugin-setting-field input[type='number'],
+.plugin-setting-field select {
+  min-width: 220px;
+}
+
 .plugin-error-text {
   color: var(--danger-bright);
   font-size: 0.85em;

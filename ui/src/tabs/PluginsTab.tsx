@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { listPlugins, reloadPlugin, setPluginAutoReload, setPluginEnabled, setPluginOrder } from '../api/client';
-import type { PluginInfo } from '../api/types';
+import { getPluginSettings, listPlugins, patchPluginSettings, reloadPlugin, setPluginAutoReload, setPluginEnabled, setPluginOrder } from '../api/client';
+import type { PluginInfo, PluginSettingField, PluginSettings } from '../api/types';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { useReportBusy } from '../components/busy';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 
 export function PluginsTab() {
   const t = useT();
-  const columns = useResizableColumns('lanius.columns.plugins', [80, 100, 100, 180, 360, 180, 100, 100]);
+  const columns = useResizableColumns('lanius.columns.plugins', [80, 100, 100, 180, 320, 180, 180, 100, 160]);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [directory, setDirectory] = useState('');
   const [safeMode, setSafeMode] = useState(false);
   const [error, setError] = useState<Message | null>(null);
+  const [settings, setSettings] = useState<PluginSettings | null>(null);
+  const [settingsDraft, setSettingsDraft] = useState<Record<string, unknown>>({});
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // `refresh` must not clear `error`: it runs right after a failed
   // enable/reload, and wiping the banner would hide why it failed.
@@ -83,6 +86,47 @@ export function PluginsTab() {
     await refresh();
   };
 
+  const openSettings = async (plugin: PluginInfo) => {
+    try {
+      const data = await getPluginSettings(plugin.name);
+      setSettings(data);
+      setSettingsDraft(data.values);
+      setError(null);
+    } catch (err) {
+      setError(rawMsg(`${plugin.name}: ${(err as Error).message}`));
+    }
+  };
+
+  const saveSettings = async () => {
+    if (!settings) return;
+    setSavingSettings(true);
+    try {
+      const data = await patchPluginSettings(settings.plugin, settingsDraft);
+      setSettings(data);
+      setSettingsDraft(data.values);
+      setError(null);
+    } catch (err) {
+      setError(rawMsg(`${settings.plugin}: ${(err as Error).message}`));
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const changeSetting = (field: PluginSettingField, value: unknown) => {
+    setSettingsDraft((current) => ({ ...current, [field.key]: value }));
+  };
+
+  const contributionSummary = (plugin: PluginInfo) => {
+    const entries = [
+      ['A', plugin.contributions.actions],
+      ['C', plugin.contributions.codecs],
+      ['G', plugin.contributions.payload_generators],
+      ['P', plugin.contributions.payload_processors],
+      ['S', plugin.contributions.settings],
+    ].filter((entry) => Number(entry[1]) > 0);
+    return entries.map(([kind, count]) => `${kind}:${count}`).join(' · ');
+  };
+
   return (
     <div className="plugins-tab">
       <div className="plugins-header">
@@ -101,7 +145,7 @@ export function PluginsTab() {
         <ResizableTable columns={columns} className="flow-table plugins-table">
           <thead>
             <tr>
-              {[t('plugins.use'), t('plugins.order'), t('plugins.autoReload'), t('common.name'), t('common.description'), t('plugins.hooks'), t('common.status'), t('plugins.reload')].map((label, index) => (
+              {[t('plugins.use'), t('plugins.order'), t('plugins.autoReload'), t('common.name'), t('common.description'), t('plugins.hooks'), t('plugins.contributions'), t('common.status'), t('plugins.actions')].map((label, index) => (
                 <ResizableHeader key={index} label={label} index={index} columns={columns} resizeLabel={t('table.resizeColumn', { column: label })} />
               ))}
               <ResizableFillHeader />
@@ -162,6 +206,10 @@ export function PluginsTab() {
                   ))}
                 </td>
                 <td className="mono">
+                  {plugin.sdk_api_version && <span className="param">SDK {plugin.sdk_api_version}</span>}
+                  {contributionSummary(plugin) || <span className="muted">{t('common.none')}</span>}
+                </td>
+                <td className="mono">
                   {plugin.loaded ? (
                     <span className="status-2xx">{t('plugins.loaded')}</span>
                   ) : plugin.error ? (
@@ -171,6 +219,14 @@ export function PluginsTab() {
                   )}
                 </td>
                 <td>
+                  {(plugin.contributions.settings ?? 0) > 0 && (
+                    <button
+                      aria-label={t('plugins.settingsLabel', { name: plugin.name })}
+                      onClick={() => void openSettings(plugin)}
+                    >
+                      {t('plugins.settings')}
+                    </button>
+                  )}
                   <button
                     aria-label={t('plugins.reloadLabel', { name: plugin.name })}
                     onClick={() => void reload(plugin)}
@@ -183,6 +239,52 @@ export function PluginsTab() {
             ))}
           </tbody>
         </ResizableTable>
+      )}
+      {settings && (
+        <section className="plugin-settings-panel" aria-label={t('plugins.settingsFor', { name: settings.plugin })}>
+          <div className="plugin-settings-heading">
+            <strong>{t('plugins.settingsFor', { name: settings.plugin })}</strong>
+            <button aria-label={t('common.close')} onClick={() => setSettings(null)}>×</button>
+          </div>
+          {settings.fields.map((field) => (
+            <label key={field.key} className="plugin-setting-field">
+              <span>
+                {field.title}
+                <small>{field.scope === 'user' ? t('plugins.userScope') : t('plugins.projectScope')}</small>
+              </span>
+              {field.kind === 'boolean' ? (
+                <input
+                  type="checkbox"
+                  checked={Boolean(settingsDraft[field.key])}
+                  onChange={(event) => changeSetting(field, event.target.checked)}
+                />
+              ) : field.kind === 'enum' ? (
+                <select
+                  value={String(settingsDraft[field.key] ?? '')}
+                  onChange={(event) => changeSetting(field, event.target.value)}
+                >
+                  {field.choices.map((choice) => <option key={choice}>{choice}</option>)}
+                </select>
+              ) : (
+                <input
+                  type={field.kind === 'integer' || field.kind === 'number' ? 'number' : 'text'}
+                  step={field.kind === 'integer' ? 1 : field.kind === 'number' ? 'any' : undefined}
+                  value={String(settingsDraft[field.key] ?? '')}
+                  onChange={(event) => changeSetting(
+                    field,
+                    field.kind === 'integer' || field.kind === 'number'
+                      ? Number(event.target.value)
+                      : event.target.value,
+                  )}
+                />
+              )}
+              {field.description && <small className="muted">{field.description}</small>}
+            </label>
+          ))}
+          <button disabled={savingSettings} onClick={() => void saveSettings()}>
+            {savingSettings ? t('plugins.savingSettings') : t('plugins.saveSettings')}
+          </button>
+        </section>
       )}
     </div>
   );
