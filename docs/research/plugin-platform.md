@@ -14,7 +14,7 @@
 
 Lanius의 현재 플러그인 기능은 **mitmproxy 애드온을 런타임에 싣는 최소 기능 제품**으로는 잘 동작한다. Python 플러그인이 실제 프록시 애드온 체인에 들어가 HTTP, TCP, WebSocket 트래픽을 읽고 수정할 수 있고, 활성 상태 저장, enable/disable, 수동 reload, 오류 표시, Copy as 메뉴용 코드 생성기 등록까지 구현되어 있다. 전용 테스트 31개도 모두 통과한다.
 
-하지만 Burp Suite 같은 생태계를 만들기에는 "트래픽 훅" 이외의 공식 확장 지점이 부족하다. 지금은 플러그인이 Lanius 내부 모듈을 직접 import하거나 mitmproxy 전역 객체에 의존해야 한다. 전용 탭, 메시지 에디터, 일반 컨텍스트 메뉴, 설정, 단축키, Intruder payload, 스캐너 check, issue 저장, 프로젝트 저장소, 설치와 업데이트를 위한 안정된 API가 없다.
+하지만 서드파티 플러그인 생태계를 만들기에는 "트래픽 훅" 이외의 공식 확장 지점이 부족하다. 지금은 플러그인이 Lanius 내부 모듈을 직접 import하거나 mitmproxy 전역 객체에 의존해야 한다. 전용 탭, 메시지 에디터, 일반 컨텍스트 메뉴, 설정, 단축키, Intruder payload, 스캐너 check, issue 저장, 프로젝트 저장소, 설치와 업데이트를 위한 안정된 API가 없다.
 
 따라서 예제 플러그인을 많이 추가하기 전에 다음 세 층을 순서대로 만드는 것이 좋다.
 
@@ -149,34 +149,32 @@ plugin별 log/output/error, 최근 오류 수, hook 실행 시간, timeout 가�
 
 별도 dependency resolver, per-plugin environment, SDK version 범위가 없다. frozen desktop engine에서는 engine bundle에 없는 package를 plugin이 당연히 import할 수 있다고 보장할 수 없다. pure Python dependency를 plugin package에 vendor하는 규칙과 native dependency를 별도 process에서 실행하는 규칙이 필요하다.
 
-## Burp Suite와의 차이
+## 확장 지점 현황
 
-PortSwigger의 현재 Montoya API는 HTTP, Proxy, Repeater, Intruder, Scanner, Scope, Site Map, WebSocket, Comparer, Decoder, Organizer, Collaborator, persistence, UI, logging과 AI까지 나뉜 안정된 facade를 extension에 전달한다. [공식 Montoya API 2026.7](https://portswigger.github.io/burp-extensions-montoya-api/javadoc/burp/api/montoya/MontoyaApi.html)와 [공식 example repository](https://github.com/PortSwigger/burp-extensions-montoya-api-examples)를 기준으로 비교하면 다음과 같다.
+보안 테스트 도구의 플러그인 생태계에서 흔히 필요한 확장 범주를 기준으로 Lanius의 현재 상태를 정리하면 다음과 같다.
 
-| 확장 범주 | Burp | Lanius 현재 | 제안 우선순위 |
-|---|---|---|---|
-| HTTP/Proxy traffic handler | 전용 handler와 tool context | mitmproxy hook으로 강력하게 지원 | 유지, stable wrapper 추가 |
-| WebSocket handler | 전체/Proxy handler와 UI context | message hook으로 수정 가능 | wrapper와 editor/action 추가 |
-| 추가 HTTP request | 공식 HTTP API | mitmproxy/Lanius 내부 접근으로 가능 | `sdk.http.send()` 제공 |
-| Suite tab/page | 등록 API | 없음 | P2 |
-| Context menu/action | request/response, WebSocket, issue context | Copy as generator만 있음 | P1 최우선 |
-| Custom message editor | HTTP request/response, WebSocket editor provider | 없음 | P2 |
-| Settings panel | typed field와 user/project persistence | 없음 | P1 |
-| Hotkey/menu bar | 등록과 해제 API | app 자체 shortcut만 있음 | P1/P2 |
-| Intruder payload | generator와 processor | plugin API 없음 | P1 |
-| Scanner check | passive/active check, insertion point, issue handler | scanner/issue 모델 자체가 없음 | P3 |
-| Site map/scope/tool APIs | 안정된 facade | REST와 내부 Python object는 존재 | P1 wrapper |
-| Persistence | extension/user/project storage | enable 목록만 공식 지원 | P1 |
-| Logging | extension별 output/error | 전용 화면 없음 | P0/P1 |
-| Install/update/catalog | BApp Store, local file, auto update | directory에 수동 copy | P2/P4 |
-| Ordering | traffic 처리 순서를 UI에서 이동 | load 순서뿐, UI 제어 없음 | P0 |
-| Auto reload | file change 감지 | reload button | P0/P2 |
-| Compatibility | API version과 build artifact | 계약 없음 | P1/P2 |
-| Security review | store review와 source link, AI opt-in | trust warning만 있음 | P4 |
+| 확장 범주 | Lanius 현재 | 제안 우선순위 |
+|---|---|---|
+| HTTP/Proxy traffic handler | mitmproxy hook으로 강력하게 지원 | 유지, stable wrapper 추가 |
+| WebSocket handler | message hook으로 수정 가능 | wrapper와 editor/action 추가 |
+| 추가 HTTP request | mitmproxy/Lanius 내부 접근으로 가능 | `sdk.http.send()` 제공 |
+| 전용 tab/page | 없음 | P2 |
+| Context menu/action | Copy as generator만 있음 | P1 최우선 |
+| Custom message editor | 없음 | P2 |
+| Settings panel | 없음 | P1 |
+| Hotkey/menu bar | app 자체 shortcut만 있음 | P1/P2 |
+| Intruder payload | plugin API 없음 | P1 |
+| Scanner check | scanner/issue 모델 자체가 없음 | P3 |
+| Site map/scope/tool APIs | REST와 내부 Python object는 존재 | P1 wrapper |
+| Persistence | enable 목록만 공식 지원 | P1 |
+| Logging | 전용 화면 없음 | P0/P1 |
+| Install/update/catalog | directory에 수동 copy | P2/P4 |
+| Ordering | load 순서뿐, UI 제어 없음 | P0 |
+| Auto reload | reload button | P0/P2 |
+| Compatibility | 계약 없음 | P1/P2 |
+| Security review | trust warning만 있음 | P4 |
 
-Burp는 설치된 extension의 순서를 바꾸고, extension별 Details/Output/Errors를 보며, 자동 reload와 uninstall을 지원한다. 이 동작은 [Managing extensions](https://portswigger.net/burp/documentation/desktop/extend-burp/extensions/managing-extensions)에 정리되어 있다. BApp Store는 source link, version, rating, popularity, 예상 CPU/memory/time/scanner impact를 보여주고 one-click 설치와 update를 제공한다. [BApp Store 설치 문서](https://portswigger.net/burp/documentation/desktop/extend-burp/extensions/installing/bapp-store)를 참고할 수 있다.
-
-현대적인 비교 대상으로 Caido도 볼 가치가 있다. Caido는 하나의 package에 `manifest.json`, frontend plugin, backend plugin을 함께 넣고 typed frontend/backend SDK와 RPC를 제공한다. [공식 plugin architecture](https://developer.caido.io/plugins/concepts/package.html)는 Lanius의 React UI와 Python engine을 잇는 package 설계에 더 직접적인 참고가 된다. Caido package는 release signature도 요구한다. [공식 repository/signing 안내](https://developer.caido.io/plugins/guides/repository.html)를 참고할 수 있다.
+비교 대상으로 Caido도 볼 가치가 있다. Caido는 하나의 package에 `manifest.json`, frontend plugin, backend plugin을 함께 넣고 typed frontend/backend SDK와 RPC를 제공한다. [공식 plugin architecture](https://developer.caido.io/plugins/concepts/package.html)는 Lanius의 React UI와 Python engine을 잇는 package 설계에 더 직접적인 참고가 된다. Caido package는 release signature도 요구한다. [공식 repository/signing 안내](https://developer.caido.io/plugins/guides/repository.html)를 참고할 수 있다.
 
 ## 제안 architecture
 
@@ -402,8 +400,6 @@ trusted in-process Python addon에 대해서는 이 permission이 enforcement bo
 | WebSocket Fuzzer | WebSocket API, payload provider, result table |
 | Report/Collaboration Export | issue API, redaction, external network permission |
 
-Burp 생태계에서 반복적으로 성공한 유형도 이 분류와 같다. [공식 BApp Store](https://portswigger.net/bappstore)는 traffic rewrite, passive/active scanner, custom editor, Intruder payload, import/export, external tool bridge, authorization testing, token handling, WebSocket fuzzing처럼 다양한 범주의 사례를 보여준다.
-
 ## 첫 구현 범위 제안
 
 첫 개발 milestone은 "Plugin Platform v1"로 잡고 아래까지만 구현하는 것이 적절하다.
@@ -419,12 +415,6 @@ Burp 생태계에서 반복적으로 성공한 유형도 이 분류와 같다. [
 
 ## 참고 자료
 
-- [PortSwigger: Burp extensions](https://portswigger.net/burp/documentation/desktop/extend-burp/extensions)
-- [PortSwigger: Montoya API 2026.7](https://portswigger.github.io/burp-extensions-montoya-api/javadoc/burp/api/montoya/MontoyaApi.html)
-- [PortSwigger: official Montoya examples](https://github.com/PortSwigger/burp-extensions-montoya-api-examples)
-- [PortSwigger: managing extensions](https://portswigger.net/burp/documentation/desktop/extend-burp/extensions/managing-extensions)
-- [PortSwigger: BApp Store install and metadata](https://portswigger.net/burp/documentation/desktop/extend-burp/extensions/installing/bapp-store)
-- [PortSwigger: custom UI registration](https://portswigger.github.io/burp-extensions-montoya-api/javadoc/burp/api/montoya/ui/UserInterface.html)
 - [mitmproxy: addon event hooks](https://docs.mitmproxy.org/stable/api/events.html)
 - [mitmproxy: addon options](https://docs.mitmproxy.org/stable/addons/options/)
 - [mitmproxy: addon commands](https://docs.mitmproxy.org/stable/addons/commands/)
