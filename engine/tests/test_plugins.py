@@ -459,6 +459,7 @@ def test_capture_stays_last_so_plugin_edits_are_recorded(tmp_path) -> None:
         engine = c.app.state.engine
         chain = engine.master.addons.chain
         assert chain[-1] is engine.capture, "capture must run last"
+        assert chain[-2] is engine.websockets, "WebSocket history must see plugin edits"
 
         flow = tflow.tflow(req=tutils.treq(host="ordered.test"), resp=tutils.tresp())
         for addon in chain:

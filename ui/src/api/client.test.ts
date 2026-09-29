@@ -24,6 +24,10 @@ describe('buildFlowQuery', () => {
   it('encodes search terms', () => {
     expect(buildFlowQuery({ search: 'a b&c' })).toContain('search=a+b%26c');
   });
+
+  it('passes the history snapshot anchor with later pages', () => {
+    expect(buildFlowQuery({}, 200, 200, 123)).toContain('offset=200&anchor=123');
+  });
 });
 
 describe('buildFlowQuery with the new filters', () => {

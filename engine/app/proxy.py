@@ -237,7 +237,7 @@ class ProxyEngine:
             # final "Modified request" even before a response arrives.
             on_forwarded=self.capture.request_updated,
         )
-        self.websockets = WebSocketProxyAddon(broker)
+        self.websockets = WebSocketProxyAddon(broker, store=store)
         self.repeater = RepeaterAddon(store)
         self.intruder = IntruderAddon(self.repeater, broker)
         self.plugins = PluginManager(
@@ -355,22 +355,23 @@ class ProxyEngine:
         self.websockets.attach(master)
         self.plugins.addons = master.addons
         self.plugins.load_enabled()
-        self._reorder_capture_last()
+        self._reorder_capture_last(master)
         return master
 
-    def _reorder_capture_last(self) -> None:
-        """Keep the capture addon at the end of the chain.
+    def _reorder_capture_last(self, master: DumpMaster | None = None) -> None:
+        """Persist final HTTP and WebSocket content after user plugins.
 
-        mitmproxy runs hooks in chain order, so capture must come after user
-        plugins; otherwise a plugin's edits are applied after we have already
-        persisted the flow and never show up in the history.
+        mitmproxy runs hooks in chain order. A plugin may edit a frame or
+        request, so both persistence hooks must run after it.
         """
-        if self.master is None:
+        master = master or self.master
+        if master is None:
             return
-        chain = self.master.addons.chain
-        if self.capture in chain and chain[-1] is not self.capture:
-            chain.remove(self.capture)
-            chain.append(self.capture)
+        chain = master.addons.chain
+        for addon in (self.websockets, self.capture):
+            if addon in chain:
+                chain.remove(addon)
+                chain.append(addon)
 
     async def start(self) -> None:
         if self.running:

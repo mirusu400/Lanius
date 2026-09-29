@@ -9,11 +9,13 @@ import logging
 import sqlite3
 import time
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
+from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
 from .. import __version__
@@ -443,6 +445,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         and sharing a scope and a set of Repeater requests is the common
         case.
         """
+        if include_flows and await asyncio.to_thread(store.count) > 100_000:
+            raise HTTPException(
+                status_code=413,
+                detail="JSON export is limited to 100,000 flows; use the complete SQLite backup",
+            )
         data: dict[str, Any] = {
             "format": "lanius-project",
             "version": 1,
@@ -456,6 +463,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             flows = await asyncio.to_thread(lambda: store.list(limit=100000))
             data["flows"] = [flow.detail() for flow in flows]
         return data
+
+    @app.get("/api/project/backup")
+    async def backup_project() -> FileResponse:
+        path = await asyncio.to_thread(store.backup_database)
+        return FileResponse(
+            path, filename="lanius-project.sqlite",
+            media_type="application/x-sqlite3",
+            background=BackgroundTask(Path(path).unlink, missing_ok=True),
+        )
 
     @app.post("/api/project/import")
     async def import_project(request: Request) -> dict[str, Any]:
@@ -752,6 +768,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def list_flows(
         limit: int = Query(100, ge=1, le=1000),
         offset: int = Query(0, ge=0),
+        anchor: int | None = Query(None, ge=0),
         host: str | None = None,
         method: str | None = None,
         status_code: int | None = None,
@@ -768,6 +785,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             store.page_summaries,
             limit=limit,
             offset=offset,
+            anchor=anchor,
             scope_predicate=(engine.scope.contains if in_scope_only and any(
                 rule.enabled for rule in engine.scope.scope.rules
             ) else None),
@@ -802,6 +820,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         variant.get("headers"), reveal=reveal
                     )
         return data
+
+    @app.get("/api/flows/{flow_id}/body/{side}")
+    async def get_flow_body(flow_id: str, side: str) -> Response:
+        if side not in {"request", "response"}:
+            raise HTTPException(status_code=400, detail="side must be request or response")
+        body = await asyncio.to_thread(store.get_body_bytes, flow_id, side)
+        if body is None:
+            raise HTTPException(status_code=404, detail="body not found")
+        return Response(body, media_type="application/octet-stream")
 
     @app.get("/api/about")
     async def about() -> dict[str, Any]:
@@ -1012,7 +1039,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # --- WebSocket proxy -------------------------------------------------
     @app.get("/api/websockets")
     async def websocket_state() -> dict[str, Any]:
-        return engine.websockets.state()
+        return await asyncio.to_thread(engine.websockets.state)
+
+    @app.get("/api/websockets/messages")
+    async def websocket_messages(
+        limit: int = Query(200, ge=1, le=1000),
+        before: int | None = Query(None, ge=1),
+    ) -> dict[str, Any]:
+        return await asyncio.to_thread(store.page_websocket_messages, limit=limit, before=before)
+
+    @app.get("/api/websockets/messages/{message_id}/raw")
+    async def websocket_message_raw(message_id: str) -> Response:
+        body = await asyncio.to_thread(store.get_websocket_message_bytes, message_id)
+        if body is None:
+            raise HTTPException(status_code=404, detail="message not found")
+        return Response(body, media_type="application/octet-stream")
 
     @app.patch("/api/websockets/intercept")
     async def patch_websocket_intercept(
@@ -1056,7 +1097,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.delete("/api/websockets")
     async def clear_websocket_messages() -> dict[str, bool]:
-        engine.websockets.clear()
+        await asyncio.to_thread(store.clear_websocket_messages)
+        engine.websockets.clear(persist=False)
         return {"ok": True}
 
     # --- repeater (M3) ----------------------------------------------------

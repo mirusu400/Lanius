@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   exportProject,
   importProjectFile,
+  projectBackupUrl,
 } from '../../api/client';
 import type { Project } from '../../projects';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -98,6 +99,12 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
       {switchError && <div className="banner error" role="alert">{switchError}</div>}
 
       <div className="project-actions">
+        <button type="button" disabled={busy} onClick={() => {
+          const link = document.createElement('a');
+          link.href = projectBackupUrl();
+          link.download = 'lanius-project.sqlite';
+          link.click();
+        }}>{t('project.backupDatabase')}</button>
         <button type="button" disabled={busy} onClick={() => void download(true)}>
           {t('project.export')}
         </button>

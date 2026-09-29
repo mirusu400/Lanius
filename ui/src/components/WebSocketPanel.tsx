@@ -5,6 +5,7 @@ import {
   dropWebSocketMessage,
   forwardWebSocketMessage,
   getWebSocketState,
+  listWebSocketMessages,
   patchWebSocketIntercept,
   repeatWebSocketMessage,
 } from '../api/client';
@@ -30,6 +31,11 @@ export function WebSocketPanel() {
   const [rules, setRules] = useState(DEFAULT_RULES);
   const [connections, setConnections] = useState<WebSocketConnection[]>([]);
   const [messages, setMessages] = useState<WebSocketMessage[]>([]);
+  const [page, setPage] = useState(0);
+  const [pageStarts, setPageStarts] = useState<(number | undefined)[]>([undefined]);
+  const [nextBefore, setNextBefore] = useState<number | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [pageLoading, setPageLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [content, setContent] = useState('');
   const [toClient, setToClient] = useState(false);
@@ -48,6 +54,8 @@ export function WebSocketPanel() {
         setRules(state.rules ?? DEFAULT_RULES);
         setConnections(state.connections ?? []);
         setMessages([...(state.messages ?? [])].reverse());
+        setHasMore(state.has_more ?? false);
+        setNextBefore(state.next_before ?? null);
       })
       .catch((err) => setError(errorMessage(err)));
   }, []);
@@ -72,8 +80,15 @@ export function WebSocketPanel() {
               return;
             case 'websocket.message':
             case 'websocket.intercepted':
-              setMessages((current) => [event.data, ...current].slice(0, 2000));
-              setSelectedId((id) => id ?? event.data.id);
+              if (page === 0) {
+                setMessages((current) => {
+                  const next = [event.data, ...current.filter((item) => item.id !== event.data.id)].slice(0, 200);
+                  if (current.length >= 200) setHasMore(true);
+                  setNextBefore((before) => next.at(-1)?.seq ?? before);
+                  return next;
+                });
+                setSelectedId((id) => id ?? event.data.id);
+              }
               return;
             case 'websocket.resolved':
               setMessages((current) =>
@@ -94,14 +109,48 @@ export function WebSocketPanel() {
             case 'websocket.cleared':
               setMessages([]);
               setSelectedId(null);
+              setPage(0);
+              setPageStarts([undefined]);
+              setNextBefore(null);
+              setHasMore(false);
               return;
             default:
               return;
           }
         },
       }),
-    [],
+    [page],
   );
+
+  const loadPage = async (start: number | undefined, target: number) => {
+    setPageLoading(true);
+    try {
+      const result = await listWebSocketMessages(start);
+      setMessages(result.items);
+      setHasMore(result.has_more);
+      setNextBefore(result.next_before);
+      setPage(target);
+      setSelectedId(result.items[0]?.id ?? null);
+      setError(null);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setPageLoading(false);
+    }
+  };
+
+  const older = () => {
+    if (nextBefore === null) return;
+    const starts = pageStarts.slice(0, page + 1);
+    starts.push(nextBefore);
+    setPageStarts(starts);
+    void loadPage(nextBefore, page + 1);
+  };
+
+  const newer = () => {
+    if (page === 0) return;
+    void loadPage(pageStarts[page - 1], page - 1);
+  };
 
   const patchRules = async (patch: Partial<WebSocketInterceptRules>) => {
     setRules((current) => ({ ...current, ...patch }));
@@ -188,6 +237,11 @@ export function WebSocketPanel() {
             </tbody>
           </ResizableTable>
           {messages.length === 0 && <p className="muted websocket-empty">{t('websocket.empty')}</p>}
+          <div className="history-pages">
+            <button type="button" disabled={page === 0 || pageLoading} onClick={newer}>{t('proxy.newerHistory')}</button>
+            <span>{t('proxy.historyPageLabel')} {page + 1}</span>
+            <button type="button" disabled={!hasMore || pageLoading} onClick={older}>{t('proxy.olderHistory')}</button>
+          </div>
         </div>}
         second={<div className="websocket-editor">
           {selected ? (

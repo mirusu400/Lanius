@@ -8,8 +8,10 @@ mitmproxy asyncio loop must go through :mod:`app.db.async_store` (or
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import sqlite3
+import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterable
@@ -30,9 +32,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .payloads import PayloadSetStore
-
-MAX_BODY_BYTES = 5 * 1024 * 1024
-
 
 @dataclass(slots=True)
 class RequestSnapshot:
@@ -294,6 +293,10 @@ def _like_literal(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+def _glob_literal(value: str) -> str:
+    return value.replace("[", "[[]").replace("*", "[*]").replace("?", "[?]")
+
+
 def _summary_row(row: sqlite3.Row) -> dict[str, Any]:
     data = dict(row)
     data["request_size"] = data["request_size"] or 0
@@ -319,6 +322,11 @@ class FlowStore:
         self._payload_sets: "PayloadSetStore | None" = None
         self._conn.execute("PRAGMA synchronous=NORMAL")
         migrate(self._conn)
+        # A held frame cannot be resumed after its proxy process has gone.
+        self._conn.execute(
+            "UPDATE websocket_messages SET paused = 0, dropped = 1 WHERE paused = 1"
+        )
+        self._conn.commit()
         # WAL allows capture writes to commit while a reader holds a snapshot.
         # An in-memory store cannot be reopened, so tests share its connection.
         self._read_lock = threading.RLock() if self.path != ":memory:" else self._lock
@@ -336,6 +344,22 @@ class FlowStore:
                 self._read_conn.close()
         with self._lock:
             self._conn.close()
+
+    def backup_database(self) -> str:
+        """Create a consistent complete SQLite snapshot without stopping capture."""
+        if self.path == ":memory:":
+            raise ValueError("in-memory projects have no database file to back up")
+        with tempfile.NamedTemporaryFile(prefix="lanius_backup_", suffix=".sqlite", delete=False) as temp:
+            destination = temp.name
+        try:
+            uri = Path(self.path).resolve().as_uri() + "?mode=ro"
+            with contextlib.closing(sqlite3.connect(uri, uri=True)) as source:
+                with contextlib.closing(sqlite3.connect(destination)) as target:
+                    source.backup(target)
+            return destination
+        except Exception:
+            Path(destination).unlink(missing_ok=True)
+            raise
 
     # --- writes -----------------------------------------------------------
     def upsert(self, record: FlowRecord) -> None:
@@ -357,13 +381,13 @@ class FlowStore:
             record.query,
             record.http_version,
             _dump_headers(record.request_headers),
-            _truncate(record.request_body),
+            record.request_body,
             record.request_size,
             record.started_at,
             record.status_code,
             record.reason,
             _dump_headers(record.response_headers),
-            _truncate(record.response_body),
+            record.response_body,
             record.response_size,
             record.response_mime,
             record.completed_at,
@@ -377,8 +401,13 @@ class FlowStore:
             int(record.modified),
         )
         placeholders = ", ".join(["?"] * len(values))
+        updates = ", ".join(
+            f"{column.strip()} = excluded.{column.strip()}"
+            for column in _COLUMNS.split(",") if column.strip() != "id"
+        )
         self._conn.execute(
-            f"INSERT OR REPLACE INTO flows ({_COLUMNS}) VALUES ({placeholders})",
+            f"INSERT INTO flows ({_COLUMNS}) VALUES ({placeholders})"
+            f" ON CONFLICT(id) DO UPDATE SET {updates}",
             values,
         )
 
@@ -482,6 +511,10 @@ class FlowStore:
         the file exactly as large as before.
         """
         with self._lock:
+            # FTS5 keeps deleted document text in old index segments until
+            # they are merged. VACUUM alone cannot reclaim those pages.
+            self._conn.execute("INSERT INTO flow_search(flow_search) VALUES ('optimize')")
+            self._conn.commit()
             self._conn.execute("VACUUM")
             self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
@@ -557,6 +590,15 @@ class FlowStore:
             ).fetchone()
         return _row_to_record(row) if row else None
 
+    def get_body_bytes(self, flow_id: str, side: str) -> bytes | None:
+        if side not in {"request", "response"}:
+            raise ValueError("side must be request or response")
+        with self._read_lock:
+            row = self._read_conn.execute(
+                f"SELECT {side}_body FROM flows WHERE id = ?", (flow_id,)
+            ).fetchone()
+        return bytes(row[0]) if row is not None and row[0] is not None else None
+
     def list(
         self,
         *,
@@ -631,13 +673,14 @@ class FlowStore:
                 clauses.append("(path IS NULL OR lower(path) NOT LIKE ? ESCAPE '\\')")
                 params.append(f"%.{_like_literal(ext.lower().lstrip('.'))}")
         if search:
-            clauses.append("(path LIKE ? ESCAPE '\\' OR query LIKE ? ESCAPE '\\' OR host LIKE ? ESCAPE '\\')")
-            params.extend([f"%{_like_literal(search)}%"] * 3)
+            clauses.append("rowid IN (SELECT rowid FROM flow_search WHERE text GLOB ?)")
+            params.append(f"*{_glob_literal(search.casefold())}*")
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         return where, params
 
     def page_summaries(
         self, *, limit: int = 200, offset: int = 0,
+        anchor: int | None = None,
         scope_predicate: Callable[[str | None, str | None, int | None, str | None], bool] | None = None,
         host: str | None = None, method: str | None = None,
         status_code: int | None = None, search: str | None = None,
@@ -659,6 +702,45 @@ class FlowStore:
         items: list[dict[str, Any]] = []
         matched = 0
         with self._read_lock:
+            if anchor is None:
+                anchor = int(self._read_conn.execute(
+                    "SELECT COALESCE(MAX(rowid), 0) FROM flows"
+                ).fetchone()[0])
+            where = f"{where} {'AND' if where else 'WHERE'} rowid <= ?"
+            params.append(anchor)
+            # A common search term can match millions of rows. Probe a
+            # bounded newest slice first, so the usual first few pages do
+            # not materialize every matching FTS rowid. If the slice does
+            # not prove has_more, the complete index query below decides.
+            needed = offset + limit + 1
+            if search and scope_predicate is None and needed <= 1000:
+                base_where, base_params = self._flow_filters(
+                    host=host, method=method, status_code=status_code,
+                    methods=methods, status_classes=status_classes,
+                    extensions=extensions,
+                    exclude_extensions=exclude_extensions,
+                )
+                base_where = (
+                    f"{base_where} {'AND' if base_where else 'WHERE'} rowid <= ?"
+                )
+                probe = max(needed, 300)
+                recent = self._read_conn.execute(
+                    "WITH recent AS MATERIALIZED ("
+                    f" SELECT rowid FROM flows {base_where}"
+                    " ORDER BY started_at DESC, rowid DESC LIMIT ?)"
+                    f" SELECT {_SUMMARY_COLUMNS} FROM flows"
+                    " JOIN recent ON flows.rowid = recent.rowid"
+                    " WHERE EXISTS (SELECT 1 FROM flow_search AS hit"
+                    " WHERE hit.rowid = flows.rowid AND instr(hit.text, ?) > 0)"
+                    " ORDER BY started_at DESC, flows.rowid DESC LIMIT ?",
+                    (*base_params, anchor, probe,
+                     search.casefold(), needed),
+                ).fetchall()
+                if len(recent) == needed:
+                    return {
+                        "items": [_summary_row(row) for row in recent[offset:offset + limit]],
+                        "has_more": True, "anchor": anchor,
+                    }
             if scope_predicate is None:
                 rows = self._read_conn.execute(
                     f"SELECT {_SUMMARY_COLUMNS} FROM flows {where}"
@@ -666,7 +748,7 @@ class FlowStore:
                     (*params, limit + 1, offset),
                 ).fetchall()
                 return {"items": [_summary_row(row) for row in rows[:limit]],
-                        "has_more": len(rows) > limit}
+                        "has_more": len(rows) > limit, "anchor": anchor}
             cursor = self._read_conn.execute(
                 f"SELECT {_SUMMARY_COLUMNS} FROM flows {where}"
                 " ORDER BY started_at DESC, rowid DESC", params,
@@ -678,13 +760,80 @@ class FlowStore:
                     matched += 1
                     continue
                 if len(items) == limit:
-                    return {"items": items, "has_more": True}
+                    return {"items": items, "has_more": True, "anchor": anchor}
                 items.append(_summary_row(row))
-        return {"items": items, "has_more": False}
+        return {"items": items, "has_more": False, "anchor": anchor}
 
     def count(self) -> int:
         with self._read_lock:
             return int(self._read_conn.execute("SELECT flows FROM flow_totals").fetchone()[0])
+
+    # --- WebSocket history ------------------------------------------------
+    def append_websocket_message(self, item: dict[str, Any], content: bytes) -> int:
+        """Commit raw message bytes before announcing the live event."""
+        with self._lock:
+            cursor = self._conn.execute(
+                """INSERT INTO websocket_messages
+                (id, connection_id, host, path, from_client, is_text, timestamp,
+                 content, injected, dropped, paused)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (item["id"], item["connection_id"], item["host"], item["path"],
+                 int(item["from_client"]), int(item["is_text"]), item["timestamp"],
+                 content, int(item["injected"]), int(item["dropped"]), int(item["paused"])),
+            )
+            self._conn.commit()
+            return int(cursor.lastrowid or 0)
+
+    def update_websocket_message(
+        self, message_id: str, content: bytes, *, dropped: bool
+    ) -> None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE websocket_messages SET content = ?, dropped = ?, paused = 0 WHERE id = ?",
+                (content, int(dropped), message_id),
+            )
+            self._conn.commit()
+
+    def page_websocket_messages(
+        self, *, limit: int = 200, before: int | None = None
+    ) -> dict[str, Any]:
+        from ..addons.websocket_proxy import _encoded
+
+        with self._read_lock:
+            rows = self._read_conn.execute(
+                "SELECT * FROM websocket_messages"
+                + (" WHERE seq < ?" if before is not None else "")
+                + " ORDER BY seq DESC LIMIT ?",
+                ((before,) if before is not None else ()) + (limit + 1,),
+            ).fetchall()
+        items = []
+        for row in rows[:limit]:
+            raw = bytes(row["content"])
+            item = {key: row[key] for key in (
+                "seq", "id", "connection_id", "host", "path", "timestamp"
+            )}
+            item.update({key: bool(row[key]) for key in (
+                "from_client", "is_text", "injected", "dropped", "paused"
+            )})
+            item.update({"size": len(raw), **_encoded(raw, item["is_text"])})
+            items.append(item)
+        return {
+            "items": items,
+            "has_more": len(rows) > limit,
+            "next_before": items[-1]["seq"] if items else None,
+        }
+
+    def clear_websocket_messages(self) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM websocket_messages")
+            self._conn.commit()
+
+    def get_websocket_message_bytes(self, message_id: str) -> bytes | None:
+        with self._read_lock:
+            row = self._read_conn.execute(
+                "SELECT content FROM websocket_messages WHERE id = ?", (message_id,)
+            ).fetchone()
+        return bytes(row[0]) if row is not None else None
 
     # --- scope rules (M4) -------------------------------------------------
     def list_scope_rules(self) -> List[dict[str, Any]]:
@@ -1394,12 +1543,6 @@ class FlowStore:
             key = (item.pop("scheme"), item.pop("host"), item.pop("port"))
             grouped.setdefault(key, []).append(item)
         return grouped
-
-
-def _truncate(body: bytes | None) -> bytes | None:
-    if body is None:
-        return None
-    return body[:MAX_BODY_BYTES]
 
 
 def _folder_bounds(prefix: str) -> tuple[str, str]:

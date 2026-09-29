@@ -79,6 +79,7 @@ export function ProxyTab() {
   filtersRef.current = filters;
   const historyPageRef = useRef(historyPage);
   historyPageRef.current = historyPage;
+  const historyAnchor = useRef<number | undefined>(undefined);
   const requestGeneration = useRef(0);
   const scopeReloadTimer = useRef<number | null>(null);
   const previousSearch = useRef(filters.search);
@@ -94,8 +95,9 @@ export function ProxyTab() {
     const generation = ++requestGeneration.current;
     setHistoryLoading(true);
     try {
-      const page = await listFlowPage(filtersRef.current, historyPageRef.current * 200);
+      const page = await listFlowPage(filtersRef.current, historyPageRef.current * 200, 200, historyAnchor.current);
       if (generation !== requestGeneration.current) return;
+      historyAnchor.current = page.anchor;
       setFlows(page.items);
       setHasMoreHistory(page.has_more);
       setError(null);
@@ -127,7 +129,10 @@ export function ProxyTab() {
 
   const jumpToHistoryPage = () => {
     const page = Number(historyPageInput);
-    if (Number.isSafeInteger(page) && page > 0) setHistoryPage(page - 1);
+    if (Number.isSafeInteger(page) && page > 0) {
+      if (page === 1) historyAnchor.current = undefined;
+      setHistoryPage(page - 1);
+    }
     else setHistoryPageInput(String(historyPage + 1));
   };
 
@@ -166,6 +171,7 @@ export function ProxyTab() {
         onEvent: (event) => {
           switch (event.type) {
             case 'flows.cleared':
+              historyAnchor.current = undefined;
               setFlows([]);
               setHasMoreHistory(false);
               clearSelection();
@@ -188,7 +194,8 @@ export function ProxyTab() {
             case 'flow.error': {
               if (pausedRef.current) return;
               const flow = event.data;
-              if (filtersRef.current.inScopeOnly) {
+              if (historyPageRef.current === 0) historyAnchor.current = undefined;
+              if (filtersRef.current.inScopeOnly || filtersRef.current.search) {
                 if (scopeReloadTimer.current !== null) window.clearTimeout(scopeReloadTimer.current);
                 scopeReloadTimer.current = window.setTimeout(() => void reload(), 500);
                 return;
@@ -259,6 +266,7 @@ export function ProxyTab() {
 
   const onClear = useCallback(async () => {
     await clearFlows();
+    historyAnchor.current = undefined;
     setFlows([]);
     setHasMoreHistory(false);
     clearSelection();
@@ -324,7 +332,7 @@ export function ProxyTab() {
         <>
           <FilterBar
             filters={filters}
-            onChange={(next) => { setHistoryPage(0); setHistoryPageInput('1'); setFilters(next); }}
+            onChange={(next) => { historyAnchor.current = undefined; setHistoryPage(0); setHistoryPageInput('1'); setFilters(next); }}
             paused={paused}
             onTogglePause={() => setPaused((p) => !p)}
             onClear={onClear}
@@ -357,7 +365,10 @@ export function ProxyTab() {
             second={<FlowDetailView flow={selectedFlow} />}
           />
           <div className="history-pages">
-            <button disabled={historyPage === 0 || historyLoading} onClick={() => setHistoryPage((page) => page - 1)}>{t('proxy.newerHistory')}</button>
+            <button disabled={historyPage === 0 || historyLoading} onClick={() => {
+              if (historyPage === 1) historyAnchor.current = undefined;
+              setHistoryPage((page) => page - 1);
+            }}>{t('proxy.newerHistory')}</button>
             <label>{t('proxy.historyPageLabel')}
               <input type="number" min="1" value={historyPageInput}
                 onChange={(event) => setHistoryPageInput(event.target.value)}

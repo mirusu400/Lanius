@@ -36,8 +36,8 @@ def main() -> None:
     parser.add_argument("--unique-paths", action="store_true",
                         help="Use distinct static paths to stress endpoint group count")
     args = parser.parse_args()
-    if args.rows < 1 or not 0 <= args.body_bytes <= 5 * 1024 * 1024:
-        parser.error("rows must be positive; body-bytes must be between 0 and 5 MiB")
+    if args.rows < 1 or args.body_bytes < 0:
+        parser.error("rows must be positive; body-bytes must be non-negative")
 
     with tempfile.TemporaryDirectory(prefix="lanius_large_project_") as directory:
         path = Path(directory) / "capture.sqlite"
@@ -95,6 +95,10 @@ def main() -> None:
         measure("latest 200 flows", lambda: store.list(limit=200))
         measure("oldest flow search", lambda: store.page_summaries(
             search="/legacy-only", limit=200))
+        measure("common full-text search", lambda: store.page_summaries(
+            search="example.test", limit=200))
+        measure("header full-text search", lambda: store.page_summaries(
+            search="stress-probe", limit=200))
         measure("site folders", lambda: store.page_folders_for_site(
             "https", "host12.example.test", 443, limit=200))
         measure("endpoint groups", lambda: store.page_endpoints(limit=200))

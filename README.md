@@ -196,14 +196,20 @@ previous single-database workspace remains available as **Previous work**.
 Temporary projects are removed when closed. Use **Settings > Project > Switch**
 to return to the chooser.
 
-Work is saved as you go. **Settings > Project** exports the current project
-as one JSON file, with a second button that leaves the capture out when you
-only want to pass on a scope and a set of requests. The same screen shows
+Work is saved as you go. **Settings > Project > Back up complete database**
+downloads a consistent SQLite snapshot with every HTTP body and WebSocket
+message. The JSON export is intended for sharing smaller projects: it holds
+at most 100,000 HTTP flows, omits WebSocket messages, and its readable body
+encoding cannot preserve arbitrary binary bytes. Projects above that limit
+receive an error instead of a silently shortened JSON export. A second JSON
+button leaves the capture out when you only want to pass on a scope and a set
+of requests. The same screen shows
 which captured targets use space. Select targets to remove their requests and
 compact the database, or compact only to reclaim pages freed earlier. The
 preview shows request counts and the confirmation names what will be deleted.
-Existing projects build the new summary indexes once when first opened after
-upgrading; a large project can take several seconds on that first launch.
+Existing projects build summary and full text indexes once when first opened
+after upgrading; a large project can take minutes on that first launch and
+requires additional disk space.
 
 ## Features
 
@@ -220,16 +226,24 @@ Intruder. The original bytes stay in the capture and edited requests are
 encoded again before sending. This can be disabled under **Settings > Proxy >
 HTTP body display**. `Accept-Encoding` only advertises acceptable response
 formats and does not mean that the request body itself is compressed.
-Captured request and response bodies are stored up to 5 MiB each.
+Captured request and response bodies are stored without the former 5 MiB
+database limit. The original bytes are available from
+`GET /api/flows/{id}/body/request` and `/response`.
+Bytes already cut off by older versions cannot be recovered by upgrading.
 
 History has a **Modified** column. When Match & Replace, Intercept, or a plugin
 changes a request, its detail pane keeps **Original**, **Auto-modified**, and
 **Modified request** tabs so every stage can be compared.
 History shows 200 requests per page; **Older**, **Newer**, and the page number
-field move through the whole project. Search checks the stored host, path and
-query on every page, including old captures. It does not search headers or
-bodies. The scope filter also applies before paging, so a rare old in-scope
-request remains reachable.
+field move through the whole project. Search checks host, path, query,
+headers, decoded request and response bodies, comments, and request versions
+throughout the capture. The trigram index accelerates searches containing at
+least three consecutive characters; shorter searches can still scan the
+index. Pages use a snapshot anchor so new captures do not shift older pages.
+Deleting rows while browsing can still change numeric page offsets. The scope
+filter applies before paging, so a rare old in-scope request remains reachable.
+API and MCP clients can pass the returned `anchor` on later flow pages to keep
+the same capture boundary while new requests arrive.
 Drag a table column header's right edge to resize it in History and other
 headed data tables. Column widths are remembered on this machine.
 Drag the divider between side-by-side panes to resize them in Proxy,
@@ -279,8 +293,10 @@ directions. Turn interception on for client messages, server messages, or both,
 then edit and forward or drop held messages. A captured message can also be
 edited and sent again to either side of its still-active connection. Binary
 messages are shown and edited as Base64 so their bytes are not corrupted.
-WebSocket message history currently keeps the latest 2,000 messages in memory;
-it is cleared when the engine restarts. HTTP history is stored in the project.
+WebSocket message history is stored as raw bytes in the project database.
+The view loads 200 at a time and can page through all earlier messages after a
+restart. `GET /api/websockets/messages/{id}/raw` returns the exact frame bytes.
+Frames discarded by older versions before this upgrade are not recoverable.
 
 ### Target
 

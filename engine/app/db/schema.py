@@ -6,8 +6,9 @@ import sqlite3
 
 from .metrics import MIGRATION as METRICS_MIGRATION
 from .endpoint_index import MIGRATION as ENDPOINT_MIGRATION, register_functions
+from .search_index import MIGRATION as SEARCH_MIGRATION, register_functions as register_search_functions
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -112,12 +113,31 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
     ),
     6: METRICS_MIGRATION,
     7: ENDPOINT_MIGRATION,
+    8: SEARCH_MIGRATION + (
+        """CREATE TABLE websocket_messages (
+            seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            id TEXT NOT NULL UNIQUE,
+            connection_id TEXT NOT NULL,
+            host TEXT NOT NULL,
+            path TEXT NOT NULL,
+            from_client INTEGER NOT NULL,
+            is_text INTEGER NOT NULL,
+            timestamp REAL NOT NULL,
+            content BLOB NOT NULL,
+            injected INTEGER NOT NULL,
+            dropped INTEGER NOT NULL,
+            paused INTEGER NOT NULL
+        )""",
+        "CREATE INDEX idx_websocket_messages_connection ON websocket_messages(connection_id, seq DESC)",
+        "CREATE INDEX idx_websocket_messages_paused ON websocket_messages(paused) WHERE paused = 1",
+    ),
 }
 
 
 def migrate(conn: sqlite3.Connection) -> int:
     """Apply pending migrations; returns the resulting schema version."""
     register_functions(conn)
+    register_search_functions(conn)
     conn.execute("PRAGMA recursive_triggers=ON")
     current = conn.execute("PRAGMA user_version").fetchone()[0]
     for version in sorted(_MIGRATIONS):

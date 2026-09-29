@@ -11,6 +11,7 @@ import type {
   MatchReplaceRule,
   PausedFlow,
   WebSocketInterceptRules,
+  WebSocketMessage,
   WebSocketState,
 } from './types';
 
@@ -77,9 +78,10 @@ async function errorDetail(res: Response): Promise<string> {
   return res.statusText ? `${res.status} ${res.statusText}` : `HTTP ${res.status}`;
 }
 
-export function buildFlowQuery(filters: FlowFilters, limit = 200, offset = 0): string {
+export function buildFlowQuery(filters: FlowFilters, limit = 200, offset = 0, anchor?: number): string {
   const params = new URLSearchParams({ limit: String(limit) });
   if (offset) params.set('offset', String(offset));
+  if (anchor !== undefined) params.set('anchor', String(anchor));
   if (filters.host) params.set('host', filters.host);
   if (filters.method) params.set('method', filters.method);
   if (filters.statusCode !== undefined && !Number.isNaN(filters.statusCode)) {
@@ -118,12 +120,12 @@ export async function listFlows(
 }
 
 export async function listFlowPage(
-  filters: FlowFilters = {}, offset = 0, limit = 200,
-): Promise<{ items: FlowSummary[]; has_more: boolean }> {
-  const data = await request<{ items: FlowSummary[]; has_more?: boolean }>(
-    `/api/flows?${buildFlowQuery(filters, limit, offset)}`,
+  filters: FlowFilters = {}, offset = 0, limit = 200, anchor?: number,
+): Promise<{ items: FlowSummary[]; has_more: boolean; anchor?: number }> {
+  const data = await request<{ items: FlowSummary[]; has_more?: boolean; anchor?: number }>(
+    `/api/flows?${buildFlowQuery(filters, limit, offset, anchor)}`,
   );
-  return { items: data?.items ?? [], has_more: data?.has_more ?? false };
+  return { items: data?.items ?? [], has_more: data?.has_more ?? false, anchor: data?.anchor };
 }
 
 export function getFlow(id: string, reveal = false): Promise<FlowDetail> {
@@ -256,6 +258,12 @@ export function setBodyDisplaySettings(
 
 export function getWebSocketState(): Promise<WebSocketState> {
   return request('/api/websockets');
+}
+
+export function listWebSocketMessages(before?: number): Promise<{
+  items: WebSocketMessage[]; has_more: boolean; next_before: number | null;
+}> {
+  return request(`/api/websockets/messages?limit=200${before ? `&before=${before}` : ''}`);
 }
 
 export function patchWebSocketIntercept(
@@ -733,6 +741,10 @@ export function putWorkspace(key: string, value: unknown): Promise<{ ok: boolean
 
 export function exportProject(includeFlows = true): Promise<Record<string, unknown>> {
   return request(`/api/project/export?include_flows=${includeFlows}`);
+}
+
+export function projectBackupUrl(): string {
+  return `${API_BASE}/api/project/backup`;
 }
 
 export function importProject(

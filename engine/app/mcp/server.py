@@ -100,6 +100,7 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
     async def list_flows(
         limit: int = 50,
         offset: int = 0,
+        anchor: int | None = None,
         host: str | None = None,
         method: str | None = None,
         status_code: int | None = None,
@@ -109,12 +110,14 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
             store.page_summaries,
             limit=max(1, min(limit, 500)),
             offset=max(0, offset),
+            anchor=max(0, anchor) if anchor is not None else None,
             host=host,
             method=method,
             status_code=status_code,
             search=search,
         )
         return {"count": len(page["items"]), "has_more": page["has_more"],
+                "anchor": page["anchor"],
                 "flows": [flow_summary(item) for item in page["items"]]}
 
     @server.tool(

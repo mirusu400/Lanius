@@ -7,6 +7,7 @@ import sqlite3
 import pytest
 
 from app.db.schema import SCHEMA_VERSION, _MIGRATIONS, migrate
+from app.db.endpoint_index import register_functions as register_endpoint_functions
 from app.db.store import FlowRecord, FlowStore, RequestSnapshot
 
 
@@ -226,6 +227,94 @@ def test_list_filters_and_ordering() -> None:
     assert [r.id for r in store.list(status_code=404)] == ["c"]
     assert [r.id for r in store.list(search="items")] == ["b", "c", "a"]
     assert [r.id for r in store.list(limit=1, offset=1)] == ["c"]
+    store.close()
+
+
+def test_full_bodies_and_text_search_survive_restart(tmp_path) -> None:
+    import gzip
+
+    path = tmp_path / "full.sqlite"
+    body = b"a" * (5 * 1024 * 1024) + b"end-of-body-marker"
+    store = FlowStore(path)
+    store.upsert(make_record(
+        "full", path="/other", request_body=body,
+        request_headers=[("Content-Type", "text/plain"), ("X-Find", "header-marker")],
+        response_body=gzip.compress("압축본문-needle".encode()),
+        response_headers=[("Content-Encoding", "gzip"), ("Content-Type", "text/plain; charset=utf-8")],
+        comment="comment-marker",
+    ))
+    assert store.get_body_bytes("full", "request") == body
+    for term in ("end-of-body-marker", "header-marker", "압축본문", "comment-marker"):
+        assert [item["id"] for item in store.page_summaries(search=term)["items"]] == ["full"]
+    store.close()
+    reopened = FlowStore(path)
+    assert reopened.get_body_bytes("full", "request") == body
+    assert reopened.page_summaries(search="end-of-body-marker")["items"][0]["id"] == "full"
+    reopened.close()
+
+
+def test_v7_upgrade_indexes_all_existing_history(tmp_path) -> None:
+    path = tmp_path / "v7.sqlite"
+    conn = sqlite3.connect(path)
+    register_endpoint_functions(conn)
+    conn.execute("PRAGMA recursive_triggers=ON")
+    for version in range(1, 8):
+        for statement in _MIGRATIONS[version]:
+            conn.execute(statement)
+    conn.execute(
+        "INSERT INTO flows(id,host,path,request_headers,response_body) VALUES(?,?,?,?,?)",
+        ("old", "old.example", "/other", '[["X-Old", "header-needle"]]', b"body-needle"),
+    )
+    conn.execute("PRAGMA user_version=7")
+    conn.commit()
+    conn.close()
+    store = FlowStore(path)
+    for term in ("old.example", "header-needle", "body-needle"):
+        assert store.page_summaries(search=term)["items"][0]["id"] == "old"
+    store.close()
+
+
+def test_search_index_tracks_updates_deletes_and_literal_metacharacters() -> None:
+    store = FlowStore()
+    store.upsert(make_record("a", path="/other", request_body=b"alpha %_?*[ marker"))
+    store.upsert(make_record("binary", path="/other", request_body=b"\x00hidden-needle"))
+    assert store.page_summaries(search="%_?*[")["items"][0]["id"] == "a"
+    assert store.page_summaries(search="hidden-needle")["items"][0]["id"] == "binary"
+    store.upsert(make_record("a", path="/other", request_body=b"beta marker"))
+    assert store.page_summaries(search="alpha")["items"] == []
+    assert store.page_summaries(search="BETA")["items"][0]["id"] == "a"
+    store.delete(["a"])
+    assert store.page_summaries(search="beta")["items"] == []
+    store.close()
+
+
+def test_history_anchor_remains_stable_while_new_flows_arrive() -> None:
+    store = FlowStore()
+    for i in range(4):
+        store.upsert(make_record(str(i), started_at=float(i)))
+    first = store.page_summaries(limit=2)
+    assert [item["id"] for item in first["items"]] == ["3", "2"]
+    store.upsert(make_record("new", started_at=100))
+    store.upsert(make_record("2", started_at=2, response_body=b"updated"))
+    second = store.page_summaries(limit=2, offset=2, anchor=first["anchor"])
+    assert [item["id"] for item in second["items"]] == ["1", "0"]
+    store.close()
+
+
+def test_common_full_text_search_pages_without_losing_old_matches() -> None:
+    store = FlowStore()
+    for i in range(310):
+        store.upsert(make_record(
+            str(i), path="/other", host="common.example", started_at=float(i),
+            request_body=b"common-search" if i != 0 else b"rare-old-marker",
+        ))
+    first = store.page_summaries(search="common-search", limit=200)
+    assert len(first["items"]) == 200 and first["has_more"]
+    second = store.page_summaries(
+        search="common-search", limit=200, offset=200, anchor=first["anchor"]
+    )
+    assert len(second["items"]) == 109 and not second["has_more"]
+    assert store.page_summaries(search="rare-old-marker")["items"][0]["id"] == "0"
     store.close()
 
 
