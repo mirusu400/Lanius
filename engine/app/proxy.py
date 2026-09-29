@@ -27,6 +27,9 @@ from .addons.repeater import RepeaterAddon
 from .addons.websocket_proxy import WebSocketProxyAddon
 from .addons.intruder import IntruderAddon
 from .addons.plugins import PluginManager
+from .addons.scanner import ScannerAddon
+from .plugin_packages import PluginPackageManager
+from .plugin_catalogue import PluginCatalogueManager
 from .addons.scope import ScopeManager
 from .config import Settings
 from .db.store import FlowStore
@@ -240,11 +243,33 @@ class ProxyEngine:
         self.websockets = WebSocketProxyAddon(broker, store=store)
         self.repeater = RepeaterAddon(store)
         self.intruder = IntruderAddon(self.repeater, broker)
+        self.plugin_packages = PluginPackageManager(
+            settings.plugins_dir,
+            trusted_keys_path=settings.plugin_trusted_keys,
+            revocations_path=settings.plugin_revocations,
+            development_mode=settings.plugin_dev_mode,
+        )
+        self.plugin_catalogue = PluginCatalogueManager(
+            settings.plugin_catalogue_sources,
+            settings.plugin_catalogue_cache,
+            settings.plugin_revocations,
+            self.plugin_packages,
+        )
         self.plugins = PluginManager(
             settings.plugins_dir,
             store,
             broker,
             on_chain_changed=self._reorder_capture_last,
+            user_values_path=settings.data_dir / "plugin-values.json",
+            packages=self.plugin_packages,
+            safe_mode=settings.disable_plugins,
+        )
+        self.scanner = ScannerAddon(
+            self.plugins.registry,
+            store,
+            broker,
+            self.repeater,
+            self.scope,
         )
         self._task: asyncio.Task[None] | None = None
         # Why the proxy is not listening, when it failed to start. The API
@@ -348,6 +373,7 @@ class ProxyEngine:
         master.addons.add(self.match_replace)
         master.addons.add(self.intercept)
         master.addons.add(self.websockets)
+        master.addons.add(self.scanner)
         master.addons.add(self.capture)
         master.addons.add(self.repeater)
         # Not via the running hook: it does not fire for every mode set.
@@ -359,16 +385,16 @@ class ProxyEngine:
         return master
 
     def _reorder_capture_last(self, master: DumpMaster | None = None) -> None:
-        """Persist final HTTP and WebSocket content after user plugins.
+        """Analyze and persist final traffic content after user plugins.
 
         mitmproxy runs hooks in chain order. A plugin may edit a frame or
-        request, so both persistence hooks must run after it.
+        request, so scanner and persistence hooks must run after it.
         """
         master = master or self.master
         if master is None:
             return
         chain = master.addons.chain
-        for addon in (self.websockets, self.capture):
+        for addon in (self.scanner, self.websockets, self.capture):
             if addon in chain:
                 chain.remove(addon)
                 chain.append(addon)
@@ -392,6 +418,7 @@ class ProxyEngine:
             self.master = self._build_master()
             self._task = asyncio.create_task(self.master.run(), name="lanius-proxy")
             await self._await_bind()
+            await self.plugins.start_runtime()
         except Exception as exc:
             self.start_error = str(exc)
             await self.stop()
@@ -754,6 +781,7 @@ class ProxyEngine:
     async def stop(self) -> None:
         self.intercept.resume_all()
         self.websockets.resume_all()
+        await self.plugins.stop_runtime()
         if self.master is not None:
             await self._stop_listeners()
             self.master.shutdown()
@@ -765,6 +793,8 @@ class ProxyEngine:
             except Exception:  # pragma: no cover - defensive
                 logger.exception("proxy shutdown error")
         await self.capture.done()
+        await self.scanner.done()
+        self.plugins.master_stopped()
         self._task = None
         self.master = None
         if self._upstream_bridge is not None:

@@ -8,6 +8,7 @@ import { sendToIntruder } from '../tabs/intruderStore';
 import { ContextMenu, useContextMenu, type MenuItem } from './ContextMenu';
 import { Split } from './Split';
 import { useCodegenMenu } from './useCodegenMenu';
+import { usePluginActions } from './usePluginActions';
 import { rawRequest, rawRequestVariant, rawResponse } from './rawHttp';
 import {
   canReformat,
@@ -208,8 +209,10 @@ export function FlowDetailView({ flow, onSentToRepeater, splitStorageKey = 'lani
   const [requestBodyView, setRequestBodyView] = useState<BodyView>('pretty');
   const [responseBodyView, setResponseBodyView] = useState<BodyView>('pretty');
   const [requestStage, setRequestStage] = useState<RequestStage>('modified');
-  const menu = useContextMenu<null>();
+  const [actionError, setActionError] = useState<string | null>(null);
+  const menu = useContextMenu<'request' | 'response'>();
   const codegen = useCodegenMenu();
+  const pluginActions = usePluginActions(setActionError);
   // Captured when the menu opens: the flow can change underneath while
   // it is open, and acting on a different request than the one that was
   // right-clicked is worse than the menu doing nothing.
@@ -250,11 +253,23 @@ export function FlowDetailView({ flow, onSentToRepeater, splitStorageKey = 'lani
   const responseViews: View[] = isTcp ? ['raw', 'hex'] : ['parsed', 'raw', 'hex', 'preview'];
   const pick = (view: View, views: View[]) => (views.includes(view) ? view : views[0]);
 
-  const openMenu = (event: React.MouseEvent) => {
+  const openMenu = (
+    event: React.MouseEvent,
+    message: 'request' | 'response',
+  ) => {
     target.current = { flow, detail };
-    menu.open(event, null);
+    menu.open(event, message);
   };
 
+  const pluginMenu = pluginActions.buildMenu(
+    menu.target ? ['flow', menu.target] : ['flow'],
+    {
+      flow_id: flow.id,
+      flow,
+      detail,
+      message: menu.target,
+    },
+  );
   const menuItems: MenuItem[] = [
     {
       label: t('menu.sendToRepeater'),
@@ -273,6 +288,7 @@ export function FlowDetailView({ flow, onSentToRepeater, splitStorageKey = 'lani
       },
     },
     codegen.buildMenu({ flow_id: flow.id }),
+    ...(pluginMenu ? [pluginMenu] : []),
   ];
 
   const charsetOf = (charset: string | null | undefined) =>
@@ -334,7 +350,7 @@ export function FlowDetailView({ flow, onSentToRepeater, splitStorageKey = 'lani
       decodeError={decodeErrorOf(requestEncoding, requestDecodeError)}
       requestStage={variants ? requestStage : undefined}
       onRequestStage={variants ? setRequestStage : undefined}
-      onContextMenu={openMenu}
+      onContextMenu={(event) => openMenu(event, 'request')}
       t={t}
     />
   );
@@ -366,7 +382,7 @@ export function FlowDetailView({ flow, onSentToRepeater, splitStorageKey = 'lani
         detail?.response_content_encoding,
         detail?.response_decode_error,
       )}
-      onContextMenu={openMenu}
+      onContextMenu={(event) => openMenu(event, 'response')}
       t={t}
     />
   );
@@ -389,6 +405,7 @@ export function FlowDetailView({ flow, onSentToRepeater, splitStorageKey = 'lani
           {t('detail.revealSecrets')}
         </label>
       </div>
+      {actionError && <div className="banner error">{actionError}</div>}
       {/* Stacked rather than tabbed: comparing what was sent with what
           came back is the usual reason to open a flow at all. */}
       <Split

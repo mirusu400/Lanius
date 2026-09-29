@@ -34,6 +34,7 @@ import {
 import { ContextMenu, useContextMenu, type MenuItem } from '../components/ContextMenu';
 import { useReportBusy } from '../components/busy';
 import { useCodegenMenu } from '../components/useCodegenMenu';
+import { usePluginActions } from '../components/usePluginActions';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { sendToRepeater } from './repeaterStore';
 import { sendToIntruder } from './intruderStore';
@@ -179,6 +180,10 @@ export function TargetTab() {
       setLoading(false);
     }
   }, [inScopeOnly]);
+  const pluginActions = usePluginActions(
+    (message) => setError(rawMsg(message)),
+    () => void refreshSites(),
+  );
 
   const resetPages = useCallback(() => {
     pageGeneration.current += 1;
@@ -641,6 +646,15 @@ export function TargetTab() {
                         },
                         codegen,
                         (target) => setPendingDelete([target]),
+                        menu.target.clicked.kind === 'flow'
+                          ? pluginActions.buildMenu(
+                              ['flow'],
+                              {
+                                flow_id: menu.target.clicked.flow.id,
+                                flow: menu.target.clicked.flow,
+                              },
+                            )
+                          : undefined,
                       )
                   : []
               }
@@ -667,6 +681,7 @@ function treeMenuItems(
   onScopeChanged: () => void,
   codegen: ReturnType<typeof useCodegenMenu>,
   onDelete: (target: SitemapRowTarget) => void,
+  pluginActions?: MenuItem,
 ): MenuItem[] {
   const copy = (text: string) => {
     void navigator.clipboard?.writeText(text);
@@ -734,6 +749,7 @@ function treeMenuItems(
     // Rendered from the stored flow's id, so the engine uses the headers
     // and body it captured rather than the summary this tree holds.
     codegen.buildMenu({ flow_id: flow.id }),
+    ...(pluginActions ? [pluginActions] : []),
     {
       label: t('menu.deleteFlow'),
       separator: true,

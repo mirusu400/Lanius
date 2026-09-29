@@ -20,6 +20,7 @@ import type {
 } from '../api/types';
 import { FlowTable } from '../components/FlowTable';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
+import { usePluginActions } from '../components/usePluginActions';
 import { flowMenuItems, flowUrl } from './flowMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -39,7 +40,7 @@ import { FilterBar } from '../components/FilterBar';
 import { InterceptPanel } from '../components/InterceptPanel';
 import { WebSocketPanel } from '../components/WebSocketPanel';
 import { matchesFilters, mergeFlow } from './proxyModel';
-import { msg, renderMessage, useT, type Message } from '../i18n';
+import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { useReportBusy } from '../components/busy';
 
 const DEFAULT_RULES: InterceptRules = {
@@ -291,6 +292,10 @@ export function ProxyTab() {
   }, []);
 
   const menu = useContextMenu<FlowSummary>();
+  const pluginActions = usePluginActions(
+    (message) => setError(rawMsg(message)),
+    () => void reload(),
+  );
 
   /** Run an action with the flow's headers and body loaded.
    *
@@ -444,7 +449,11 @@ export function ProxyTab() {
                   },
                   // A stored flow is rendered from its id, so the engine
                   // uses the headers and body it actually captured.
-                  codegen.buildMenu({ flow_id: menu.target.id }))
+                  codegen.buildMenu({ flow_id: menu.target.id }),
+                  pluginActions.buildMenu(
+                    ['history', 'flow'],
+                    { flow_id: menu.target.id, flow: menu.target },
+                  ))
                 : []
             }
             onClose={menu.close}

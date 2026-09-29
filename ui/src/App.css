@@ -2707,6 +2707,7 @@ pre.body {
   flex-direction: column;
   height: 100%;
   overflow: auto;
+  position: relative;
 }
 
 .plugins-header {
@@ -2726,6 +2727,92 @@ pre.body {
   cursor: pointer;
 }
 
+.plugin-marketplace {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.plugin-marketplace-heading,
+.plugin-source-row,
+.plugin-catalogue-actions,
+.plugin-catalogue-meta {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.plugin-marketplace-heading input {
+  flex: 1;
+  min-width: 180px;
+}
+
+.plugin-catalogue-sources {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.plugin-catalogue-sources summary {
+  cursor: pointer;
+}
+
+.plugin-source-row {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.plugin-source-row > .muted {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plugin-source-form {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-top: 10px;
+}
+
+.plugin-catalogue-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  max-height: 300px;
+  overflow: auto;
+}
+
+.plugin-catalogue-card {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.plugin-catalogue-card p {
+  margin: 0;
+}
+
+.plugin-catalogue-meta {
+  color: var(--muted);
+  flex-wrap: wrap;
+  font-size: 0.85em;
+}
+
+.plugin-catalogue-actions {
+  flex-wrap: wrap;
+}
+
+.plugin-catalogue-actions > span {
+  flex: 1;
+}
+
 .plugins-table td {
   white-space: normal;
 }
@@ -2742,6 +2829,291 @@ pre.body {
 .plugins-table button:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.plugin-settings-panel {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+  max-height: 40%;
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+.plugin-diagnostics-panel {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+  max-height: 52%;
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+.plugin-diagnostics-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.plugin-diagnostics-grid table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.plugin-diagnostics-grid th,
+.plugin-diagnostics-grid td {
+  border-bottom: 1px solid var(--border);
+  padding: 5px 7px;
+  text-align: left;
+}
+
+.plugin-log {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  max-height: 220px;
+  overflow: auto;
+  padding: 7px;
+}
+
+.plugin-log > div {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 80px 60px minmax(0, 1fr);
+  padding: 2px 0;
+}
+
+.plugin-log-error,
+.plugin-log-critical {
+  color: var(--danger-bright);
+}
+
+.plugin-log-warning {
+  color: var(--warn);
+}
+
+.plugin-settings-heading,
+.plugin-setting-field {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.plugin-settings-heading button {
+  font-size: 1.2em;
+}
+
+.plugin-setting-field > span:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.plugin-setting-field small {
+  font-size: 0.8em;
+  font-weight: normal;
+}
+
+.plugin-setting-field input[type='text'],
+.plugin-setting-field input[type='number'],
+.plugin-setting-field select {
+  min-width: 220px;
+}
+
+.plugin-trust {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.75em;
+  margin-left: 6px;
+  padding: 1px 6px;
+}
+
+.plugin-trust-trusted {
+  color: var(--ok-bright);
+}
+
+.plugin-trust-unsigned,
+.plugin-trust-unmanaged {
+  color: var(--warn);
+}
+
+.plugin-frame-shell {
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  inset: 42px 0 0;
+  position: absolute;
+  z-index: 10;
+}
+
+.plugin-frame-shell header {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  padding: 8px 12px;
+}
+
+.plugin-frame-shell iframe {
+  background: white;
+  border: 0;
+  flex: 1;
+  width: 100%;
+}
+
+.visually-hidden {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+  clip: rect(0 0 0 0);
+}
+
+/* --- scanner issues --- */
+.issues-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.scanner-controls,
+.scanner-checks,
+.scanner-jobs,
+.issue-filters {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.scanner-controls label,
+.scanner-checks label {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+}
+
+.scanner-controls input[type='number'] {
+  margin-left: 5px;
+  width: 64px;
+}
+
+.scanner-jobs {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.scanner-job {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.issue-counts {
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.issues-body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(280px, 38%) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.issues-list,
+.issue-detail {
+  min-height: 0;
+  overflow: auto;
+}
+
+.issues-list {
+  border-right: 1px solid var(--border);
+}
+
+.issue-row {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--fg);
+  cursor: pointer;
+  display: grid;
+  gap: 4px 8px;
+  grid-template-columns: min-content 1fr min-content;
+  padding: 9px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.issue-row:hover,
+.issue-row.selected {
+  background: var(--bg-hover);
+}
+
+.issue-row .muted:nth-of-type(2) {
+  grid-column: 2;
+}
+
+.issue-severity {
+  border-radius: 3px;
+  font-size: 0.75em;
+  font-weight: 700;
+  padding: 2px 5px;
+  text-transform: uppercase;
+}
+
+.severity-critical,
+.severity-high {
+  background: var(--danger-wash);
+  color: var(--danger-bright);
+}
+
+.severity-medium {
+  color: var(--warn);
+}
+
+.severity-low {
+  color: var(--info);
+}
+
+.severity-info {
+  color: var(--muted);
+}
+
+.issue-detail {
+  padding: 18px 22px;
+}
+
+.issue-detail h2 {
+  margin-top: 0;
+}
+
+.issue-detail pre {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  max-height: 240px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.issue-meta {
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.issue-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.pre-wrap {
+  white-space: pre-wrap;
 }
 
 .plugin-error-text {

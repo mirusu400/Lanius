@@ -38,6 +38,7 @@ export function flowMenuItems(
   /** The copy-as submenu, built from the formats the engine offers.
    * Optional so the menu still renders where codegen is unavailable. */
   copyAs?: MenuItem,
+  pluginActions?: MenuItem,
 ): MenuItem[] {
   return [
     {
@@ -59,6 +60,7 @@ export function flowMenuItems(
       onSelect: () => actions.copy(flowUrl(flow)),
     },
     ...(copyAs ? [copyAs] : []),
+    ...(pluginActions ? [pluginActions] : []),
     // Last, separated and marked: a capture is mostly noise and removing
     // it is what keeps the database from growing without bound, but it
     // is also the one item here that cannot be undone.

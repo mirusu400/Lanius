@@ -22,8 +22,9 @@ import { Split } from '../components/Split';
 import { ResponseInspector } from '../components/ResponseInspector';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
+import { usePluginActions } from '../components/usePluginActions';
 import { sendTextToIntruder } from './intruderStore';
-import { errorMessage, renderMessage, useT } from '../i18n';
+import { errorMessage, rawMsg, renderMessage, useT } from '../i18n';
 import { useShortcut } from '../useShortcut';
 
 export function RepeaterTabView() {
@@ -92,6 +93,21 @@ export function RepeaterTabView() {
       return null;
     }
   };
+  const pluginActions = usePluginActions((message) => {
+    if (active) updateTab(active.id, { error: rawMsg(message) });
+  });
+  const pluginMenu = active
+    ? pluginActions.buildMenu(
+        ['repeater', 'request'],
+        {
+          repeater_tab_id: active.id,
+          url: active.url,
+          raw_request: active.text,
+          request: codegenTarget(),
+          response: active.response,
+        },
+      )
+    : undefined;
 
   const editorMenu = useEditorMenu(
     [
@@ -123,7 +139,10 @@ export function RepeaterTabView() {
         },
       },
     ],
-    [codegen.buildMenu(codegenTarget())],
+    [
+      codegen.buildMenu(codegenTarget()),
+      ...(pluginMenu ? [pluginMenu] : []),
+    ],
   );
 
   const send = async () => {
