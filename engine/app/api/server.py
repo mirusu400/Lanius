@@ -765,12 +765,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         exclude_extensions: list[str] | None = Query(None),
         in_scope_only: bool = False,
     ) -> dict[str, Any]:
-        records = await asyncio.to_thread(
-            store.list,
-            # Scope is decided in Python, so the database cannot do the
-            # paging for it; fetch a wider slice and cut it afterwards.
-            limit=limit if not in_scope_only else min(limit * 20, 20_000),
+        page = await asyncio.to_thread(
+            store.page_summaries,
+            limit=limit,
             offset=offset,
+            scope_predicate=engine.scope.contains if in_scope_only else None,
             host=host,
             method=method,
             status_code=status_code,
@@ -780,13 +779,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             extensions=extensions,
             exclude_extensions=exclude_extensions,
         )
-        if in_scope_only:
-            records = [
-                r
-                for r in records
-                if engine.scope.contains(r.scheme, r.host, r.port, r.path)
-            ][:limit]
-        return {"items": [r.summary() for r in records], "count": len(records)}
+        return {**page, "count": len(page["items"])}
 
     @app.get("/api/flows/{flow_id}")
     async def get_flow(flow_id: str, reveal: bool = False) -> dict[str, Any]:

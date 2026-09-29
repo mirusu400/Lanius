@@ -282,6 +282,17 @@ _COLUMNS = (
     " request_original, request_auto_modified, auto_modified, modified"
 )
 
+_SUMMARY_COLUMNS = (
+    "id, type, client_addr, server_addr, scheme, method, host, port, path, query,"
+    " http_version, request_size, started_at, status_code, reason, response_size,"
+    " response_mime, completed_at, duration_ms, error, source, comment,"
+    " auto_modified, modified"
+)
+
+
+def _like_literal(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
 
 class FlowStore:
     """Thread-safe SQLite-backed flow store."""
@@ -550,11 +561,33 @@ class FlowStore:
         extensions: Sequence[str] | None = None,
         exclude_extensions: Sequence[str] | None = None,
     ) -> List[FlowRecord]:
+        where, params = self._flow_filters(
+            host=host, method=method, status_code=status_code, search=search,
+            methods=methods, status_classes=status_classes,
+            extensions=extensions, exclude_extensions=exclude_extensions,
+        )
+        with self._read_lock:
+            rows = self._read_conn.execute(
+                f"SELECT {_COLUMNS} FROM flows {where}"
+                " ORDER BY started_at DESC, rowid DESC LIMIT ? OFFSET ?",
+                (*params, limit, offset),
+            ).fetchall()
+        return [_row_to_record(row) for row in rows]
+
+    @staticmethod
+    def _flow_filters(
+        *, host: str | None = None, method: str | None = None,
+        status_code: int | None = None, search: str | None = None,
+        methods: Sequence[str] | None = None,
+        status_classes: Sequence[int] | None = None,
+        extensions: Sequence[str] | None = None,
+        exclude_extensions: Sequence[str] | None = None,
+    ) -> tuple[str, list[Any]]:
         clauses: list[str] = []
         params: list[Any] = []
         if host:
-            clauses.append("host LIKE ?")
-            params.append(f"%{host}%")
+            clauses.append("host LIKE ? ESCAPE '\\'")
+            params.append(f"%{_like_literal(host)}%")
         if method:
             clauses.append("method = ?")
             params.append(method.upper())
@@ -580,25 +613,64 @@ class FlowStore:
         if extensions:
             # The query string lives in its own column, so matching the
             # end of the path is exact rather than a guess.
-            matches = " OR ".join("lower(path) LIKE ?" for _ in extensions)
+            matches = " OR ".join("lower(path) LIKE ? ESCAPE '\\'" for _ in extensions)
             clauses.append(f"({matches})")
-            params.extend(f"%.{ext.lower().lstrip('.')}" for ext in extensions)
+            params.extend(f"%.{_like_literal(ext.lower().lstrip('.'))}" for ext in extensions)
         if exclude_extensions:
             for ext in exclude_extensions:
-                clauses.append("(path IS NULL OR lower(path) NOT LIKE ?)")
-                params.append(f"%.{ext.lower().lstrip('.')}")
+                clauses.append("(path IS NULL OR lower(path) NOT LIKE ? ESCAPE '\\')")
+                params.append(f"%.{_like_literal(ext.lower().lstrip('.'))}")
         if search:
-            clauses.append("(path LIKE ? OR query LIKE ? OR host LIKE ?)")
-            params.extend([f"%{search}%"] * 3)
+            clauses.append("(path LIKE ? ESCAPE '\\' OR query LIKE ? ESCAPE '\\' OR host LIKE ? ESCAPE '\\')")
+            params.extend([f"%{_like_literal(search)}%"] * 3)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        params.extend([limit, offset])
+        return where, params
+
+    def page_summaries(
+        self, *, limit: int = 200, offset: int = 0,
+        scope_predicate: Callable[[str | None, str | None, int | None, str | None], bool] | None = None,
+        host: str | None = None, method: str | None = None,
+        status_code: int | None = None, search: str | None = None,
+        methods: Sequence[str] | None = None,
+        status_classes: Sequence[int] | None = None,
+        extensions: Sequence[str] | None = None,
+        exclude_extensions: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        """A bounded page over all matching flows, without loading body BLOBs.
+
+        Scope rules may depend on arbitrary paths, so apply them while
+        streaming the SQL result before counting the requested page offset.
+        """
+        where, params = self._flow_filters(
+            host=host, method=method, status_code=status_code, search=search,
+            methods=methods, status_classes=status_classes,
+            extensions=extensions, exclude_extensions=exclude_extensions,
+        )
+        items: list[dict[str, Any]] = []
+        matched = 0
         with self._read_lock:
-            rows = self._read_conn.execute(
-                f"SELECT {_COLUMNS} FROM flows {where}"
-                " ORDER BY started_at DESC, rowid DESC LIMIT ? OFFSET ?",
-                params,
-            ).fetchall()
-        return [_row_to_record(row) for row in rows]
+            if scope_predicate is None:
+                rows = self._read_conn.execute(
+                    f"SELECT {_SUMMARY_COLUMNS} FROM flows {where}"
+                    " ORDER BY started_at DESC, rowid DESC LIMIT ? OFFSET ?",
+                    (*params, limit + 1, offset),
+                ).fetchall()
+                return {"items": [dict(row) for row in rows[:limit]],
+                        "has_more": len(rows) > limit}
+            cursor = self._read_conn.execute(
+                f"SELECT {_SUMMARY_COLUMNS} FROM flows {where}"
+                " ORDER BY started_at DESC, rowid DESC", params,
+            )
+            for row in cursor:
+                if not scope_predicate(row["scheme"], row["host"], row["port"], row["path"]):
+                    continue
+                if matched < offset:
+                    matched += 1
+                    continue
+                if len(items) == limit:
+                    return {"items": items, "has_more": True}
+                items.append(dict(row))
+        return {"items": items, "has_more": False}
 
     def count(self) -> int:
         with self._read_lock:

@@ -58,7 +58,7 @@ def test_status_reports_running_proxy(client) -> None:
 
 
 def test_list_flows_empty(client) -> None:
-    assert client.get("/api/flows").json() == {"items": [], "count": 0}
+    assert client.get("/api/flows").json() == {"items": [], "count": 0, "has_more": False}
 
 
 def test_list_and_filter_flows(client) -> None:
