@@ -27,6 +27,7 @@ from .addons.repeater import RepeaterAddon
 from .addons.websocket_proxy import WebSocketProxyAddon
 from .addons.intruder import IntruderAddon
 from .addons.plugins import PluginManager
+from .plugin_packages import PluginPackageManager
 from .addons.scope import ScopeManager
 from .config import Settings
 from .db.store import FlowStore
@@ -240,12 +241,18 @@ class ProxyEngine:
         self.websockets = WebSocketProxyAddon(broker, store=store)
         self.repeater = RepeaterAddon(store)
         self.intruder = IntruderAddon(self.repeater, broker)
+        self.plugin_packages = PluginPackageManager(
+            settings.plugins_dir,
+            trusted_keys_path=settings.plugin_trusted_keys,
+            development_mode=settings.plugin_dev_mode,
+        )
         self.plugins = PluginManager(
             settings.plugins_dir,
             store,
             broker,
             on_chain_changed=self._reorder_capture_last,
             user_values_path=settings.data_dir / "plugin-values.json",
+            packages=self.plugin_packages,
             safe_mode=settings.disable_plugins,
         )
         self._task: asyncio.Task[None] | None = None

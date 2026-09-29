@@ -423,6 +423,8 @@ Three working examples ship in [`plugins/`](./plugins/), and the full hook
 list is in [`plugins/README.md`](./plugins/README.md). Actions, codecs,
 settings, namespaced storage, payload extensions, and managed tasks use the
 versioned [`lanius_sdk`](./docs/plugins-sdk.md).
+Installable `.lanius-plugin` archives, signatures, and sandboxed UI are
+documented in [`docs/plugin-packages.md`](./docs/plugin-packages.md).
 
 Plugins run inside the engine process, not a sandbox. Only enable code you
 trust.

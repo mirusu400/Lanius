@@ -92,3 +92,6 @@ failure cleanup can cancel it deterministically.
 `lanius_sdk.API_VERSION` and `context.api_version` currently report `1.0`.
 Minor additions remain backward compatible. A future breaking API uses a new
 major version and package manifests declare which major versions they accept.
+
+Distribution, compatibility fields, integrity, signatures, sandboxed UI, and
+development linking are specified in [plugin-packages.md](plugin-packages.md).

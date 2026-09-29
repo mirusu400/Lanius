@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getPluginSettings, listPlugins, patchPluginSettings, reloadPlugin, setPluginAutoReload, setPluginEnabled, setPluginOrder } from '../api/client';
-import type { PluginInfo, PluginSettingField, PluginSettings } from '../api/types';
+import { getPluginSettings, installDevelopmentPlugin, installPluginPackage, listPlugins, patchPluginSettings, reloadPlugin, setPluginAutoReload, setPluginEnabled, setPluginOrder, uninstallPluginPackage } from '../api/client';
+import type { PluginInfo, PluginSettingField, PluginSettings, PluginUiView } from '../api/types';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { useReportBusy } from '../components/busy';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
+import { PluginFrame } from '../components/PluginFrame';
 
 export function PluginsTab() {
   const t = useT();
@@ -12,10 +13,14 @@ export function PluginsTab() {
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [directory, setDirectory] = useState('');
   const [safeMode, setSafeMode] = useState(false);
+  const [developmentMode, setDevelopmentMode] = useState(false);
   const [error, setError] = useState<Message | null>(null);
   const [settings, setSettings] = useState<PluginSettings | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<Record<string, unknown>>({});
   const [savingSettings, setSavingSettings] = useState(false);
+  const [developmentPath, setDevelopmentPath] = useState('');
+  const [activeView, setActiveView] = useState<{ plugin: PluginInfo; view: PluginUiView } | null>(null);
+  const packageInput = useRef<HTMLInputElement | null>(null);
 
   // `refresh` must not clear `error`: it runs right after a failed
   // enable/reload, and wiping the banner would hide why it failed.
@@ -30,6 +35,7 @@ export function PluginsTab() {
       setPlugins(data.items);
       setDirectory(data.directory);
       setSafeMode(data.safe_mode);
+      setDevelopmentMode(data.development_mode);
     } catch (err) {
       setError(msg('plugins.listFailed', { message: (err as Error).message }));
     } finally {
@@ -127,11 +133,68 @@ export function PluginsTab() {
     return entries.map(([kind, count]) => `${kind}:${count}`).join(' · ');
   };
 
+  const installPackage = async (file: File) => {
+    try {
+      await installPluginPackage(file);
+      setError(null);
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    }
+    if (packageInput.current) packageInput.current.value = '';
+    await refresh();
+  };
+
+  const installDevelopment = async () => {
+    if (!developmentPath.trim()) return;
+    try {
+      await installDevelopmentPlugin(developmentPath.trim());
+      setDevelopmentPath('');
+      setError(null);
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    }
+    await refresh();
+  };
+
+  const uninstall = async (plugin: PluginInfo) => {
+    try {
+      await uninstallPluginPackage(plugin.name);
+      if (activeView?.plugin.name === plugin.name) setActiveView(null);
+      setError(null);
+    } catch (err) {
+      setError(rawMsg(`${plugin.name}: ${(err as Error).message}`));
+    }
+    await refresh();
+  };
+
   return (
     <div className="plugins-tab">
       <div className="plugins-header">
         <span className="muted mono">{directory}</span>
         <span className="spacer" />
+        {developmentMode && (
+          <>
+            <input
+              aria-label={t('plugins.developmentPath')}
+              placeholder={t('plugins.developmentPath')}
+              value={developmentPath}
+              onChange={(event) => setDevelopmentPath(event.target.value)}
+            />
+            <button onClick={() => void installDevelopment()}>{t('plugins.linkDevelopment')}</button>
+          </>
+        )}
+        <input
+          ref={packageInput}
+          className="visually-hidden"
+          type="file"
+          accept=".lanius-plugin,application/zip"
+          aria-label={t('plugins.packageFile')}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void installPackage(file);
+          }}
+        />
+        <button onClick={() => packageInput.current?.click()}>{t('plugins.install')}</button>
         <button onClick={() => void refresh()}>{t('plugins.rescan')}</button>
       </div>
       {safeMode && <div className="banner warning">{t('plugins.safeMode')}</div>}
@@ -191,6 +254,11 @@ export function PluginsTab() {
                   {plugin.version && (
                     <span className="muted"> v{plugin.version}</span>
                   )}
+                  {plugin.package && (
+                    <span className={`plugin-trust plugin-trust-${plugin.package.trust}`}>
+                      {plugin.package.trust}
+                    </span>
+                  )}
                 </td>
                 <td>
                   {plugin.description ?? <span className="muted">{t('common.none')}</span>}
@@ -227,12 +295,26 @@ export function PluginsTab() {
                       {t('plugins.settings')}
                     </button>
                   )}
+                  {plugin.ui?.views.map((view) => (
+                    <button
+                      key={view.id}
+                      disabled={!plugin.loaded}
+                      onClick={() => setActiveView({ plugin, view })}
+                    >
+                      {view.title}
+                    </button>
+                  ))}
                   <button
                     aria-label={t('plugins.reloadLabel', { name: plugin.name })}
                     onClick={() => void reload(plugin)}
                   >
                     {t('plugins.reload')}
                   </button>
+                  {plugin.package && (
+                    <button className="danger" onClick={() => void uninstall(plugin)}>
+                      {t('plugins.uninstall')}
+                    </button>
+                  )}
                 </td>
                 <ResizableFillCell />
               </tr>
@@ -285,6 +367,13 @@ export function PluginsTab() {
             {savingSettings ? t('plugins.savingSettings') : t('plugins.saveSettings')}
           </button>
         </section>
+      )}
+      {activeView && (
+        <PluginFrame
+          plugin={activeView.plugin}
+          view={activeView.view}
+          onClose={() => setActiveView(null)}
+        />
       )}
     </div>
   );

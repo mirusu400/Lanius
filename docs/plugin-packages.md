@@ -1,0 +1,110 @@
+# Lanius plugin packages
+
+A `.lanius-plugin` file is a ZIP archive with `plugin.json` at its root. The
+installer rejects absolute paths, parent traversal, symbolic links, duplicate
+paths, archives over 50 MiB, more than 2,000 files, and expanded content over
+100 MiB. Installation extracts to a temporary directory, verifies every file,
+then atomically moves the package into the plugin directory.
+
+## Manifest schema 1
+
+```json
+{
+  "schema": 1,
+  "id": "publisher.plugin-name",
+  "name": "Display name",
+  "version": "1.0.0",
+  "description": "One line summary",
+  "author": { "name": "Publisher" },
+  "compatibility": {
+    "lanius": ">=0.1,<1",
+    "sdk": ">=1,<2"
+  },
+  "backend": {
+    "runtime": "trusted",
+    "entrypoint": "backend/__init__.py"
+  },
+  "ui": {
+    "views": [
+      { "id": "main", "title": "Plugin", "entrypoint": "ui/index.html" }
+    ]
+  },
+  "permissions": ["actions.invoke", "settings.read"],
+  "integrity": {
+    "files": {
+      "backend/__init__.py": "<lowercase SHA-256>",
+      "ui/index.html": "<lowercase SHA-256>"
+    }
+  }
+}
+```
+
+Schema 1 backend code uses the trusted runtime. It runs in the engine process
+and has the same operating system access as a legacy Python addon. The UI and
+permissions do not turn that backend into a sandbox; the Plugins screen labels
+the package trust state so this is visible before enabling it.
+
+Every regular file except `plugin.json` is listed in `integrity.files`. Missing,
+extra, or changed files stop installation. Installed archives are checked again
+before discovery, and individual UI assets are checked when served.
+
+## Signatures and trusted keys
+
+Signatures use Ed25519. Add this object to the manifest:
+
+```json
+{
+  "signature": {
+    "algorithm": "ed25519",
+    "key_id": "publisher-key-2026",
+    "value": "<base64 signature>"
+  }
+}
+```
+
+The signed bytes are UTF-8 JSON of the whole manifest with the `signature`
+member removed, sorted keys, no insignificant whitespace, and non-ASCII text
+left unescaped. Trusted public keys are a JSON object at
+`plugin-trusted-keys.json` in the Lanius data directory:
+
+```json
+{ "publisher-key-2026": "<base64 raw Ed25519 public key>" }
+```
+
+A signature from an unknown key is rejected. Local installation accepts an
+unsigned package and labels it `unsigned`; catalog installation can require a
+trusted signature.
+
+## Sandboxed UI
+
+Each view is loaded in an iframe with an opaque origin. The iframe and response
+headers both apply a script-only sandbox. Fetch/WebSocket calls, external
+subresources, nested frames, and forms are blocked by the response policy. A
+view cannot navigate the host, receives no referrer, and can load only
+integrity-listed assets under `ui/`.
+
+The page can request a host operation with `postMessage`:
+
+```js
+parent.postMessage({
+  type: "lanius.request",
+  plugin: "publisher.plugin-name",
+  id: "request-1",
+  method: "settings.get",
+  params: {}
+}, "*");
+```
+
+The host replies with `lanius.response` and the same `id`. Supported methods
+are `contributions.list`, `actions.invoke`, `settings.get`, and
+`settings.patch`. The latter three require their matching manifest permission,
+and an iframe can invoke only an action owned by its own plugin.
+
+## Development mode
+
+Set `LANIUS_PLUGIN_DEV_MODE=1` before starting the engine. The Plugins screen
+then accepts a local package directory and installs a symbolic link rather than
+copying it. Source changes are watched and automatic reload is enabled. Removing
+the development plugin deletes only the link. Development mode skips integrity
+hash checks so edited files can reload, and the plugin is visibly labelled
+`development`.

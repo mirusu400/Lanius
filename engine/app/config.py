@@ -40,6 +40,8 @@ class Settings:
     tcp_hosts: list[str] = None  # type: ignore[assignment]
     plugins_dir: Path = None  # type: ignore[assignment]
     disable_plugins: bool = False
+    plugin_dev_mode: bool = False
+    plugin_trusted_keys: Path = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.data_dir is None:
@@ -62,6 +64,9 @@ class Settings:
                 os.environ.get("LANIUS_PLUGINS_DIR", self.data_dir / "plugins")
             )
         self.plugins_dir = Path(self.plugins_dir)
+        if self.plugin_trusted_keys is None:
+            self.plugin_trusted_keys = self.data_dir / "plugin-trusted-keys.json"
+        self.plugin_trusted_keys = Path(self.plugin_trusted_keys)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -72,6 +77,7 @@ class Settings:
             api_port=int(os.environ.get("LANIUS_API_PORT", "12954")),
             log_level=os.environ.get("LANIUS_LOG_LEVEL", "info"),
             disable_plugins=_env_bool("LANIUS_DISABLE_PLUGINS"),
+            plugin_dev_mode=_env_bool("LANIUS_PLUGIN_DEV_MODE"),
         )
 
     def ensure_dirs(self) -> None:

@@ -24,6 +24,8 @@ const base: PluginInfo = {
   auto_reload: false,
   sdk_api_version: null,
   contributions: {},
+  package: null,
+  ui: null,
 };
 
 function jsonResponse(body: unknown, ok = true) {
@@ -54,7 +56,7 @@ beforeEach(() => {
       const url = String(input);
       calls.push(url);
       if (url.endsWith('/api/plugins')) {
-        return jsonResponse({ items: plugins, directory: '/home/u/.lanius/plugins', safe_mode: false });
+        return jsonResponse({ items: plugins, directory: '/home/u/.lanius/plugins', safe_mode: false, development_mode: false });
       }
       if (url.endsWith('/api/plugins/order')) {
         const names = JSON.parse(String(init?.body)) as string[];

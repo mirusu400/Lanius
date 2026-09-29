@@ -584,6 +584,7 @@ export function listPlugins(): Promise<{
   items: import('./types').PluginInfo[];
   directory: string;
   safe_mode: boolean;
+  development_mode: boolean;
 }> {
   return request('/api/plugins');
 }
@@ -654,6 +655,40 @@ export function invokePluginAction(
     headers: JSON_HEADERS,
     body: JSON.stringify({ context }),
   });
+}
+
+export function installPluginPackage(
+  file: File,
+): Promise<{ plugin: import('./types').PluginInfo; trust: string }> {
+  return request('/api/plugins/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: file,
+  });
+}
+
+export function installDevelopmentPlugin(
+  path: string,
+): Promise<{ plugin: import('./types').PluginInfo; development: true }> {
+  return request('/api/plugins/install-development', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ path }),
+  });
+}
+
+export function uninstallPluginPackage(
+  name: string,
+): Promise<{ id: string; uninstalled: boolean }> {
+  return request(`/api/plugins/${name}/package`, { method: 'DELETE' });
+}
+
+export function pluginUiUrl(name: string, entrypoint: string): string {
+  const asset = entrypoint.replace(/^ui\//, '');
+  return `${API_BASE}/api/plugin-ui/${encodeURIComponent(name)}/${asset
+    .split('/')
+    .map(encodeURIComponent)
+    .join('/')}`;
 }
 
 // --- logger / CA ----------------------------------------------------------

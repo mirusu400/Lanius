@@ -355,6 +355,24 @@ export interface PluginInfo {
   auto_reload: boolean;
   sdk_api_version: string | null;
   contributions: PluginContributionCounts;
+  package: PluginPackageInfo | null;
+  ui: { views: PluginUiView[] } | null;
+}
+
+export interface PluginPackageInfo {
+  schema: number;
+  id: string;
+  name: string;
+  permissions: string[];
+  signature_present: boolean;
+  trust: 'trusted' | 'unsigned' | 'development' | 'unmanaged';
+  development: boolean;
+}
+
+export interface PluginUiView {
+  id: string;
+  title: string;
+  entrypoint: string;
 }
 
 export interface PluginContributionCounts {

@@ -10,3 +10,5 @@ mitmproxy>=12.2.3
 fastapi>=0.141
 uvicorn[standard]>=0.52
 mcp>=2.2
+cryptography>=48
+packaging>=26

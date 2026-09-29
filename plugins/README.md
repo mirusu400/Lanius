@@ -22,6 +22,8 @@ Instead of a `Plugin` class or instance you can expose a list:
 For actions, codecs, settings, storage, payload extensions, and managed tasks,
 use the versioned [`lanius_sdk`](../docs/plugins-sdk.md). SDK registrations are
 owned by the plugin and are removed automatically on disable or reload.
+Installable archives and sandboxed UI views use the
+[`plugin.json` package format](../docs/plugin-packages.md).
 
 ## Available hooks
 

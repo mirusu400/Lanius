@@ -41,6 +41,12 @@ from ..db.payloads import PayloadSetError, parse_payloads
 from .. import wordlists
 from ..addons.plugins import PluginError
 from ..plugin_registry import PluginApiError
+from ..plugin_packages import (
+    MAX_ARCHIVE_BYTES,
+    PluginPackageError,
+    file_sha256,
+    load_manifest,
+)
 from .. import codegen
 from ..build_info import build_info
 from .. import updates
@@ -267,6 +273,10 @@ class PluginPayloadGeneratorBody(BaseModel):
 class PluginPayloadProcessorBody(BaseModel):
     value: str
     context: dict[str, Any] = {}
+
+
+class PluginDevelopmentInstall(BaseModel):
+    path: str
 
 
 def redact_headers(
@@ -1594,6 +1604,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "items": engine.plugins.list(),
             "directory": str(settings.plugins_dir),
             "safe_mode": engine.plugins.safe_mode,
+            "development_mode": settings.plugin_dev_mode,
         }
 
     @app.post("/api/plugins/{name}/enable")
@@ -1638,6 +1649,110 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Serializable catalogue of every live SDK contribution."""
 
         return engine.plugins.registry.list()
+
+    @app.post("/api/plugins/install")
+    async def install_plugin_package(
+        request: Request,
+        allow_unsigned: bool = True,
+        replace: bool = False,
+        enable: bool = False,
+    ) -> dict[str, Any]:
+        chunks: list[bytes] = []
+        size = 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > MAX_ARCHIVE_BYTES:
+                raise HTTPException(status_code=413, detail="package archive exceeds 50 MiB")
+            chunks.append(chunk)
+        archive = b"".join(chunks)
+        try:
+            result = await asyncio.to_thread(
+                engine.plugin_packages.install,
+                archive,
+                allow_unsigned=allow_unsigned,
+                replace=replace,
+            )
+            await engine.plugins.refresh()
+            plugin = engine.plugins.get(result["id"])
+            if enable:
+                plugin = await engine.plugins.enable_async(plugin.name)
+            return {**result, "plugin": plugin.as_dict()}
+        except PluginPackageError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except PluginError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/plugins/install-development")
+    async def install_development_plugin(
+        payload: PluginDevelopmentInstall,
+    ) -> dict[str, Any]:
+        try:
+            result = await asyncio.to_thread(
+                engine.plugin_packages.install_development, Path(payload.path)
+            )
+            await engine.plugins.refresh()
+            await engine.plugins.set_auto_reload(result["id"], True)
+            return {
+                **result,
+                "plugin": engine.plugins.get(result["id"]).as_dict(),
+            }
+        except (PluginPackageError, OSError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.delete("/api/plugins/{name}/package")
+    async def uninstall_plugin_package(name: str) -> dict[str, Any]:
+        try:
+            plugin = engine.plugins.get(name)
+            if plugin.package_root is None:
+                raise PluginPackageError(f"installed package not found: {name}")
+            if plugin.loaded or plugin.enabled:
+                await engine.plugins.disable_async(name)
+            result = await asyncio.to_thread(engine.plugin_packages.uninstall, name)
+            await engine.plugins.refresh()
+            return result
+        except PluginPackageError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/plugin-ui/{name}/{asset:path}")
+    async def plugin_ui_asset(name: str, asset: str) -> FileResponse:
+        try:
+            plugin = engine.plugins.get(name)
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if not plugin.loaded or plugin.package_root is None or not plugin.meta.get("ui"):
+            raise HTTPException(status_code=404, detail="plugin UI is not active")
+        root = (plugin.package_root / "ui").resolve()
+        candidate = (root / asset).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail="UI asset not found") from exc
+        relative = candidate.relative_to(plugin.package_root.resolve()).as_posix()
+        integrity = load_manifest(plugin.package_root).integrity
+        if (
+            relative not in integrity
+            or not candidate.is_file()
+            or (
+                not plugin.package_root.is_symlink()
+                and file_sha256(candidate) != integrity[relative]
+            )
+        ):
+            raise HTTPException(status_code=404, detail="UI asset not found")
+        return FileResponse(
+            candidate,
+            headers={
+                "Cache-Control": "no-store" if plugin.package_root.is_symlink() else "public, max-age=31536000, immutable",
+                "Content-Security-Policy": (
+                    "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                    "img-src 'self' data:; font-src 'self'; connect-src 'none'; "
+                    "base-uri 'none'; form-action 'none'; navigate-to 'none'; "
+                    "frame-src 'none'; frame-ancestors 'self'; sandbox allow-scripts"
+                ),
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
 
     @app.get("/api/plugins/{name}/settings")
     async def plugin_settings(name: str) -> dict[str, Any]:

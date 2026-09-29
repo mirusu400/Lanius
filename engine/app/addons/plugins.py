@@ -25,6 +25,12 @@ from mitmproxy import hooks as mitm_hooks
 
 from .. import codegen
 from ..plugin_registry import ContributionRegistry
+from ..plugin_packages import (
+    PluginPackageError,
+    PluginPackageManager,
+    load_manifest,
+    verify_integrity,
+)
 from lanius_sdk import API_VERSION, Disposable
 
 logger = logging.getLogger(__name__)
@@ -110,6 +116,7 @@ class DiscoveredPlugin:
     path: Path
     meta: dict[str, Any]
     fingerprint: tuple[tuple[str, int, int], ...]
+    package_root: Path | None = None
 
 
 @dataclass(slots=True)
@@ -129,6 +136,7 @@ class Plugin:
     auto_reload: bool = False
     fingerprint: tuple[tuple[str, int, int], ...] = ()
     uses_sdk: bool = False
+    package_root: Path | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -145,6 +153,8 @@ class Plugin:
             "auto_reload": self.auto_reload,
             "sdk_api_version": API_VERSION if self.uses_sdk else None,
             "contributions": self.meta.get("contributions", {}),
+            "package": self.meta.get("package"),
+            "ui": self.meta.get("ui"),
         }
 
 
@@ -201,7 +211,7 @@ def _legacy_metadata(path: Path) -> dict[str, Any]:
 
 
 def _purge_modules(name: str) -> None:
-    prefix = f"lanius_plugins.{name}"
+    prefix = _module_name(name)
     module_names = [
         module_name
         for module_name in sys.modules
@@ -210,6 +220,12 @@ def _purge_modules(name: str) -> None:
     for module_name in module_names:
         sys.modules.pop(module_name, None)
     importlib.invalidate_caches()
+
+
+def _module_name(name: str) -> str:
+    """Return a valid, collision-free module name for any manifest plugin ID."""
+
+    return f"lanius_plugins.p_{name.encode('utf-8').hex()}"
 
 
 def _purge_bytecode(path: Path) -> None:
@@ -243,6 +259,19 @@ def _fingerprint(path: Path) -> tuple[tuple[str, int, int], ...]:
     return tuple(values)
 
 
+def _package_fingerprint(root: Path) -> tuple[tuple[str, int, int], ...]:
+    values: list[tuple[str, int, int]] = []
+    for candidate in sorted(root.rglob("*")):
+        if not candidate.is_file() or "__pycache__" in candidate.parts:
+            continue
+        try:
+            stat = candidate.stat()
+        except OSError:
+            continue
+        values.append((str(candidate.relative_to(root)), stat.st_mtime_ns, stat.st_size))
+    return tuple(values)
+
+
 class PluginManager:
     """Discover, load, order and unload engine plugins."""
 
@@ -255,6 +284,7 @@ class PluginManager:
         on_chain_changed: Any | None = None,
         user_values_path: Path | None = None,
         registry: ContributionRegistry | None = None,
+        packages: PluginPackageManager | None = None,
         *,
         safe_mode: bool = False,
     ) -> None:
@@ -265,6 +295,7 @@ class PluginManager:
         self.on_chain_changed = on_chain_changed
         self.safe_mode = safe_mode
         self.registry = registry or ContributionRegistry(store, user_values_path)
+        self.packages = packages
         self.runtime_started = False
         self.plugins: dict[str, Plugin] = {}
         self._lock = asyncio.Lock()
@@ -326,7 +357,25 @@ class PluginManager:
         for entry in sorted(self.directory.iterdir()):
             if entry.name.startswith(("_", ".")):
                 continue
-            if entry.is_file() and entry.suffix == ".py":
+            package_root: Path | None = None
+            if entry.is_dir() and (entry / "plugin.json").is_file():
+                try:
+                    if self.packages is not None:
+                        manifest, trust = self.packages.inspect(entry)
+                    else:
+                        manifest = load_manifest(entry)
+                        verify_integrity(entry, manifest)
+                        trust = "development" if entry.is_symlink() else "unmanaged"
+                except PluginPackageError as exc:
+                    logger.warning("ignoring invalid plugin package %s: %s", entry, exc)
+                    continue
+                path = entry / manifest.backend_entrypoint
+                name = manifest.id
+                meta = manifest.metadata(entry)
+                meta["package"]["trust"] = trust
+                package_root = entry
+                fingerprint = _package_fingerprint(entry)
+            elif entry.is_file() and entry.suffix == ".py":
                 path = entry
                 name = entry.stem
             elif entry.is_dir() and (entry / "__init__.py").exists():
@@ -335,7 +384,11 @@ class PluginManager:
             else:
                 continue
             found[name] = DiscoveredPlugin(
-                name, path, _legacy_metadata(path), _fingerprint(path)
+                name,
+                path,
+                meta if package_root else _legacy_metadata(path),
+                fingerprint if package_root else _fingerprint(path),
+                package_root,
             )
         return found
 
@@ -352,6 +405,7 @@ class PluginManager:
             if existing is not None:
                 existing.path = item.path
                 existing.fingerprint = item.fingerprint
+                existing.package_root = item.package_root
                 if not existing.loaded:
                     existing.meta = item.meta
                 continue
@@ -366,6 +420,7 @@ class PluginManager:
                 order=plugin_order,
                 auto_reload=name in auto_reload,
                 fingerprint=item.fingerprint,
+                package_root=item.package_root,
             )
 
         for name in list(self.plugins):
@@ -421,6 +476,7 @@ class PluginManager:
                     order=plugin_order,
                     auto_reload=name in auto_reload,
                     fingerprint=item.fingerprint,
+                    package_root=item.package_root,
                 )
                 changed = True
 
@@ -535,10 +591,19 @@ class PluginManager:
                     logger.warning("plugin %s failed to load", plugin.name)
 
     def _import(self, plugin: Plugin) -> Any:
-        module_name = f"lanius_plugins.{plugin.name}"
+        module_name = _module_name(plugin.name)
         _purge_modules(plugin.name)
         _purge_bytecode(plugin.path)
-        spec = importlib.util.spec_from_file_location(module_name, plugin.path)
+        if plugin.package_root is not None:
+            spec = importlib.util.spec_from_file_location(
+                module_name,
+                plugin.path,
+                submodule_search_locations=[str(plugin.path.parent)],
+            )
+        else:
+            # Omitting submodule_search_locations lets importlib recognize a
+            # legacy __init__.py as a package and enables relative imports.
+            spec = importlib.util.spec_from_file_location(module_name, plugin.path)
         if spec is None or spec.loader is None:
             raise PluginError(f"cannot import {plugin.path}")
         module = importlib.util.module_from_spec(spec)
@@ -645,10 +710,15 @@ class PluginManager:
             raise PluginError(plugin.error) from exc
 
         self._namespace(plugin, objects)
+        discovered_meta = dict(plugin.meta)
         plugin.meta = {
-            "description": getattr(module, "DESCRIPTION", None),
-            "version": getattr(module, "VERSION", None),
-            "author": getattr(module, "AUTHOR", None),
+            **discovered_meta,
+            "description": getattr(module, "DESCRIPTION", None)
+            or discovered_meta.get("description"),
+            "version": getattr(module, "VERSION", None)
+            or discovered_meta.get("version"),
+            "author": getattr(module, "AUTHOR", None)
+            or discovered_meta.get("author"),
             "hooks": sorted({h for obj in objects for h in _module_hooks(obj)}),
             "contributions": self.registry.counts(plugin.name),
         }
