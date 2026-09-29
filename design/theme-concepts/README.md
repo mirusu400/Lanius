@@ -1,8 +1,9 @@
 # Lanius color concepts
 
 These are visual studies for the Target → Endpoints screen. They use the same
-layout and fictional sample data so the colors can be compared directly. None
-of the concepts has been applied to the app.
+fictional sample data so the colors can be compared directly. The app uses the
+listed palette values, while actual typography, saved column widths, and
+captured data depend on the user's settings and project.
 
 | File | Direction | Background | Surface | Accent | Selection |
 | --- | --- | --- | --- | --- | --- |

@@ -121,9 +121,9 @@ function prefersDark(): boolean {
   );
 }
 
-/** Which palette 'system' resolves to right now. */
+/** System dark uses Steel; the older orange dark remains a separate choice. */
 export function resolveTheme(choice: ThemeChoice): ThemePalette {
-  if (choice === 'system') return prefersDark() ? 'dark' : 'light';
+  if (choice === 'system') return prefersDark() ? 'steel' : 'light';
   return choice;
 }
 

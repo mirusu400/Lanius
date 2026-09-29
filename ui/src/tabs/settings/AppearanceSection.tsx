@@ -69,12 +69,12 @@ export function AppearanceSection() {
           }
         >
           <option value="system">{t('appearance.themeSystem')}</option>
-          <option value="dark">{t('appearance.themeDark')}</option>
+          <option value="steel">{t('appearance.themeSteel')}</option>
           <option value="light">{t('appearance.themeLight')}</option>
           <option value="copper">{t('appearance.themeCopper')}</option>
-          <option value="steel">{t('appearance.themeSteel')}</option>
           <option value="sage">{t('appearance.themeSage')}</option>
           <option value="paper">{t('appearance.themePaper')}</option>
+          <option value="dark">{t('appearance.themeDark')}</option>
         </select>
       </div>
 

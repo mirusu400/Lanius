@@ -142,7 +142,7 @@ describe('appearance settings', () => {
     systemDark = false;
     expect(resolveTheme('system')).toBe('light');
     systemDark = true;
-    expect(resolveTheme('system')).toBe('dark');
+    expect(resolveTheme('system')).toBe('steel');
     // An explicit choice ignores the system.
     expect(resolveTheme('light')).toBe('light');
   });

@@ -2001,6 +2001,11 @@ pre.body {
   overflow: auto;
 }
 
+.endpoint-list .flow-table tr.selected td:first-child,
+.endpoint-request-list .flow-table tr.selected td:first-child {
+  box-shadow: inset 3px 0 var(--accent);
+}
+
 .endpoint-layout,
 .endpoint-request-split {
   flex: 1;
