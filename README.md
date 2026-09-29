@@ -225,10 +225,11 @@ Captured request and response bodies are stored up to 5 MiB each.
 History has a **Modified** column. When Match & Replace, Intercept, or a plugin
 changes a request, its detail pane keeps **Original**, **Auto-modified**, and
 **Modified request** tabs so every stage can be compared.
-History shows 200 requests per page; **Older** and **Newer** move through the
-whole project. Search checks the stored host, path and query on every page,
-including old captures. It does not search headers or bodies. The scope filter
-also applies before paging, so a rare old in-scope request remains reachable.
+History shows 200 requests per page; **Older**, **Newer**, and the page number
+field move through the whole project. Search checks the stored host, path and
+query on every page, including old captures. It does not search headers or
+bodies. The scope filter also applies before paging, so a rare old in-scope
+request remains reachable.
 Drag a table column header's right edge to resize it in History and other
 headed data tables. Column widths are remembered on this machine.
 Drag the divider between side-by-side panes to resize them in Proxy,

@@ -70,6 +70,13 @@ def test_list_and_filter_flows(client) -> None:
     assert client.get("/api/flows?host=a.com").json()["count"] == 1
 
 
+def test_flow_list_preserves_boolean_summary_fields(client) -> None:
+    seed(client, "modified", auto_modified=True, modified=True)
+    item = client.get("/api/flows").json()["items"][0]
+    assert item["auto_modified"] is True
+    assert item["modified"] is True
+
+
 def test_get_flow_redacts_sensitive_headers_by_default(client) -> None:
     seed(client, "a")
     data = client.get("/api/flows/a").json()

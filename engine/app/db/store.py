@@ -294,6 +294,16 @@ def _like_literal(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+def _summary_row(row: sqlite3.Row) -> dict[str, Any]:
+    data = dict(row)
+    data["request_size"] = data["request_size"] or 0
+    data["response_size"] = data["response_size"] or 0
+    data["source"] = data["source"] or "proxy"
+    data["auto_modified"] = bool(data["auto_modified"])
+    data["modified"] = bool(data["modified"])
+    return data
+
+
 class FlowStore:
     """Thread-safe SQLite-backed flow store."""
 
@@ -655,7 +665,7 @@ class FlowStore:
                     " ORDER BY started_at DESC, rowid DESC LIMIT ? OFFSET ?",
                     (*params, limit + 1, offset),
                 ).fetchall()
-                return {"items": [dict(row) for row in rows[:limit]],
+                return {"items": [_summary_row(row) for row in rows[:limit]],
                         "has_more": len(rows) > limit}
             cursor = self._read_conn.execute(
                 f"SELECT {_SUMMARY_COLUMNS} FROM flows {where}"
@@ -669,7 +679,7 @@ class FlowStore:
                     continue
                 if len(items) == limit:
                     return {"items": items, "has_more": True}
-                items.append(dict(row))
+                items.append(_summary_row(row))
         return {"items": items, "has_more": False}
 
     def count(self) -> int:

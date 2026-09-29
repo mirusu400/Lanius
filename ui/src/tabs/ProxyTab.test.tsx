@@ -173,6 +173,13 @@ describe('ProxyTab', () => {
     expect(calls.some((call) => call.url.includes('offset=200'))).toBe(true);
     await user.click(screen.getByRole('button', { name: t('proxy.newerHistory') }));
     await screen.findByText('/seeded');
+    const page = screen.getByRole('spinbutton', { name: t('proxy.historyPageLabel') });
+    await user.clear(page);
+    await user.type(page, '10000');
+    await user.click(screen.getByRole('button', { name: t('proxy.jumpToPage') }));
+    await waitFor(() => expect(calls.some((call) =>
+      call.url.includes('offset=1999800')
+    )).toBe(true));
   });
 
   it('appends flows arriving over the WebSocket and updates them in place', async () => {

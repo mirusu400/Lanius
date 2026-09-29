@@ -64,8 +64,9 @@ def main() -> None:
                 host = f"host{index % 50}.example.test"
                 rows.append((
                     f"{index:032x}", "http", "https", "GET", host, 443,
-                    (f"/p/item-{index:08d}" if args.unique_paths
-                     else f"/api/products/{index % 1000}"),
+                    ("/legacy-only" if index == 0 else
+                     f"/p/item-{index:08d}" if args.unique_paths else
+                     f"/api/products/{index % 1000}"),
                     f"page={index % 20}",
                     headers, body, args.body_bytes, float(index), 200,
                     headers, body, args.body_bytes, "application/json",
@@ -92,7 +93,8 @@ def main() -> None:
             "https", "host12.example.test", 443, limit=200,
             path_prefix="/api/products"))
         measure("latest 200 flows", lambda: store.list(limit=200))
-        measure("old flow search", lambda: store.page_summaries(search="/api/products/999", limit=200))
+        measure("oldest flow search", lambda: store.page_summaries(
+            search="/legacy-only", limit=200))
         measure("site folders", lambda: store.page_folders_for_site(
             "https", "host12.example.test", 443, limit=200))
         measure("endpoint groups", lambda: store.page_endpoints(limit=200))

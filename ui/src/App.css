@@ -624,6 +624,16 @@ pre.body,
   border-top: 1px solid var(--border);
 }
 
+.history-pages label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-pages input {
+  width: 5.5em;
+}
+
 /* A typed size next to the sizes worth one click. */
 .size-field {
   display: inline-flex;

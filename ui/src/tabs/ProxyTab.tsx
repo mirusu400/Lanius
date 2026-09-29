@@ -58,6 +58,7 @@ export function ProxyTab() {
   const flowsRef = useRef(flows);
   flowsRef.current = flows;
   const [historyPage, setHistoryPage] = useState(0);
+  const [historyPageInput, setHistoryPageInput] = useState('1');
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   // Outside the component: switching tabs unmounts this one, and a
@@ -80,6 +81,7 @@ export function ProxyTab() {
   historyPageRef.current = historyPage;
   const requestGeneration = useRef(0);
   const scopeReloadTimer = useRef<number | null>(null);
+  const previousSearch = useRef(filters.search);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
 
@@ -110,8 +112,24 @@ export function ProxyTab() {
   }, []);
 
   useEffect(() => {
-    void reload();
+    const searchChanged = filters.search !== previousSearch.current;
+    previousSearch.current = filters.search;
+    if (!searchChanged) {
+      void reload();
+      return;
+    }
+    requestGeneration.current += 1;
+    const timer = window.setTimeout(() => void reload(), 300);
+    return () => window.clearTimeout(timer);
   }, [filters, historyPage, reload]);
+
+  useEffect(() => setHistoryPageInput(String(historyPage + 1)), [historyPage]);
+
+  const jumpToHistoryPage = () => {
+    const page = Number(historyPageInput);
+    if (Number.isSafeInteger(page) && page > 0) setHistoryPage(page - 1);
+    else setHistoryPageInput(String(historyPage + 1));
+  };
 
   useEffect(() => () => {
     if (scopeReloadTimer.current !== null) window.clearTimeout(scopeReloadTimer.current);
@@ -306,7 +324,7 @@ export function ProxyTab() {
         <>
           <FilterBar
             filters={filters}
-            onChange={(next) => { setHistoryPage(0); setFilters(next); }}
+            onChange={(next) => { setHistoryPage(0); setHistoryPageInput('1'); setFilters(next); }}
             paused={paused}
             onTogglePause={() => setPaused((p) => !p)}
             onClear={onClear}
@@ -320,7 +338,7 @@ export function ProxyTab() {
             open={filterOpen}
             filters={filters}
             onClose={() => setFilterOpen(false)}
-            onApply={(next) => { setHistoryPage(0); setFilters(next); }}
+            onApply={(next) => { setHistoryPage(0); setHistoryPageInput('1'); setFilters(next); }}
           />
           {error && <div className="banner error">{renderMessage(error, t)}</div>}
           <Split
@@ -340,7 +358,12 @@ export function ProxyTab() {
           />
           <div className="history-pages">
             <button disabled={historyPage === 0 || historyLoading} onClick={() => setHistoryPage((page) => page - 1)}>{t('proxy.newerHistory')}</button>
-            <span>{t('proxy.historyPage', { page: historyPage + 1 })}</span>
+            <label>{t('proxy.historyPageLabel')}
+              <input type="number" min="1" value={historyPageInput}
+                onChange={(event) => setHistoryPageInput(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter') jumpToHistoryPage(); }} />
+            </label>
+            <button disabled={historyLoading} onClick={jumpToHistoryPage}>{t('proxy.jumpToPage')}</button>
             <button disabled={!hasMoreHistory || historyLoading} onClick={() => setHistoryPage((page) => page + 1)}>{t('proxy.olderHistory')}</button>
           </div>
           <ConfirmDialog
