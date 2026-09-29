@@ -64,10 +64,12 @@ UPDATE flow_totals SET
 WHERE id = 1;
 UPDATE flow_status_stats SET flows = flows - 1
   WHERE OLD.status_code IS NOT NULL AND bucket = OLD.status_code / 100;
-DELETE FROM flow_status_stats WHERE flows = 0;
+DELETE FROM flow_status_stats
+  WHERE OLD.status_code IS NOT NULL AND bucket = OLD.status_code / 100 AND flows = 0;
 UPDATE flow_method_stats SET flows = flows - 1
   WHERE OLD.method IS NOT NULL AND method = OLD.method;
-DELETE FROM flow_method_stats WHERE flows = 0;
+DELETE FROM flow_method_stats
+  WHERE OLD.method IS NOT NULL AND method = OLD.method AND flows = 0;
 UPDATE flow_site_stats SET
   flows = flows - 1,
   paths = paths - CASE WHEN OLD.path IS NOT NULL AND (
@@ -81,11 +83,14 @@ UPDATE flow_site_stats SET last_seen = (
     scheme IS OLD.scheme AND host = OLD.host AND port IS OLD.port
 ) WHERE OLD.host IS NOT NULL AND {_SITE_WHERE_OLD}
   AND last_seen = OLD.started_at;
-DELETE FROM flow_site_stats WHERE flows = 0;
+DELETE FROM flow_site_stats
+  WHERE OLD.host IS NOT NULL AND {_SITE_WHERE_OLD} AND flows = 0;
 UPDATE flow_path_stats SET flows = flows - 1
   WHERE OLD.host IS NOT NULL AND OLD.path IS NOT NULL
     AND {_SITE_WHERE_OLD} AND path = OLD.path;
-DELETE FROM flow_path_stats WHERE flows = 0;
+DELETE FROM flow_path_stats
+  WHERE OLD.host IS NOT NULL AND OLD.path IS NOT NULL
+    AND {_SITE_WHERE_OLD} AND path = OLD.path AND flows = 0;
 """
 
 MIGRATION: tuple[str, ...] = (
