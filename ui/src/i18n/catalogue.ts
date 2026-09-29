@@ -356,7 +356,7 @@ const en = {
   // --- updates ---
   'updates.section': 'Updates',
   'updates.help':
-    'Whether a newer build has been published. Nothing is downloaded or installed for you: this asks GitHub and hands you the link.',
+    'Whether a newer build has been published, and on the desktop app a way to install it. Nothing happens on its own: checking asks GitHub, and the new build is downloaded only once you press Install.',
   'updates.channel': 'Compare against',
   'updates.channelAuto': 'The stream this build came from',
   'updates.channelStable': 'Releases',
@@ -1086,7 +1086,7 @@ const ko: Catalogue = {
   // --- updates ---
   'updates.section': '업데이트',
   'updates.help':
-    '새 빌드가 올라왔는지 확인합니다. 내려받거나 설치하지는 않습니다. GitHub에 물어보고 링크만 알려 줍니다.',
+    '새 빌드가 올라왔는지 확인하고, 데스크톱 앱에서는 설치까지 합니다. 저절로 되는 일은 없습니다. 확인은 GitHub에 묻는 것뿐이고, 내려받기는 설치 버튼을 눌러야 시작합니다.',
   'updates.channel': '비교 대상',
   'updates.channelAuto': '지금 쓰는 빌드와 같은 갈래',
   'updates.channelStable': '정식 릴리스',

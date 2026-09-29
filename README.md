@@ -30,9 +30,10 @@ It is rebuilt from every commit that lands on `main` and passes CI, so the
 download always matches the current code. Settings, About says which commit
 a build came from, and checks whether a newer one has been published: a
 nightly is compared by commit and a tagged release by version, since every
-nightly this month reports the same version number. Nothing is downloaded
-or installed for you, and the check can be turned off for a network where
-nothing should leave the machine.
+nightly this month reports the same version number. The desktop app can
+install what it finds, in one press; nothing downloads on its own, and the
+check itself can be turned off for a network where nothing should leave
+the machine.
 
 | Platform | File |
 |---|---|
