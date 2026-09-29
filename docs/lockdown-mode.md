@@ -10,7 +10,8 @@ project. `LANIUS_LOCKDOWN=1` forces it on before the project picker appears.
 The project checkbox is stored in that project's SQLite settings and is
 included in project exports. The effective value is global OR project.
 Importing a project applies its saved setting immediately and restarts the
-desktop engine when project Lockdown is enabled.
+desktop engine when project Lockdown is enabled. An import can turn project
+Lockdown on but never off; only the project checkbox can disable it.
 
 Blocked product operations include GitHub update checks and installation,
 remote SecLists downloads and user plugins. The Python engine guards its

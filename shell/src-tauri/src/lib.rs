@@ -578,24 +578,29 @@ fn require_product_egress() -> Result<(), String> {
     }
 }
 
+/// `require_product_egress` blocks on a local socket; keep it off the async
+/// runtime's worker threads.
+async fn check_product_egress() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(require_product_egress)
+        .await
+        .map_err(|_| LOCKDOWN_BLOCKED.to_string())?
+}
+
 /// Keep checking while the native updater owns a network connection. Dropping
 /// its future stops a check or download when either checkbox turns on.
 async fn monitored_product_egress<T, F>(operation: F) -> Result<T, String>
 where
     F: std::future::Future<Output = Result<T, String>>,
 {
-    require_product_egress()?;
+    check_product_egress().await?;
     tokio::pin!(operation);
     loop {
         tokio::select! {
-            result = &mut operation => {
-                require_product_egress()?;
-                return result;
-            }
+            // Once the operation has finished its packets are gone; refusing
+            // the result then would only leave an installed update unapplied.
+            result = &mut operation => return result,
             _ = tokio::time::sleep(Duration::from_millis(250)) => {
-                tauri::async_runtime::spawn_blocking(require_product_egress)
-                    .await
-                    .map_err(|_| LOCKDOWN_BLOCKED.to_string())??;
+                check_product_egress().await?;
             }
         }
     }
@@ -810,7 +815,6 @@ pub struct UpdateProgressReport {
 /// back to the download link.
 #[tauri::command]
 async fn update_check(app: tauri::AppHandle) -> Result<Option<UpdateOffer>, String> {
-    require_product_egress()?;
     let updater = app.updater().map_err(|err| err.to_string())?;
     let found =
         monitored_product_egress(async { updater.check().await.map_err(|err| err.to_string()) })
@@ -830,7 +834,6 @@ async fn update_check(app: tauri::AppHandle) -> Result<Option<UpdateOffer>, Stri
 /// running sidecar is how a half-written database happens.
 #[tauri::command]
 async fn update_install(app: tauri::AppHandle) -> Result<(), String> {
-    require_product_egress()?;
     let updater = app.updater().map_err(|err| err.to_string())?;
     let update =
         monitored_product_egress(async { updater.check().await.map_err(|err| err.to_string()) })
