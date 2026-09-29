@@ -1244,6 +1244,7 @@ td.empty {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 .empty-detail {
@@ -1392,20 +1393,20 @@ td.empty {
   margin-top: 0;
 }
 
-/* Read only, but a textarea rather than a pre: it scrolls horizontally
-   without wrapping and supports select-all, which is what the raw view
-   is for. */
+/* Raw HTTP remains selectable, wraps long lines, and can grow vertically. */
 .raw-view {
   width: 100%;
   height: 100%;
-  min-height: 120px;
-  resize: none;
+  min-height: 180px;
+  resize: vertical;
   border: none;
   outline: none;
   background: transparent;
   color: var(--fg);
-  white-space: pre;
-  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
+  overflow-y: auto;
   font-size: inherit;
   padding: 0;
 }
@@ -1765,7 +1766,11 @@ pre.body {
 
 .site-detail {
   flex: 1;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .pad {
@@ -1820,7 +1825,60 @@ pre.body {
 /* endpoints */
 .endpoint-list {
   flex: 1;
+  min-height: 0;
   overflow: auto;
+}
+
+.endpoint-layout,
+.endpoint-request-split {
+  flex: 1;
+  min-height: 0;
+}
+
+.endpoint-requests {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.endpoint-request-heading {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+  white-space: nowrap;
+}
+
+.endpoint-request-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.endpoint-request-heading .muted { flex: 0 0 auto; }
+
+.endpoint-request-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.endpoint-loading { padding: 8px 12px; }
+
+.endpoint-load-more {
+  align-self: stretch;
+  margin: 6px;
+}
+
+.endpoint-prompt {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
 }
 
 .param {

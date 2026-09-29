@@ -39,14 +39,13 @@ import {
   buildTree,
   countFlows,
   deletionTarget,
-  endpointHost,
   siteLabel,
   type SiteTree,
   type TreeNode,
 } from './targetModel';
 import { FlowDetailView } from '../components/FlowDetail';
+import { EndpointExplorer } from '../components/EndpointExplorer';
 import { Split } from '../components/Split';
-import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 import { connectStream } from '../api/stream';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 
@@ -61,7 +60,6 @@ function flowIdsUnder(node: TreeNode): string[] {
 
 export function TargetTab() {
   const t = useT();
-  const endpointColumns = useResizableColumns('lanius.columns.endpoints', [70, 180, 300, 78, 180, 180]);
   const [view, setView] = useState<View>('sitemap');
   const [sites, setSites] = useState<Site[]>([]);
   const [sitePaths, setSitePaths] = useState<Record<string, SitePath[]>>({});
@@ -237,6 +235,15 @@ export function TargetTab() {
     if (!pagesRef.current[node.path]) void loadPage(node);
   }, [loadPage]);
 
+  const refreshEndpoints = useCallback(async () => {
+    try {
+      const data = await getEndpoints(undefined, inScopeOnly);
+      setEndpoints(data.items);
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    }
+  }, [inScopeOnly]);
+
   const [pendingDelete, setPendingDelete] = useState<SitemapRowTarget[] | null>(null);
 
   /** What the confirmation says, and what it will remove. */
@@ -339,6 +346,7 @@ export function TargetTab() {
       timer = window.setTimeout(() => {
         timer = undefined;
         void refreshSites();
+        if (view === 'endpoints') void refreshEndpoints();
       }, 1500);
     };
     const disconnect = connectStream({
@@ -352,7 +360,7 @@ export function TargetTab() {
       if (timer) window.clearTimeout(timer);
       disconnect();
     };
-  }, [refreshSites]);
+  }, [refreshSites, refreshEndpoints, view]);
 
   // A site remains light until it is opened; pages are merged by flow ID.
   useEffect(() => {
@@ -369,10 +377,8 @@ export function TargetTab() {
 
   useEffect(() => {
     if (view !== 'endpoints') return;
-    getEndpoints(undefined, inScopeOnly)
-      .then((data) => setEndpoints(data.items))
-      .catch(() => setEndpoints([]));
-  }, [view, inScopeOnly]);
+    void refreshEndpoints();
+  }, [view, refreshEndpoints]);
 
   // The tree only carries a path summary, so load the full flow for the
   // shared detail pane.
@@ -449,6 +455,7 @@ export function TargetTab() {
           resetPages();
           expansion.collapseAll();
           void refreshSites();
+          if (view === 'endpoints') void refreshEndpoints();
         }}>{t('common.refresh')}</button>
       </div>
 
@@ -476,54 +483,13 @@ export function TargetTab() {
           }}
         />
       ) : view === 'endpoints' ? (
-        <div className="endpoint-list">
-          <ResizableTable columns={endpointColumns} className="flow-table">
-            <thead>
-              <tr>
-                {[
-                  t('flow.method'), t('flow.host'), t('target.endpoint'),
-                  t('target.count'), t('target.params'), t('target.statuses'),
-                ].map((label, index) => (
-                  <ResizableHeader
-                    key={index}
-                    label={label}
-                    index={index}
-                    columns={endpointColumns}
-                    resizeLabel={t('table.resizeColumn', { column: label })}
-                  />
-                ))}
-                <ResizableFillHeader />
-              </tr>
-            </thead>
-            <tbody>
-              {endpoints.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="empty">
-                    {t('target.noEndpoints')}
-                  </td>
-                  <ResizableFillCell />
-                </tr>
-              )}
-              {endpoints.map((endpoint) => (
-                <tr key={endpoint.key}>
-                  <td className="mono">{endpoint.method}</td>
-                  <td className="mono">{endpointHost(endpoint)}</td>
-                  <td className="mono">{endpoint.template}</td>
-                  <td className="mono num">{endpoint.count}</td>
-                  <td className="mono">
-                    {endpoint.query_params.map((p) => (
-                      <span key={p} className="param">
-                        {p}
-                      </span>
-                    ))}
-                  </td>
-                  <td className="mono">{endpoint.statuses.join(', ')}</td>
-                  <ResizableFillCell />
-                </tr>
-              ))}
-            </tbody>
-          </ResizableTable>
-        </div>
+        <EndpointExplorer
+          endpoints={endpoints}
+          inScopeOnly={inScopeOnly}
+          onChanged={async () => {
+            await Promise.all([refreshScope(), refreshSites(), refreshEndpoints()]);
+          }}
+        />
       ) : (
         <Split
           direction="horizontal"
@@ -577,7 +543,7 @@ export function TargetTab() {
             />
           </div>}
           second={<div className="site-detail">
-            {selectedDetail && <FlowDetailView flow={selectedDetail} />}
+            {selectedDetail && <FlowDetailView flow={selectedDetail} splitStorageKey="lanius.split.sitemap.detail" initialSplit={0.35} />}
           </div>}
         />
       )}

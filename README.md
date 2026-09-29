@@ -290,6 +290,10 @@ been fully loaded, the confirmation does not show an incomplete request count.
 Drag the divider between the site tree and request detail to resize either
 pane. Endpoint and Scope table columns can also be resized from their header
 edges. These sizes are remembered on this machine.
+Click an endpoint to browse every captured request in that group, inspect its
+request and response, or right-click it to send it to Repeater or Intruder.
+The request and response panes have a draggable divider; raw text wraps long
+lines and its editor height can be adjusted.
 
 Define a **scope** with include and exclude rules to keep your attention on the
 application under test. Scope rules persist across restarts, and you can tell

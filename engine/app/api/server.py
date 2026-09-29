@@ -1206,18 +1206,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         in_scope_only: bool = False,
         limit: int = Query(5000, ge=1, le=20000),
     ) -> dict[str, Any]:
-        records = await asyncio.to_thread(store.list, limit=limit, host=host)
+        records = await asyncio.to_thread(store.endpoint_candidates, host)
         if in_scope_only:
             records = [
                 r
                 for r in records
-                if engine.scope.contains(r.scheme, r.host, r.port, r.path)
+                if engine.scope.contains(r["scheme"], r["host"], r["port"], r["path"])
             ]
         grouped = build_endpoints(records)
         return {
-            "items": [e.as_dict() for e in grouped],
+            "items": [e.as_dict() for e in grouped[:limit]],
             "count": len(grouped),
         }
+
+    @app.get("/api/endpoints/flows")
+    async def endpoint_flows(
+        scheme: str,
+        host: str,
+        method: str,
+        template: str,
+        port: int | None = None,
+        in_scope_only: bool = False,
+        limit: int = Query(200, ge=1, le=500),
+        offset: int = Query(0, ge=0),
+    ) -> dict[str, Any]:
+        rows = await asyncio.to_thread(
+            store.paths_for_endpoint, scheme, host, port, method, template
+        )
+        if in_scope_only:
+            rows = [
+                row for row in rows
+                if engine.scope.contains(scheme, host, port, row["path"])
+            ]
+        return {"items": rows[offset:offset + limit], "count": len(rows)}
 
     # --- intruder (M5) ----------------------------------------------------
     @app.post("/api/intruder/positions")
