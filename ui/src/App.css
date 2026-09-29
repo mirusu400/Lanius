@@ -105,7 +105,7 @@
   --shadow: rgba(15, 20, 30, 0.18);
 }
 
-/* The four optional palettes use the same roles as the original themes.
+/* The optional palettes use the same roles as the original themes.
    Selection and status colors stay distinct without tinting every surface. */
 :root[data-theme='copper'] {
   color-scheme: dark;

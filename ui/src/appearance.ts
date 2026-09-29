@@ -5,11 +5,14 @@
  * window does not flash the wrong theme on launch.
  */
 
-export type ThemePalette = 'dark' | 'light' | 'copper' | 'steel' | 'sage' | 'paper';
+export type ThemePalette =
+  | 'dark' | 'light' | 'copper' | 'steel' | 'sage' | 'paper'
+  | 'monokai' | 'gruvbox' | 'dracula' | 'tokyo-night' | 'catppuccin' | 'solarized';
 export type ThemeChoice = 'system' | ThemePalette;
 
 const THEME_CHOICES: readonly ThemeChoice[] = [
   'system', 'dark', 'light', 'copper', 'steel', 'sage', 'paper',
+  'monokai', 'gruvbox', 'dracula', 'tokyo-night', 'catppuccin', 'solarized',
 ];
 
 export interface Appearance {

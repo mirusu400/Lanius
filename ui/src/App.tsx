@@ -33,6 +33,7 @@ import { Spinner, useDelayedBusy } from "./components/Spinner";
 import { useShortcuts } from "./useShortcut";
 import { autoCheck, useUpdates } from "./updates";
 import "./App.css";
+import "./themePresets.css";
 
 const TABS = [
   "Dashboard",
