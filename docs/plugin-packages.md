@@ -48,6 +48,10 @@ Every regular file except `plugin.json` is listed in `integrity.files`. Missing,
 extra, or changed files stop installation. Installed archives are checked again
 before discovery, and individual UI assets are checked when served.
 
+Read-only data can be placed under `resources/`. It remains part of
+`integrity.files` and is available to backend code through
+`context.resources`; no extra manifest entry is required.
+
 ## Signatures and trusted keys
 
 Signatures use Ed25519. Add this object to the manifest:

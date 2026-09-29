@@ -448,12 +448,21 @@ export interface PluginSettings {
   values: Record<string, unknown>;
 }
 
+export type PluginActionLocation =
+  | 'global'
+  | 'history'
+  | 'flow'
+  | 'request'
+  | 'response'
+  | 'repeater'
+  | 'intruder';
+
 export interface PluginActionContribution {
   id: string;
   plugin: string;
   title: string;
   description: string | null;
-  locations: string[];
+  locations: PluginActionLocation[];
 }
 
 export interface PluginContributionCatalogue {

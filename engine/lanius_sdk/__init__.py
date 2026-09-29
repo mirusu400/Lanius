@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-API_VERSION = "1.0"
+API_VERSION = "1.1"
 
 ActionLocation = Literal[
     "global", "history", "flow", "request", "response", "repeater", "intruder"
@@ -148,6 +148,8 @@ class _Host(Protocol):
     def get_storage(self, key: str, default: Any, scope: SettingScope) -> Any: ...
     def set_storage(self, key: str, value: Any, scope: SettingScope) -> None: ...
     def delete_storage(self, key: str, scope: SettingScope) -> None: ...
+    def list_resources(self, prefix: str) -> Sequence[str]: ...
+    def read_resource(self, path: str) -> bytes: ...
     def create_task(
         self, awaitable: Awaitable[Any], *, name: str | None
     ) -> Disposable: ...
@@ -287,6 +289,22 @@ class PluginTasks:
         return self._host.create_task(awaitable, name=name)
 
 
+class PluginResources:
+    """Read integrity-listed package data from the plugin's resources folder."""
+
+    def __init__(self, host: _Host) -> None:
+        self._host = host
+
+    def list(self, prefix: str = "") -> tuple[str, ...]:
+        return tuple(self._host.list_resources(prefix))
+
+    def read_bytes(self, path: str) -> bytes:
+        return self._host.read_resource(path)
+
+    def read_text(self, path: str, *, encoding: str = "utf-8") -> str:
+        return self.read_bytes(path).decode(encoding)
+
+
 class Scanner:
     def __init__(self, host: _Host) -> None:
         self._host = host
@@ -333,6 +351,7 @@ class PluginContext:
         self.payloads = Payloads(host)
         self.settings = PluginSettings(host)
         self.storage = PluginStorage(host)
+        self.resources = PluginResources(host)
         self.tasks = PluginTasks(host)
         self.scanner = Scanner(host)
         self.log = logging.getLogger(f"lanius.plugin.{plugin_id}")
@@ -349,6 +368,7 @@ __all__ = [
     "IssueSeverity",
     "PluginApiError",
     "PluginContext",
+    "PluginResources",
     "ScanIssue",
     "SettingDefinition",
     "SettingKind",

@@ -422,7 +422,9 @@ class Plugin:
 Three working examples ship in [`plugins/`](./plugins/), and the full hook
 list is in [`plugins/README.md`](./plugins/README.md). Actions, codecs,
 settings, namespaced storage, payload extensions, and managed tasks use the
-versioned [`lanius_sdk`](./docs/plugins-sdk.md).
+versioned [`lanius_sdk`](./docs/plugins-sdk.md). Declared actions appear in the
+matching History, Target, message, Repeater, Intruder, or global UI location;
+package data is available through a bounded read-only resource API.
 Installable `.lanius-plugin` archives, signatures, and sandboxed UI are
 documented in [`docs/plugin-packages.md`](./docs/plugin-packages.md).
 The Plugins tab can browse user-configured signed catalogues, install compatible

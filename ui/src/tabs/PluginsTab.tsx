@@ -29,6 +29,7 @@ import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { useReportBusy } from '../components/busy';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 import { PluginFrame } from '../components/PluginFrame';
+import { usePluginActions } from '../components/usePluginActions';
 
 const EMPTY_CATALOGUE: PluginCatalogue = {
   sources: [],
@@ -64,6 +65,11 @@ export function PluginsTab() {
   const [catalogueBusy, setCatalogueBusy] = useState<string | null>(null);
   const [sourceDraft, setSourceDraft] = useState<PluginCatalogueSource>(EMPTY_SOURCE);
   const packageInput = useRef<HTMLInputElement | null>(null);
+  const {
+    actionsAt,
+    invoke: invokeAction,
+    refresh: refreshActions,
+  } = usePluginActions((message) => setError(rawMsg(message)));
 
   // `refresh` must not clear `error`: it runs right after a failed
   // enable/reload, and wiping the banner would hide why it failed.
@@ -79,12 +85,13 @@ export function PluginsTab() {
       setDirectory(data.directory);
       setSafeMode(data.safe_mode);
       setDevelopmentMode(data.development_mode);
+      await refreshActions();
     } catch (err) {
       setError(msg('plugins.listFailed', { message: (err as Error).message }));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshActions]);
 
   useEffect(() => {
     void refresh();
@@ -305,6 +312,15 @@ export function PluginsTab() {
             <button onClick={() => void installDevelopment()}>{t('plugins.linkDevelopment')}</button>
           </>
         )}
+        {actionsAt(['global']).map((action) => (
+          <button
+            key={action.id}
+            title={action.description ?? undefined}
+            onClick={() => void invokeAction(action, { location: 'global' })}
+          >
+            {action.title}
+          </button>
+        ))}
         <input
           ref={packageInput}
           className="visually-hidden"

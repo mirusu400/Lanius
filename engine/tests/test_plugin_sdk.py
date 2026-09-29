@@ -13,6 +13,7 @@ from app.addons.plugins import PluginError, PluginManager
 from app.api.server import create_app
 from app.config import Settings
 from app.db.store import FlowStore
+from app.plugin_registry import ContributionRegistry
 from fastapi.testclient import TestClient
 from lanius_sdk import PluginApiError
 
@@ -94,7 +95,7 @@ async def test_sdk_plugin_registers_and_invokes_contributions(sdk_manager) -> No
 
     assert plugin.loaded is True
     assert plugin.objects == []
-    assert plugin.as_dict()["sdk_api_version"] == "1.0"
+    assert plugin.as_dict()["sdk_api_version"] == "1.1"
     assert plugin.as_dict()["contributions"] == {
         "actions": 1,
         "codecs": 1,
@@ -144,6 +145,19 @@ def test_disabling_sdk_plugin_removes_every_contribution(sdk_manager) -> None:
     assert all(not values for values in sdk_manager.registry.list().values())
     with pytest.raises(codecs.CodecError, match="unknown codec"):
         codecs.transform("value", "sdk.brackets", "encode")
+
+
+def test_sdk_resources_are_read_only_and_path_bounded(tmp_path) -> None:
+    resources = tmp_path / "resources"
+    (resources / "payloads").mkdir(parents=True)
+    (resources / "payloads" / "names.txt").write_text("admin\nroot\n")
+    context = ContributionRegistry(None).context("sdk", resources)
+
+    assert context.resources.list() == ("payloads/names.txt",)
+    assert context.resources.list("payloads") == ("payloads/names.txt",)
+    assert context.resources.read_text("payloads/names.txt") == "admin\nroot\n"
+    with pytest.raises(PluginApiError, match="stay inside"):
+        context.resources.read_text("../secret")
 
 
 def test_failed_activation_rolls_back_partial_contributions(tmp_path) -> None:

@@ -634,7 +634,12 @@ class PluginManager:
             return []
         if not callable(activate):
             raise PluginError("`activate` must be callable")
-        result = activate(self.registry.context(plugin.name))
+        resource_root = (
+            plugin.package_root / "resources"
+            if plugin.package_root is not None
+            else None
+        )
+        result = activate(self.registry.context(plugin.name, resource_root))
         if inspect.isawaitable(result):
             close = getattr(result, "close", None)
             if close is not None:

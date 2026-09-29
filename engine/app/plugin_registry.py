@@ -11,7 +11,7 @@ import tempfile
 import threading
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, List, Literal
 
 from lanius_sdk import (
@@ -41,6 +41,29 @@ _ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 _KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _MAX_STORAGE_BYTES = 1024 * 1024
 _MAX_GENERATED_PAYLOADS = 100_000
+_MAX_RESOURCE_BYTES = 10 * 1024 * 1024
+_MAX_ACTION_RESULT_BYTES = 1024 * 1024
+_CONTRIBUTION_TIMEOUT_SECONDS = 30.0
+
+
+async def _invoke_handler(handler: Any, *args: Any) -> Any:
+    if inspect.iscoroutinefunction(handler):
+        return await handler(*args)
+    result = await asyncio.to_thread(handler, *args)
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
+def _collect_payloads(values: Iterable[Any]) -> List[str]:
+    result: List[str] = []
+    for value in values:
+        if len(result) >= _MAX_GENERATED_PAYLOADS:
+            raise PluginApiError(
+                f"payload generator exceeded {_MAX_GENERATED_PAYLOADS} values"
+            )
+        result.append(str(value))
+    return result
 
 
 @dataclass(slots=True)
@@ -131,9 +154,9 @@ class ContributionRegistry:
         self._handles: dict[str, list[Disposable]] = {}
         self._tasks: dict[str, set[asyncio.Future[Any]]] = {}
 
-    def context(self, owner: str) -> PluginContext:
+    def context(self, owner: str, resource_root: Path | None = None) -> PluginContext:
         self._validate_id(owner, "plugin id")
-        return PluginContext(owner, PluginHost(self, owner))
+        return PluginContext(owner, PluginHost(self, owner, resource_root))
 
     @staticmethod
     def _validate_id(value: str, label: str) -> None:
@@ -218,34 +241,52 @@ class ContributionRegistry:
             raise PluginApiError(
                 f"action {qualified_id} is not available at {location!r}"
             )
-        result = item.handler(payload)
-        if inspect.isawaitable(result):
-            result = await result
+        try:
+            result = await asyncio.wait_for(
+                _invoke_handler(item.handler, payload),
+                timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
+            )
+        except TimeoutError as exc:
+            raise PluginApiError(f"action {qualified_id} timed out") from exc
+        try:
+            size = len(json.dumps(result, ensure_ascii=False).encode())
+        except (TypeError, ValueError) as exc:
+            raise PluginApiError("action result must be JSON compatible") from exc
+        if size > _MAX_ACTION_RESULT_BYTES:
+            raise PluginApiError("action result exceeds 1 MiB")
         return result
 
     async def generate_payloads(
         self, qualified_id: str, options: Mapping[str, Any]
     ) -> List[str]:
         item = self._get("payload_generators", qualified_id)
-        values = item.handler(options)
-        if inspect.isawaitable(values):
-            values = await values
-        result: List[str] = []
-        for value in values:
-            if len(result) >= _MAX_GENERATED_PAYLOADS:
-                raise PluginApiError(
-                    f"payload generator exceeded {_MAX_GENERATED_PAYLOADS} values"
-                )
-            result.append(str(value))
-        return result
+        try:
+            values = await asyncio.wait_for(
+                _invoke_handler(item.handler, options),
+                timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
+            )
+            return await asyncio.wait_for(
+                asyncio.to_thread(_collect_payloads, values),
+                timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
+            )
+        except TimeoutError as exc:
+            raise PluginApiError(
+                f"payload generator {qualified_id} timed out"
+            ) from exc
 
     async def process_payload(
         self, qualified_id: str, value: str, context: Mapping[str, Any]
     ) -> str:
         item = self._get("payload_processors", qualified_id)
-        result = item.handler(value, context)
-        if inspect.isawaitable(result):
-            result = await result
+        try:
+            result = await asyncio.wait_for(
+                _invoke_handler(item.handler, value, context),
+                timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
+            )
+        except TimeoutError as exc:
+            raise PluginApiError(
+                f"payload processor {qualified_id} timed out"
+            ) from exc
         if not isinstance(result, str):
             raise PluginApiError("payload processor must return a string")
         return result
@@ -387,9 +428,66 @@ class ContributionRegistry:
 class PluginHost:
     """Owner-bound implementation behind the public context services."""
 
-    def __init__(self, registry: ContributionRegistry, owner: str) -> None:
+    def __init__(
+        self,
+        registry: ContributionRegistry,
+        owner: str,
+        resource_root: Path | None = None,
+    ) -> None:
         self.registry = registry
         self.owner = owner
+        self.resource_root = resource_root
+
+    def _resource_path(self, value: str, *, allow_empty: bool = False) -> Path:
+        if not isinstance(value, str):
+            raise PluginApiError("resource path must be a string")
+        path = PurePosixPath(value)
+        if (
+            path.is_absolute()
+            or ".." in path.parts
+            or "\\" in value
+            or (not allow_empty and (not value or value.endswith("/")))
+        ):
+            raise PluginApiError("resource path must stay inside resources/")
+        if self.resource_root is None:
+            raise PluginApiError("plugin has no packaged resources")
+        root = self.resource_root.resolve()
+        candidate = (root / path.as_posix()).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError as exc:
+            raise PluginApiError("resource path must stay inside resources/") from exc
+        return candidate
+
+    def list_resources(self, prefix: str) -> Sequence[str]:
+        if self.resource_root is None:
+            return ()
+        root = self.resource_root.resolve()
+        if not root.is_dir():
+            return ()
+        start = self._resource_path(prefix, allow_empty=True) if prefix else root
+        if not start.exists():
+            return ()
+        files = [start] if start.is_file() else start.rglob("*")
+        return tuple(
+            sorted(
+                candidate.relative_to(root).as_posix()
+                for candidate in files
+                if candidate.is_file()
+            )
+        )
+
+    def read_resource(self, path: str) -> bytes:
+        candidate = self._resource_path(path)
+        if not candidate.is_file():
+            raise PluginApiError(f"plugin resource not found: {path}")
+        size = candidate.stat().st_size
+        if size > _MAX_RESOURCE_BYTES:
+            raise PluginApiError("plugin resource exceeds 10 MiB")
+        value = candidate.read_bytes()
+        if len(value) > _MAX_RESOURCE_BYTES:
+            raise PluginApiError("plugin resource exceeds 10 MiB")
+        return value
 
     def register_action(
         self,

@@ -1,4 +1,4 @@
-# Plugin SDK 1.0
+# Plugin SDK 1.1
 
 `lanius_sdk` is the stable boundary between a plugin and the engine. Engine
 modules under `app` are internal and can change without an SDK compatibility
@@ -49,6 +49,17 @@ awaitable. The contribution catalogue is available at
 `GET /api/plugin-contributions`; actions run through
 `POST /api/plugin-actions/{id}/invoke`.
 
+The declared locations are rendered in HTTP history, Target, request and
+response details, Repeater, Intruder, or the global Plugins toolbar. Synchronous
+handlers run outside the engine event loop. Actions and payload handlers have a
+30 second host timeout, and action results must be JSON compatible and no more
+than 1 MiB.
+
+Flow locations include `flow_id` and a serializable flow summary. Request and
+response detail menus also include the loaded detail and a `message` field.
+Repeater and Intruder include their current raw request and parsed request when
+valid. The host adds the exact `location` chosen by the UI before invocation.
+
 ## Codecs
 
 `context.codecs.register` adds an encoder, a decoder, or both to Decoder. A
@@ -87,6 +98,14 @@ disable and reload; uninstall can explicitly remove them later.
 `context.tasks.create(awaitable)` for background work so shutdown, reload, and
 failure cleanup can cancel it deterministically.
 
+## Package resources
+
+Files stored under a package's `resources/` directory are available through
+`context.resources.list()`, `read_bytes(path)`, and `read_text(path)`. Paths
+are relative to `resources/`, cannot escape that directory, and a single read
+is capped at 10 MiB. Resource files remain covered by the package manifest's
+integrity map. Legacy loose-file plugins do not receive a resource directory.
+
 ## Scanner checks and issues
 
 `context.scanner.register_passive` analyzes captured responses without sending
@@ -97,7 +116,7 @@ deduplicates, persists, and displays. The full scheduler contract is in
 
 ## Compatibility
 
-`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.0`.
+`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.1`.
 Minor additions remain backward compatible. A future breaking API uses a new
 major version and package manifests declare which major versions they accept.
 
