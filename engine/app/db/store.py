@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import json
+import math
 import sqlite3
 import tempfile
 import threading
@@ -285,7 +286,7 @@ _SUMMARY_COLUMNS = (
     "id, type, client_addr, server_addr, scheme, method, host, port, path, query,"
     " http_version, request_size, started_at, status_code, reason, response_size,"
     " response_mime, completed_at, duration_ms, error, source, comment,"
-    " auto_modified, modified"
+    " auto_modified, modified, flows.rowid AS history_rowid"
 )
 
 
@@ -299,12 +300,32 @@ def _glob_literal(value: str) -> str:
 
 def _summary_row(row: sqlite3.Row) -> dict[str, Any]:
     data = dict(row)
+    data.pop("history_rowid", None)
     data["request_size"] = data["request_size"] or 0
     data["response_size"] = data["response_size"] or 0
     data["source"] = data["source"] or "proxy"
     data["auto_modified"] = bool(data["auto_modified"])
     data["modified"] = bool(data["modified"])
     return data
+
+
+def _history_cursor(row: sqlite3.Row) -> str:
+    return json.dumps([row["started_at"], row["history_rowid"]], separators=(",", ":"))
+
+
+def _cursor_filter(cursor: str) -> tuple[str, list[Any]]:
+    try:
+        started_at, rowid = json.loads(cursor)
+        if (started_at is not None and (
+                isinstance(started_at, bool) or not isinstance(started_at, (int, float))
+                or not math.isfinite(started_at))) \
+                or not isinstance(rowid, int) or isinstance(rowid, bool) or rowid < 1:
+            raise ValueError
+    except (ValueError, TypeError) as exc:
+        raise ValueError("invalid history cursor") from exc
+    if started_at is None:
+        return "(started_at IS NULL AND rowid < ?)", [rowid]
+    return "(started_at < ? OR started_at IS NULL OR (started_at = ? AND rowid < ?))", [started_at, started_at, rowid]
 
 
 class FlowStore:
@@ -681,6 +702,7 @@ class FlowStore:
     def page_summaries(
         self, *, limit: int = 200, offset: int = 0,
         anchor: int | None = None,
+        cursor: str | None = None,
         scope_predicate: Callable[[str | None, str | None, int | None, str | None], bool] | None = None,
         host: str | None = None, method: str | None = None,
         status_code: int | None = None, search: str | None = None,
@@ -694,6 +716,8 @@ class FlowStore:
         Scope rules may depend on arbitrary paths, so apply them while
         streaming the SQL result before counting the requested page offset.
         """
+        if cursor is not None and offset:
+            raise ValueError("cursor and offset cannot be combined")
         where, params = self._flow_filters(
             host=host, method=method, status_code=status_code, search=search,
             methods=methods, status_classes=status_classes,
@@ -708,6 +732,10 @@ class FlowStore:
                 ).fetchone()[0])
             where = f"{where} {'AND' if where else 'WHERE'} rowid <= ?"
             params.append(anchor)
+            if cursor is not None:
+                cursor_sql, cursor_params = _cursor_filter(cursor)
+                where += f" AND {cursor_sql}"
+                params.extend(cursor_params)
             # A common search term can match millions of rows. Probe a
             # bounded newest slice first, so the usual first few pages do
             # not materialize every matching FTS rowid. If the slice does
@@ -723,6 +751,8 @@ class FlowStore:
                 base_where = (
                     f"{base_where} {'AND' if base_where else 'WHERE'} rowid <= ?"
                 )
+                if cursor is not None:
+                    base_where += f" AND {cursor_sql}"
                 probe = max(needed, 300)
                 recent = self._read_conn.execute(
                     "WITH recent AS MATERIALIZED ("
@@ -733,13 +763,15 @@ class FlowStore:
                     " WHERE EXISTS (SELECT 1 FROM flow_search AS hit"
                     " WHERE hit.rowid = flows.rowid AND instr(hit.text, ?) > 0)"
                     " ORDER BY started_at DESC, flows.rowid DESC LIMIT ?",
-                    (*base_params, anchor, probe,
+                    (*base_params, anchor,
+                     *(cursor_params if cursor is not None else []), probe,
                      search.casefold(), needed),
                 ).fetchall()
                 if len(recent) == needed:
                     return {
                         "items": [_summary_row(row) for row in recent[offset:offset + limit]],
                         "has_more": True, "anchor": anchor,
+                        "next_cursor": _history_cursor(recent[offset + limit - 1]),
                     }
             if scope_predicate is None:
                 rows = self._read_conn.execute(
@@ -748,21 +780,27 @@ class FlowStore:
                     (*params, limit + 1, offset),
                 ).fetchall()
                 return {"items": [_summary_row(row) for row in rows[:limit]],
-                        "has_more": len(rows) > limit, "anchor": anchor}
-            cursor = self._read_conn.execute(
+                        "has_more": len(rows) > limit, "anchor": anchor,
+                        "next_cursor": _history_cursor(rows[limit - 1])
+                        if len(rows) >= limit else (_history_cursor(rows[-1]) if rows else None)}
+            last_cursor: str | None = None
+            rows_cursor = self._read_conn.execute(
                 f"SELECT {_SUMMARY_COLUMNS} FROM flows {where}"
                 " ORDER BY started_at DESC, rowid DESC", params,
             )
-            for row in cursor:
+            for row in rows_cursor:
                 if not scope_predicate(row["scheme"], row["host"], row["port"], row["path"]):
                     continue
                 if matched < offset:
                     matched += 1
                     continue
                 if len(items) == limit:
-                    return {"items": items, "has_more": True, "anchor": anchor}
+                    return {"items": items, "has_more": True, "anchor": anchor,
+                            "next_cursor": last_cursor}
                 items.append(_summary_row(row))
-        return {"items": items, "has_more": False, "anchor": anchor}
+                last_cursor = _history_cursor(row)
+        return {"items": items, "has_more": False, "anchor": anchor,
+                "next_cursor": last_cursor}
 
     def count(self) -> int:
         with self._read_lock:

@@ -5,6 +5,7 @@ import time
 import gzip
 import json
 import sqlite3
+from urllib.parse import quote
 
 from unittest import mock
 
@@ -60,7 +61,8 @@ def test_status_reports_running_proxy(client) -> None:
 
 def test_list_flows_empty(client) -> None:
     assert client.get("/api/flows").json() == {
-        "items": [], "count": 0, "has_more": False, "anchor": 0,
+        "items": [], "count": 0, "has_more": False,
+        "anchor": 0, "next_cursor": None,
     }
 
 
@@ -81,9 +83,15 @@ def test_full_text_search_anchor_and_raw_body_endpoint(client) -> None:
     seed(client, "new", started_at=3)
     older = client.get(f"/api/flows?limit=1&offset=1&anchor={page['anchor']}").json()
     assert [item["id"] for item in older["items"]] == ["old"]
-    assert client.get("/api/flows?search=needle-tail").json()["items"][0]["id"] == "old"
     assert client.get("/api/flows?search=search-header").json()["items"][0]["id"] == "next"
+    client.app.state.store.delete(["next"])
+    cursor_page = client.get(
+        f"/api/flows?limit=1&anchor={page['anchor']}&cursor={quote(page['next_cursor'])}"
+    ).json()
+    assert [item["id"] for item in cursor_page["items"]] == ["old"]
+    assert client.get("/api/flows?search=needle-tail").json()["items"][0]["id"] == "old"
     assert client.get("/api/flows/old/body/request").content == b"\xffneedle-tail"
+    assert client.get("/api/flows?cursor=invalid").status_code == 422
 
 
 def test_flow_list_preserves_boolean_summary_fields(client) -> None:

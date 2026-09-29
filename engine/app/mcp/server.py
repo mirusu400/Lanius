@@ -101,6 +101,7 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
         limit: int = 50,
         offset: int = 0,
         anchor: int | None = None,
+        cursor: str | None = None,
         host: str | None = None,
         method: str | None = None,
         status_code: int | None = None,
@@ -111,6 +112,7 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
             limit=max(1, min(limit, 500)),
             offset=max(0, offset),
             anchor=max(0, anchor) if anchor is not None else None,
+            cursor=cursor,
             host=host,
             method=method,
             status_code=status_code,
@@ -118,6 +120,7 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
         )
         return {"count": len(page["items"]), "has_more": page["has_more"],
                 "anchor": page["anchor"],
+                "next_cursor": page["next_cursor"],
                 "flows": [flow_summary(item) for item in page["items"]]}
 
     @server.tool(

@@ -78,9 +78,10 @@ async function errorDetail(res: Response): Promise<string> {
   return res.statusText ? `${res.status} ${res.statusText}` : `HTTP ${res.status}`;
 }
 
-export function buildFlowQuery(filters: FlowFilters, limit = 200, offset = 0, anchor?: number): string {
+export function buildFlowQuery(filters: FlowFilters, limit = 200, offset = 0, anchor?: number, cursor?: string): string {
   const params = new URLSearchParams({ limit: String(limit) });
-  if (offset) params.set('offset', String(offset));
+  if (cursor) params.set('cursor', cursor);
+  else if (offset) params.set('offset', String(offset));
   if (anchor !== undefined) params.set('anchor', String(anchor));
   if (filters.host) params.set('host', filters.host);
   if (filters.method) params.set('method', filters.method);
@@ -120,12 +121,13 @@ export async function listFlows(
 }
 
 export async function listFlowPage(
-  filters: FlowFilters = {}, offset = 0, limit = 200, anchor?: number,
-): Promise<{ items: FlowSummary[]; has_more: boolean; anchor?: number }> {
-  const data = await request<{ items: FlowSummary[]; has_more?: boolean; anchor?: number }>(
-    `/api/flows?${buildFlowQuery(filters, limit, offset, anchor)}`,
+  filters: FlowFilters = {}, offset = 0, limit = 200, anchor?: number, cursor?: string,
+): Promise<{ items: FlowSummary[]; has_more: boolean; anchor?: number; next_cursor?: string | null }> {
+  const data = await request<{ items: FlowSummary[]; has_more?: boolean; anchor?: number; next_cursor?: string | null }>(
+    `/api/flows?${buildFlowQuery(filters, limit, offset, anchor, cursor)}`,
   );
-  return { items: data?.items ?? [], has_more: data?.has_more ?? false, anchor: data?.anchor };
+  return { items: data?.items ?? [], has_more: data?.has_more ?? false,
+    anchor: data?.anchor, next_cursor: data?.next_cursor };
 }
 
 export function getFlow(id: string, reveal = false): Promise<FlowDetail> {

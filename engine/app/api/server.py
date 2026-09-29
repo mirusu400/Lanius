@@ -769,6 +769,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         limit: int = Query(100, ge=1, le=1000),
         offset: int = Query(0, ge=0),
         anchor: int | None = Query(None, ge=0),
+        cursor: str | None = None,
         host: str | None = None,
         method: str | None = None,
         status_code: int | None = None,
@@ -781,23 +782,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         exclude_extensions: list[str] | None = Query(None),
         in_scope_only: bool = False,
     ) -> dict[str, Any]:
-        page = await asyncio.to_thread(
-            store.page_summaries,
-            limit=limit,
-            offset=offset,
-            anchor=anchor,
-            scope_predicate=(engine.scope.contains if in_scope_only and any(
-                rule.enabled for rule in engine.scope.scope.rules
-            ) else None),
-            host=host,
-            method=method,
-            status_code=status_code,
-            search=search,
-            methods=methods,
-            status_classes=status_classes,
-            extensions=extensions,
-            exclude_extensions=exclude_extensions,
-        )
+        try:
+            page = await asyncio.to_thread(
+                store.page_summaries,
+                limit=limit,
+                offset=offset,
+                anchor=anchor,
+                cursor=cursor,
+                scope_predicate=(engine.scope.contains if in_scope_only and any(
+                    rule.enabled for rule in engine.scope.scope.rules
+                ) else None),
+                host=host,
+                method=method,
+                status_code=status_code,
+                search=search,
+                methods=methods,
+                status_classes=status_classes,
+                extensions=extensions,
+                exclude_extensions=exclude_extensions,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return {**page, "count": len(page["items"])}
 
     @app.get("/api/flows/{flow_id}")

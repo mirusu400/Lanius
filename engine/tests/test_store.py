@@ -301,19 +301,40 @@ def test_history_anchor_remains_stable_while_new_flows_arrive() -> None:
     store.close()
 
 
+def test_history_cursor_does_not_skip_survivors_after_deletion() -> None:
+    store = FlowStore()
+    for i in range(4):
+        store.upsert(make_record(str(i), started_at=float(i)))
+    first = store.page_summaries(limit=2)
+    store.delete(["3"])
+    second = store.page_summaries(
+        limit=2, anchor=first["anchor"], cursor=first["next_cursor"]
+    )
+    assert [item["id"] for item in second["items"]] == ["1", "0"]
+    store.close()
+
+
 def test_common_full_text_search_pages_without_losing_old_matches() -> None:
     store = FlowStore()
-    for i in range(310):
+    for i in range(420):
         store.upsert(make_record(
             str(i), path="/other", host="common.example", started_at=float(i),
             request_body=b"common-search" if i != 0 else b"rare-old-marker",
         ))
     first = store.page_summaries(search="common-search", limit=200)
     assert len(first["items"]) == 200 and first["has_more"]
+    store.delete(["419"])
     second = store.page_summaries(
-        search="common-search", limit=200, offset=200, anchor=first["anchor"]
+        search="common-search", limit=200, anchor=first["anchor"],
+        cursor=first["next_cursor"],
     )
-    assert len(second["items"]) == 109 and not second["has_more"]
+    assert len(second["items"]) == 200 and second["has_more"]
+    assert second["items"][0]["id"] == "219"
+    third = store.page_summaries(
+        search="common-search", limit=200, anchor=first["anchor"],
+        cursor=second["next_cursor"],
+    )
+    assert len(third["items"]) == 19 and not third["has_more"]
     assert store.page_summaries(search="rare-old-marker")["items"][0]["id"] == "0"
     store.close()
 

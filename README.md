@@ -240,10 +240,11 @@ headers, decoded request and response bodies, comments, and request versions
 throughout the capture. The trigram index accelerates searches containing at
 least three consecutive characters; shorter searches can still scan the
 index. Pages use a snapshot anchor so new captures do not shift older pages.
-Deleting rows while browsing can still change numeric page offsets. The scope
-filter applies before paging, so a rare old in-scope request remains reachable.
-API and MCP clients can pass the returned `anchor` on later flow pages to keep
-the same capture boundary while new requests arrive.
+Sequential **Older** navigation uses a cursor, so deleting an earlier row does
+not skip surviving records. A direct page-number jump still uses an offset,
+which can move after deletions. The scope filter applies before paging, so a
+rare old in-scope request remains reachable. API and MCP clients can pass the
+returned `anchor` and `next_cursor` on later flow pages.
 Drag a table column header's right edge to resize it in History and other
 headed data tables. Column widths are remembered on this machine.
 Drag the divider between side-by-side panes to resize them in Proxy,

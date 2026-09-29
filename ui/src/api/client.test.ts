@@ -28,6 +28,12 @@ describe('buildFlowQuery', () => {
   it('passes the history snapshot anchor with later pages', () => {
     expect(buildFlowQuery({}, 200, 200, 123)).toContain('offset=200&anchor=123');
   });
+
+  it('uses a cursor for a sequential page', () => {
+    const q = new URLSearchParams(buildFlowQuery({}, 200, 200, 123, '[1,42]'));
+    expect(q.get('cursor')).toBe('[1,42]');
+    expect(q.has('offset')).toBe(false);
+  });
 });
 
 describe('buildFlowQuery with the new filters', () => {
