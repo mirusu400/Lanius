@@ -42,6 +42,9 @@ class Settings:
     disable_plugins: bool = False
     plugin_dev_mode: bool = False
     plugin_trusted_keys: Path = None  # type: ignore[assignment]
+    plugin_catalogue_sources: Path = None  # type: ignore[assignment]
+    plugin_catalogue_cache: Path = None  # type: ignore[assignment]
+    plugin_revocations: Path = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.data_dir is None:
@@ -67,6 +70,15 @@ class Settings:
         if self.plugin_trusted_keys is None:
             self.plugin_trusted_keys = self.data_dir / "plugin-trusted-keys.json"
         self.plugin_trusted_keys = Path(self.plugin_trusted_keys)
+        if self.plugin_catalogue_sources is None:
+            self.plugin_catalogue_sources = self.data_dir / "plugin-catalogues.json"
+        self.plugin_catalogue_sources = Path(self.plugin_catalogue_sources)
+        if self.plugin_catalogue_cache is None:
+            self.plugin_catalogue_cache = self.data_dir / "plugin-catalogue-cache"
+        self.plugin_catalogue_cache = Path(self.plugin_catalogue_cache)
+        if self.plugin_revocations is None:
+            self.plugin_revocations = self.data_dir / "plugin-revocations.json"
+        self.plugin_revocations = Path(self.plugin_revocations)
 
     @classmethod
     def from_env(cls) -> "Settings":

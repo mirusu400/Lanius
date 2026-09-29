@@ -425,6 +425,10 @@ settings, namespaced storage, payload extensions, and managed tasks use the
 versioned [`lanius_sdk`](./docs/plugins-sdk.md).
 Installable `.lanius-plugin` archives, signatures, and sandboxed UI are
 documented in [`docs/plugin-packages.md`](./docs/plugin-packages.md).
+The Plugins tab can browse user-configured signed catalogues, install compatible
+releases, update them with a retained backup, roll back, and reject revoked
+versions. The catalogue format is in
+[`docs/plugin-catalogues.md`](./docs/plugin-catalogues.md).
 Plugin supplied passive and active checks create deduplicated project findings
 in the **Issues** tab; limits and SDK contracts are documented in
 [`docs/plugin-scanner.md`](./docs/plugin-scanner.md).

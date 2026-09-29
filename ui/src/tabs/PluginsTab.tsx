@@ -1,11 +1,50 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getPluginSettings, installDevelopmentPlugin, installPluginPackage, listPlugins, patchPluginSettings, reloadPlugin, setPluginAutoReload, setPluginEnabled, setPluginOrder, uninstallPluginPackage } from '../api/client';
-import type { PluginInfo, PluginSettingField, PluginSettings, PluginUiView } from '../api/types';
+import {
+  getPluginCatalogue,
+  getPluginSettings,
+  installCataloguePlugin,
+  installDevelopmentPlugin,
+  installPluginPackage,
+  listPlugins,
+  patchPluginSettings,
+  reloadPlugin,
+  rollbackPlugin,
+  savePluginCatalogueSources,
+  setPluginAutoReload,
+  setPluginEnabled,
+  setPluginOrder,
+  uninstallPluginPackage,
+} from '../api/client';
+import type {
+  PluginCatalogue,
+  PluginCatalogueItem,
+  PluginCatalogueSource,
+  PluginInfo,
+  PluginSettingField,
+  PluginSettings,
+  PluginUiView,
+} from '../api/types';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { useReportBusy } from '../components/busy';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 import { PluginFrame } from '../components/PluginFrame';
+
+const EMPTY_CATALOGUE: PluginCatalogue = {
+  sources: [],
+  items: [],
+  errors: {},
+  refreshed: false,
+};
+
+const EMPTY_SOURCE: PluginCatalogueSource = {
+  id: '',
+  title: '',
+  url: '',
+  public_key: '',
+  key_id: null,
+  enabled: true,
+};
 
 export function PluginsTab() {
   const t = useT();
@@ -20,6 +59,10 @@ export function PluginsTab() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [developmentPath, setDevelopmentPath] = useState('');
   const [activeView, setActiveView] = useState<{ plugin: PluginInfo; view: PluginUiView } | null>(null);
+  const [catalogue, setCatalogue] = useState<PluginCatalogue>(EMPTY_CATALOGUE);
+  const [catalogueSearch, setCatalogueSearch] = useState('');
+  const [catalogueBusy, setCatalogueBusy] = useState<string | null>(null);
+  const [sourceDraft, setSourceDraft] = useState<PluginCatalogueSource>(EMPTY_SOURCE);
   const packageInput = useRef<HTMLInputElement | null>(null);
 
   // `refresh` must not clear `error`: it runs right after a failed
@@ -45,7 +88,84 @@ export function PluginsTab() {
 
   useEffect(() => {
     void refresh();
+    void getPluginCatalogue().then(setCatalogue).catch((err) => {
+      setError(rawMsg((err as Error).message));
+    });
   }, [refresh]);
+
+  const refreshCatalogue = async (network = false) => {
+    setCatalogueBusy('refresh');
+    try {
+      setCatalogue(await getPluginCatalogue(network));
+      setError(null);
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    } finally {
+      setCatalogueBusy(null);
+    }
+  };
+
+  const saveSources = async (sources: PluginCatalogueSource[]) => {
+    setCatalogueBusy('sources');
+    try {
+      await savePluginCatalogueSources(sources);
+      setCatalogue(await getPluginCatalogue());
+      setError(null);
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    } finally {
+      setCatalogueBusy(null);
+    }
+  };
+
+  const addSource = async () => {
+    if (!sourceDraft.id.trim() || !sourceDraft.url.trim() || !sourceDraft.public_key.trim()) return;
+    await saveSources([
+      ...catalogue.sources,
+      {
+        ...sourceDraft,
+        id: sourceDraft.id.trim(),
+        title: sourceDraft.title.trim() || sourceDraft.id.trim(),
+        url: sourceDraft.url.trim(),
+        public_key: sourceDraft.public_key.trim(),
+        key_id: sourceDraft.key_id?.trim() || null,
+      },
+    ]);
+    setSourceDraft(EMPTY_SOURCE);
+  };
+
+  const installFromCatalogue = async (item: PluginCatalogueItem, version?: string) => {
+    setCatalogueBusy(item.id);
+    try {
+      await installCataloguePlugin(item.source, item.id, version);
+      await Promise.all([refresh(), refreshCatalogue(false)]);
+      setError(null);
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    } finally {
+      setCatalogueBusy(null);
+    }
+  };
+
+  const rollbackFromCatalogue = async (item: PluginCatalogueItem) => {
+    setCatalogueBusy(item.id);
+    try {
+      await rollbackPlugin(item.id);
+      await Promise.all([refresh(), refreshCatalogue(false)]);
+      setError(null);
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    } finally {
+      setCatalogueBusy(null);
+    }
+  };
+
+  const visibleCatalogue = catalogue.items.filter((item) => {
+    const query = catalogueSearch.trim().toLowerCase();
+    return !query || [item.id, item.name, item.description, item.author, ...(item.categories ?? [])]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query));
+  });
 
   const toggle = async (plugin: PluginInfo) => {
     try {
@@ -201,6 +321,121 @@ export function PluginsTab() {
       </div>
       {safeMode && <div className="banner warning">{t('plugins.safeMode')}</div>}
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
+
+      <section className="plugin-marketplace" aria-label={t('plugins.catalogue')}>
+        <div className="plugin-marketplace-heading">
+          <strong>{t('plugins.catalogue')}</strong>
+          <input
+            value={catalogueSearch}
+            onChange={(event) => setCatalogueSearch(event.target.value)}
+            placeholder={t('plugins.catalogueSearch')}
+            aria-label={t('plugins.catalogueSearch')}
+          />
+          <button disabled={catalogueBusy !== null} onClick={() => void refreshCatalogue(true)}>
+            {catalogueBusy === 'refresh' ? t('common.loading') : t('plugins.catalogueRefresh')}
+          </button>
+        </div>
+        {Object.entries(catalogue.errors).map(([source, message]) => (
+          <div key={source} className="banner warning">{source}: {message}</div>
+        ))}
+        <details className="plugin-catalogue-sources">
+          <summary>{t('plugins.catalogueSources')} ({catalogue.sources.length})</summary>
+          {catalogue.sources.map((source) => (
+            <div key={source.id} className="plugin-source-row">
+              <span><strong>{source.title}</strong> <code>{source.id}</code></span>
+              <span className="muted mono">{source.url}</span>
+              <button
+                className="danger"
+                disabled={catalogueBusy !== null}
+                onClick={() => void saveSources(catalogue.sources.filter((item) => item.id !== source.id))}
+              >
+                {t('common.delete')}
+              </button>
+            </div>
+          ))}
+          <div className="plugin-source-form">
+            <input
+              value={sourceDraft.id}
+              onChange={(event) => setSourceDraft((current) => ({ ...current, id: event.target.value }))}
+              placeholder={t('plugins.sourceId')}
+              aria-label={t('plugins.sourceId')}
+            />
+            <input
+              value={sourceDraft.title}
+              onChange={(event) => setSourceDraft((current) => ({ ...current, title: event.target.value }))}
+              placeholder={t('plugins.sourceTitle')}
+              aria-label={t('plugins.sourceTitle')}
+            />
+            <input
+              value={sourceDraft.url}
+              onChange={(event) => setSourceDraft((current) => ({ ...current, url: event.target.value }))}
+              placeholder={t('plugins.sourceUrl')}
+              aria-label={t('plugins.sourceUrl')}
+            />
+            <input
+              value={sourceDraft.public_key}
+              onChange={(event) => setSourceDraft((current) => ({ ...current, public_key: event.target.value }))}
+              placeholder={t('plugins.sourceKey')}
+              aria-label={t('plugins.sourceKey')}
+            />
+            <input
+              value={sourceDraft.key_id ?? ''}
+              onChange={(event) => setSourceDraft((current) => ({ ...current, key_id: event.target.value }))}
+              placeholder={t('plugins.sourceKeyId')}
+              aria-label={t('plugins.sourceKeyId')}
+            />
+            <button disabled={catalogueBusy !== null} onClick={() => void addSource()}>
+              {t('plugins.addSource')}
+            </button>
+          </div>
+        </details>
+        <div className="plugin-catalogue-grid">
+          {visibleCatalogue.map((item) => (
+            <article key={`${item.source}:${item.id}`} className="plugin-catalogue-card">
+              <div>
+                <strong>{item.name}</strong>
+                <span className="muted mono"> {item.id}</span>
+              </div>
+              <p>{item.description}</p>
+              <div className="plugin-catalogue-meta">
+                <span>{item.source_title}</span>
+                {item.author && <span>{item.author}</span>}
+                {item.categories?.map((category) => <span key={category} className="param">{category}</span>)}
+              </div>
+              <div className="plugin-catalogue-actions">
+                <span className="mono">
+                  {item.installed_version
+                    ? `${t('plugins.installed')} ${item.installed_version}`
+                    : t('plugins.notInstalled')}
+                  {item.latest_version && ` · ${t('plugins.latest')} ${item.latest_version}`}
+                </span>
+                {item.latest_version && (!item.installed_version || item.update_available) && (
+                  <button
+                    disabled={catalogueBusy !== null}
+                    onClick={() => void installFromCatalogue(item, item.latest_version ?? undefined)}
+                  >
+                    {item.installed_version ? t('plugins.update') : t('plugins.installFromCatalogue')}
+                  </button>
+                )}
+                {item.rollback_versions.length > 0 && (
+                  <button
+                    disabled={catalogueBusy !== null}
+                    onClick={() => void rollbackFromCatalogue(item)}
+                  >
+                    {t('plugins.rollback')} {item.rollback_versions[0]}
+                  </button>
+                )}
+              </div>
+              {item.releases.some((release) => release.revoked) && (
+                <small className="status-5xx">{t('plugins.revokedRelease')}</small>
+              )}
+            </article>
+          ))}
+          {catalogue.sources.length > 0 && visibleCatalogue.length === 0 && (
+            <p className="muted">{t('plugins.catalogueNone')}</p>
+          )}
+        </div>
+      </section>
 
       {plugins.length === 0 ? (
         <p className="muted pad">

@@ -5,10 +5,16 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginsTab } from './PluginsTab';
-import type { PluginInfo } from '../api/types';
+import type { PluginCatalogue, PluginInfo } from '../api/types';
 
 let plugins: PluginInfo[] = [];
 let calls: string[] = [];
+let catalogue: PluginCatalogue = {
+  sources: [],
+  items: [],
+  errors: {},
+  refreshed: false,
+};
 
 const base: PluginInfo = {
   name: 'stamp',
@@ -39,6 +45,7 @@ function jsonResponse(body: unknown, ok = true) {
 
 beforeEach(() => {
   calls = [];
+  catalogue = { sources: [], items: [], errors: {}, refreshed: false };
   plugins = [
     { ...base },
     {
@@ -57,6 +64,9 @@ beforeEach(() => {
       calls.push(url);
       if (url.endsWith('/api/plugins')) {
         return jsonResponse({ items: plugins, directory: '/home/u/.lanius/plugins', safe_mode: false, development_mode: false });
+      }
+      if (url.includes('/api/plugin-catalogue?')) {
+        return jsonResponse(catalogue);
       }
       if (url.endsWith('/api/plugins/order')) {
         const names = JSON.parse(String(init?.body)) as string[];
@@ -204,5 +214,33 @@ describe('PluginsTab', () => {
     plugins = [];
     render(<PluginsTab />);
     expect(await screen.findByText(t('plugins.none'))).toBeTruthy();
+  });
+
+  it('searches and installs a signed catalogue release', async () => {
+    catalogue = {
+      sources: [{
+        id: 'official', title: 'Official', url: 'https://example.test/catalog.json',
+        public_key: 'key', key_id: 'release', enabled: true,
+      }],
+      items: [{
+        id: 'acme.scanner', name: 'Acme scanner', description: 'Checks headers',
+        author: 'Acme', categories: ['scanner'], source: 'official', source_title: 'Official',
+        releases: [{
+          version: '1.0.0', url: 'https://example.test/acme.lanius-plugin', sha256: 'a'.repeat(64),
+          package_key_id: 'release',
+          compatibility: { lanius: '>=0.1,<1', sdk: '>=1,<2' }, compatible: true,
+          revoked: false, revocation_reason: null,
+        }],
+        latest_version: '1.0.0', installed_version: null, update_available: false,
+        rollback_versions: [],
+      }],
+      errors: {},
+      refreshed: false,
+    };
+    const user = userEvent.setup();
+    render(<PluginsTab />);
+    expect(await screen.findByText('Acme scanner')).toBeTruthy();
+    await user.click(screen.getByText(t('plugins.installFromCatalogue')));
+    await waitFor(() => expect(calls.some((call) => call.endsWith('/api/plugin-catalogue/install'))).toBe(true));
   });
 });

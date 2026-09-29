@@ -29,6 +29,7 @@ from .addons.intruder import IntruderAddon
 from .addons.plugins import PluginManager
 from .addons.scanner import ScannerAddon
 from .plugin_packages import PluginPackageManager
+from .plugin_catalogue import PluginCatalogueManager
 from .addons.scope import ScopeManager
 from .config import Settings
 from .db.store import FlowStore
@@ -245,7 +246,14 @@ class ProxyEngine:
         self.plugin_packages = PluginPackageManager(
             settings.plugins_dir,
             trusted_keys_path=settings.plugin_trusted_keys,
+            revocations_path=settings.plugin_revocations,
             development_mode=settings.plugin_dev_mode,
+        )
+        self.plugin_catalogue = PluginCatalogueManager(
+            settings.plugin_catalogue_sources,
+            settings.plugin_catalogue_cache,
+            settings.plugin_revocations,
+            self.plugin_packages,
         )
         self.plugins = PluginManager(
             settings.plugins_dir,

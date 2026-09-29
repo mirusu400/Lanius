@@ -33,6 +33,8 @@ const plugin: PluginInfo = {
     signature_present: false,
     trust: 'unsigned',
     development: false,
+    source: 'archive',
+    catalog_source: null,
   },
   ui: { views: [view] },
 };

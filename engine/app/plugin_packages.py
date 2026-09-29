@@ -26,6 +26,7 @@ from . import __version__
 
 MANIFEST_NAME = "plugin.json"
 INSTALL_RECORD = ".lanius-install.json"
+BACKUPS_DIRECTORY = ".backups"
 MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 100 * 1024 * 1024
 MAX_FILES = 2_000
@@ -85,6 +86,8 @@ class PluginManifest:
                 "signature_present": self.signature is not None,
                 "trust": "development" if root.is_symlink() else installed.get("trust", "unmanaged"),
                 "development": root.is_symlink(),
+                "source": installed.get("source", "development" if root.is_symlink() else "unmanaged"),
+                "catalog_source": installed.get("catalog_source"),
             },
             "ui": {"views": views} if views else None,
         }
@@ -319,11 +322,43 @@ class PluginPackageManager:
         directory: Path,
         *,
         trusted_keys_path: Path | None = None,
+        revocations_path: Path | None = None,
         development_mode: bool = False,
     ) -> None:
         self.directory = Path(directory)
         self.trusted_keys_path = trusted_keys_path
+        self.revocations_path = revocations_path
         self.development_mode = development_mode
+
+    @property
+    def backups_directory(self) -> Path:
+        return self.directory / BACKUPS_DIRECTORY
+
+    def _revocation_reason(self, root: Path, manifest: PluginManifest) -> str | None:
+        record = self.installed_record(root) or {}
+        source = record.get("catalog_source")
+        if not isinstance(source, str) or self.revocations_path is None:
+            return None
+        try:
+            value = json.loads(self.revocations_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError, UnicodeError) as exc:
+            raise PluginPackageError(f"cannot read plugin revocations: {exc}") from exc
+        entries = value.get("entries", []) if isinstance(value, dict) else []
+        if not isinstance(entries, list):
+            raise PluginPackageError("plugin revocations must contain an entries list")
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            if (
+                entry.get("source") == source
+                and entry.get("plugin") == manifest.id
+                and entry.get("version") == manifest.version
+            ):
+                reason = entry.get("reason")
+                return str(reason) if reason else "catalog release was revoked"
+        return None
 
     def inspect(self, root: Path) -> tuple[PluginManifest, str]:
         """Validate an installed package again before it can execute."""
@@ -335,6 +370,11 @@ class PluginPackageManager:
             return manifest, "development"
         verify_integrity(root, manifest)
         trust = verify_signature(manifest, load_trusted_keys(self.trusted_keys_path))
+        reason = self._revocation_reason(root, manifest)
+        if reason is not None:
+            raise PluginPackageError(
+                f"plugin version is revoked: {manifest.id} {manifest.version}: {reason}"
+            )
         return manifest, trust
 
     def _validate_archive_entry(self, item: zipfile.ZipInfo) -> str:
@@ -350,6 +390,11 @@ class PluginPackageManager:
         *,
         allow_unsigned: bool = True,
         replace: bool = False,
+        keep_backup: bool = False,
+        expected_id: str | None = None,
+        expected_version: str | None = None,
+        expected_key_id: str | None = None,
+        install_record: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if len(archive) > MAX_ARCHIVE_BYTES:
             raise PluginPackageError("package archive exceeds 50 MiB")
@@ -387,25 +432,56 @@ class PluginPackageManager:
             trust = verify_signature(manifest, load_trusted_keys(self.trusted_keys_path))
             if trust == "unsigned" and not allow_unsigned:
                 raise PluginPackageError("unsigned packages are not allowed")
+            if expected_id is not None and manifest.id != expected_id:
+                raise PluginPackageError(
+                    f"catalog package id differs: expected {expected_id}, got {manifest.id}"
+                )
+            if expected_version is not None and manifest.version != expected_version:
+                raise PluginPackageError(
+                    "catalog package version differs: "
+                    f"expected {expected_version}, got {manifest.version}"
+                )
+            if expected_key_id is not None and (
+                manifest.signature is None
+                or manifest.signature.get("key_id") != expected_key_id
+            ):
+                raise PluginPackageError(
+                    "catalog package signature key differs: "
+                    f"expected {expected_key_id}"
+                )
 
             target = self.directory / manifest.id
             if target.exists() or target.is_symlink():
                 if not replace:
                     raise PluginPackageError(f"plugin is already installed: {manifest.id}")
-                backup = temporary / "previous"
+                if target.is_symlink() or not (target / MANIFEST_NAME).is_file():
+                    raise PluginPackageError(
+                        f"existing plugin cannot be replaced as a package: {manifest.id}"
+                    )
+                previous_manifest = load_manifest(target)
+                if keep_backup:
+                    backup = self.backups_directory / manifest.id / previous_manifest.version
+                    backup.parent.mkdir(parents=True, exist_ok=True)
+                    if backup.exists():
+                        raise PluginPackageError(
+                            f"rollback backup already exists: {manifest.id} {previous_manifest.version}"
+                        )
+                else:
+                    backup = temporary / "previous"
                 os.replace(target, backup)
             else:
                 backup = None
             try:
+                record = dict(install_record or {})
+                record.update(
+                    {
+                        "source": record.get("source", "archive"),
+                        "trust": trust,
+                        "version": manifest.version,
+                    }
+                )
                 (extract_root / INSTALL_RECORD).write_text(
-                    json.dumps(
-                        {
-                            "source": "archive",
-                            "trust": trust,
-                            "version": manifest.version,
-                        },
-                        sort_keys=True,
-                    ),
+                    json.dumps(record, sort_keys=True),
                     encoding="utf-8",
                 )
                 os.replace(extract_root, target)
@@ -451,7 +527,68 @@ class PluginPackageManager:
             shutil.rmtree(target)
         else:
             raise PluginPackageError(f"installed package not found: {plugin_id}")
+        shutil.rmtree(self.backups_directory / plugin_id, ignore_errors=True)
         return {"id": plugin_id, "uninstalled": True}
+
+    def rollback_versions(self, plugin_id: str) -> list[str]:
+        if not _PLUGIN_ID.fullmatch(plugin_id):
+            raise PluginPackageError("invalid plugin id")
+        root = self.backups_directory / plugin_id
+        versions: list[Version] = []
+        if root.is_dir():
+            for candidate in root.iterdir():
+                if not candidate.is_dir():
+                    continue
+                try:
+                    manifest, _trust = self.inspect(candidate)
+                    if manifest.id == plugin_id and manifest.version == candidate.name:
+                        versions.append(Version(manifest.version))
+                except (PluginPackageError, InvalidVersion):
+                    continue
+        return [str(version) for version in sorted(versions, reverse=True)]
+
+    def rollback(self, plugin_id: str, version: str | None = None) -> dict[str, Any]:
+        versions = self.rollback_versions(plugin_id)
+        if version is None:
+            if not versions:
+                raise PluginPackageError(f"no rollback version found: {plugin_id}")
+            version = versions[0]
+        if version not in versions:
+            raise PluginPackageError(f"rollback version not found: {plugin_id} {version}")
+        target = self.directory / plugin_id
+        if target.is_symlink() or not (target / MANIFEST_NAME).is_file():
+            raise PluginPackageError(f"installed package not found: {plugin_id}")
+        current = load_manifest(target)
+        selected = self.backups_directory / plugin_id / version
+        current_backup = self.backups_directory / plugin_id / current.version
+        if current_backup.exists():
+            raise PluginPackageError(
+                f"rollback backup already exists: {plugin_id} {current.version}"
+            )
+        temporary = Path(tempfile.mkdtemp(prefix=".rollback-", dir=self.directory))
+        holding = temporary / "current"
+        try:
+            os.replace(target, holding)
+            try:
+                os.replace(selected, target)
+                os.replace(holding, current_backup)
+            except Exception:
+                if target.exists() and not selected.exists():
+                    os.replace(target, selected)
+                if holding.exists():
+                    os.replace(holding, target)
+                raise
+        finally:
+            shutil.rmtree(temporary, ignore_errors=True)
+        manifest, trust = self.inspect(target)
+        return {
+            "id": manifest.id,
+            "name": manifest.name,
+            "version": manifest.version,
+            "trust": trust,
+            "development": False,
+            "rollback_versions": self.rollback_versions(plugin_id),
+        }
 
     def installed_record(self, root: Path) -> dict[str, Any] | None:
         try:

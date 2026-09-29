@@ -367,6 +367,53 @@ export interface PluginPackageInfo {
   signature_present: boolean;
   trust: 'trusted' | 'unsigned' | 'development' | 'unmanaged';
   development: boolean;
+  source: 'archive' | 'catalogue' | 'development' | 'unmanaged';
+  catalog_source: string | null;
+}
+
+export interface PluginCatalogueSource {
+  id: string;
+  title: string;
+  url: string;
+  public_key: string;
+  key_id: string | null;
+  enabled: boolean;
+}
+
+export interface PluginCatalogueRelease {
+  version: string;
+  url: string;
+  sha256: string;
+  package_key_id: string;
+  compatibility: { lanius: string; sdk: string };
+  published_at?: string;
+  yanked?: boolean;
+  compatible: boolean;
+  revoked: boolean;
+  revocation_reason: string | null;
+}
+
+export interface PluginCatalogueItem {
+  id: string;
+  name: string;
+  description?: string;
+  author?: string;
+  homepage?: string;
+  categories?: string[];
+  source: string;
+  source_title: string;
+  releases: PluginCatalogueRelease[];
+  latest_version: string | null;
+  installed_version: string | null;
+  update_available: boolean;
+  rollback_versions: string[];
+}
+
+export interface PluginCatalogue {
+  sources: PluginCatalogueSource[];
+  items: PluginCatalogueItem[];
+  errors: Record<string, string>;
+  refreshed: boolean;
 }
 
 export interface PluginUiView {

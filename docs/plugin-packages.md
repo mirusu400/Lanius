@@ -72,8 +72,13 @@ left unescaped. Trusted public keys are a JSON object at
 ```
 
 A signature from an unknown key is rejected. Local installation accepts an
-unsigned package and labels it `unsigned`; catalog installation can require a
+unsigned package and labels it `unsigned`; catalogue installation requires a
 trusted signature.
+
+Signed catalogue sources require trusted package signatures, pin immutable
+release hashes, retain update backups, support rollback, and distribute
+revocations. Their index format and trust boundary are documented in
+[plugin-catalogues.md](plugin-catalogues.md).
 
 ## Sandboxed UI
 

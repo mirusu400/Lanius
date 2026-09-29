@@ -48,6 +48,7 @@ from ..plugin_packages import (
     file_sha256,
     load_manifest,
 )
+from ..plugin_catalogue import PluginCatalogueError
 from .. import codegen
 from ..build_info import build_info
 from .. import updates
@@ -278,6 +279,30 @@ class PluginPayloadProcessorBody(BaseModel):
 
 class PluginDevelopmentInstall(BaseModel):
     path: str
+
+
+class PluginCatalogueSourceBody(BaseModel):
+    id: str
+    title: str
+    url: str
+    public_key: str
+    key_id: str | None = None
+    enabled: bool = True
+
+
+class PluginCatalogueSourcesBody(BaseModel):
+    sources: list[PluginCatalogueSourceBody] = Field(default_factory=list)
+
+
+class PluginCatalogueInstallBody(BaseModel):
+    source: str
+    plugin: str
+    version: str | None = None
+    enable: bool = True
+
+
+class PluginRollbackBody(BaseModel):
+    version: str | None = None
 
 
 class IssueStatusPatch(BaseModel):
@@ -1726,6 +1751,88 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return result
         except PluginPackageError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/plugin-catalogue")
+    async def plugin_catalogue(refresh: bool = False) -> dict[str, Any]:
+        try:
+            result = await asyncio.to_thread(
+                engine.plugin_catalogue.catalogue, refresh=refresh
+            )
+            if refresh:
+                await engine.plugins.refresh()
+            return result
+        except PluginCatalogueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.put("/api/plugin-catalogue/sources")
+    async def save_plugin_catalogue_sources(
+        payload: PluginCatalogueSourcesBody,
+    ) -> dict[str, Any]:
+        try:
+            sources = await asyncio.to_thread(
+                engine.plugin_catalogue.save_sources,
+                [source.model_dump() for source in payload.sources],
+            )
+            broker.publish("plugins.catalogue", {"sources": sources})
+            return {"sources": sources}
+        except PluginCatalogueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/plugin-catalogue/install")
+    async def install_catalogue_plugin(
+        payload: PluginCatalogueInstallBody,
+    ) -> dict[str, Any]:
+        existing = engine.plugins.plugins.get(payload.plugin)
+        restore_enabled = bool(existing and existing.enabled)
+        if existing is not None and (existing.loaded or existing.enabled):
+            await engine.plugins.disable_async(payload.plugin)
+        try:
+            result = await asyncio.to_thread(
+                engine.plugin_catalogue.install,
+                payload.source,
+                payload.plugin,
+                payload.version,
+            )
+            await engine.plugins.refresh()
+            plugin = engine.plugins.get(payload.plugin)
+            if payload.enable or restore_enabled:
+                plugin = await engine.plugins.enable_async(plugin.name)
+            broker.publish("plugins.catalogue", {"installed": result})
+            return {**result, "plugin": plugin.as_dict()}
+        except (PluginCatalogueError, PluginPackageError) as exc:
+            await engine.plugins.refresh()
+            if restore_enabled and payload.plugin in engine.plugins.plugins:
+                await engine.plugins.enable_async(payload.plugin)
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except PluginError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/plugins/{name}/rollback")
+    async def rollback_plugin(
+        name: str, payload: PluginRollbackBody
+    ) -> dict[str, Any]:
+        restore_enabled = False
+        try:
+            plugin = engine.plugins.get(name)
+            restore_enabled = plugin.enabled
+            if plugin.loaded or plugin.enabled:
+                await engine.plugins.disable_async(name)
+            result = await asyncio.to_thread(
+                engine.plugin_packages.rollback, name, payload.version
+            )
+            await engine.plugins.refresh()
+            plugin = engine.plugins.get(name)
+            if restore_enabled:
+                plugin = await engine.plugins.enable_async(name)
+            broker.publish("plugins.catalogue", {"rolled_back": result})
+            return {**result, "plugin": plugin.as_dict()}
+        except PluginPackageError as exc:
+            await engine.plugins.refresh()
+            if restore_enabled and name in engine.plugins.plugins:
+                await engine.plugins.enable_async(name)
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except PluginError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

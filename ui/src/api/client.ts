@@ -683,6 +683,43 @@ export function uninstallPluginPackage(
   return request(`/api/plugins/${name}/package`, { method: 'DELETE' });
 }
 
+export function getPluginCatalogue(refresh = false): Promise<import('./types').PluginCatalogue> {
+  return request(`/api/plugin-catalogue?refresh=${refresh}`);
+}
+
+export function savePluginCatalogueSources(
+  sources: import('./types').PluginCatalogueSource[],
+): Promise<{ sources: import('./types').PluginCatalogueSource[] }> {
+  return request('/api/plugin-catalogue/sources', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ sources }),
+  });
+}
+
+export function installCataloguePlugin(
+  source: string,
+  plugin: string,
+  version?: string,
+): Promise<{ plugin: import('./types').PluginInfo; version: string }> {
+  return request('/api/plugin-catalogue/install', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ source, plugin, version: version || null, enable: true }),
+  });
+}
+
+export function rollbackPlugin(
+  name: string,
+  version?: string,
+): Promise<{ plugin: import('./types').PluginInfo; version: string }> {
+  return request(`/api/plugins/${encodeURIComponent(name)}/rollback`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ version: version || null }),
+  });
+}
+
 export function pluginUiUrl(name: string, entrypoint: string): string {
   const asset = entrypoint.replace(/^ui\//, '');
   return `${API_BASE}/api/plugin-ui/${encodeURIComponent(name)}/${asset
