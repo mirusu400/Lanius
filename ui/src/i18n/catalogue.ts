@@ -169,6 +169,10 @@ const en = {
   'target.statuses': 'Statuses',
   'target.noEndpoints':
     'No endpoints yet. Captured paths are grouped into templates here.',
+  'target.selectEndpoint': 'Select an endpoint to see its captured requests.',
+  'target.noEndpointRequests': 'No requests captured for this endpoint.',
+  'target.requestCount': '{count} requests',
+  'target.loadMoreRequests': 'Load more requests',
 
   // --- scope editor ---
   'scope.kind': 'rule kind',
@@ -843,6 +847,10 @@ const ko: Catalogue = {
   'target.statuses': '상태 코드',
   'target.noEndpoints':
     '엔드포인트가 없습니다. 트래픽을 캡처하면 경로가 템플릿으로 묶여 표시됩니다.',
+  'target.selectEndpoint': '엔드포인트를 선택하면 캡처된 요청이 표시됩니다.',
+  'target.noEndpointRequests': '이 엔드포인트에 기록된 요청이 없습니다.',
+  'target.requestCount': '요청 {count}건',
+  'target.loadMoreRequests': '요청 더 보기',
 
   'scope.kind': '규칙 종류',
   'scope.include': 'Include',

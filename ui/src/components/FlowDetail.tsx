@@ -21,6 +21,8 @@ import type { Translator } from '../i18n';
 interface Props {
   flow: FlowSummary | null;
   onSentToRepeater?: () => void;
+  splitStorageKey?: string;
+  initialSplit?: number;
 }
 
 /** How one half of the exchange is shown.
@@ -172,6 +174,7 @@ function Half({
             className="raw-view mono"
             readOnly
             spellCheck={false}
+            wrap="soft"
             value={raw || t('common.empty')}
           />
         )}
@@ -190,7 +193,7 @@ function Half({
   );
 }
 
-export function FlowDetailView({ flow, onSentToRepeater }: Props) {
+export function FlowDetailView({ flow, onSentToRepeater, splitStorageKey = 'lanius.split.detail', initialSplit = 0.5 }: Props) {
   const t = useT();
   const [detail, setDetail] = useState<FlowDetail | null>(null);
   const [reveal, setReveal] = useState(false);
@@ -384,7 +387,8 @@ export function FlowDetailView({ flow, onSentToRepeater }: Props) {
           came back is the usual reason to open a flow at all. */}
       <Split
         direction="vertical"
-        storageKey="lanius.split.detail"
+        storageKey={splitStorageKey}
+        initial={initialSplit}
         first={request}
         second={response}
       />

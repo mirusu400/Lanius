@@ -390,6 +390,25 @@ export function getEndpoints(
   return request(`/api/endpoints?${params}`);
 }
 
+export function getEndpointFlows(
+  endpoint: import('./types').EndpointGroup,
+  inScopeOnly = false,
+  limit = 200,
+  offset = 0,
+): Promise<{ items: import('./types').SitePath[]; count: number }> {
+  const params = new URLSearchParams({
+    scheme: endpoint.scheme,
+    host: endpoint.host,
+    method: endpoint.method,
+    template: endpoint.template,
+    in_scope_only: String(inScopeOnly),
+    limit: String(limit),
+    offset: String(offset),
+  });
+  if (endpoint.port !== null) params.set('port', String(endpoint.port));
+  return request(`/api/endpoints/flows?${params}`);
+}
+
 // --- intruder (M5) --------------------------------------------------------
 
 export function getPositions(

@@ -138,7 +138,7 @@ def build_endpoints(flows: Iterable[Any]) -> list[Endpoint]:
             del index
 
         example = path + (f"?{get('query')}" if get("query") else "")
-        if example not in endpoint.examples:
+        if len(endpoint.examples) < 5 and example not in endpoint.examples:
             endpoint.examples.append(example)
 
         started = get("started_at")
