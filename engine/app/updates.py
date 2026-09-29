@@ -20,6 +20,7 @@ from typing import Any
 
 from . import __version__
 from .build_info import build_info
+from .lockdown import LockdownPolicy
 
 REPO = "mirusu400/Lanius"
 RELEASES_URL = f"https://api.github.com/repos/{REPO}/releases"
@@ -115,8 +116,10 @@ def _entry(release: dict[str, Any], channel: str) -> dict[str, Any]:
     }
 
 
-async def _get_json(url: str) -> Any:
+async def _get_json(url: str, policy: LockdownPolicy | None = None) -> Any:
     """One GitHub call, with offline reported as itself."""
+    if policy is not None:
+        policy.require_outbound("update check")
     try:
         import httpx
     except ImportError as exc:  # pragma: no cover - httpx ships with us
@@ -150,15 +153,17 @@ async def _get_json(url: str) -> Any:
         raise UpdateError("GitHub returned something that is not JSON") from exc
 
 
-async def _fetch_releases() -> list[dict[str, Any]]:
+async def _fetch_releases(policy: LockdownPolicy | None = None) -> list[dict[str, Any]]:
     """Published releases, newest first."""
-    data = await _get_json(f"{RELEASES_URL}?per_page=20")
+    data = await _get_json(f"{RELEASES_URL}?per_page=20", policy)
     if not isinstance(data, list):
         raise UpdateError("GitHub returned something that is not a release list")
     return [item for item in data if isinstance(item, dict) and not item.get("draft")]
 
 
-async def _compare(base: str, head: str) -> str | None:
+async def _compare(
+    base: str, head: str, policy: LockdownPolicy | None = None
+) -> str | None:
     """`ahead`, `behind`, `identical`, or None when GitHub cannot say.
 
     Two different commits are not the same as being out of date: a
@@ -166,7 +171,7 @@ async def _compare(base: str, head: str) -> str | None:
     telling that user to update would be wrong.
     """
     try:
-        data = await _get_json(f"{COMPARE_URL}/{base}...{head}")
+        data = await _get_json(f"{COMPARE_URL}/{base}...{head}", policy)
     except UpdateError:
         # A commit that was never pushed cannot be compared, which is
         # not a failure worth reporting on its own.
@@ -190,7 +195,8 @@ def default_channel(current: dict[str, Any] | None = None) -> str:
 
 
 async def _verdict(
-    channel: str, latest: dict[str, Any] | None, current: dict[str, Any]
+    channel: str, latest: dict[str, Any] | None, current: dict[str, Any],
+    policy: LockdownPolicy | None = None,
 ) -> tuple[bool, str]:
     """Whether `latest` beats what is running, and how it was decided."""
     if latest is None:
@@ -217,7 +223,7 @@ async def _verdict(
     if current.get("dirty"):
         return False, "different"
 
-    status = await _compare(local_commit, remote_commit)
+    status = await _compare(local_commit, remote_commit, policy)
     if status == "ahead":
         return True, "behind"
     if status in ("behind", "identical"):
@@ -227,10 +233,22 @@ async def _verdict(
     return True, "different"
 
 
-async def check(*, channel: str | None = None, refresh: bool = False) -> dict[str, Any]:
+async def check(
+    *, channel: str | None = None, refresh: bool = False,
+    policy: LockdownPolicy | None = None,
+) -> dict[str, Any]:
     """What the newest build is, and whether it beats this one."""
     if channel is not None and channel not in CHANNELS:
         raise ValueError(f"unknown channel: {channel!r}")
+    if policy is not None:
+        async with policy.outbound("update check"):
+            return await _check(channel=channel, refresh=refresh, policy=policy)
+    return await _check(channel=channel, refresh=refresh, policy=None)
+
+
+async def _check(
+    *, channel: str | None, refresh: bool, policy: LockdownPolicy | None,
+) -> dict[str, Any]:
 
     current = build_info()
     chosen = channel or default_channel(current)
@@ -239,7 +257,7 @@ async def check(*, channel: str | None = None, refresh: bool = False) -> dict[st
     async with _lock:
         fresh = _cache is not None and (time.monotonic() - _cache_at) < CACHE_TTL
         if refresh or not fresh:
-            releases = await _fetch_releases()
+            releases = await _fetch_releases(policy)
             stable = next(
                 (
                     _entry(item, "stable")
@@ -261,7 +279,7 @@ async def check(*, channel: str | None = None, refresh: bool = False) -> dict[st
         found = dict(_cache or {"stable": None, "nightly": None})
 
     latest = found.get(chosen)
-    available, reason = await _verdict(chosen, latest, current)
+    available, reason = await _verdict(chosen, latest, current, policy)
     return {
         "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "channel": chosen,

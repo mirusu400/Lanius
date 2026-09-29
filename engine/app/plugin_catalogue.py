@@ -23,6 +23,7 @@ from packaging.version import InvalidVersion, Version
 from lanius_sdk import API_VERSION
 
 from . import __version__
+from .lockdown import LockdownBlocked
 from .plugin_packages import MAX_ARCHIVE_BYTES, PluginPackageError, PluginPackageManager
 
 CATALOGUE_SCHEMA = 1
@@ -274,12 +275,25 @@ class PluginCatalogueManager:
         packages: PluginPackageManager,
         *,
         fetch: Callable[[str, int], bytes] | None = None,
+        lockdown_enabled: Callable[[], bool] | None = None,
     ) -> None:
         self.sources_path = Path(sources_path)
         self.cache_directory = Path(cache_directory)
         self.revocations_path = Path(revocations_path)
         self.packages = packages
-        self.fetch = fetch or _default_fetch
+        self._fetch = fetch or _default_fetch
+        self.lockdown_enabled = lockdown_enabled or (lambda: False)
+
+    def fetch(self, url: str, limit: int) -> bytes:
+        """Every catalogue byte arrives through here, so guard it here.
+
+        Refreshing a catalogue and installing a release are Lanius-owned
+        downloads: Lockdown Mode refuses them even when a caller forgets to
+        check first.
+        """
+        if self.lockdown_enabled():
+            raise LockdownBlocked("plugin catalogue download")
+        return self._fetch(url, limit)
 
     def sources(self) -> list[CatalogueSource]:
         try:

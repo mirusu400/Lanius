@@ -19,7 +19,7 @@ import sys
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Callable, List
 
 from mitmproxy import hooks as mitm_hooks
 
@@ -287,6 +287,7 @@ class PluginManager:
         packages: PluginPackageManager | None = None,
         *,
         safe_mode: bool = False,
+        lockdown_enabled: Callable[[], bool] | None = None,
     ) -> None:
         self.directory = Path(directory)
         self.store = store
@@ -294,12 +295,29 @@ class PluginManager:
         self.addons = addons
         self.on_chain_changed = on_chain_changed
         self.safe_mode = safe_mode
+        self.lockdown_enabled = lockdown_enabled or (lambda: False)
         self.registry = registry or ContributionRegistry(store, user_values_path)
         self.packages = packages
         self.runtime_started = False
         self.plugins: dict[str, Plugin] = {}
         self._lock = asyncio.Lock()
         self._watch_task: asyncio.Task[None] | None = None
+
+    @property
+    def suspended(self) -> bool:
+        """Whether plugin code may not run at all.
+
+        Plugins are arbitrary Python and can open their own sockets, so
+        Lockdown Mode suspends them exactly as safe mode does. Every load
+        path goes through :meth:`_load`, which checks this.
+        """
+        return self.safe_mode or self.lockdown_enabled()
+
+    @property
+    def suspended_reason(self) -> str:
+        if self.safe_mode:
+            return "plugins are disabled by safe mode"
+        return "Lockdown Mode blocks plugin execution"
 
     # --- persistence --------------------------------------------------
     def _json_setting(self, key: str) -> list[str]:
@@ -467,7 +485,7 @@ class PluginManager:
                             await self._unload_async(existing)
                         else:
                             existing.meta = item.meta
-                        if existing.enabled and not self.safe_mode:
+                        if existing.enabled and not self.suspended:
                             try:
                                 await self._load_async(existing)
                             except PluginError:
@@ -590,7 +608,7 @@ class PluginManager:
         """Load enabled plugins before the mitmproxy master starts running."""
 
         self.discover()
-        if self.safe_mode:
+        if self.suspended:
             return
         for plugin in self._ordered_plugins():
             if plugin.enabled and not plugin.loaded:
@@ -598,6 +616,36 @@ class PluginManager:
                     self._load(plugin)
                 except PluginError:
                     logger.warning("plugin %s failed to load", plugin.name)
+
+    async def suspend_for_lockdown(self) -> None:
+        """Detach loaded plugins without changing their saved enabled state.
+
+        The enabled flags stay on disk, so turning Lockdown Mode off again
+        restores the same set of plugins.
+        """
+        async with self._lock:
+            for plugin in self.plugins.values():
+                if plugin.loaded:
+                    await self._unload_async(plugin)
+            self._publish()
+
+    async def resume_after_lockdown(self) -> None:
+        """Load enabled plugins again once Lockdown Mode is off.
+
+        `load_enabled` runs before the master does and cannot fire the
+        running hook, so a plugin resumed while the proxy is live needs the
+        async path instead.
+        """
+        if self.suspended:
+            return
+        async with self._lock:
+            for plugin in self._ordered_plugins():
+                if plugin.enabled and not plugin.loaded:
+                    try:
+                        await self._load_async(plugin)
+                    except PluginError:
+                        logger.warning("plugin %s failed to load", plugin.name)
+            self._publish()
 
     def _import(self, plugin: Plugin) -> Any:
         module_name = _module_name(plugin.name)
@@ -701,8 +749,8 @@ class PluginManager:
             invoke(obj, mitm_hooks.ConfigureHook(updated))
 
     def _load(self, plugin: Plugin) -> Plugin:
-        if self.safe_mode:
-            raise PluginError("plugins are disabled by safe mode")
+        if self.suspended:
+            raise PluginError(self.suspended_reason)
         plugin.uses_sdk = False
         try:
             module = self._import(plugin)

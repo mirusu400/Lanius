@@ -15,6 +15,7 @@ import type {
   WebSocketMessage,
   WebSocketState,
 } from './types';
+import { notifyLockdownBlocked } from '../lockdownEvents';
 
 /** Engine base URL. The desktop shell can change it while the UI is open. */
 export let API_BASE =
@@ -60,7 +61,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // no browser is installed. Reporting only the status threw that away
     // and left the user with "409 Conflict", or worse "409 undefined"
     // where the runtime has no statusText.
-    throw new Error(await errorDetail(res));
+    const detail = await errorDetail(res);
+    if (res.status === 423 && detail.startsWith('LOCKDOWN_MODE_BLOCKED')) {
+      notifyLockdownBlocked();
+      throw new Error('Lockdown Mode blocked external communication');
+    }
+    throw new Error(detail);
   }
   return (await res.json()) as T;
 }
@@ -1112,6 +1118,50 @@ export function checkUpdates(
   return request(`/api/updates${query ? `?${query}` : ''}`);
 }
 
+export interface LockdownStatus {
+  global_enabled: boolean;
+  project_enabled: boolean;
+  effective: boolean;
+}
+
+export function getLockdown(): Promise<LockdownStatus> {
+  return request('/api/lockdown');
+}
+
+export function setProjectLockdown(enabled: boolean): Promise<LockdownStatus> {
+  return request('/api/lockdown/project', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export interface GlobalLockdownStatus {
+  enabled: boolean;
+  forced: boolean;
+}
+
+export async function getGlobalLockdown(): Promise<GlobalLockdownStatus> {
+  const internals = shell();
+  if (!internals) {
+    const status = await getLockdown();
+    return { enabled: status.global_enabled, forced: status.global_enabled };
+  }
+  return (await internals.invoke('get_global_lockdown')) as GlobalLockdownStatus;
+}
+
+export async function setGlobalLockdown(enabled: boolean): Promise<GlobalLockdownStatus> {
+  const internals = shell();
+  if (!internals) throw new Error('Desktop shell is unavailable');
+  return (await internals.invoke('set_global_lockdown', { enabled })) as GlobalLockdownStatus;
+}
+
+export async function restartProjectEngine(): Promise<void> {
+  const internals = shell();
+  if (!internals) return;
+  await internals.invoke('restart_project_engine');
+}
+
 /** What the desktop shell's updater found, when the build has one.
  *
  * The engine answers "is there a newer build" by comparing commits; this
@@ -1155,7 +1205,12 @@ export function canInstallUpdates(): boolean {
 export async function desktopUpdateCheck(): Promise<UpdateOffer | null> {
   const internals = shell();
   if (!internals) return null;
-  return (await internals.invoke('update_check')) as UpdateOffer | null;
+  try {
+    return (await internals.invoke('update_check')) as UpdateOffer | null;
+  } catch (error) {
+    if (String(error).includes('LOCKDOWN_MODE_BLOCKED')) notifyLockdownBlocked();
+    throw error;
+  }
 }
 
 /** Download, install, and restart onto the new build.
@@ -1167,7 +1222,12 @@ export async function desktopUpdateCheck(): Promise<UpdateOffer | null> {
 export async function desktopUpdateInstall(): Promise<void> {
   const internals = shell();
   if (!internals) throw new Error('Desktop shell is unavailable');
-  await internals.invoke('update_install');
+  try {
+    await internals.invoke('update_install');
+  } catch (error) {
+    if (String(error).includes('LOCKDOWN_MODE_BLOCKED')) notifyLockdownBlocked();
+    throw error;
+  }
 }
 
 export async function desktopUpdateProgress(): Promise<UpdateProgress> {

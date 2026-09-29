@@ -32,6 +32,7 @@ from .plugin_packages import PluginPackageManager
 from .plugin_catalogue import PluginCatalogueManager
 from .addons.scope import ScopeManager
 from .config import Settings
+from .lockdown import LockdownPolicy
 from .db.store import FlowStore
 from .events import EventBroker
 from .tls import (
@@ -223,11 +224,13 @@ class ProxyEngine:
     """Runs mitmproxy inside the app's asyncio loop."""
 
     def __init__(
-        self, settings: Settings, store: FlowStore, broker: EventBroker
+        self, settings: Settings, store: FlowStore, broker: EventBroker,
+        lockdown: LockdownPolicy | None = None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.broker = broker
+        self.lockdown = lockdown or LockdownPolicy.from_env(store)
         self.master: DumpMaster | None = None
         self.scope = ScopeManager(store, broker)
         self.capture = CaptureAddon(store, broker, self.scope)
@@ -254,6 +257,7 @@ class ProxyEngine:
             settings.plugin_catalogue_cache,
             settings.plugin_revocations,
             self.plugin_packages,
+            lockdown_enabled=lambda: self.lockdown.enabled,
         )
         self.plugins = PluginManager(
             settings.plugins_dir,
@@ -263,6 +267,7 @@ class ProxyEngine:
             user_values_path=settings.data_dir / "plugin-values.json",
             packages=self.plugin_packages,
             safe_mode=settings.disable_plugins,
+            lockdown_enabled=lambda: self.lockdown.enabled,
         )
         self.scanner = ScannerAddon(
             self.plugins.registry,

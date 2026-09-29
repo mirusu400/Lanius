@@ -3,9 +3,13 @@
 import { useState } from 'react';
 import {
   exportProject,
+  getLockdown,
   importProjectFile,
   projectBackupUrl,
+  restartProjectEngine,
 } from '../../api/client';
+import { notifyLockdownChanged } from '../../lockdownEvents';
+import { resetUpdates } from '../../updates';
 import type { Project } from '../../projects';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import {
@@ -68,6 +72,15 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
           scope: String(result.scope ?? 0),
         }),
       );
+      try {
+        const lockdown = await getLockdown();
+        if (lockdown.effective) resetUpdates();
+        if (lockdown.project_enabled) await restartProjectEngine();
+      } catch (err) {
+        setError(rawMsg(String(err instanceof Error ? err.message : err)));
+      } finally {
+        notifyLockdownChanged();
+      }
     } catch (err) {
       setError(msg('project.importFailed', { message: (err as Error).message }));
     } finally {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { API_BASE, setDesktopApiPort } from './api/client';
+import { API_BASE, getGlobalLockdown, setDesktopApiPort, setGlobalLockdown, type GlobalLockdownStatus } from './api/client';
 import { useT } from './i18n';
 import {
   createProject,
@@ -20,6 +20,7 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
   const [currentPort, setCurrentPort] = useState(new URL(API_BASE).port);
   const [port, setPort] = useState(currentPort);
   const [portNote, setPortNote] = useState(false);
+  const [lockdownGlobal, setLockdownGlobal] = useState<GlobalLockdownStatus | null>(null);
 
   useEffect(() => {
     void listProjects()
@@ -27,6 +28,24 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
       .catch((err: unknown) => setError(String(err)))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    void getGlobalLockdown()
+      .then(setLockdownGlobal)
+      .catch((err: unknown) => setError(String(err)));
+  }, []);
+
+  const toggleGlobalLockdown = async (enabled: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setLockdownGlobal(await setGlobalLockdown(enabled));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const start = async (action: () => Promise<Project>) => {
     setBusy(true);
@@ -67,6 +86,17 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
         <p className="muted">{t('startup.intro')}</p>
 
         {error && <div className="banner error" role="alert">{error}</div>}
+
+        <label className="project-picker-lockdown lockdown-label">
+          <input
+            type="checkbox"
+            checked={lockdownGlobal?.enabled ?? false}
+            disabled={busy || lockdownGlobal === null || lockdownGlobal.forced}
+            onChange={(event) => void toggleGlobalLockdown(event.target.checked)}
+          />{' '}
+          {t('lockdown.global')}
+        </label>
+        <p className="muted">{lockdownGlobal?.forced ? t('lockdown.forced') : t('lockdown.globalHelp')}</p>
 
         <div className="project-picker-port">
           <label htmlFor="startup-api-port">{t('mcp.port')}</label>

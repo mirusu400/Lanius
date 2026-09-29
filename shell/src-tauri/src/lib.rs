@@ -3,6 +3,7 @@
 //! Owns the window and the Python engine lifecycle: the engine runs as a
 //! sidecar process (codex.md §4) and is shut down when the app exits.
 
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -78,27 +79,72 @@ fn port_override(var: &str, default: u16) -> u16 {
 
 #[derive(Deserialize, Serialize)]
 struct DesktopSettings {
+    #[serde(default = "default_api_port")]
     api_port: u16,
+    #[serde(default)]
+    lockdown_global: bool,
+}
+
+impl Default for DesktopSettings {
+    fn default() -> Self {
+        Self {
+            api_port: DEFAULT_API_PORT,
+            lockdown_global: false,
+        }
+    }
+}
+
+fn default_api_port() -> u16 {
+    DEFAULT_API_PORT
+}
+
+#[derive(Serialize)]
+struct GlobalLockdown {
+    enabled: bool,
+    forced: bool,
 }
 
 fn desktop_settings_path() -> Result<PathBuf, String> {
     Ok(projects::home()?.join("desktop.json"))
 }
 
+fn read_desktop_settings() -> Result<DesktopSettings, String> {
+    let path = desktop_settings_path()?;
+    match std::fs::read(path) {
+        Ok(data) => serde_json::from_slice(&data).map_err(|err| err.to_string()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(DesktopSettings::default()),
+        Err(err) => Err(err.to_string()),
+    }
+}
+
+fn save_desktop_settings(settings: &DesktopSettings) -> Result<(), String> {
+    let path = desktop_settings_path()?;
+    std::fs::create_dir_all(path.parent().ok_or("invalid settings path")?)
+        .map_err(|err| err.to_string())?;
+    let data = serde_json::to_vec_pretty(settings).map_err(|err| err.to_string())?;
+    std::fs::write(path, data).map_err(|err| err.to_string())
+}
+
 fn saved_api_port() -> Option<u16> {
-    let path = desktop_settings_path().ok()?;
-    let data = std::fs::read(path).ok()?;
-    let settings: DesktopSettings = serde_json::from_slice(&data).ok()?;
+    let settings = read_desktop_settings().ok()?;
     (settings.api_port > 0).then_some(settings.api_port)
 }
 
 fn save_api_port(port: u16) -> Result<(), String> {
-    let path = desktop_settings_path()?;
-    std::fs::create_dir_all(path.parent().ok_or("invalid settings path")?)
-        .map_err(|err| err.to_string())?;
-    let data = serde_json::to_vec_pretty(&DesktopSettings { api_port: port })
-        .map_err(|err| err.to_string())?;
-    std::fs::write(path, data).map_err(|err| err.to_string())
+    let mut settings = read_desktop_settings()?;
+    settings.api_port = port;
+    save_desktop_settings(&settings)
+}
+
+fn lockdown_forced() -> bool {
+    std::env::var("LANIUS_LOCKDOWN").as_deref() == Ok("1")
+}
+
+fn global_lockdown() -> bool {
+    lockdown_forced()
+        || read_desktop_settings()
+            .map(|settings| settings.lockdown_global)
+            .unwrap_or(true)
 }
 
 /// The API port this run should use.
@@ -282,6 +328,10 @@ fn start_engine(
         // hardcoding it would leave the app unable to start at all.
         .env("LANIUS_API_PORT", api_port().to_string())
         .env("LANIUS_PROXY_PORT", proxy_port().to_string())
+        .env(
+            "LANIUS_LOCKDOWN_GLOBAL",
+            if global_lockdown() { "1" } else { "0" },
+        )
         // The engine watches us and exits if we die without cleanup
         // (SIGKILL, crash), so it can never orphan the proxy ports.
         .env("LANIUS_WATCH_PARENT", "1")
@@ -414,6 +464,180 @@ fn engine_info(state: State<'_, EngineProcess>) -> EngineInfo {
 #[tauri::command]
 fn engine_running() -> bool {
     port_open(api_port())
+}
+
+const LOCKDOWN_BLOCKED: &str = "LOCKDOWN_MODE_BLOCKED";
+/// Still a refusal, and still matched by the UI's prefix check, but it says
+/// the engine never answered rather than blaming a setting the user did not
+/// make. A restarting engine is the common cause.
+const UNCONFIRMED: &str =
+    "LOCKDOWN_MODE_BLOCKED: the engine did not confirm whether this project is locked";
+
+#[tauri::command]
+fn get_global_lockdown() -> Result<GlobalLockdown, String> {
+    // Report the value the engine will actually be started with, including
+    // the locked reading of a settings file that cannot be parsed. Returning
+    // an error here would disable the checkbox and leave no way out.
+    Ok(GlobalLockdown {
+        enabled: global_lockdown(),
+        forced: lockdown_forced(),
+    })
+}
+
+#[tauri::command]
+async fn set_global_lockdown(
+    enabled: bool,
+    app: tauri::AppHandle,
+) -> Result<GlobalLockdown, String> {
+    tauri::async_runtime::spawn_blocking(move || change_global_lockdown(enabled, &app))
+        .await
+        .map_err(|err| err.to_string())?
+}
+
+#[tauri::command]
+async fn restart_project_engine(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let engine = app.state::<EngineProcess>();
+        let session = app.state::<ProjectSession>();
+        let active = session.0.lock().expect("project lock");
+        let project = active.as_ref().ok_or("no project is open")?;
+        let dir = project
+            .db_path
+            .parent()
+            .ok_or("invalid project directory")?;
+        stop_engine(&engine);
+        start_engine(&app, &engine, dir)
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+fn change_global_lockdown(enabled: bool, app: &tauri::AppHandle) -> Result<GlobalLockdown, String> {
+    if lockdown_forced() && !enabled {
+        return Err("LANIUS_LOCKDOWN forces Lockdown Mode on".to_string());
+    }
+    // A settings file that cannot be parsed reads as locked. Start from the
+    // defaults so the user's own toggle can rewrite it, which is the only way
+    // back out of that state.
+    let was = global_lockdown();
+    let mut settings = read_desktop_settings().unwrap_or_default();
+    if was == enabled && settings.lockdown_global == enabled {
+        return get_global_lockdown();
+    }
+    let old = settings.lockdown_global;
+    let engine = app.state::<EngineProcess>();
+    let session = app.state::<ProjectSession>();
+    let active = session.0.lock().expect("project lock");
+    settings.lockdown_global = enabled;
+    save_desktop_settings(&settings)?;
+    if let Some(project) = active.as_ref() {
+        stop_engine(&engine);
+        let dir = project
+            .db_path
+            .parent()
+            .ok_or("invalid project directory")?;
+        if let Err(err) = start_engine(app, &engine, dir) {
+            settings.lockdown_global = old;
+            let rollback =
+                save_desktop_settings(&settings).and_then(|_| start_engine(app, &engine, dir));
+            return Err(match rollback {
+                Ok(()) => {
+                    format!("could not change Lockdown Mode: {err}; previous setting restored")
+                }
+                Err(rollback_err) => {
+                    format!("could not change Lockdown Mode: {err}; restore failed: {rollback_err}")
+                }
+            });
+        }
+    }
+    get_global_lockdown()
+}
+
+/// Fail closed if the active engine cannot confirm that its project is unlocked.
+fn require_product_egress() -> Result<(), String> {
+    if global_lockdown() {
+        return Err(LOCKDOWN_BLOCKED.to_string());
+    }
+    project_egress_allowed().map_err(|_| UNCONFIRMED.to_string())?
+}
+
+/// Ask the running engine whether the open project is locked.
+///
+/// `Err` means the answer never arrived, which is not the same as a locked
+/// project; both refuse, but only one of them is the user's own setting.
+fn project_egress_allowed() -> Result<Result<(), String>, ()> {
+    let address = format!("{API_HOST}:{}", api_port());
+    let socket = address.parse().map_err(|_| ())?;
+    let mut stream =
+        TcpStream::connect_timeout(&socket, Duration::from_millis(500)).map_err(|_| ())?;
+    stream
+        .set_read_timeout(Some(Duration::from_millis(500)))
+        .map_err(|_| ())?;
+    stream
+        .write_all(
+            b"GET /api/lockdown HTTP/1.1
+
+Host: localhost
+
+Connection: close
+
+
+
+",
+        )
+        .map_err(|_| ())?;
+    let mut response = Vec::new();
+    stream
+        .take(4096)
+        .read_to_end(&mut response)
+        .map_err(|_| ())?;
+    let response = String::from_utf8(response).map_err(|_| ())?;
+    let (headers, body) = response
+        .split_once(
+            "
+
+
+
+",
+        )
+        .ok_or(())?;
+    if !headers.starts_with("HTTP/1.1 200 ") {
+        return Err(());
+    }
+    let status: serde_json::Value = serde_json::from_str(body).map_err(|_| ())?;
+    match status.get("effective").and_then(serde_json::Value::as_bool) {
+        Some(false) => Ok(Ok(())),
+        Some(true) => Ok(Err(LOCKDOWN_BLOCKED.to_string())),
+        None => Err(()),
+    }
+}
+
+/// `require_product_egress` blocks on a local socket; keep it off the async
+/// runtime's worker threads.
+async fn check_product_egress() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(require_product_egress)
+        .await
+        .map_err(|_| LOCKDOWN_BLOCKED.to_string())?
+}
+
+/// Keep checking while the native updater owns a network connection. Dropping
+/// its future stops a check or download when either checkbox turns on.
+async fn monitored_product_egress<T, F>(operation: F) -> Result<T, String>
+where
+    F: std::future::Future<Output = Result<T, String>>,
+{
+    check_product_egress().await?;
+    tokio::pin!(operation);
+    loop {
+        tokio::select! {
+            // Once the operation has finished its packets are gone; refusing
+            // the result then would only leave an installed update unapplied.
+            result = &mut operation => return result,
+            _ = tokio::time::sleep(Duration::from_millis(250)) => {
+                check_product_egress().await?;
+            }
+        }
+    }
 }
 
 /// Change the local API/MCP port and restart the active project's engine.
@@ -626,7 +850,9 @@ pub struct UpdateProgressReport {
 #[tauri::command]
 async fn update_check(app: tauri::AppHandle) -> Result<Option<UpdateOffer>, String> {
     let updater = app.updater().map_err(|err| err.to_string())?;
-    let found = updater.check().await.map_err(|err| err.to_string())?;
+    let found =
+        monitored_product_egress(async { updater.check().await.map_err(|err| err.to_string()) })
+            .await?;
     Ok(found.map(|update| UpdateOffer {
         version: update.version.clone(),
         current_version: update.current_version.clone(),
@@ -643,31 +869,33 @@ async fn update_check(app: tauri::AppHandle) -> Result<Option<UpdateOffer>, Stri
 #[tauri::command]
 async fn update_install(app: tauri::AppHandle) -> Result<(), String> {
     let updater = app.updater().map_err(|err| err.to_string())?;
-    let update = updater
-        .check()
-        .await
-        .map_err(|err| err.to_string())?
-        .ok_or("there is no newer build to install")?;
+    let update =
+        monitored_product_egress(async { updater.check().await.map_err(|err| err.to_string()) })
+            .await?
+            .ok_or("there is no newer build to install")?;
 
     let progress = app.state::<Arc<UpdateProgress>>().inner().clone();
     progress.downloaded.store(0, Ordering::Relaxed);
     progress.total.store(0, Ordering::Relaxed);
 
     let counter = progress.clone();
-    update
-        .download_and_install(
-            move |chunk, total| {
-                counter
-                    .downloaded
-                    .fetch_add(chunk as u64, Ordering::Relaxed);
-                if let Some(total) = total {
-                    counter.total.store(total, Ordering::Relaxed);
-                }
-            },
-            || {},
-        )
-        .await
-        .map_err(|err| err.to_string())?;
+    monitored_product_egress(async {
+        update
+            .download_and_install(
+                move |chunk, total| {
+                    counter
+                        .downloaded
+                        .fetch_add(chunk as u64, Ordering::Relaxed);
+                    if let Some(total) = total {
+                        counter.total.store(total, Ordering::Relaxed);
+                    }
+                },
+                || {},
+            )
+            .await
+            .map_err(|err| err.to_string())
+    })
+    .await?;
 
     end_project(
         &app.state::<EngineProcess>(),
@@ -697,6 +925,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             engine_info,
             engine_running,
+            get_global_lockdown,
+            set_global_lockdown,
+            restart_project_engine,
             set_api_port,
             set_window_theme,
             list_projects,

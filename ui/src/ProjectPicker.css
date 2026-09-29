@@ -22,6 +22,13 @@
 .project-picker h2 { margin: 0 0 8px; font-size: 1.12em; }
 .project-picker p { margin: 0 0 18px; }
 
+.project-picker-lockdown {
+  display: block;
+  margin-top: 20px;
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .project-picker-port {
   display: flex;
   align-items: center;

@@ -52,6 +52,7 @@ from ..plugin_packages import (
 from ..plugin_catalogue import PluginCatalogueError
 from .. import codegen
 from ..build_info import build_info
+from ..lockdown import BLOCKED_DETAIL, LockdownBlocked, LockdownPolicy
 from .. import updates
 from ..addons.scope import ScopeError, rule_from_url
 from .. import browser
@@ -111,6 +112,10 @@ class MatchReplacePreviewBody(MatchReplaceBody):
 
 class BodyDisplayPatch(BaseModel):
     auto_decompress: bool
+
+
+class LockdownPatch(BaseModel):
+    enabled: bool
 
 
 class WebSocketRulesPatch(BaseModel):
@@ -333,6 +338,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.ensure_dirs()
     store = FlowStore(settings.db_path)
+    lockdown = LockdownPolicy.from_env(store)
 
     # Notable (non per-flow) events are persisted for the Logger tab.
     LOGGED_EVENTS = (
@@ -357,7 +363,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             logger.exception("failed to log event %s", event_type)
 
     broker = EventBroker(on_publish=_log_event)
-    engine = ProxyEngine(settings, store, broker)
+    engine = ProxyEngine(settings, store, broker, lockdown)
 
     # Built below, then started by the lifespan (its session manager needs a
     # running task group before it can serve requests).
@@ -383,6 +389,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 store.close()
 
     app = FastAPI(title="Lanius Engine", version=__version__, lifespan=lifespan)
+
+    @app.exception_handler(LockdownBlocked)
+    async def lockdown_blocked(_request: Request, _error: LockdownBlocked) -> JSONResponse:
+        return JSONResponse(status_code=423, content={"detail": BLOCKED_DETAIL})
 
     # MCP over streamable HTTP, on the same local-only port (codex.md §10).
     try:
@@ -458,6 +468,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.store = store
     app.state.broker = broker
     app.state.engine = engine
+    app.state.lockdown = lockdown
+
+    async def _apply_lockdown_to_plugins(locked: bool) -> None:
+        """Plugins are arbitrary Python, so they follow the mode both ways."""
+        if locked:
+            await engine.plugins.suspend_for_lockdown()
+        else:
+            await engine.plugins.resume_after_lockdown()
+
+    @app.get("/api/lockdown")
+    async def lockdown_status() -> dict[str, Any]:
+        return lockdown.status()
+
+    @app.put("/api/lockdown/project")
+    async def set_project_lockdown(body: LockdownPatch) -> dict[str, Any]:
+        result = lockdown.set_project(body.enabled)
+        await _apply_lockdown_to_plugins(result["effective"])
+        return result
 
     @app.get("/api/status")
     async def status() -> dict[str, Any]:
@@ -581,11 +609,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=422, detail=f"unsupported project version: {version!r}"
             )
+        was_locked = lockdown.project_enabled
         counts = await asyncio.to_thread(store.import_project, payload)
+        # Project exports carry this setting too. Apply an imported switch
+        # before any pending product request can continue. A file can turn
+        # Lockdown on but never off: only the user's own switch loosens it.
+        lockdown.set_project(was_locked or lockdown.project_enabled)
         # The scope lives in memory once loaded, so without this the
         # imported rules sit in the database and affect nothing.
         scope = await asyncio.to_thread(engine.scope.reload)
         engine.match_replace.reload()
+        await _apply_lockdown_to_plugins(lockdown.enabled)
         broker.publish("scope.changed", scope.as_dict())
         broker.publish("project.imported", counts)
         return {"ok": True, **counts}
@@ -953,7 +987,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         not phone home on its own.
         """
         try:
-            return await updates.check(channel=channel, refresh=refresh)
+            return await updates.check(channel=channel, refresh=refresh, policy=lockdown)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except updates.UpdateError as exc:
@@ -1553,7 +1587,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         on its own is not one to trust.
         """
         try:
-            entry, payloads = await wordlists.fetch(body.list_id)
+            entry, payloads = await wordlists.fetch(body.list_id, lockdown)
         except wordlists.WordlistError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         try:
@@ -1672,6 +1706,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/plugins/{name}/enable")
     async def enable_plugin(name: str) -> dict[str, Any]:
+        lockdown.require_outbound("plugin execution")
         try:
             return (await engine.plugins.enable_async(name)).as_dict()
         except PluginError as exc:
@@ -1687,6 +1722,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/plugins/{name}/reload")
     async def reload_plugin(name: str) -> dict[str, Any]:
+        lockdown.require_outbound("plugin execution")
         try:
             return (await engine.plugins.reload_async(name)).as_dict()
         except PluginError as exc:
@@ -1786,6 +1822,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/plugin-catalogue")
     async def plugin_catalogue(refresh: bool = False) -> dict[str, Any]:
+        # Only a refresh leaves the machine; the cached catalogue is local.
+        if refresh:
+            lockdown.require_outbound("plugin catalogue refresh")
         try:
             result = await asyncio.to_thread(
                 engine.plugin_catalogue.catalogue, refresh=refresh
@@ -1814,6 +1853,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def install_catalogue_plugin(
         payload: PluginCatalogueInstallBody,
     ) -> dict[str, Any]:
+        # Refuse before the installed plugin is torn down, so a blocked
+        # install leaves the working one running.
+        lockdown.require_outbound("plugin catalogue install")
         existing = engine.plugins.plugins.get(payload.plugin)
         restore_enabled = bool(existing and existing.enabled)
         if existing is not None and (existing.loaded or existing.enabled):

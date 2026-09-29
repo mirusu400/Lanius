@@ -22,6 +22,7 @@ import { CaSection } from "./settings/CaSection";
 import { CaptureSection } from "./settings/CaptureSection";
 import { EngineSection } from "./settings/EngineSection";
 import { LanguageSection } from "./settings/LanguageSection";
+import { LockdownSection } from "./settings/LockdownSection";
 import { ListenerSection } from "./settings/ListenerSection";
 import { McpSection } from "./settings/McpSection";
 import { MatchReplaceSection } from "./settings/MatchReplaceSection";
@@ -38,6 +39,7 @@ const GROUPS = [
   "browser",
   "appearance",
   "integrations",
+  "security",
   "project",
   "about",
 ] as const;
@@ -80,7 +82,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
         {GROUPS.map((name) => (
           <button
             key={name}
-            className={group === name ? "active" : ""}
+            className={`${group === name ? "active" : ""} ${name === "security" ? "lockdown-tab" : ""}`.trim()}
             onClick={() => choose(name)}
           >
             {t(`settings.group.${name}`)}
@@ -123,6 +125,8 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
         )}
 
         {group === "integrations" && <McpSection />}
+
+        {group === "security" && <LockdownSection />}
 
         {group === "project" && (
           <>
