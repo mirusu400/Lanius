@@ -392,8 +392,10 @@ choice is remembered.
 
 Plugins are ordinary mitmproxy addons. Drop a Python file into
 `~/.lanius/plugins`, then enable it from the **Plugins** tab. It applies to
-live traffic immediately, and you can reload it after an edit without
-restarting.
+live traffic immediately. Plugins can be reordered, reloaded manually, or
+watched and reloaded automatically after an edit without restarting. Set
+`LANIUS_DISABLE_PLUGINS=1` before launch to inspect a project in plugin safe
+mode.
 
 ```python
 DESCRIPTION = "Tag responses that are missing a CSP header"

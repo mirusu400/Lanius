@@ -471,6 +471,9 @@ def register_format(
     """
     if kind in GENERATORS:
         raise ValueError(f"{kind!r} is a built-in format")
+    if kind in _PLUGIN_FORMATS:
+        existing_owner = _PLUGIN_FORMATS[kind][0]
+        raise ValueError(f"{kind!r} is already registered by {existing_owner!r}")
     _PLUGIN_FORMATS[kind] = (owner, label, generator)
 
 

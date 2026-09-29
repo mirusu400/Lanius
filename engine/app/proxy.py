@@ -245,6 +245,7 @@ class ProxyEngine:
             store,
             broker,
             on_chain_changed=self._reorder_capture_last,
+            safe_mode=settings.disable_plugins,
         )
         self._task: asyncio.Task[None] | None = None
         # Why the proxy is not listening, when it failed to start. The API
@@ -392,6 +393,7 @@ class ProxyEngine:
             self.master = self._build_master()
             self._task = asyncio.create_task(self.master.run(), name="lanius-proxy")
             await self._await_bind()
+            await self.plugins.start_runtime()
         except Exception as exc:
             self.start_error = str(exc)
             await self.stop()
@@ -754,6 +756,7 @@ class ProxyEngine:
     async def stop(self) -> None:
         self.intercept.resume_all()
         self.websockets.resume_all()
+        await self.plugins.stop_runtime()
         if self.master is not None:
             await self._stop_listeners()
             self.master.shutdown()
@@ -765,6 +768,7 @@ class ProxyEngine:
             except Exception:  # pragma: no cover - defensive
                 logger.exception("proxy shutdown error")
         await self.capture.done()
+        self.plugins.master_stopped()
         self._task = None
         self.master = None
         if self._upstream_bridge is not None:

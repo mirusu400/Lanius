@@ -583,6 +583,7 @@ export function compareTexts(
 export function listPlugins(): Promise<{
   items: import('./types').PluginInfo[];
   directory: string;
+  safe_mode: boolean;
 }> {
   return request('/api/plugins');
 }
@@ -600,6 +601,25 @@ export function reloadPlugin(
   name: string,
 ): Promise<import('./types').PluginInfo> {
   return request(`/api/plugins/${name}/reload`, { method: 'POST' });
+}
+
+export function setPluginOrder(
+  names: string[],
+): Promise<{ items: import('./types').PluginInfo[] }> {
+  return request('/api/plugins/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(names),
+  });
+}
+
+export function setPluginAutoReload(
+  name: string,
+  enabled: boolean,
+): Promise<import('./types').PluginInfo> {
+  return request(`/api/plugins/${name}/auto-reload?enabled=${enabled}`, {
+    method: 'PATCH',
+  });
 }
 
 // --- logger / CA ----------------------------------------------------------

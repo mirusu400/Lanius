@@ -16,6 +16,13 @@ def _default_data_dir() -> Path:
     return Path(os.environ.get("LANIUS_DATA_DIR", Path.home() / ".lanius"))
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(slots=True)
 class Settings:
     proxy_host: str = "127.0.0.1"
@@ -32,6 +39,7 @@ class Settings:
     # Hosts forced through the raw TCP layer instead of HTTP parsing.
     tcp_hosts: list[str] = None  # type: ignore[assignment]
     plugins_dir: Path = None  # type: ignore[assignment]
+    disable_plugins: bool = False
 
     def __post_init__(self) -> None:
         if self.data_dir is None:
@@ -63,6 +71,7 @@ class Settings:
             api_host=os.environ.get("LANIUS_API_HOST", "127.0.0.1"),
             api_port=int(os.environ.get("LANIUS_API_PORT", "12954")),
             log_level=os.environ.get("LANIUS_LOG_LEVEL", "info"),
+            disable_plugins=_env_bool("LANIUS_DISABLE_PLUGINS"),
         )
 
     def ensure_dirs(self) -> None:

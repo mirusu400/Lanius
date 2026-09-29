@@ -20,6 +20,8 @@ const base: PluginInfo = {
   version: '1.0.0',
   author: 'tester',
   hooks: ['request'],
+  order: 0,
+  auto_reload: false,
 };
 
 function jsonResponse(body: unknown, ok = true) {
@@ -46,11 +48,27 @@ beforeEach(() => {
   ];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       calls.push(url);
       if (url.endsWith('/api/plugins')) {
-        return jsonResponse({ items: plugins, directory: '/home/u/.lanius/plugins' });
+        return jsonResponse({ items: plugins, directory: '/home/u/.lanius/plugins', safe_mode: false });
+      }
+      if (url.endsWith('/api/plugins/order')) {
+        const names = JSON.parse(String(init?.body)) as string[];
+        plugins = names.map((name, order) => ({
+          ...plugins.find((plugin) => plugin.name === name)!,
+          order,
+        }));
+        return jsonResponse({ items: plugins });
+      }
+      if (url.includes('/auto-reload')) {
+        const name = url.split('/api/plugins/')[1].split('/')[0];
+        const enabled = url.endsWith('enabled=true');
+        plugins = plugins.map((plugin) =>
+          plugin.name === name ? { ...plugin, auto_reload: enabled } : plugin,
+        );
+        return jsonResponse(plugins.find((plugin) => plugin.name === name));
       }
       if (url.includes('/broken/enable')) {
         return jsonResponse({ detail: 'RuntimeError: boom' }, false);
@@ -127,6 +145,23 @@ describe('PluginsTab', () => {
     await waitFor(() =>
       expect(calls.some((c) => c.endsWith('/stamp/reload'))).toBe(true),
     );
+  });
+
+  it('changes plugin order', async () => {
+    const user = userEvent.setup();
+    plugins = plugins.map((plugin, order) => ({ ...plugin, order }));
+    render(<PluginsTab />);
+    await user.click(await screen.findByLabelText(t('plugins.moveDownLabel', { name: 'stamp' })));
+    await waitFor(() => expect(calls.some((call) => call.endsWith('/api/plugins/order'))).toBe(true));
+    expect(plugins.map((plugin) => plugin.name)).toEqual(['broken', 'stamp']);
+  });
+
+  it('enables automatic reload for a plugin', async () => {
+    const user = userEvent.setup();
+    render(<PluginsTab />);
+    await user.click(await screen.findByLabelText(t('plugins.autoReloadLabel', { name: 'stamp' })));
+    await waitFor(() => expect(calls.some((call) => call.includes('/auto-reload?enabled=true'))).toBe(true));
+    expect(plugins[0].auto_reload).toBe(true);
   });
 
   it('explains an empty plugin directory', async () => {

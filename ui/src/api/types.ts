@@ -351,6 +351,8 @@ export interface PluginInfo {
   version: string | null;
   author: string | null;
   hooks: string[];
+  order: number;
+  auto_reload: boolean;
 }
 
 // --- dashboard ------------------------------------------------------------
