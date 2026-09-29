@@ -1,6 +1,6 @@
 import type { FlowSummary } from '../api/types';
 import { useT } from '../i18n';
-import { ResizableHeader, useResizableColumns } from './ResizableColumns';
+import { ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
 import {
   formatBytes,
   formatDuration,
@@ -26,8 +26,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu }: Props)
   ];
   return (
     <div className="flow-table-wrap">
-      <table className="flow-table" style={{ width: `max(100%, ${columns.widths.reduce((sum, width) => sum + width, 0)}px)` }}>
-        <colgroup>{columns.widths.map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
+      <ResizableTable columns={columns} className="flow-table">
         <thead>
           <tr>
             {headers.map((label, index) => (
@@ -83,7 +82,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu }: Props)
             </tr>
           ))}
         </tbody>
-      </table>
+      </ResizableTable>
     </div>
   );
 }

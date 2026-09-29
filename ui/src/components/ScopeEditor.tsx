@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { ScopeState } from '../api/types';
 import { describeRule, summarizeScope } from '../tabs/targetModel';
 import { useT } from '../i18n';
+import { ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
 
 interface Props {
   scope: ScopeState;
@@ -20,6 +21,7 @@ export function ScopeEditor({
   onRestrictCapture,
 }: Props) {
   const t = useT();
+  const columns = useResizableColumns('lanius.columns.scope', [120, 480, 100, 100]);
   const [url, setUrl] = useState('');
   const [kind, setKind] = useState<'include' | 'exclude'>('include');
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +68,7 @@ export function ScopeEditor({
           {t('scope.restrictCapture')}
         </label>
       </div>
+      <p className="muted scope-pattern-hint">{t('scope.hostPatternHint')}</p>
       {error && <div className="banner error">{error}</div>}
       <div className="scope-summary muted">
         {t('scope.summary', {
@@ -74,13 +77,12 @@ export function ScopeEditor({
         })}
         {summary.includes === 0 && t('scope.noIncludeHint')}
       </div>
-      <table className="flow-table scope-table">
+      <ResizableTable columns={columns} className="flow-table scope-table">
         <thead>
           <tr>
-            <th className="col-method">{t('scope.kind')}</th>
-            <th>{t('scope.rule')}</th>
-            <th className="col-size">{t('common.enabled')}</th>
-            <th className="col-size" />
+            {[t('scope.kind'), t('scope.rule'), t('common.enabled'), t('common.delete')].map((label, index) => (
+              <ResizableHeader key={index} label={label} index={index} columns={columns} resizeLabel={t('table.resizeColumn', { column: label })} />
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -119,7 +121,7 @@ export function ScopeEditor({
             </tr>
           ))}
         </tbody>
-      </table>
+      </ResizableTable>
     </div>
   );
 }

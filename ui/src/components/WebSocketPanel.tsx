@@ -15,6 +15,7 @@ import type {
   WebSocketMessage,
 } from '../api/types';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
+import { ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
 
 const DEFAULT_RULES: WebSocketInterceptRules = {
   enabled: false,
@@ -24,6 +25,7 @@ const DEFAULT_RULES: WebSocketInterceptRules = {
 
 export function WebSocketPanel() {
   const t = useT();
+  const columns = useResizableColumns('lanius.columns.websocket', [110, 300, 80, 100]);
   const [rules, setRules] = useState(DEFAULT_RULES);
   const [connections, setConnections] = useState<WebSocketConnection[]>([]);
   const [messages, setMessages] = useState<WebSocketMessage[]>([]);
@@ -162,8 +164,12 @@ export function WebSocketPanel() {
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
       <div className="websocket-split">
         <div className="websocket-list">
-          <table>
-            <thead><tr><th>{t('websocket.direction')}</th><th>{t('flow.host')}</th><th>{t('flow.size')}</th><th>{t('common.status')}</th></tr></thead>
+          <ResizableTable columns={columns} className="websocket-table">
+            <thead><tr>
+              {[t('websocket.direction'), t('flow.host'), t('flow.size'), t('common.status')].map((label, index) => (
+                <ResizableHeader key={index} label={label} index={index} columns={columns} resizeLabel={t('table.resizeColumn', { column: label })} />
+              ))}
+            </tr></thead>
             <tbody>
               {messages.map((message) => (
                 <tr key={message.id} className={message.id === selectedId ? 'selected' : undefined} onClick={() => setSelectedId(message.id)}>
@@ -174,7 +180,7 @@ export function WebSocketPanel() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </ResizableTable>
           {messages.length === 0 && <p className="muted websocket-empty">{t('websocket.empty')}</p>}
         </div>
         <div className="websocket-editor">

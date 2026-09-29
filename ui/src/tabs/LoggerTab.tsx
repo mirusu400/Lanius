@@ -5,6 +5,7 @@ import { connectStream } from '../api/stream';
 import { formatTime } from './proxyModel';
 import { useT } from '../i18n';
 import { useReportBusy } from '../components/busy';
+import { ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 
 const MAX_LIVE = 500;
 
@@ -17,6 +18,8 @@ interface LiveEntry {
 
 export function LoggerTab() {
   const t = useT();
+  const liveColumns = useResizableColumns('lanius.columns.logger.live', [90, 180, 440]);
+  const storedColumns = useResizableColumns('lanius.columns.logger.stored', [90, 520]);
   const [stored, setStored] = useState<LogEvent[]>([]);
   const [live, setLive] = useState<LiveEntry[]>([]);
   const [paused, setPaused] = useState(false);
@@ -99,11 +102,16 @@ export function LoggerTab() {
       <div className="logger-split">
         <div className="logger-live">
           <h4>{t('logger.liveEvents')}</h4>
-          <table className="flow-table">
+          <ResizableTable columns={liveColumns} className="flow-table">
+            <thead><tr>
+              {[t('flow.time'), t('logger.eventType'), t('logger.detail')].map((label, index) => (
+                <ResizableHeader key={index} label={label} index={index} columns={liveColumns} resizeLabel={t('table.resizeColumn', { column: label })} />
+              ))}
+            </tr></thead>
             <tbody>
               {visible.length === 0 && (
                 <tr>
-                  <td className="empty">{t('logger.noEvents')}</td>
+                  <td colSpan={3} className="empty">{t('logger.noEvents')}</td>
                 </tr>
               )}
               {visible.map((entry) => (
@@ -114,11 +122,16 @@ export function LoggerTab() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </ResizableTable>
         </div>
         <div className="logger-stored">
           <h4>{t('logger.storedEvents')}</h4>
-          <table className="flow-table">
+          <ResizableTable columns={storedColumns} className="flow-table">
+            <thead><tr>
+              {[t('flow.time'), t('logger.message')].map((label, index) => (
+                <ResizableHeader key={index} label={label} index={index} columns={storedColumns} resizeLabel={t('table.resizeColumn', { column: label })} />
+              ))}
+            </tr></thead>
             <tbody>
               {stored.map((event) => (
                 <tr key={event.id}>
@@ -127,7 +140,7 @@ export function LoggerTab() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </ResizableTable>
         </div>
       </div>
     </div>

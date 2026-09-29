@@ -78,7 +78,7 @@ def test_add_rule_from_url(client) -> None:
 
 
 def test_add_rule_from_bad_url_is_rejected(client) -> None:
-    res = client.post("/api/scope/from-url", json={"url": "not-a-url"})
+    res = client.post("/api/scope/from-url", json={"url": "bad host"})
     assert res.status_code == 400
 
 

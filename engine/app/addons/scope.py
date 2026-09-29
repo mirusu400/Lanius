@@ -134,17 +134,34 @@ class Scope:
 
 
 def rule_from_url(url: str, kind: RuleKind = "include", prefix: bool = True) -> ScopeRule:
-    """Build a rule from a URL, as 'Add to scope' does in the UI."""
-    parts = urlsplit(url)
-    if not parts.scheme or not parts.hostname:
+    """Build a rule from a URL or scheme-free host pattern.
+
+    A host pattern such as ``*.files.com`` applies to both HTTP and HTTPS.
+    The leading ``*.`` matches subdomains, not the apex host.
+    """
+    value = url.strip()
+    has_scheme = "://" in value
+    try:
+        parts = urlsplit(value if has_scheme else f"//{value}")
+        port = parts.port
+    except ValueError as exc:
+        raise ScopeError(f"invalid url or host pattern: {url!r}") from exc
+    if (
+        (has_scheme and parts.scheme not in ("http", "https"))
+        or not parts.hostname
+        or parts.username is not None
+        or parts.password is not None
+        or any(character.isspace() for character in parts.hostname)
+        or parts.fragment
+    ):
         raise ScopeError(f"invalid url: {url!r}")
     path = parts.path or "/"
     return ScopeRule(
         kind=kind,
         host=parts.hostname,
         path=f"{path.rstrip('/')}/*" if prefix else path,
-        protocol=parts.scheme,
-        port=parts.port,
+        protocol=parts.scheme if has_scheme else "any",
+        port=port,
     )
 
 

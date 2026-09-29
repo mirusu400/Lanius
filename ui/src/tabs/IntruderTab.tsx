@@ -29,11 +29,13 @@ import { useEditorMenu } from '../components/useEditorMenu';
 import { sendToRepeater } from './repeaterStore';
 import { getFlow } from '../api/client';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
+import { ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 
 const DEFAULT_TEMPLATE = 'GET /?q=\u00a7test\u00a7 HTTP/1.1\nHost: example.com\n\n';
 
 export function IntruderTab() {
   const t = useT();
+  const resultColumns = useResizableColumns('lanius.columns.intruder', [70, 340, 85, 90, 110]);
   const [url, setUrl] = useState('http://example.com');
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
   const [attackType, setAttackType] = useState<AttackType>('sniper');
@@ -360,14 +362,12 @@ export function IntruderTab() {
               <span className="muted">{t('intruder.noResults')}</span>
             )}
           </div>
-          <table className="flow-table">
+          <ResizableTable columns={resultColumns} className="flow-table">
             <thead>
               <tr>
-                <th className="col-method">#</th>
-                <th>{t('intruder.payload')}</th>
-                <th className="col-status">{t('flow.status')}</th>
-                <th className="col-size">{t('intruder.length')}</th>
-                <th className="col-time">{t('flow.time')}</th>
+                {['#', t('intruder.payload'), t('flow.status'), t('intruder.length'), t('flow.time')].map((label, index) => (
+                  <ResizableHeader key={index} label={label} index={index} columns={resultColumns} resizeLabel={t('table.resizeColumn', { column: label })} />
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -391,7 +391,7 @@ export function IntruderTab() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </ResizableTable>
           <ContextMenu
             position={menu.position}
             items={

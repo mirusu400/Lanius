@@ -23,7 +23,7 @@ function loadWidths(key: string, defaults: number[]): number[] {
 
 export function useResizableColumns(key: string, defaults: number[]) {
   const [widths, setWidths] = useState(() => loadWidths(key, defaults));
-  const [drag, setDrag] = useState<{ index: number; x: number; width: number } | null>(null);
+  const [drag, setDrag] = useState<{ index: number; x: number; width: number; pointerId: number } | null>(null);
 
   useEffect(() => {
     try {
@@ -35,25 +35,32 @@ export function useResizableColumns(key: string, defaults: number[]) {
 
   useEffect(() => {
     if (!drag) return;
-    const move = (event: MouseEvent) => {
+    const move = (event: PointerEvent) => {
+      if (event.pointerId !== drag.pointerId) return;
       setWidths((current) => current.map((width, index) => index === drag.index ? clamp(drag.width + event.clientX - drag.x) : width));
     };
-    const stop = () => setDrag(null);
+    const stop = (event: PointerEvent) => {
+      if (event.pointerId === drag.pointerId) setDrag(null);
+    };
     const previous = document.body.style.userSelect;
     document.body.style.userSelect = 'none';
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', stop);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
     return () => {
       document.body.style.userSelect = previous;
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', stop);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
     };
   }, [drag]);
 
-  const start = (event: React.MouseEvent, index: number) => {
+  const start = (event: React.PointerEvent, index: number) => {
+    if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
-    setDrag({ index, x: event.clientX, width: widths[index] });
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDrag({ index, x: event.clientX, width: widths[index], pointerId: event.pointerId });
   };
 
   const step = (event: React.KeyboardEvent, index: number) => {
@@ -68,6 +75,24 @@ export function useResizableColumns(key: string, defaults: number[]) {
 }
 
 type ResizableColumns = ReturnType<typeof useResizableColumns>;
+
+export function ResizableTable({
+  columns,
+  className,
+  children,
+}: {
+  columns: ResizableColumns;
+  className: string;
+  children: React.ReactNode;
+}) {
+  const total = columns.widths.reduce((sum, width) => sum + width, 0);
+  return (
+    <table className={`${className} resizable-table`} style={{ width: `${total}px` }}>
+      <colgroup>{columns.widths.map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
+      {children}
+    </table>
+  );
+}
 
 export function ResizableHeader({
   label,
@@ -94,7 +119,7 @@ export function ResizableHeader({
         aria-valuenow={columns.widths[index]}
         aria-valuemin={MIN_WIDTH}
         aria-valuemax={MAX_WIDTH}
-        onMouseDown={(event) => columns.start(event, index)}
+        onPointerDown={(event) => columns.start(event, index)}
         onKeyDown={(event) => columns.step(event, index)}
       />
     </th>

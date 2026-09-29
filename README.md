@@ -222,8 +222,8 @@ formats and does not mean that the request body itself is compressed.
 History has a **Modified** column. When Match & Replace, Intercept, or a plugin
 changes a request, its detail pane keeps **Original**, **Auto-modified**, and
 **Modified request** tabs so every stage can be compared.
-Drag a History column header's right edge to resize it. Column widths are
-remembered on this machine.
+Drag a table column header's right edge to resize it in History and other
+headed data tables. Column widths are remembered on this machine.
 
 Right-click a request to send it to Repeater or Intruder, add it to the scope,
 or copy it as a URL. The site map, Repeater tabs and Intruder results have
@@ -278,12 +278,16 @@ In the site map, Ctrl/⌘-click to select separate sites, folders or requests,
 or Shift-click to select a visible range. Right-click a selected row to delete
 the selection together after reviewing the affected request count.
 Drag the divider between the site tree and request detail to resize either
-pane. Endpoint columns can also be resized from their header edges. These
-sizes are remembered on this machine.
+pane. Endpoint and Scope table columns can also be resized from their header
+edges. These sizes are remembered on this machine.
 
 Define a **scope** with include and exclude rules to keep your attention on the
 application under test. Scope rules persist across restarts, and you can tell
 Lanius to stop recording out of scope traffic entirely.
+The Scope field accepts full URLs or scheme-free host patterns. For example,
+`*.files.com` includes HTTP and HTTPS on subdomains such as
+`cdn.files.com`; add `files.com` separately to include the root domain.
+When a scheme is omitted, all ports match unless a port is specified.
 
 ### Repeater
 

@@ -10,11 +10,13 @@ import {
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useT } from '../../i18n';
 import { formatBytes } from '../dashboardModel';
+import { ResizableHeader, ResizableTable, useResizableColumns } from '../../components/ResizableColumns';
 
 const siteKey = (site: CompactSite) => JSON.stringify([site.scheme, site.host, site.port]);
 
 export function ProjectCompactSection() {
   const t = useT();
+  const columns = useResizableColumns('lanius.columns.compact', [360, 130, 110, 150]);
   const [overview, setOverview] = useState<CompactOverview | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
@@ -118,12 +120,11 @@ export function ProjectCompactSection() {
 
       {overview && visibleSites.length > 0 ? (
         <div className="compact-table-wrap">
-          <table className="compact-table">
+          <ResizableTable columns={columns} className="compact-table">
             <thead><tr>
-              <th>{t('compact.target')}</th>
-              <th>{t('compact.scope')}</th>
-              <th>{t('compact.flows')}</th>
-              <th>{t('compact.content')}</th>
+              {[t('compact.target'), t('compact.scope'), t('compact.flows'), t('compact.content')].map((label, index) => (
+                <ResizableHeader key={index} label={label} index={index} columns={columns} resizeLabel={t('table.resizeColumn', { column: label })} />
+              ))}
             </tr></thead>
             <tbody>
               {visibleSites.map((site) => {
@@ -141,7 +142,7 @@ export function ProjectCompactSection() {
                 );
               })}
             </tbody>
-          </table>
+          </ResizableTable>
         </div>
       ) : <p className="muted">{overview ? t('compact.noTargets') : t('compact.loading')}</p>}
 

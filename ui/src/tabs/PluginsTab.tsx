@@ -4,9 +4,11 @@ import { listPlugins, reloadPlugin, setPluginEnabled } from '../api/client';
 import type { PluginInfo } from '../api/types';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { useReportBusy } from '../components/busy';
+import { ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 
 export function PluginsTab() {
   const t = useT();
+  const columns = useResizableColumns('lanius.columns.plugins', [80, 180, 360, 180, 100, 100]);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [directory, setDirectory] = useState('');
   const [error, setError] = useState<Message | null>(null);
@@ -68,15 +70,12 @@ export function PluginsTab() {
           {t('plugins.none')}
         </p>
       ) : (
-        <table className="flow-table plugins-table">
+        <ResizableTable columns={columns} className="flow-table plugins-table">
           <thead>
             <tr>
-              <th className="col-size">{t('plugins.use')}</th>
-              <th className="col-host">{t('common.name')}</th>
-              <th>{t('common.description')}</th>
-              <th className="col-host">{t('plugins.hooks')}</th>
-              <th className="col-size">{t('common.status')}</th>
-              <th className="col-size" />
+              {[t('plugins.use'), t('common.name'), t('common.description'), t('plugins.hooks'), t('common.status'), t('plugins.reload')].map((label, index) => (
+                <ResizableHeader key={index} label={label} index={index} columns={columns} resizeLabel={t('table.resizeColumn', { column: label })} />
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -129,7 +128,7 @@ export function PluginsTab() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </ResizableTable>
       )}
     </div>
   );

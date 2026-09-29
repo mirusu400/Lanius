@@ -44,7 +44,7 @@ import {
 } from './targetModel';
 import { FlowDetailView } from '../components/FlowDetail';
 import { Split } from '../components/Split';
-import { ResizableHeader, useResizableColumns } from '../components/ResizableColumns';
+import { ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 import { connectStream } from '../api/stream';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 
@@ -385,8 +385,7 @@ export function TargetTab() {
         />
       ) : view === 'endpoints' ? (
         <div className="endpoint-list">
-          <table className="flow-table" style={{ width: `max(100%, ${endpointColumns.widths.reduce((sum, width) => sum + width, 0)}px)` }}>
-            <colgroup>{endpointColumns.widths.map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
+          <ResizableTable columns={endpointColumns} className="flow-table">
             <thead>
               <tr>
                 {[
@@ -428,7 +427,7 @@ export function TargetTab() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </ResizableTable>
         </div>
       ) : (
         <Split

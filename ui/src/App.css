@@ -480,6 +480,11 @@ pre.body,
   white-space: nowrap;
 }
 
+.websocket-list td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .websocket-list tbody tr {
   cursor: pointer;
 }
@@ -1102,14 +1107,39 @@ pre.body,
   z-index: 1;
 }
 
+.resizable-table {
+  table-layout: fixed;
+}
+
+table.resizable-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-alt);
+  z-index: 1;
+  padding-right: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .column-resize-handle {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 8px;
+  width: 14px;
   cursor: col-resize;
   touch-action: none;
+}
+
+.column-resize-handle::after {
+  background: var(--border);
+  content: '';
+  position: absolute;
+  right: 5px;
+  top: 25%;
+  bottom: 25%;
+  width: 2px;
 }
 
 .column-resize-handle:hover,
@@ -1791,6 +1821,11 @@ pre.body {
   overflow: auto;
 }
 
+.scope-pattern-hint {
+  margin: 6px 10px;
+  font-size: 0.88em;
+}
+
 .scope-controls {
   align-items: center;
   background: var(--bg-alt);
@@ -2207,7 +2242,6 @@ pre.body {
 .log-type {
   color: var(--accent);
   white-space: nowrap;
-  width: 1%;
 }
 
 .log-detail {
