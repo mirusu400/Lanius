@@ -82,6 +82,7 @@ curl -x http://127.0.0.1:8080 http://example.com/
 
 The **Docs** tab explains the features that need more than a tooltip, in the
 interface language you have selected.
+Settings and Docs use the available window width when you resize the app.
 
 ### Capturing apps that ignore proxy settings
 

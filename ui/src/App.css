@@ -2206,14 +2206,23 @@ pre.body {
   overflow: hidden;
 }
 
+.settings-tab > .subtabs {
+  overflow-x: auto;
+}
+
+.settings-tab > .subtabs button {
+  flex: 1 1 0;
+  min-width: max-content;
+}
+
 /* The group tabs stay put; only the settings under them scroll, so you
    can always switch group without scrolling back up first. */
 .settings-body {
   flex: 1;
+  min-width: 0;
   overflow: auto;
   overscroll-behavior-y: none;
   padding: 20px 24px;
-  max-width: 900px;
 }
 
 /* The last section has nothing after it to divide from. */
@@ -2960,7 +2969,7 @@ pre.body {
 /* --- docs --- */
 .docs-tab {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: clamp(240px, 22vw, 360px) minmax(0, 1fr);
   gap: 20px;
   padding: 16px;
   height: 100%;
@@ -3007,8 +3016,8 @@ pre.body {
 }
 
 .docs-body {
+  min-width: 0;
   overflow-y: auto;
-  max-width: 680px;
   padding-right: 8px;
 }
 
