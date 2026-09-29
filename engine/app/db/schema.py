@@ -8,7 +8,7 @@ from .metrics import MIGRATION as METRICS_MIGRATION
 from .endpoint_index import MIGRATION as ENDPOINT_MIGRATION, register_functions
 from .search_index import MIGRATION as SEARCH_MIGRATION, register_functions as register_search_functions
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -130,6 +130,35 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         )""",
         "CREATE INDEX idx_websocket_messages_connection ON websocket_messages(connection_id, seq DESC)",
         "CREATE INDEX idx_websocket_messages_paused ON websocket_messages(paused) WHERE paused = 1",
+    ),
+    9: (
+        """
+        CREATE TABLE IF NOT EXISTS issues (
+            id              TEXT PRIMARY KEY,
+            fingerprint     TEXT NOT NULL UNIQUE,
+            plugin_id       TEXT NOT NULL,
+            check_id        TEXT NOT NULL,
+            scan_mode       TEXT NOT NULL,
+            title           TEXT NOT NULL,
+            severity        TEXT NOT NULL,
+            confidence      TEXT NOT NULL,
+            status          TEXT NOT NULL DEFAULT 'open',
+            detail          TEXT NOT NULL,
+            remediation     TEXT,
+            url             TEXT,
+            host            TEXT,
+            path            TEXT,
+            parameter       TEXT,
+            flow_id         TEXT,
+            evidence        TEXT,
+            first_seen      REAL NOT NULL,
+            last_seen       REAL NOT NULL,
+            occurrences     INTEGER NOT NULL DEFAULT 1
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_issues_status_severity ON issues(status, severity)",
+        "CREATE INDEX IF NOT EXISTS idx_issues_host ON issues(host)",
+        "CREATE INDEX IF NOT EXISTS idx_issues_last_seen ON issues(last_seen DESC)",
     ),
 }
 

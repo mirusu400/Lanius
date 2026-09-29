@@ -129,6 +129,8 @@ export function PluginsTab() {
       ['G', plugin.contributions.payload_generators],
       ['P', plugin.contributions.payload_processors],
       ['S', plugin.contributions.settings],
+      ['PS', plugin.contributions.passive_scanners],
+      ['AS', plugin.contributions.active_scanners],
     ].filter((entry) => Number(entry[1]) > 0);
     return entries.map(([kind, count]) => `${kind}:${count}`).join(' · ');
   };

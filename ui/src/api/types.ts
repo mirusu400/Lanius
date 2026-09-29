@@ -381,6 +381,8 @@ export interface PluginContributionCounts {
   payload_generators?: number;
   payload_processors?: number;
   settings?: number;
+  passive_scanners?: number;
+  active_scanners?: number;
 }
 
 export interface PluginSettingField {
@@ -434,6 +436,71 @@ export interface PluginContributionCatalogue {
     kind: PluginSettingField['kind'];
     scope: PluginSettingField['scope'];
   }>;
+  passive_scanners: ScannerCheck[];
+  active_scanners: ScannerCheck[];
+}
+
+export type IssueSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical';
+export type IssueStatus = 'open' | 'resolved' | 'false_positive';
+
+export interface Issue {
+  id: string;
+  fingerprint: string;
+  plugin_id: string;
+  check_id: string;
+  scan_mode: 'passive' | 'active';
+  title: string;
+  severity: IssueSeverity;
+  confidence: 'tentative' | 'firm' | 'certain';
+  status: IssueStatus;
+  detail: string;
+  remediation: string | null;
+  url: string | null;
+  host: string | null;
+  path: string | null;
+  parameter: string | null;
+  flow_id: string | null;
+  evidence: Record<string, unknown> | null;
+  first_seen: number;
+  last_seen: number;
+  occurrences: number;
+}
+
+export interface IssueSummary {
+  total: number;
+  by_severity: Record<IssueSeverity, number>;
+  by_status: Record<IssueStatus, number>;
+}
+
+export interface ScannerCheck {
+  id: string;
+  plugin: string;
+  title: string;
+  description: string | null;
+  mode: 'passive' | 'active';
+}
+
+export interface ScanJob {
+  id: string;
+  flow_id: string;
+  check_ids: string[];
+  concurrency: number;
+  requests_per_second: number;
+  total: number;
+  completed: number;
+  requests: number;
+  issues: number;
+  status: 'pending' | 'running' | 'completed' | 'stopped' | 'failed';
+  error: string | null;
+  started_at: number;
+  finished_at: number | null;
+}
+
+export interface ScannerState {
+  passive_enabled: boolean;
+  passive_checks: ScannerCheck[];
+  active_checks: ScannerCheck[];
+  jobs: ScanJob[];
 }
 
 // --- dashboard ------------------------------------------------------------

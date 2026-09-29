@@ -40,6 +40,7 @@ from ..addons.intruder import (
 from ..db.payloads import PayloadSetError, parse_payloads
 from .. import wordlists
 from ..addons.plugins import PluginError
+from ..addons.scanner import ScannerError, request_snapshot
 from ..plugin_registry import PluginApiError
 from ..plugin_packages import (
     MAX_ARCHIVE_BYTES,
@@ -279,6 +280,16 @@ class PluginDevelopmentInstall(BaseModel):
     path: str
 
 
+class IssueStatusPatch(BaseModel):
+    status: str
+
+
+class ActiveScanBody(BaseModel):
+    check_ids: list[str] = []
+    concurrency: int = 3
+    requests_per_second: float = 5.0
+
+
 def redact_headers(
     headers: list[tuple[str, str]] | None, *, reveal: bool = False
 ) -> list[tuple[str, str]] | None:
@@ -303,6 +314,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         "intercept.rules",
         "scope.changed",
         "plugins.changed",
+        "issues.",
+        "scanner.",
         "intruder.started",
         "intruder.finished",
         "flows.cleared",
@@ -487,6 +500,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "scope": await asyncio.to_thread(store.list_scope_rules),
             "workspace": await asyncio.to_thread(store.all_workspace),
             "settings": await asyncio.to_thread(store.all_settings),
+            "issues": await asyncio.to_thread(store.all_issues),
         }
         if include_flows:
             flows = await asyncio.to_thread(lambda: store.list(limit=100000))
@@ -1815,6 +1829,113 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except PluginApiError as exc:
             status = 404 if str(exc).startswith("unknown") else 400
             raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    # --- scanner and issues ---------------------------------------------
+    @app.get("/api/issues")
+    async def list_issues(
+        status: str | None = None,
+        severity: str | None = None,
+        host: str | None = None,
+        search: str | None = None,
+        limit: int = Query(500, ge=1, le=5000),
+    ) -> dict[str, Any]:
+        if status not in (None, "open", "resolved", "false_positive"):
+            raise HTTPException(status_code=422, detail="invalid issue status")
+        if severity not in (None, "info", "low", "medium", "high", "critical"):
+            raise HTTPException(status_code=422, detail="invalid issue severity")
+        items = await asyncio.to_thread(
+            store.list_issues,
+            status=status,
+            severity=severity,
+            host=host,
+            search=search,
+            limit=limit,
+        )
+        summary = await asyncio.to_thread(store.issue_summary)
+        return {"items": items, "count": len(items), "summary": summary}
+
+    @app.get("/api/issues/{issue_id}")
+    async def get_issue(issue_id: str) -> dict[str, Any]:
+        issue = await asyncio.to_thread(store.get_issue, issue_id)
+        if issue is None:
+            raise HTTPException(status_code=404, detail="issue not found")
+        return issue
+
+    @app.patch("/api/issues/{issue_id}")
+    async def patch_issue(
+        issue_id: str, payload: IssueStatusPatch
+    ) -> dict[str, Any]:
+        if payload.status not in ("open", "resolved", "false_positive"):
+            raise HTTPException(status_code=422, detail="invalid issue status")
+        issue = await asyncio.to_thread(
+            store.set_issue_status, issue_id, payload.status
+        )
+        if issue is None:
+            raise HTTPException(status_code=404, detail="issue not found")
+        broker.publish("issues.changed", issue)
+        return issue
+
+    @app.delete("/api/issues/{issue_id}")
+    async def delete_issue(issue_id: str) -> dict[str, Any]:
+        deleted = await asyncio.to_thread(store.delete_issue, issue_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="issue not found")
+        broker.publish("issues.changed", {"id": issue_id, "deleted": True})
+        return {"id": issue_id, "deleted": True}
+
+    @app.get("/api/scanner")
+    async def scanner_state() -> dict[str, Any]:
+        contributions = engine.plugins.registry.list()
+        return {
+            "passive_enabled": engine.scanner.passive_enabled,
+            "passive_checks": contributions["passive_scanners"],
+            "active_checks": contributions["active_scanners"],
+            "jobs": [job.as_dict() for job in engine.scanner.jobs.values()],
+        }
+
+    @app.patch("/api/scanner/passive")
+    async def set_passive_scanner(enabled: bool) -> dict[str, Any]:
+        engine.scanner.set_passive_enabled(enabled)
+        return {"passive_enabled": enabled}
+
+    @app.post("/api/scanner/passive/{flow_id}")
+    async def run_passive_scanner(flow_id: str) -> dict[str, Any]:
+        record = await asyncio.to_thread(store.get, flow_id)
+        if record is None or record.type != "http":
+            raise HTTPException(status_code=404, detail="HTTP flow not found")
+        issues = await engine.scanner.scan_passive(request_snapshot(record))
+        return {"items": issues, "count": len(issues)}
+
+    @app.post("/api/scanner/active/{flow_id}")
+    async def start_active_scan(
+        flow_id: str, payload: ActiveScanBody
+    ) -> dict[str, Any]:
+        try:
+            job = await engine.scanner.start_active(
+                flow_id,
+                check_ids=payload.check_ids or None,
+                concurrency=payload.concurrency,
+                requests_per_second=payload.requests_per_second,
+            )
+            return job.as_dict()
+        except ScannerError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/scanner/jobs/{job_id}")
+    async def get_scan_job(job_id: str) -> dict[str, Any]:
+        try:
+            return engine.scanner.get_job(job_id).as_dict()
+        except ScannerError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/scanner/jobs/{job_id}/stop")
+    async def stop_scan_job(job_id: str) -> dict[str, Any]:
+        try:
+            job = engine.scanner.stop_job(job_id)
+            await asyncio.sleep(0)
+            return job.as_dict()
+        except ScannerError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.websocket("/ws")
     async def ws_stream(websocket: WebSocket) -> None:

@@ -19,6 +19,9 @@ ActionLocation = Literal[
 ]
 SettingScope = Literal["project", "user"]
 SettingKind = Literal["string", "boolean", "integer", "number", "enum"]
+IssueSeverity = Literal["info", "low", "medium", "high", "critical"]
+IssueConfidence = Literal["tentative", "firm", "certain"]
+InsertionPointKind = Literal["query", "header", "path", "form", "json", "body"]
 
 
 class PluginApiError(ValueError):
@@ -58,6 +61,47 @@ class SettingDefinition:
     description: str | None = None
     scope: SettingScope = "project"
     choices: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ScanIssue:
+    """A finding returned by a passive or active scanner check."""
+
+    title: str
+    severity: IssueSeverity
+    detail: str
+    confidence: IssueConfidence = "firm"
+    remediation: str | None = None
+    parameter: str | None = None
+    evidence: Mapping[str, Any] | None = None
+    fingerprint: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class InsertionPoint:
+    """One request value an active check can replace with a payload."""
+
+    id: str
+    kind: InsertionPointKind
+    name: str
+    base_value: str
+
+
+class ActiveScanContext:
+    """A rate-limited request sender scoped to one insertion point."""
+
+    def __init__(
+        self,
+        request: Mapping[str, Any],
+        insertion_point: InsertionPoint,
+        send: Callable[[str], Awaitable[Mapping[str, Any]]],
+    ) -> None:
+        self.request = request
+        self.insertion_point = insertion_point
+        self._send = send
+
+    async def send(self, payload: str) -> Mapping[str, Any]:
+        return await self._send(payload)
 
 
 class _Host(Protocol):
@@ -106,6 +150,30 @@ class _Host(Protocol):
     def delete_storage(self, key: str, scope: SettingScope) -> None: ...
     def create_task(
         self, awaitable: Awaitable[Any], *, name: str | None
+    ) -> Disposable: ...
+
+    def register_passive_scan(
+        self,
+        check_id: str,
+        title: str,
+        handler: Callable[
+            [Mapping[str, Any]],
+            ScanIssue | Iterable[ScanIssue] | Awaitable[ScanIssue | Iterable[ScanIssue] | None] | None,
+        ],
+        *,
+        description: str | None,
+    ) -> Disposable: ...
+
+    def register_active_scan(
+        self,
+        check_id: str,
+        title: str,
+        handler: Callable[
+            [ActiveScanContext],
+            ScanIssue | Iterable[ScanIssue] | Awaitable[ScanIssue | Iterable[ScanIssue] | None] | None,
+        ],
+        *,
+        description: str | None,
     ) -> Disposable: ...
 
 
@@ -219,6 +287,41 @@ class PluginTasks:
         return self._host.create_task(awaitable, name=name)
 
 
+class Scanner:
+    def __init__(self, host: _Host) -> None:
+        self._host = host
+
+    def register_passive(
+        self,
+        check_id: str,
+        title: str,
+        handler: Callable[
+            [Mapping[str, Any]],
+            ScanIssue | Iterable[ScanIssue] | Awaitable[ScanIssue | Iterable[ScanIssue] | None] | None,
+        ],
+        *,
+        description: str | None = None,
+    ) -> Disposable:
+        return self._host.register_passive_scan(
+            check_id, title, handler, description=description
+        )
+
+    def register_active(
+        self,
+        check_id: str,
+        title: str,
+        handler: Callable[
+            [ActiveScanContext],
+            ScanIssue | Iterable[ScanIssue] | Awaitable[ScanIssue | Iterable[ScanIssue] | None] | None,
+        ],
+        *,
+        description: str | None = None,
+    ) -> Disposable:
+        return self._host.register_active_scan(
+            check_id, title, handler, description=description
+        )
+
+
 class PluginContext:
     """Capabilities given to a plugin's ``activate`` function."""
 
@@ -231,15 +334,22 @@ class PluginContext:
         self.settings = PluginSettings(host)
         self.storage = PluginStorage(host)
         self.tasks = PluginTasks(host)
+        self.scanner = Scanner(host)
         self.log = logging.getLogger(f"lanius.plugin.{plugin_id}")
 
 
 __all__ = [
     "API_VERSION",
     "ActionLocation",
+    "ActiveScanContext",
     "Disposable",
+    "InsertionPoint",
+    "InsertionPointKind",
+    "IssueConfidence",
+    "IssueSeverity",
     "PluginApiError",
     "PluginContext",
+    "ScanIssue",
     "SettingDefinition",
     "SettingKind",
     "SettingScope",

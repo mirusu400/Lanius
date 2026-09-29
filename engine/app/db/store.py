@@ -1018,12 +1018,15 @@ class FlowStore:
         workspace = data.get("workspace") or {}
         settings = data.get("settings") or {}
         flows = data.get("flows") or []
+        issues = data.get("issues") or []
 
         imported_flows = 0
+        imported_issues = 0
         with self._lock:
             with self._conn:  # transaction
                 self._conn.execute("DELETE FROM scope_rules")
                 self._conn.execute("DELETE FROM workspace")
+                self._conn.execute("DELETE FROM issues")
                 if flows:
                     self._conn.execute("DELETE FROM flows")
 
@@ -1060,12 +1063,35 @@ class FlowStore:
                     except Exception:
                         # One malformed flow must not abandon the rest.
                         logger.warning("skipping an unreadable flow during import")
+                issue_columns = (
+                    "id", "fingerprint", "plugin_id", "check_id", "scan_mode",
+                    "title", "severity", "confidence", "status", "detail",
+                    "remediation", "url", "host", "path", "parameter", "flow_id",
+                    "evidence", "first_seen", "last_seen", "occurrences",
+                )
+                for issue in issues:
+                    try:
+                        values = tuple(
+                            json.dumps(issue.get(name), ensure_ascii=False)
+                            if name == "evidence" and issue.get(name) is not None
+                            else issue.get(name)
+                            for name in issue_columns
+                        )
+                        self._conn.execute(
+                            f"INSERT INTO issues ({', '.join(issue_columns)})"
+                            f" VALUES ({', '.join('?' for _ in issue_columns)})",
+                            values,
+                        )
+                        imported_issues += 1
+                    except Exception:
+                        logger.warning("skipping an unreadable issue during import")
 
         return {
             "scope": len(scope),
             "workspace": len(workspace),
             "settings": len(settings),
             "flows": imported_flows,
+            "issues": imported_issues,
         }
 
     def delete_setting(self, key: str) -> None:
@@ -1073,6 +1099,134 @@ class FlowStore:
         with self._lock:
             self._conn.execute("DELETE FROM settings WHERE key = ?", (key,))
             self._conn.commit()
+
+    # --- scanner issues --------------------------------------------------
+    def upsert_issue(self, issue: dict[str, Any]) -> dict[str, Any]:
+        """Insert a finding or merge another observation into its fingerprint."""
+
+        columns = (
+            "id", "fingerprint", "plugin_id", "check_id", "scan_mode", "title",
+            "severity", "confidence", "status", "detail", "remediation", "url",
+            "host", "path", "parameter", "flow_id", "evidence", "first_seen",
+            "last_seen", "occurrences",
+        )
+        values = tuple(
+            json.dumps(issue.get(name), ensure_ascii=False)
+            if name == "evidence" and issue.get(name) is not None
+            else issue.get(name)
+            for name in columns
+        )
+        with self._lock:
+            self._conn.execute(
+                f"INSERT INTO issues ({', '.join(columns)})"
+                f" VALUES ({', '.join('?' for _ in columns)})"
+                " ON CONFLICT(fingerprint) DO UPDATE SET"
+                " last_seen=excluded.last_seen,"
+                " occurrences=issues.occurrences + 1,"
+                " severity=excluded.severity,"
+                " confidence=excluded.confidence,"
+                " detail=excluded.detail,"
+                " remediation=excluded.remediation,"
+                " evidence=excluded.evidence,"
+                " flow_id=COALESCE(excluded.flow_id, issues.flow_id)",
+                values,
+            )
+            self._conn.commit()
+            row = self._conn.execute(
+                "SELECT * FROM issues WHERE fingerprint = ?",
+                (issue["fingerprint"],),
+            ).fetchone()
+        assert row is not None
+        return self._issue_row(row)
+
+    @staticmethod
+    def _issue_row(row: sqlite3.Row) -> dict[str, Any]:
+        value = dict(row)
+        try:
+            value["evidence"] = json.loads(value["evidence"]) if value["evidence"] else None
+        except (TypeError, ValueError):
+            value["evidence"] = None
+        return value
+
+    def list_issues(
+        self,
+        *,
+        status: str | None = None,
+        severity: str | None = None,
+        host: str | None = None,
+        search: str | None = None,
+        limit: int = 500,
+    ) -> List[dict[str, Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if severity:
+            clauses.append("severity = ?")
+            params.append(severity)
+        if host:
+            clauses.append("host = ?")
+            params.append(host)
+        if search:
+            clauses.append("(title LIKE ? OR detail LIKE ? OR parameter LIKE ?)")
+            pattern = f"%{search}%"
+            params.extend([pattern, pattern, pattern])
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(limit)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM issues" + where
+                + " ORDER BY CASE severity"
+                " WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2"
+                " WHEN 'low' THEN 3 ELSE 4 END, last_seen DESC LIMIT ?",
+                params,
+            ).fetchall()
+        return [self._issue_row(row) for row in rows]
+
+    def get_issue(self, issue_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM issues WHERE id = ?", (issue_id,)
+            ).fetchone()
+        return self._issue_row(row) if row is not None else None
+
+    def set_issue_status(self, issue_id: str, status: str) -> dict[str, Any] | None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE issues SET status = ? WHERE id = ?", (status, issue_id)
+            )
+            self._conn.commit()
+        return self.get_issue(issue_id)
+
+    def delete_issue(self, issue_id: str) -> bool:
+        with self._lock:
+            cursor = self._conn.execute("DELETE FROM issues WHERE id = ?", (issue_id,))
+            self._conn.commit()
+        return cursor.rowcount > 0
+
+    def issue_summary(self) -> dict[str, Any]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT severity, status, COUNT(*) AS count FROM issues"
+                " GROUP BY severity, status"
+            ).fetchall()
+        return {
+            "total": sum(row["count"] for row in rows),
+            "by_severity": {
+                severity: sum(
+                    row["count"] for row in rows if row["severity"] == severity
+                )
+                for severity in ("info", "low", "medium", "high", "critical")
+            },
+            "by_status": {
+                status: sum(row["count"] for row in rows if row["status"] == status)
+                for status in ("open", "resolved", "false_positive")
+            },
+        }
+
+    def all_issues(self) -> List[dict[str, Any]]:
+        return self.list_issues(limit=100_000)
 
     def list_events(self, limit: int = 200) -> List[dict[str, Any]]:
         with self._lock:

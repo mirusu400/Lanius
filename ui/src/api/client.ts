@@ -691,6 +691,60 @@ export function pluginUiUrl(name: string, entrypoint: string): string {
     .join('/')}`;
 }
 
+export function listIssues(filters: {
+  status?: import('./types').IssueStatus | '';
+  severity?: import('./types').IssueSeverity | '';
+  search?: string;
+} = {}): Promise<{
+  items: import('./types').Issue[];
+  count: number;
+  summary: import('./types').IssueSummary;
+}> {
+  const params = new URLSearchParams();
+  if (filters.status) params.set('status', filters.status);
+  if (filters.severity) params.set('severity', filters.severity);
+  if (filters.search) params.set('search', filters.search);
+  return request(`/api/issues?${params}`);
+}
+
+export function setIssueStatus(
+  id: string,
+  status: import('./types').IssueStatus,
+): Promise<import('./types').Issue> {
+  return request(`/api/issues/${id}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function deleteIssue(id: string): Promise<{ id: string; deleted: true }> {
+  return request(`/api/issues/${id}`, { method: 'DELETE' });
+}
+
+export function getScannerState(): Promise<import('./types').ScannerState> {
+  return request('/api/scanner');
+}
+
+export function setPassiveScanner(enabled: boolean): Promise<{ passive_enabled: boolean }> {
+  return request(`/api/scanner/passive?enabled=${enabled}`, { method: 'PATCH' });
+}
+
+export function startActiveScan(
+  flowId: string,
+  options: { check_ids?: string[]; concurrency?: number; requests_per_second?: number } = {},
+): Promise<import('./types').ScanJob> {
+  return request(`/api/scanner/active/${encodeURIComponent(flowId)}`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(options),
+  });
+}
+
+export function stopScanJob(id: string): Promise<import('./types').ScanJob> {
+  return request(`/api/scanner/jobs/${id}/stop`, { method: 'POST' });
+}
+
 // --- logger / CA ----------------------------------------------------------
 
 export interface LogEvent {

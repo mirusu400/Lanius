@@ -87,6 +87,14 @@ disable and reload; uninstall can explicitly remove them later.
 `context.tasks.create(awaitable)` for background work so shutdown, reload, and
 failure cleanup can cancel it deterministically.
 
+## Scanner checks and issues
+
+`context.scanner.register_passive` analyzes captured responses without sending
+traffic. `register_active` receives bounded insertion points and a rate-limited
+request sender. Checks return `ScanIssue` values, which the host validates,
+deduplicates, persists, and displays. The full scheduler contract is in
+[plugin-scanner.md](plugin-scanner.md).
+
 ## Compatibility
 
 `lanius_sdk.API_VERSION` and `context.api_version` currently report `1.0`.

@@ -425,6 +425,9 @@ settings, namespaced storage, payload extensions, and managed tasks use the
 versioned [`lanius_sdk`](./docs/plugins-sdk.md).
 Installable `.lanius-plugin` archives, signatures, and sandboxed UI are
 documented in [`docs/plugin-packages.md`](./docs/plugin-packages.md).
+Plugin supplied passive and active checks create deduplicated project findings
+in the **Issues** tab; limits and SDK contracts are documented in
+[`docs/plugin-scanner.md`](./docs/plugin-scanner.md).
 
 Plugins run inside the engine process, not a sandbox. Only enable code you
 trust.

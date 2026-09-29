@@ -27,6 +27,7 @@ from .addons.repeater import RepeaterAddon
 from .addons.websocket_proxy import WebSocketProxyAddon
 from .addons.intruder import IntruderAddon
 from .addons.plugins import PluginManager
+from .addons.scanner import ScannerAddon
 from .plugin_packages import PluginPackageManager
 from .addons.scope import ScopeManager
 from .config import Settings
@@ -255,6 +256,13 @@ class ProxyEngine:
             packages=self.plugin_packages,
             safe_mode=settings.disable_plugins,
         )
+        self.scanner = ScannerAddon(
+            self.plugins.registry,
+            store,
+            broker,
+            self.repeater,
+            self.scope,
+        )
         self._task: asyncio.Task[None] | None = None
         # Why the proxy is not listening, when it failed to start. The API
         # stays up so the user can fix the listener from the app itself.
@@ -357,6 +365,7 @@ class ProxyEngine:
         master.addons.add(self.match_replace)
         master.addons.add(self.intercept)
         master.addons.add(self.websockets)
+        master.addons.add(self.scanner)
         master.addons.add(self.capture)
         master.addons.add(self.repeater)
         # Not via the running hook: it does not fire for every mode set.
@@ -377,7 +386,7 @@ class ProxyEngine:
         if master is None:
             return
         chain = master.addons.chain
-        for addon in (self.websockets, self.capture):
+        for addon in (self.websockets, self.scanner, self.capture):
             if addon in chain:
                 chain.remove(addon)
                 chain.append(addon)
@@ -776,6 +785,7 @@ class ProxyEngine:
             except Exception:  # pragma: no cover - defensive
                 logger.exception("proxy shutdown error")
         await self.capture.done()
+        await self.scanner.done()
         self.plugins.master_stopped()
         self._task = None
         self.master = None

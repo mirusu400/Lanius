@@ -15,10 +15,12 @@ from pathlib import Path
 from typing import Any, List, Literal
 
 from lanius_sdk import (
+    ActiveScanContext,
     ActionLocation,
     Disposable,
     PluginApiError,
     PluginContext,
+    ScanIssue,
     SettingDefinition,
     SettingScope,
 )
@@ -26,7 +28,13 @@ from lanius_sdk import (
 from .addons import codecs
 
 ContributionKind = Literal[
-    "actions", "codecs", "payload_generators", "payload_processors", "settings"
+    "actions",
+    "codecs",
+    "payload_generators",
+    "payload_processors",
+    "settings",
+    "passive_scanners",
+    "active_scanners",
 ]
 
 _ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
@@ -117,6 +125,8 @@ class ContributionRegistry:
             "payload_generators": {},
             "payload_processors": {},
             "settings": {},
+            "passive_scanners": {},
+            "active_scanners": {},
         }
         self._handles: dict[str, list[Disposable]] = {}
         self._tasks: dict[str, set[asyncio.Future[Any]]] = {}
@@ -192,6 +202,11 @@ class ContributionRegistry:
             return self._items[kind][qualified_id]
         except KeyError as exc:
             raise PluginApiError(f"unknown {kind} contribution: {qualified_id}") from exc
+
+    def scan_handlers(
+        self, kind: Literal["passive_scanners", "active_scanners"]
+    ) -> List[Contribution]:
+        return list(self._items[kind].values())
 
     async def invoke_action(
         self, qualified_id: str, payload: Mapping[str, Any]
@@ -533,3 +548,51 @@ class PluginHost:
         if isinstance(task, asyncio.Task):
             task.set_name(name or f"plugin-{self.owner}-task")
         return self.registry.track_task(self.owner, task)
+
+    def register_passive_scan(
+        self,
+        check_id: str,
+        title: str,
+        handler: Callable[
+            [Mapping[str, Any]],
+            ScanIssue
+            | Iterable[ScanIssue]
+            | Awaitable[ScanIssue | Iterable[ScanIssue] | None]
+            | None,
+        ],
+        *,
+        description: str | None,
+    ) -> Disposable:
+        if not callable(handler):
+            raise PluginApiError("passive scanner check must be callable")
+        return self.registry.register(
+            self.owner,
+            "passive_scanners",
+            check_id,
+            {"title": title, "description": description, "mode": "passive"},
+            handler,
+        )
+
+    def register_active_scan(
+        self,
+        check_id: str,
+        title: str,
+        handler: Callable[
+            [ActiveScanContext],
+            ScanIssue
+            | Iterable[ScanIssue]
+            | Awaitable[ScanIssue | Iterable[ScanIssue] | None]
+            | None,
+        ],
+        *,
+        description: str | None,
+    ) -> Disposable:
+        if not callable(handler):
+            raise PluginApiError("active scanner check must be callable")
+        return self.registry.register(
+            self.owner,
+            "active_scanners",
+            check_id,
+            {"title": title, "description": description, "mode": "active"},
+            handler,
+        )

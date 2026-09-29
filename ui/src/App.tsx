@@ -7,6 +7,7 @@ import { DashboardTab } from "./tabs/DashboardTab";
 import { ProxyTab } from "./tabs/ProxyTab";
 import { RepeaterTabView } from "./tabs/RepeaterTab";
 import { TargetTab } from "./tabs/TargetTab";
+import { IssuesTab } from "./tabs/IssuesTab";
 import { IntruderTab } from "./tabs/IntruderTab";
 import { DecoderTab } from "./tabs/DecoderTab";
 import { ComparerTab } from "./tabs/ComparerTab";
@@ -40,6 +41,7 @@ const TABS = [
   "Dashboard",
   "Proxy",
   "Target",
+  "Issues",
   "Repeater",
   "Intruder",
   "Decoder",
@@ -199,6 +201,8 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
             >
               {name === "Dashboard"
                 ? t("dash.title")
+                : name === "Issues"
+                  ? t("issues.title")
                 : name === "Docs"
                   ? t("docs.title")
                   : name}
@@ -224,6 +228,8 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
             <ProxyTab />
           ) : tab === "Target" ? (
             <TargetTab />
+          ) : tab === "Issues" ? (
+            <IssuesTab />
           ) : tab === "Repeater" ? (
             <RepeaterTabView />
           ) : tab === "Intruder" ? (
