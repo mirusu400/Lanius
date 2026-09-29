@@ -7,6 +7,7 @@ import type {
   FlowEdits,
   FlowFilters,
   FlowSummary,
+  ResponsePreview,
   InterceptRules,
   MatchReplaceRule,
   PausedFlow,
@@ -132,6 +133,10 @@ export async function listFlowPage(
 
 export function getFlow(id: string, reveal = false): Promise<FlowDetail> {
   return request<FlowDetail>(`/api/flows/${id}${reveal ? '?reveal=true' : ''}`);
+}
+
+export function getResponsePreview(id: string): Promise<ResponsePreview> {
+  return request<ResponsePreview>(`/api/flows/${encodeURIComponent(id)}/response-preview`);
 }
 
 export function clearFlows(): Promise<{ ok: boolean }> {
@@ -939,6 +944,13 @@ function shell(): { invoke(cmd: string, args?: unknown): Promise<unknown> } | nu
       __TAURI_INTERNALS__?: { invoke(cmd: string, args?: unknown): Promise<unknown> };
     }).__TAURI_INTERNALS__ ?? null
   );
+}
+
+/** Capture the active Lanius window and copy its image to the OS clipboard. */
+export async function captureWindowToClipboard(): Promise<void> {
+  const internals = shell();
+  if (!internals) throw new Error('Desktop shell is unavailable');
+  await internals.invoke('capture_current_window');
 }
 
 /** True when the shell can install an update itself. */

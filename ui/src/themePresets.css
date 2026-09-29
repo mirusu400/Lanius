@@ -1,0 +1,176 @@
+/* Editor palette adaptations. Original colors and source licenses are listed
+   in docs/theme-sources.md. Derived shades fill Lanius-specific UI roles. */
+:root[data-theme='monokai'],
+:root[data-theme='gruvbox'],
+:root[data-theme='dracula'],
+:root[data-theme='tokyo-night'],
+:root[data-theme='catppuccin'],
+:root[data-theme='solarized'] {
+  color-scheme: dark;
+  --bg: var(--theme-bg);
+  --bg-alt: var(--theme-panel);
+  --bg-row: var(--theme-row);
+  --bg-sunken: var(--theme-sunken);
+  --bg-hover: var(--theme-hover);
+  --border: var(--theme-border);
+  --border-soft: var(--theme-border-soft);
+  --fg: var(--theme-fg);
+  --muted: var(--theme-muted);
+  --fg-disabled: var(--theme-disabled);
+  --accent: var(--theme-accent);
+  --accent-dim: var(--theme-selection);
+  --on-accent: var(--theme-on-accent);
+  --accent-wash: color-mix(in srgb, var(--accent) 8%, transparent);
+  --accent-wash-strong: color-mix(in srgb, var(--accent) 20%, transparent);
+  --accent2: var(--theme-accent2);
+  --accent2-wash: color-mix(in srgb, var(--accent2) 16%, transparent);
+  --ok: var(--theme-ok);
+  --ok-bright: color-mix(in srgb, var(--ok) 82%, white);
+  --ok-soft: var(--ok);
+  --ok-strong: color-mix(in srgb, var(--ok) 78%, black);
+  --ok-border: color-mix(in srgb, var(--ok) 45%, var(--bg));
+  --ok-wash: color-mix(in srgb, var(--ok) 17%, transparent);
+  --warn: var(--theme-warn);
+  --warn-dim: color-mix(in srgb, var(--warn) 82%, var(--bg));
+  --danger: var(--theme-danger);
+  --danger-dim: color-mix(in srgb, var(--danger) 80%, var(--bg));
+  --danger-soft: color-mix(in srgb, var(--danger) 85%, white);
+  --danger-bright: color-mix(in srgb, var(--danger) 65%, white);
+  --danger-muted: color-mix(in srgb, var(--danger) 70%, var(--bg));
+  --danger-deep: color-mix(in srgb, var(--danger) 35%, var(--bg));
+  --danger-bg: color-mix(in srgb, var(--danger) 18%, var(--bg));
+  --danger-border: color-mix(in srgb, var(--danger) 45%, var(--bg));
+  --danger-wash: color-mix(in srgb, var(--danger) 17%, transparent);
+  --info: var(--theme-info);
+  --info-soft: color-mix(in srgb, var(--info) 78%, white);
+  --info-wash: color-mix(in srgb, var(--info) 18%, transparent);
+  --chart-2xx: color-mix(in srgb, var(--ok) 78%, var(--bg));
+  --chart-3xx: color-mix(in srgb, var(--info) 78%, var(--bg));
+  --shadow: rgba(0, 0, 0, 0.45);
+}
+
+:root[data-theme='monokai'] {
+  --theme-bg: #272822;
+  --theme-panel: #34352f;
+  --theme-row: #2e2f29;
+  --theme-sunken: #1e1f1c;
+  --theme-hover: #3e3d32;
+  --theme-border: #414339;
+  --theme-border-soft: #34352f;
+  --theme-fg: #f8f8f2;
+  --theme-muted: #b2b1a6;
+  --theme-disabled: #75715e;
+  --theme-accent: #f92672;
+  --theme-selection: #414339;
+  --theme-on-accent: #1e1f1c;
+  --theme-accent2: #ae81ff;
+  --theme-ok: #a6e22e;
+  --theme-warn: #e6db74;
+  --theme-danger: #f92672;
+  --theme-info: #66d9ef;
+}
+
+:root[data-theme='gruvbox'] {
+  --theme-bg: #282828;
+  --theme-panel: #3c3836;
+  --theme-row: #32302f;
+  --theme-sunken: #1d2021;
+  --theme-hover: #504945;
+  --theme-border: #504945;
+  --theme-border-soft: #3c3836;
+  --theme-fg: #ebdbb2;
+  --theme-muted: #bdae93;
+  --theme-disabled: #7c6f64;
+  --theme-accent: #fabd2f;
+  --theme-selection: #504945;
+  --theme-on-accent: #282828;
+  --theme-accent2: #83a598;
+  --theme-ok: #b8bb26;
+  --theme-warn: #fabd2f;
+  --theme-danger: #fb4934;
+  --theme-info: #83a598;
+}
+
+:root[data-theme='dracula'] {
+  --theme-bg: #282a36;
+  --theme-panel: #343746;
+  --theme-row: #303241;
+  --theme-sunken: #21222c;
+  --theme-hover: #44475a;
+  --theme-border: #44475a;
+  --theme-border-soft: #343746;
+  --theme-fg: #f8f8f2;
+  --theme-muted: #b4bdd4;
+  --theme-disabled: #6272a4;
+  --theme-accent: #bd93f9;
+  --theme-selection: #44475a;
+  --theme-on-accent: #282a36;
+  --theme-accent2: #8be9fd;
+  --theme-ok: #50fa7b;
+  --theme-warn: #ffb86c;
+  --theme-danger: #ff5555;
+  --theme-info: #8be9fd;
+}
+
+:root[data-theme='tokyo-night'] {
+  --theme-bg: #1a1b26;
+  --theme-panel: #24283b;
+  --theme-row: #202336;
+  --theme-sunken: #16161e;
+  --theme-hover: #292e42;
+  --theme-border: #414868;
+  --theme-border-soft: #292e42;
+  --theme-fg: #a9b1d6;
+  --theme-muted: #9aa5ce;
+  --theme-disabled: #565f89;
+  --theme-accent: #7aa2f7;
+  --theme-selection: #292e42;
+  --theme-on-accent: #1a1b26;
+  --theme-accent2: #bb9af7;
+  --theme-ok: #9ece6a;
+  --theme-warn: #e0af68;
+  --theme-danger: #f7768e;
+  --theme-info: #7dcfff;
+}
+
+:root[data-theme='catppuccin'] {
+  --theme-bg: #1e1e2e;
+  --theme-panel: #313244;
+  --theme-row: #242435;
+  --theme-sunken: #181825;
+  --theme-hover: #45475a;
+  --theme-border: #45475a;
+  --theme-border-soft: #313244;
+  --theme-fg: #cdd6f4;
+  --theme-muted: #bac2de;
+  --theme-disabled: #6c7086;
+  --theme-accent: #cba6f7;
+  --theme-selection: #45475a;
+  --theme-on-accent: #1e1e2e;
+  --theme-accent2: #89b4fa;
+  --theme-ok: #a6e3a1;
+  --theme-warn: #f9e2af;
+  --theme-danger: #f38ba8;
+  --theme-info: #89dceb;
+}
+
+:root[data-theme='solarized'] {
+  --theme-bg: #002b36;
+  --theme-panel: #073642;
+  --theme-row: #04323d;
+  --theme-sunken: #00212b;
+  --theme-hover: #164853;
+  --theme-border: #586e75;
+  --theme-border-soft: #17444d;
+  --theme-fg: #93a1a1;
+  --theme-muted: #839496;
+  --theme-disabled: #657b83;
+  --theme-accent: #268bd2;
+  --theme-selection: #14536a;
+  --theme-on-accent: #002b36;
+  --theme-accent2: #2aa198;
+  --theme-ok: #859900;
+  --theme-warn: #b58900;
+  --theme-danger: #dc322f;
+  --theme-info: #2aa198;
+}

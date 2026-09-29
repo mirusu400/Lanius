@@ -649,7 +649,7 @@ describe('TargetTab', () => {
     expect(await screen.findByText('/users/{id}')).toBeTruthy();
     expect(screen.getByText('7')).toBeTruthy();
     expect(screen.getByText('page')).toBeTruthy();
-    expect(screen.getByText('200, 404')).toBeTruthy();
+    expect(screen.getByText('200').closest('td')?.textContent).toBe('200, 404');
   });
 
   it('adds and removes scope rules in the editor', async () => {

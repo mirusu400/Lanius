@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lanius theme concepts</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --canvas: #121414; --bg: #1c1e1e; --panel: #242727; --raised: #2d3130;
+      --sunken: #171919; --border: #3b4140; --soft-border: #303534;
+      --fg: #dce0db; --muted: #98a09b; --accent: #b99065;
+      --selected: #38322a; --ok: #8eb49c; --warn: #d0b17b;
+      --danger: #cb8b82; --info: #8eacb8; --on-accent: #151714;
+    }
+    html, body { margin: 0; width: 1440px; height: 900px; overflow: hidden; }
+    body { background: var(--canvas); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .sheet { width: 1440px; height: 900px; padding: 28px 36px 34px; }
+    .heading { height: 83px; display: flex; align-items: flex-start; justify-content: space-between; }
+    .eyebrow { font: 600 11px/1.1 'SF Mono', Menlo, monospace; letter-spacing: .2em; color: var(--accent); margin-bottom: 8px; }
+    h1 { font-size: 26px; line-height: 1.1; letter-spacing: -.025em; margin: 0 0 6px; font-weight: 650; }
+    .heading p { font-size: 13px; margin: 0; color: var(--muted); }
+    .swatches { display: flex; gap: 16px; padding-top: 23px; }
+    .swatch { display: flex; gap: 7px; align-items: center; color: var(--muted); font: 11px 'SF Mono', Menlo, monospace; }
+    .swatch b { width: 17px; height: 17px; display: block; border: 1px solid var(--border); border-radius: 3px; }
+    .window { height: 742px; border-radius: 10px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); box-shadow: 0 25px 70px rgba(0,0,0,.24); }
+    .topbar { height: 51px; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 14px; gap: 25px; }
+    .brand { font-weight: 750; color: var(--accent); font-size: 14px; letter-spacing: .05em; }
+    .tabs { display: flex; align-items: stretch; height: 100%; gap: 3px; }
+    .tab { height: 100%; display: flex; align-items: center; padding: 0 13px; color: var(--muted); font-size: 12.5px; border-bottom: 2px solid transparent; }
+    .tab.active { color: var(--fg); border-color: var(--accent); }
+    .subbar { display: flex; align-items: center; height: 42px; border-bottom: 1px solid var(--border); padding: 0 11px; gap: 8px; }
+    .subtab { font-size: 12px; color: var(--muted); padding: 5px 9px; border: 1px solid transparent; border-radius: 4px; }
+    .subtab.active { color: var(--fg); background: var(--raised); border-color: var(--border); }
+    .spacer { flex: 1; }
+    .filter { color: var(--muted); font-size: 11px; display: flex; gap: 6px; align-items: center; }
+    .checkbox { width: 12px; height: 12px; border: 1px solid var(--muted); border-radius: 2px; }
+    .button { font-size: 11px; color: var(--fg); background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 5px 10px; }
+    .endpoints { height: 259px; overflow: hidden; }
+    .table { border-collapse: collapse; table-layout: fixed; width: 100%; font: 12px/1.2 'SF Mono', Menlo, monospace; }
+    .table th { height: 31px; background: var(--panel); color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 550; text-align: left; padding: 0 12px; }
+    .table td { height: 33px; border-bottom: 1px solid var(--soft-border); padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--panel) 35%, var(--bg)); }
+    .table tbody tr.selected { background: var(--selected); box-shadow: inset 3px 0 var(--accent); }
+    .count { text-align: right; }
+    .badge { font: 10px/1.1 'SF Mono', Menlo, monospace; display: inline-block; padding: 3px 5px; margin-right: 3px; color: var(--muted); background: var(--raised); border-radius: 3px; }
+    .status { color: var(--ok); }
+    .status.warn { color: var(--warn); }
+    .status.error { color: var(--danger); }
+    .status.info { color: var(--info); }
+    .splitbar { height: 8px; background: var(--bg); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); position: relative; }
+    .splitbar:after { content: ''; position: absolute; top: 3px; left: 49%; width: 26px; border-top: 2px solid var(--border); }
+    .bottom { height: 381px; display: flex; overflow: hidden; }
+    .requests { width: 48%; border-right: 1px solid var(--border); overflow: hidden; }
+    .pane-title { height: 37px; display: flex; gap: 12px; align-items: center; padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--border); font: 12px 'SF Mono', Menlo, monospace; }
+    .pane-title span:last-child { color: var(--muted); font-size: 11px; }
+    .requests .table th { height: 31px; }
+    .requests .table td { height: 34px; }
+    .detail { width: 52%; overflow: hidden; }
+    .urlbar { height: 37px; display: flex; align-items: center; gap: 9px; padding: 0 11px; border-bottom: 1px solid var(--border); font: 11px 'SF Mono', Menlo, monospace; white-space: nowrap; overflow: hidden; }
+    .urlbar strong { color: var(--accent); font-weight: 650; }
+    .urlbar span { overflow: hidden; text-overflow: ellipsis; }
+    .half { height: 164px; border-bottom: 1px solid var(--border); }
+    .half.response { height: 180px; border-bottom: 0; }
+    .halfbar { height: 31px; display: flex; align-items: center; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: .06em; color: var(--muted); }
+    .halfbar .view { display: flex; margin-left: auto; letter-spacing: 0; gap: 2px; }
+    .halfbar .view span { padding: 3px 7px; border-radius: 3px; }
+    .halfbar .view .active { color: var(--fg); background: var(--raised); border: 1px solid var(--border); padding: 2px 6px; }
+    .halfbody { height: calc(100% - 31px); overflow: hidden; padding: 10px 13px; font: 11px/1.5 'SF Mono', Menlo, monospace; }
+    .kv { display: flex; gap: 15px; padding: 1px 0; }
+    .kv .key { width: 130px; flex: 0 0 auto; color: var(--accent); }
+    .kv .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .raw { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg); line-height: 1.45; }
+    .raw .head { color: var(--muted); }
+    .raw .json-key { color: var(--info); }
+    .raw .json-string { color: var(--ok); }
+    .raw .number { color: var(--warn); }
+    .footer { margin-top: 13px; color: var(--muted); font: 11px 'SF Mono', Menlo, monospace; display: flex; justify-content: space-between; }
+  </style>
+  <script>
+    const palettes = {
+      copper: {
+        name: '01 / COPPER', subtitle: '차콜 + 무광 구리 · 차분하고 따뜻한 도구감',
+        canvas: '#111313', bg: '#1C1E1F', panel: '#252829', raised: '#303435', sunken: '#17191A', border: '#3C4141', softBorder: '#2B3030',
+        fg: '#DCE0DB', muted: '#98A19B', accent: '#B99063', selected: '#39332B', ok: '#8DB49A', warn: '#D0AE74', danger: '#CA877D', info: '#8FAAB2'
+      },
+      steel: {
+        name: '02 / STEEL', subtitle: '슬레이트 + 스틸 블루 · 차갑고 정돈된 분석 도구',
+        canvas: '#101519', bg: '#1A2024', panel: '#232B30', raised: '#2D383E', sunken: '#151B1F', border: '#3B474D', softBorder: '#2A3439',
+        fg: '#DCE4E6', muted: '#98A8AC', accent: '#84AFC2', selected: '#293E48', ok: '#8DB49E', warn: '#D2B37A', danger: '#D18C84', info: '#91B4C4'
+      },
+      sage: {
+        name: '03 / SAGE', subtitle: '딥 올리브 + 세이지 · 절제된 터미널 감성',
+        canvas: '#121511', bg: '#1D211D', panel: '#272C27', raised: '#343A33', sunken: '#181B18', border: '#41483F', softBorder: '#30372F',
+        fg: '#E0E2D9', muted: '#A1AA9B', accent: '#A7B98A', selected: '#333D31', ok: '#9FB88D', warn: '#CCB47F', danger: '#CB9186', info: '#9DAFB1'
+      },
+      paper: {
+        name: '04 / PAPER', subtitle: '웜 페이퍼 + 딥 그린 · 밝지만 눈부시지 않은 작업 화면',
+        canvas: '#E8E8E2', bg: '#F4F4EF', panel: '#FCFBF8', raised: '#EBEEE8', sunken: '#ECEDE8', border: '#D0D5CE', softBorder: '#E0E4DD',
+        fg: '#29302C', muted: '#6E7770', accent: '#486D61', selected: '#DCEAE2', ok: '#387752', warn: '#926F38', danger: '#A7534B', info: '#477488'
+      }
+    };
+    const key = new URLSearchParams(location.search).get('theme') || 'copper';
+    const theme = palettes[key] || palettes.copper;
+    const vars = {canvas:'canvas',bg:'bg',panel:'panel',raised:'raised',sunken:'sunken',border:'border',softBorder:'soft-border',fg:'fg',muted:'muted',accent:'accent',selected:'selected',ok:'ok',warn:'warn',danger:'danger',info:'info'};
+    for (const [property, token] of Object.entries(vars)) document.documentElement.style.setProperty(`--${token}`, theme[property]);
+    document.documentElement.dataset.themeName = key;
+    addEventListener('DOMContentLoaded', () => {
+      document.getElementById('concept-name').textContent = theme.name;
+      document.getElementById('concept-subtitle').textContent = theme.subtitle;
+      for (const token of ['bg','panel','accent','selected']) {
+        document.getElementById(`swatch-${token}`).style.background = theme[token];
+        document.getElementById(`hex-${token}`).textContent = theme[token];
+      }
+    });
+  </script>
+</head>
+<body>
+  <div class="sheet">
+    <div class="heading">
+      <div>
+        <div class="eyebrow">LANIUS / COLOR STUDY</div>
+        <h1 id="concept-name">01 / COPPER</h1>
+        <p id="concept-subtitle">차콜 + 무광 구리 · 차분하고 따뜻한 도구감</p>
+      </div>
+      <div class="swatches">
+        <div class="swatch"><b id="swatch-bg"></b><span id="hex-bg"></span></div>
+        <div class="swatch"><b id="swatch-panel"></b><span id="hex-panel"></span></div>
+        <div class="swatch"><b id="swatch-accent"></b><span id="hex-accent"></span></div>
+        <div class="swatch"><b id="swatch-selected"></b><span id="hex-selected"></span></div>
+      </div>
+    </div>
+    <div class="window">
+      <div class="topbar"><div class="brand">Lanius</div><div class="tabs">
+        <div class="tab">Dashboard</div><div class="tab">Proxy</div><div class="tab active">Target</div><div class="tab">Repeater</div><div class="tab">Intruder</div><div class="tab">Decoder</div><div class="tab">Comparer</div><div class="tab">Logger</div><div class="tab">Settings</div><div class="tab">Docs</div>
+      </div></div>
+      <div class="subbar"><div class="subtab">Site map</div><div class="subtab active">Endpoints</div><div class="subtab">Scope</div><div class="spacer"></div><div class="filter"><i class="checkbox"></i>In-scope only</div><div class="button">Refresh</div></div>
+      <div class="endpoints"><table class="table">
+        <colgroup><col style="width:95px"><col style="width:260px"><col style="width:340px"><col style="width:82px"><col style="width:330px"><col></colgroup>
+        <thead><tr><th>Method</th><th>Host</th><th>Endpoint</th><th class="count">Count</th><th>Parameters</th><th>Statuses</th></tr></thead>
+        <tbody>
+          <tr class="selected"><td>GET</td><td>api.example.test</td><td>/users/{id}</td><td class="count">18</td><td><span class="badge">id</span><span class="badge">include</span><span class="badge">page</span></td><td><span class="status">200</span>, <span class="status error">404</span></td></tr>
+          <tr><td>POST</td><td>api.example.test</td><td>/session</td><td class="count">6</td><td>—</td><td><span class="status">200</span>, <span class="status warn">401</span></td></tr>
+          <tr><td>GET</td><td>api.example.test</td><td>/orders/{id}</td><td class="count">11</td><td><span class="badge">id</span></td><td><span class="status">200</span>, <span class="status error">404</span></td></tr>
+          <tr><td>GET</td><td>static.example.test</td><td>/assets/app.js</td><td class="count">4</td><td>—</td><td><span class="status">200</span></td></tr>
+          <tr><td>PUT</td><td>api.example.test</td><td>/users/{id}</td><td class="count">3</td><td><span class="badge">id</span></td><td><span class="status info">204</span></td></tr>
+          <tr><td>GET</td><td>auth.example.test</td><td>/oauth/callback</td><td class="count">8</td><td><span class="badge">code</span><span class="badge">state</span></td><td><span class="status warn">302</span></td></tr>
+        </tbody>
+      </table></div>
+      <div class="splitbar"></div>
+      <div class="bottom">
+        <div class="requests">
+          <div class="pane-title"><strong>GET /users/{id}</strong><span>18 requests</span></div>
+          <table class="table"><colgroup><col style="width:95px"><col><col style="width:74px"><col style="width:86px"></colgroup>
+            <thead><tr><th>Time</th><th>URL</th><th>Status</th><th>Size</th></tr></thead>
+            <tbody>
+              <tr class="selected"><td>14:06:23</td><td>/users/1042?include=roles</td><td class="status">200</td><td>2.4 KB</td></tr>
+              <tr><td>14:04:11</td><td>/users/1041</td><td class="status error">404</td><td>483 B</td></tr>
+              <tr><td>14:03:02</td><td>/users/1039?page=2</td><td class="status">200</td><td>2.1 KB</td></tr>
+              <tr><td>13:59:48</td><td>/users/1036</td><td class="status">200</td><td>2.3 KB</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="detail">
+          <div class="urlbar"><strong>GET</strong><span>https://api.example.test/users/1042?include=roles</span></div>
+          <div class="half"><div class="halfbar">REQUEST<div class="view"><span class="active">Parsed</span><span>Raw</span><span>Hex</span></div></div>
+            <div class="halfbody"><div class="kv"><span class="key">accept</span><span class="value">application/json</span></div><div class="kv"><span class="key">authorization</span><span class="value">••••••••••••</span></div><div class="kv"><span class="key">user-agent</span><span class="value">Lanius / 0.1.0</span></div></div>
+          </div>
+          <div class="half response"><div class="halfbar">RESPONSE (200)<div class="view"><span>Parsed</span><span class="active">Raw</span><span>Hex</span></div></div>
+            <div class="halfbody raw"><span class="head">HTTP/2 200
+content-type: application/json; charset=utf-8
+cache-control: private, max-age=0
+
+</span>{
+  <span class="json-key">"id"</span>: <span class="number">1042</span>,
+  <span class="json-key">"name"</span>: <span class="json-string">"Sample User"</span>,
+  <span class="json-key">"roles"</span>: [<span class="json-string">"editor"</span>, <span class="json-string">"reviewer"</span>]
+}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Same layout and sample data across every concept</span><span>Visual study · colors and selection emphasis only</span></div>
+  </div>
+</body>
+</html>

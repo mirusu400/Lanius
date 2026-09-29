@@ -69,8 +69,22 @@ export function AppearanceSection() {
           }
         >
           <option value="system">{t('appearance.themeSystem')}</option>
-          <option value="dark">{t('appearance.themeDark')}</option>
-          <option value="light">{t('appearance.themeLight')}</option>
+          <optgroup label={t('appearance.themeBuiltIn')}>
+            <option value="steel">{t('appearance.themeSteel')}</option>
+            <option value="light">{t('appearance.themeLight')}</option>
+            <option value="copper">{t('appearance.themeCopper')}</option>
+            <option value="sage">{t('appearance.themeSage')}</option>
+            <option value="paper">{t('appearance.themePaper')}</option>
+            <option value="dark">{t('appearance.themeDark')}</option>
+          </optgroup>
+          <optgroup label={t('appearance.themeEditor')}>
+            <option value="monokai">{t('appearance.themeMonokai')}</option>
+            <option value="gruvbox">{t('appearance.themeGruvbox')}</option>
+            <option value="dracula">{t('appearance.themeDracula')}</option>
+            <option value="tokyo-night">{t('appearance.themeTokyoNight')}</option>
+            <option value="catppuccin">{t('appearance.themeCatppuccin')}</option>
+            <option value="solarized">{t('appearance.themeSolarized')}</option>
+          </optgroup>
         </select>
       </div>
 

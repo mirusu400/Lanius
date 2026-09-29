@@ -5,7 +5,15 @@
  * window does not flash the wrong theme on launch.
  */
 
-export type ThemeChoice = 'system' | 'dark' | 'light';
+export type ThemePalette =
+  | 'dark' | 'light' | 'copper' | 'steel' | 'sage' | 'paper'
+  | 'monokai' | 'gruvbox' | 'dracula' | 'tokyo-night' | 'catppuccin' | 'solarized';
+export type ThemeChoice = 'system' | ThemePalette;
+
+const THEME_CHOICES: readonly ThemeChoice[] = [
+  'system', 'dark', 'light', 'copper', 'steel', 'sage', 'paper',
+  'monokai', 'gruvbox', 'dracula', 'tokyo-night', 'catppuccin', 'solarized',
+];
 
 export interface Appearance {
   theme: ThemeChoice;
@@ -69,9 +77,7 @@ function clamp(value: number, min: number, max: number, fallback: number): numbe
 export function normalise(value: unknown): Appearance {
   const raw = (value ?? {}) as Partial<Appearance>;
   const theme: ThemeChoice =
-    raw.theme === 'dark' || raw.theme === 'light' || raw.theme === 'system'
-      ? raw.theme
-      : DEFAULTS.theme;
+    THEME_CHOICES.find((choice) => choice === raw.theme) ?? DEFAULTS.theme;
   const known = (list: readonly { id: string }[], id: unknown) =>
     typeof id === 'string' && list.some((entry) => entry.id === id) ? id : '';
   return {
@@ -118,9 +124,9 @@ function prefersDark(): boolean {
   );
 }
 
-/** Which palette 'system' resolves to right now. */
-export function resolveTheme(choice: ThemeChoice): 'dark' | 'light' {
-  if (choice === 'system') return prefersDark() ? 'dark' : 'light';
+/** System dark uses Steel; the older orange dark remains a separate choice. */
+export function resolveTheme(choice: ThemeChoice): ThemePalette {
+  if (choice === 'system') return prefersDark() ? 'steel' : 'light';
   return choice;
 }
 
@@ -150,8 +156,10 @@ function applyWindowTheme(theme: ThemeChoice): void {
   }).__TAURI_INTERNALS__;
   // Absent in a browser, where there is no window to set.
   if (!internals) return;
+  const windowTheme = theme === 'system' ? null :
+    theme === 'light' || theme === 'paper' ? 'light' : 'dark';
   void internals
-    .invoke('set_window_theme', { theme: theme === 'system' ? null : theme })
+    .invoke('set_window_theme', { theme: windowTheme })
     // A frame that does not match is worth less than a working app, so a
     // failure here is not worth interrupting anyone over.
     .catch(() => undefined);

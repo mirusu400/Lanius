@@ -105,6 +105,185 @@
   --shadow: rgba(15, 20, 30, 0.18);
 }
 
+/* The optional palettes use the same roles as the original themes.
+   Selection and status colors stay distinct without tinting every surface. */
+:root[data-theme='copper'] {
+  color-scheme: dark;
+  --bg: #1c1e1f;
+  --bg-alt: #252829;
+  --bg-row: #202323;
+  --bg-sunken: #17191a;
+  --bg-hover: #303435;
+  --border: #3c4141;
+  --border-soft: #2b3030;
+  --fg: #dce0db;
+  --muted: #98a19b;
+  --fg-disabled: #646d67;
+  --accent: #b99063;
+  --accent-dim: #39332b;
+  --on-accent: #17191a;
+  --accent-wash: rgba(185, 144, 99, 0.08);
+  --accent-wash-strong: rgba(185, 144, 99, 0.2);
+  --accent2: #8faab2;
+  --accent2-wash: rgba(143, 170, 178, 0.16);
+  --ok: #8db49a;
+  --ok-bright: #a2c5ad;
+  --ok-soft: #8db49a;
+  --ok-strong: #72a082;
+  --ok-border: #476b54;
+  --ok-wash: rgba(141, 180, 154, 0.16);
+  --warn: #d0ae74;
+  --warn-dim: #b99b69;
+  --danger: #ca877d;
+  --danger-dim: #a86860;
+  --danger-soft: #d19a92;
+  --danger-bright: #e4ada4;
+  --danger-muted: #a96d67;
+  --danger-deep: #70403b;
+  --danger-bg: #382825;
+  --danger-border: #70443e;
+  --danger-wash: rgba(202, 135, 125, 0.17);
+  --info: #8faab2;
+  --info-soft: #a3bbc2;
+  --info-wash: rgba(143, 170, 178, 0.16);
+  --chart-2xx: #72a082;
+  --chart-3xx: #7195a2;
+  --shadow: rgba(0, 0, 0, 0.42);
+}
+
+/* Neutral surfaces and clear blue accents, inspired by VS Code Dark Modern. */
+:root[data-theme='steel'] {
+  color-scheme: dark;
+  --bg: #1f1f1f;
+  --bg-alt: #2b2b2b;
+  --bg-row: #242424;
+  --bg-sunken: #181818;
+  --bg-hover: #313131;
+  --border: #3c3c3c;
+  --border-soft: #2b2b2b;
+  --fg: #d7d7d7;
+  --muted: #9d9d9d;
+  --fg-disabled: #707070;
+  --accent: #4daafc;
+  --accent-dim: #264f78;
+  --on-accent: #101820;
+  --accent-wash: rgba(77, 170, 252, 0.09);
+  --accent-wash-strong: rgba(77, 170, 252, 0.22);
+  --accent2: #4ec9b0;
+  --accent2-wash: rgba(78, 201, 176, 0.16);
+  --ok: #4ec9b0;
+  --ok-bright: #76dfc8;
+  --ok-soft: #65d2ba;
+  --ok-strong: #32aa90;
+  --ok-border: #286a5d;
+  --ok-wash: rgba(78, 201, 176, 0.17);
+  --warn: #d7ba7d;
+  --warn-dim: #b89a5d;
+  --danger: #f48771;
+  --danger-dim: #cb6a5b;
+  --danger-soft: #f49a88;
+  --danger-bright: #ffb7a8;
+  --danger-muted: #c77062;
+  --danger-deep: #733b34;
+  --danger-bg: #3e2623;
+  --danger-border: #855047;
+  --danger-wash: rgba(244, 135, 113, 0.17);
+  --info: #75beff;
+  --info-soft: #9cdcfe;
+  --info-wash: rgba(117, 190, 255, 0.17);
+  --chart-2xx: #32aa90;
+  --chart-3xx: #569cd6;
+  --shadow: rgba(0, 0, 0, 0.45);
+}
+
+:root[data-theme='sage'] {
+  color-scheme: dark;
+  --bg: #1d211d;
+  --bg-alt: #272c27;
+  --bg-row: #222722;
+  --bg-sunken: #181b18;
+  --bg-hover: #343a33;
+  --border: #41483f;
+  --border-soft: #30372f;
+  --fg: #e0e2d9;
+  --muted: #a1aa9b;
+  --fg-disabled: #6d786b;
+  --accent: #a7b98a;
+  --accent-dim: #333d31;
+  --on-accent: #192019;
+  --accent-wash: rgba(167, 185, 138, 0.08);
+  --accent-wash-strong: rgba(167, 185, 138, 0.2);
+  --accent2: #9dafb1;
+  --accent2-wash: rgba(157, 175, 177, 0.16);
+  --ok: #9fb88d;
+  --ok-bright: #b2c7a1;
+  --ok-soft: #9fb88d;
+  --ok-strong: #85a474;
+  --ok-border: #556d4c;
+  --ok-wash: rgba(159, 184, 141, 0.16);
+  --warn: #ccb47f;
+  --warn-dim: #b5a06f;
+  --danger: #cb9186;
+  --danger-dim: #a97870;
+  --danger-soft: #d6a59b;
+  --danger-bright: #e8bab0;
+  --danger-muted: #b37d75;
+  --danger-deep: #714742;
+  --danger-bg: #392c29;
+  --danger-border: #704942;
+  --danger-wash: rgba(203, 145, 134, 0.17);
+  --info: #9dafb1;
+  --info-soft: #afc1c0;
+  --info-wash: rgba(157, 175, 177, 0.16);
+  --chart-2xx: #85a474;
+  --chart-3xx: #839ea0;
+  --shadow: rgba(0, 0, 0, 0.42);
+}
+
+:root[data-theme='paper'] {
+  color-scheme: light;
+  --bg: #f4f4ef;
+  --bg-alt: #fcfbf8;
+  --bg-row: #f0f1ec;
+  --bg-sunken: #ecede8;
+  --bg-hover: #ebeee8;
+  --border: #d0d5ce;
+  --border-soft: #e0e4dd;
+  --fg: #29302c;
+  --muted: #6e7770;
+  --fg-disabled: #a2aaa2;
+  --accent: #486d61;
+  --accent-dim: #dceae2;
+  --on-accent: #ffffff;
+  --accent-wash: rgba(72, 109, 97, 0.08);
+  --accent-wash-strong: rgba(72, 109, 97, 0.18);
+  --accent2: #477488;
+  --accent2-wash: rgba(71, 116, 136, 0.12);
+  --ok: #387752;
+  --ok-bright: #2d6948;
+  --ok-soft: #387752;
+  --ok-strong: #326e4c;
+  --ok-border: #a6c8ad;
+  --ok-wash: rgba(56, 119, 82, 0.12);
+  --warn: #926f38;
+  --warn-dim: #9d7841;
+  --danger: #a7534b;
+  --danger-dim: #91453f;
+  --danger-soft: #a7534b;
+  --danger-bright: #913e38;
+  --danger-muted: #b27068;
+  --danger-deep: #edcbc6;
+  --danger-bg: #f8e9e5;
+  --danger-border: #e6bdb7;
+  --danger-wash: rgba(167, 83, 75, 0.12);
+  --info: #477488;
+  --info-soft: #3f6b7e;
+  --info-wash: rgba(71, 116, 136, 0.12);
+  --chart-2xx: #387752;
+  --chart-3xx: #477488;
+  --shadow: rgba(24, 32, 27, 0.16);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -1430,6 +1609,249 @@ td.empty {
   padding: 0;
 }
 
+.response-preview {
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+}
+
+.response-preview-frame,
+.response-preview-pdf iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: #fff;
+}
+
+.response-preview-html {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.response-preview-html .response-preview-frame {
+  flex: 1;
+  min-height: 0;
+}
+
+.response-preview-pdf {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.response-preview-pdf iframe {
+  flex: 1;
+  min-height: 0;
+}
+
+.response-preview-pdf a {
+  align-self: flex-start;
+  color: var(--accent);
+}
+
+.image-preview {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.image-preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  padding: 0 0 6px;
+}
+
+.image-preview-toolbar button {
+  min-width: 28px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-alt);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.image-preview-toolbar button:disabled {
+  color: var(--fg-disabled);
+  cursor: default;
+}
+
+.image-preview-toolbar .mono {
+  min-width: 44px;
+  text-align: center;
+  font-size: 0.85em;
+}
+
+.response-preview-image {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: repeating-conic-gradient(#d3d5d9 0 25%, #f3f4f5 0 50%) 0 0 / 20px 20px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.response-preview-image.dragging {
+  cursor: grabbing;
+}
+
+.response-preview-image img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  transform-origin: center center;
+}
+
+.response-preview-text,
+.response-preview-file-detail pre {
+  min-height: 100%;
+  margin: 0;
+  padding: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.response-preview-workbook,
+.response-preview-archive {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.response-preview-tabs {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  flex: none;
+  padding-bottom: 6px;
+}
+
+.response-preview-tabs button,
+.response-preview-files button {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-alt);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.response-preview-tabs button.active,
+.response-preview-files button.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.preview-grid-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+}
+
+.preview-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.preview-grid th,
+.preview-grid td {
+  padding: 4px 8px;
+  min-width: 70px;
+  max-width: 320px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.preview-grid th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-alt);
+  color: var(--muted);
+  z-index: 1;
+}
+
+.preview-grid tbody th {
+  left: 0;
+}
+
+.response-preview-note {
+  margin: 5px 0;
+  font-size: 0.82em;
+}
+
+.response-preview-archive-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+}
+
+.response-preview-files {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 42%;
+  min-width: 150px;
+  overflow: auto;
+}
+
+.response-preview-files button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  text-align: left;
+}
+
+.response-preview-files button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.response-preview-files button small {
+  flex: none;
+  color: var(--muted);
+}
+
+.response-preview-file-detail {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.response-preview-file-detail pre {
+  min-height: 0;
+}
+
 .detail-tabs {
   display: flex;
   align-items: center;
@@ -1508,20 +1930,13 @@ pre.body {
 }
 
 /* --- sub tabs (Proxy: Intercept / History) --- */
-/* A row of tabs that sit on the bottom border, folder style.
- *
- * The bar used to have no bottom padding, so a tab's lower edge landed
- * exactly on the container's. A button whose height works out to a
- * fraction of a pixel, which it does at most font sizes, then lost its
- * last row of pixels to rounding, and the effect is worse in the WebKit
- * webview the desktop build uses than in Chrome. There is a pixel of
- * room now, and the row is tall enough for the tallest line it holds. */
+/* A separate surface beneath the main tab bar; the active tab is raised. */
 .subtabs {
   display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  padding: 6px 8px 1px;
-  background: var(--bg-alt);
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   /* Never smaller than the content, whatever the flex context does. */
   flex: none;
@@ -1530,11 +1945,7 @@ pre.body {
 .subtabs button {
   background: transparent;
   border: 1px solid transparent;
-  /* Transparent rather than none: dropping the border made the box a
-     pixel shorter at the bottom than the top, which is the asymmetry
-     that pushed the text into the edge. */
-  border-bottom-color: transparent;
-  border-radius: 3px 3px 0 0;
+  border-radius: 4px;
   color: var(--muted);
   cursor: pointer;
   /* Korean glyphs are taller than Latin ones, and 1.4 left nothing to
@@ -1543,7 +1954,7 @@ pre.body {
 }
 
 .subtabs button.active {
-  background: var(--bg);
+  background: var(--bg-hover);
   border-color: var(--border);
   color: var(--fg);
 }
@@ -1745,6 +2156,39 @@ pre.body {
   white-space: pre;
 }
 
+.response-inspector {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.response-inspector-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.response-inspector-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.response-inspector-body .repeater-response {
+  min-height: 0;
+  padding: 0;
+}
+
 .to-repeater {
   margin-left: 12px;
 }
@@ -1846,6 +2290,11 @@ pre.body {
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+
+.endpoint-list .flow-table tr.selected td:first-child,
+.endpoint-request-list .flow-table tr.selected td:first-child {
+  box-shadow: inset 3px 0 var(--accent);
 }
 
 .endpoint-layout,
@@ -2084,6 +2533,19 @@ pre.body {
   flex: 1;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.intruder-response-split {
+  flex: 1;
+  min-height: 0;
+}
+
+.intruder-results-list {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
 }
 

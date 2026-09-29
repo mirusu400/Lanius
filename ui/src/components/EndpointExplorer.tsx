@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { addScopeFromUrl, deleteFlows, getEndpointFlows, getFlow } from '../api/client';
 import type { EndpointGroup, FlowDetail, SitePath } from '../api/types';
-import { formatBytes, formatTime, formatUrl } from '../tabs/proxyModel';
+import { formatBytes, formatTime, formatUrl, statusClass } from '../tabs/proxyModel';
 import { endpointHost } from '../tabs/targetModel';
 import { sendToRepeater } from '../tabs/repeaterStore';
 import { sendToIntruder } from '../tabs/intruderStore';
@@ -186,7 +186,9 @@ export function EndpointExplorer({
                 <td className="mono">{item.template}</td>
                 <td className="mono num">{item.count}</td>
                 <td className="mono">{item.query_params.map((param) => <span key={param} className="param">{param}</span>)}</td>
-                <td className="mono">{item.statuses.join(', ')}</td>
+                <td className="mono">{item.statuses.map((code, index) => (
+                  <span key={code}>{index > 0 ? ', ' : ''}<span className={statusClass(code)}>{code}</span></span>
+                ))}</td>
                 <ResizableFillCell />
               </tr>
             ))}

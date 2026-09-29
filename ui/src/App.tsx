@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { isDesktop, putWorkspace } from "./api/client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { captureWindowToClipboard, isDesktop, putWorkspace } from "./api/client";
 import { ProjectPicker } from "./ProjectPicker";
 import { closeProject, currentProject, type Project } from "./projects";
 
@@ -30,9 +30,11 @@ import {
 } from "./tabs/decoderStore";
 import { BusyProvider } from "./components/busy";
 import { Spinner, useDelayedBusy } from "./components/Spinner";
-import { useShortcuts } from "./useShortcut";
+import { useToast } from "./components/Toast";
+import { useShortcut, useShortcuts } from "./useShortcut";
 import { autoCheck, useUpdates } from "./updates";
 import "./App.css";
+import "./themePresets.css";
 
 const TABS = [
   "Dashboard",
@@ -51,9 +53,34 @@ const TABS = [
 export type Tab = (typeof TABS)[number];
 
 export default function App() {
+  const t = useT();
   const desktop = isDesktop();
   const [project, setProject] = useState<Project | null>(null);
   const [checking, setChecking] = useState(desktop);
+  const { showToast, dismissToast } = useToast();
+  const capturingScreenshot = useRef(false);
+
+  const captureScreenshot = useCallback(() => {
+    if (capturingScreenshot.current) return;
+    capturingScreenshot.current = true;
+    dismissToast();
+
+    void (async () => {
+      // Let React remove an earlier toast before the snapshot. Timers also run
+      // when WebKit pauses animation frames for a window in the background.
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
+      try {
+        await captureWindowToClipboard();
+        showToast({ message: t('screenshot.copied'), tone: 'success' });
+      } catch (error) {
+        console.error('Window capture failed', error);
+        showToast({ message: t('screenshot.failed'), tone: 'error' });
+      } finally {
+        capturingScreenshot.current = false;
+      }
+    })();
+  }, [dismissToast, showToast, t]);
+  useShortcut('app.screenshot', captureScreenshot, desktop);
 
   useEffect(() => {
     if (!desktop) return;
@@ -77,9 +104,12 @@ export default function App() {
     resetDecoderTabs();
   };
 
-  if (checking) return <div className="project-picker" />;
-  if (desktop && !project) return <ProjectPicker onOpen={setProject} />;
-  return <WorkspaceApp project={project} onLeave={leaveProject} />;
+  const content = checking
+    ? <div className="project-picker" />
+    : desktop && !project
+      ? <ProjectPicker onOpen={setProject} />
+      : <WorkspaceApp project={project} onLeave={leaveProject} />;
+  return content;
 }
 
 function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: () => Promise<void> }) {

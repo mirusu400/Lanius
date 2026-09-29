@@ -15,6 +15,7 @@ use tauri::{Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
 mod projects;
+mod screenshot;
 
 #[derive(Default)]
 pub struct ProjectSession(Mutex<Option<projects::Project>>);
@@ -704,6 +705,7 @@ pub fn run() {
             open_project,
             start_temp_project,
             close_project,
+            screenshot::capture_current_window,
             update_check,
             update_install,
             update_progress

@@ -169,8 +169,13 @@ binary automatically. GOST is licensed under MIT.
 
 ### Appearance
 
-**Settings > Appearance** has a dark and a light theme, and follows the system
-by default. The interface font and the editor font are set separately, with
+**Settings > Appearance** offers Steel as the default dark palette, the
+original dark palette as Classic Dark, Light, Copper, Sage, Paper, and six
+editor palette adaptations: Monokai Classic, Gruvbox Dark, Dracula, Tokyo
+Night, Catppuccin Mocha, and Solarized Dark. Their sources are credited in
+[theme sources](docs/theme-sources.md).
+It follows the system by default. The interface
+font and the editor font are set separately, with
 their own sizes, since one is for labels and the other for raw HTTP where a
 monospace font keeps columns lined up. A preview shows the result as you
 change it.

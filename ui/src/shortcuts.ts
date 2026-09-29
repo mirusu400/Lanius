@@ -12,7 +12,7 @@ export interface KeyboardShortcut {
 
 export interface ShortcutDefinition {
   id: string;
-  category: 'navigation' | 'repeater';
+  category: 'general' | 'navigation' | 'repeater';
   label: TranslationKey;
   description?: TranslationKey;
   defaults: Record<ShortcutPlatform, KeyboardShortcut | null>;
@@ -61,6 +61,17 @@ const navigation = [
 
 /** Every shortcut with a handler is listed here and appears in Settings. */
 export const SHORTCUTS: ShortcutDefinition[] = [
+  {
+    id: 'app.screenshot',
+    category: 'general',
+    label: 'shortcuts.captureWindow',
+    description: 'shortcuts.captureWindowHelp',
+    defaults: {
+      mac: shortcut('KeyS', { meta: true, ctrl: true, shift: true }),
+      windows: null,
+      linux: null,
+    },
+  },
   ...navigation.map(([name, label, code]): ShortcutDefinition => ({
     id: `app.${name}`,
     category: 'navigation',

@@ -25,6 +25,7 @@ import { toSendPayload } from './repeaterModel';
 import { PayloadPicker } from '../components/PayloadPicker';
 import { RequestEditor } from '../components/RequestEditor';
 import { Split } from '../components/Split';
+import { ResponseInspector } from '../components/ResponseInspector';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { sendToRepeater } from './repeaterStore';
@@ -42,6 +43,7 @@ export function IntruderTab() {
   const [attackType, setAttackType] = useState<AttackType>('sniper');
   const [payloadText, setPayloadText] = useState(['a\nb\nc']);
   const [attack, setAttack] = useState<Attack | null>(null);
+  const [selectedResultIndex, setSelectedResultIndex] = useState<number | null>(null);
   // How hard to push. Gentle by default: an attack that knocks a service
   // over tells you nothing.
   const [concurrency, setConcurrency] = useState(5);
@@ -57,6 +59,7 @@ export function IntruderTab() {
         setUrl(target.url);
         setTemplate(target.template);
         setAttack(null);
+        setSelectedResultIndex(null);
       }),
     [],
   );
@@ -217,6 +220,7 @@ export function IntruderTab() {
       const started = await startAttack(config);
       attackIdRef.current = started.id;
       setAttack({ ...started, results: [] });
+      setSelectedResultIndex(null);
       void refresh(started.id);
     } catch (err) {
       setError(errorMessage(err));
@@ -236,6 +240,7 @@ export function IntruderTab() {
     [attack],
   );
   const running = attack?.status === 'running' || attack?.status === 'pending';
+  const selectedResult = attack?.results.find((result) => result.index === selectedResultIndex) ?? null;
 
   return (
     <div className="intruder-tab">
@@ -366,38 +371,60 @@ export function IntruderTab() {
               <span className="muted">{t('intruder.noResults')}</span>
             )}
           </div>
-          <ResizableTable columns={resultColumns} className="flow-table">
-            <thead>
-              <tr>
-                {['#', t('intruder.payload'), t('flow.status'), t('intruder.length'), t('flow.time')].map((label, index) => (
-                  <ResizableHeader key={index} label={label} index={index} columns={resultColumns} resizeLabel={t('table.resizeColumn', { column: label })} />
-                ))}
-                <ResizableFillHeader />
-              </tr>
-            </thead>
-            <tbody>
-              {(attack?.results ?? []).map((result) => (
-                <tr
-                  key={result.index}
-                  className={outliers.has(result.index) ? 'outlier' : undefined}
-                  onContextMenu={(event) => menu.open(event, result)}
-                >
-                  <td className="mono num">{result.index}</td>
-                  <td className="mono">{result.payloads.join(' , ')}</td>
-                  <td className="mono">
-                    {result.error ? 'ERR' : result.status_code}
-                  </td>
-                  <td className="mono num">{result.length}</td>
-                  <td className="mono num">
-                    {result.duration_ms === null
-                      ? ''
-                      : `${Math.round(result.duration_ms)} ms`}
-                  </td>
-                  <ResizableFillCell />
-                </tr>
-              ))}
-            </tbody>
-          </ResizableTable>
+          <Split
+            direction="vertical"
+            storageKey="lanius.split.intruder.response"
+            initial={0.55}
+            className="intruder-response-split"
+            first={<div className="intruder-results-list">
+              <ResizableTable columns={resultColumns} className="flow-table">
+                <thead>
+                  <tr>
+                    {['#', t('intruder.payload'), t('flow.status'), t('intruder.length'), t('flow.time')].map((label, index) => (
+                      <ResizableHeader key={index} label={label} index={index} columns={resultColumns} resizeLabel={t('table.resizeColumn', { column: label })} />
+                    ))}
+                    <ResizableFillHeader />
+                  </tr>
+                </thead>
+                <tbody>
+                  {(attack?.results ?? []).map((result) => (
+                    <tr
+                      key={result.index}
+                      className={[outliers.has(result.index) ? 'outlier' : '', selectedResultIndex === result.index ? 'selected' : ''].filter(Boolean).join(' ') || undefined}
+                      aria-selected={selectedResultIndex === result.index}
+                      tabIndex={0}
+                      onClick={() => setSelectedResultIndex(result.index)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedResultIndex(result.index);
+                        }
+                      }}
+                      onContextMenu={(event) => menu.open(event, result)}
+                    >
+                      <td className="mono num">{result.index}</td>
+                      <td className="mono">{result.payloads.join(' , ')}</td>
+                      <td className="mono">
+                        {result.error ? 'ERR' : result.status_code}
+                      </td>
+                      <td className="mono num">{result.length}</td>
+                      <td className="mono num">
+                        {result.duration_ms === null
+                          ? ''
+                          : `${Math.round(result.duration_ms)} ms`}
+                      </td>
+                      <ResizableFillCell />
+                    </tr>
+                  ))}
+                </tbody>
+              </ResizableTable>
+            </div>}
+            second={<ResponseInspector
+              flowId={selectedResult?.flow_id ?? null}
+              title={selectedResult ? `${t('detail.response')} #${selectedResult.index}` : undefined}
+              empty={selectedResult?.error ?? t('intruder.selectResult')}
+            />}
+          />
           <ContextMenu
             position={menu.position}
             items={

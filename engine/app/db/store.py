@@ -1357,6 +1357,51 @@ class FlowStore:
                 count += 1
         return {"items": items, "count": count}
 
+    def endpoint_candidates(self, host: str | None = None) -> List[dict[str, Any]]:
+        """All HTTP requests with only the fields needed for grouping."""
+        params: list[Any] = []
+        where = "WHERE type = 'http' AND host IS NOT NULL"
+        if host:
+            where += " AND host LIKE ?"
+            params.append(f"%{host}%")
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT method, scheme, host, port, path, query, status_code,"
+                f" started_at FROM flows {where} ORDER BY started_at DESC, rowid DESC",
+                params,
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def paths_for_endpoint(
+        self, scheme: str, host: str, port: int | None, method: str, template: str
+    ) -> List[dict[str, Any]]:
+        """Every captured request belonging to one endpoint template."""
+        from ..addons.endpoints import templatize
+
+        clauses = [
+            "type = 'http'", "COALESCE(scheme, 'http') = ?", "host = ?",
+            "upper(COALESCE(method, 'GET')) = ?",
+        ]
+        params: list[Any] = [scheme, host, method.upper()]
+        if port is None:
+            clauses.append("port IS NULL")
+        else:
+            clauses.append("port = ?")
+            params.append(port)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, method, path, query, status_code, response_size,"
+                " started_at FROM flows"
+                f" WHERE {' AND '.join(clauses)}"
+                " ORDER BY started_at DESC, rowid DESC",
+                params,
+            ).fetchall()
+        return [
+            {**dict(row), "method": row["method"] or "GET"}
+            for row in rows
+            if templatize(row["path"] or "/")[0] == template
+        ]
+
     def distinct_paths_for_site(
         self, scheme: str, host: str, port: int | None
     ) -> List[str]:

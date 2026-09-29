@@ -19,6 +19,7 @@ import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { RequestEditor } from '../components/RequestEditor';
 import { Split } from '../components/Split';
+import { ResponseInspector } from '../components/ResponseInspector';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { sendTextToIntruder } from './intruderStore';
@@ -257,13 +258,15 @@ export function RepeaterTabView() {
               onChange={(text) => updateTab(active.id, { text })}
               onContextMenu={editorMenu.open}
             />}
-            second={<pre className="repeater-response mono">
-              {active.response
+            second={<ResponseInspector
+              flowId={active.response?.id ?? null}
+              raw={active.response
                 ? renderResponseText(active.response, (count) =>
                     t('repeater.bodyTruncated', { count: String(count) }),
                   )
-                : t('repeater.noResponse')}
-            </pre>}
+                : undefined}
+              empty={t('repeater.noResponse')}
+            />}
           />
           {editorMenu.element}
         </>
