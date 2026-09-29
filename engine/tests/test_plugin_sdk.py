@@ -255,3 +255,26 @@ def test_sdk_contributions_are_available_through_the_api(tmp_path) -> None:
             "/api/plugins/sdk/settings", json={"values": {"enabled": False}}
         )
         assert updated.json()["values"]["enabled"] is False
+
+
+def test_dotted_plugin_ids_cannot_collide_with_each_other(tmp_path) -> None:
+    from lanius_sdk import PluginApiError
+
+    registry = ContributionRegistry(None, tmp_path / "user-values.json")
+    with pytest.raises(PluginApiError, match="dashes or underscores"):
+        registry.register("acme", "actions", "demo.hello", {}, lambda payload: None)
+
+    registry.set_storage("acme", "demo.token", "outer", "user")
+    assert registry.get_storage("acme.demo", "token", None, "user") is None
+    registry.set_storage("acme.demo", "token", "inner", "user")
+    assert registry.get_storage("acme", "demo.token", None, "user") == "outer"
+
+    registry.register("acme", "actions", "hello", {}, lambda payload: None)
+    registry.register("acme.demo", "actions", "hello", {}, lambda payload: None)
+    assert [item["id"] for item in registry.diagnostics("acme")["contributions"]] == [
+        "acme.hello"
+    ]
+    registry.reset_diagnostics("acme")
+    assert [
+        item["id"] for item in registry.diagnostics("acme.demo")["contributions"]
+    ] == ["acme.demo.hello"]

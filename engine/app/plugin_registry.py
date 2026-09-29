@@ -41,6 +41,9 @@ ContributionKind = Literal[
 ]
 
 _ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
+# Plugin ids may contain dots, so contribution ids must not: the qualified
+# "<plugin>.<local>" id then splits unambiguously at its last dot.
+_LOCAL_ID = re.compile(r"^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$")
 _KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _MAX_STORAGE_BYTES = 1024 * 1024
 _MAX_GENERATED_PAYLOADS = 100_000
@@ -241,6 +244,13 @@ class ContributionRegistry:
             )
 
     @staticmethod
+    def _validate_local_id(value: str, label: str) -> None:
+        if not isinstance(value, str) or not _LOCAL_ID.fullmatch(value):
+            raise PluginApiError(
+                f"{label} must use lowercase letters, digits, dashes or underscores"
+            )
+
+    @staticmethod
     def _validate_key(key: str) -> None:
         if not isinstance(key, str) or not _KEY.fullmatch(key):
             raise PluginApiError("storage key contains unsupported characters")
@@ -264,7 +274,7 @@ class ContributionRegistry:
         *,
         on_dispose: Callable[[], None] | None = None,
     ) -> Disposable:
-        self._validate_id(local_id, f"{kind} id")
+        self._validate_local_id(local_id, f"{kind} id")
         qualified = f"{owner}.{local_id}"
         bucket = self._items[kind]
         if qualified in bucket:
@@ -354,7 +364,7 @@ class ContributionRegistry:
         with self._diagnostics_lock:
             contributions = []
             for (kind, qualified_id), health in self._health.items():
-                if not qualified_id.startswith(f"{owner}."):
+                if qualified_id.rpartition(".")[0] != owner:
                     continue
                 item = self._items[kind].get(qualified_id)
                 contributions.append(
@@ -375,7 +385,7 @@ class ContributionRegistry:
         with self._diagnostics_lock:
             self._logs.pop(owner, None)
             for kind, qualified_id in list(self._health):
-                if qualified_id.startswith(f"{owner}."):
+                if qualified_id.rpartition(".")[0] == owner:
                     self._health[(kind, qualified_id)] = ContributionHealth()
         return self.diagnostics(owner)
 
@@ -510,7 +520,8 @@ class ContributionRegistry:
         return value
 
     def _value_key(self, category: str, owner: str, key: str) -> str:
-        return f"plugins.{category}.{owner}.{key}"
+        # "/" appears in neither plugin ids nor keys, so owners cannot collide.
+        return f"plugins.{category}.{owner}/{key}"
 
     def _read_value(self, key: str, scope: SettingScope) -> Any:
         raw = (
@@ -704,6 +715,7 @@ class PluginHost:
     ) -> Disposable:
         if not callable(encode) and not callable(decode):
             raise PluginApiError("a codec needs an encode or decode function")
+        self.registry._validate_local_id(codec_id, "codecs id")
         qualified = f"{self.owner}.{codec_id}"
         codecs.register_codec(qualified, encode=encode, decode=decode)
         try:

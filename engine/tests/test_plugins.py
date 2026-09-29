@@ -783,3 +783,26 @@ def test_the_shipped_redaction_plugin_works(tmp_path) -> None:
         assert "abc" not in text
     finally:
         manager.disable("copy_as_python_redacted")
+
+
+@pytest.mark.asyncio
+async def test_auto_reload_recovers_a_plugin_whose_last_edit_failed(tmp_path) -> None:
+    path = write(tmp_path, "stamp", STAMP_PLUGIN)
+    store = FlowStore(tmp_path / "recover.sqlite")
+    manager = PluginManager(tmp_path, store, addons=FakeAddons())
+    manager.discover()
+    manager.mark_runtime_started()
+    await manager.enable_async("stamp")
+    await manager.set_auto_reload("stamp", True)
+
+    path.write_text("def broken(:\n")
+    await manager.refresh()
+    assert manager.get("stamp").loaded is False
+
+    path.write_text(STAMP_PLUGIN.replace('"yes"', '"fixed"'))
+    await manager.refresh()
+    assert manager.get("stamp").loaded is True
+    flow = tflow.tflow(req=tutils.treq(), resp=False)
+    manager.addons.items[0].request(flow)
+    assert flow.request.headers["X-Plugin"] == "fixed"
+    store.close()

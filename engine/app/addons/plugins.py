@@ -456,8 +456,17 @@ class PluginManager:
                     existing.fingerprint = item.fingerprint
                     if not existing.loaded:
                         existing.meta = item.meta
-                    if source_changed and existing.loaded and existing.auto_reload:
-                        await self._unload_async(existing)
+                    # An enabled plugin that failed to load is retried too, so
+                    # fixing the file recovers it without a manual reload.
+                    if (
+                        source_changed
+                        and existing.auto_reload
+                        and (existing.loaded or existing.enabled)
+                    ):
+                        if existing.loaded:
+                            await self._unload_async(existing)
+                        else:
+                            existing.meta = item.meta
                         if existing.enabled and not self.safe_mode:
                             try:
                                 await self._load_async(existing)

@@ -302,3 +302,31 @@ def test_catalogue_api_refreshes_and_installs(tmp_path) -> None:
         )
         assert installed.status_code == 200, installed.text
         assert installed.json()["plugin"]["loaded"] is True
+
+
+def test_rollback_skips_a_backup_of_the_installed_version(tmp_path) -> None:
+    catalogue, packages, _responses, _archives, _key = setup_manager(tmp_path)
+    catalogue.refresh()
+    catalogue.install("official", "acme.catalogue-demo", "1.0.0")
+    catalogue.install("official", "acme.catalogue-demo", "2.0.0")
+    packages.rollback("acme.catalogue-demo")
+    catalogue.install("official", "acme.catalogue-demo", "2.0.0")
+
+    assert packages.rollback_versions("acme.catalogue-demo") == ["1.0.0"]
+    result = packages.rollback("acme.catalogue-demo")
+    assert result["version"] == "1.0.0"
+    assert result["rollback_versions"] == ["2.0.0"]
+
+
+def test_refresh_recovers_after_the_source_key_is_rotated(tmp_path) -> None:
+    catalogue, _packages, responses, archives, _key = setup_manager(tmp_path)
+    assert catalogue.refresh() == {}
+
+    rotated = Ed25519PrivateKey.generate()
+    sources = json.loads(catalogue.sources_path.read_text())
+    sources["sources"][0]["public_key"] = public_key(rotated)
+    catalogue.sources_path.write_text(json.dumps(sources))
+    responses["https://catalogue.test/index.json"] = signed_catalogue(rotated, archives)
+
+    assert catalogue.refresh() == {}
+    assert catalogue.catalogue()["errors"] == {}

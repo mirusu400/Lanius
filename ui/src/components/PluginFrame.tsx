@@ -62,7 +62,8 @@ export function PluginFrame({
         } else if (request.method === 'actions.invoke') {
           if (!permissions.has('actions.invoke')) throw new Error('permission denied: actions.invoke');
           const action = String(params.action ?? '');
-          if (!action.startsWith(`${plugin.name}.`)) throw new Error('a plugin can only invoke its own actions');
+          // Contribution ids never contain dots, so the owner is everything before the last one.
+          if (action.slice(0, action.lastIndexOf('.')) !== plugin.name) throw new Error('a plugin can only invoke its own actions');
           result = (await invokePluginAction(action, (params.context as Record<string, unknown>) ?? {})).result;
         } else if (request.method === 'settings.get') {
           if (!permissions.has('settings.read')) throw new Error('permission denied: settings.read');

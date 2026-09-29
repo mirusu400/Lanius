@@ -222,3 +222,91 @@ def test_package_api_serves_sandboxed_ui_and_uninstalls(tmp_path) -> None:
             plugin["name"] != "acme.demo"
             for plugin in client.get("/api/plugins").json()["items"]
         )
+
+
+def test_bytecode_written_after_import_does_not_break_integrity(tmp_path) -> None:
+    packages = PluginPackageManager(tmp_path / "plugins")
+    packages.install(archive_bytes())
+    cache = tmp_path / "plugins" / "acme.demo" / "backend" / "__pycache__"
+    cache.mkdir()
+    (cache / "__init__.cpython-313.pyc").write_bytes(b"compiled")
+
+    manifest, trust = packages.inspect(tmp_path / "plugins" / "acme.demo")
+    assert (manifest.id, trust) == ("acme.demo", "unsigned")
+
+
+def test_packages_cannot_ship_bytecode(tmp_path) -> None:
+    files = {
+        "backend/__init__.py": BACKEND,
+        "backend/__pycache__/__init__.cpython-313.pyc": b"compiled",
+        "ui/index.html": INDEX,
+        "ui/app.js": SCRIPT,
+    }
+    with pytest.raises(PluginPackageError, match="compiled bytecode"):
+        PluginPackageManager(tmp_path / "plugins").install(archive_bytes(files=files))
+
+
+def test_install_refuses_cross_site_requests(tmp_path) -> None:
+    settings = Settings(
+        proxy_port=free_port(),
+        api_port=free_port(),
+        data_dir=tmp_path,
+        db_path=tmp_path / "api.sqlite",
+        confdir=tmp_path / "mitm",
+        plugins_dir=tmp_path / "plugins",
+    )
+    with TestClient(create_app(settings)) as client:
+        refused = client.post(
+            "/api/plugins/install?enable=true",
+            content=archive_bytes(),
+            headers={"Origin": "https://attacker.test", "Content-Type": "text/plain"},
+        )
+        assert refused.status_code == 403
+        assert not (tmp_path / "plugins" / "acme.demo").exists()
+
+        allowed = client.post(
+            "/api/plugins/install",
+            content=archive_bytes(),
+            headers={
+                "Origin": "http://localhost:5173",
+                "Content-Type": "application/octet-stream",
+            },
+        )
+        assert allowed.status_code == 200, allowed.text
+
+
+def test_replacing_a_loaded_package_reloads_it(tmp_path) -> None:
+    settings = Settings(
+        proxy_port=free_port(),
+        api_port=free_port(),
+        data_dir=tmp_path,
+        db_path=tmp_path / "api.sqlite",
+        confdir=tmp_path / "mitm",
+        plugins_dir=tmp_path / "plugins",
+    )
+    updated = BACKEND.replace(b"'hello': payload", b"'updated': payload")
+    with TestClient(create_app(settings)) as client:
+        headers = {"Content-Type": "application/octet-stream"}
+        first = client.post(
+            "/api/plugins/install?enable=true", content=archive_bytes(), headers=headers
+        )
+        assert first.status_code == 200, first.text
+        replaced = client.post(
+            "/api/plugins/install?replace=true",
+            content=archive_bytes(
+                files={
+                    "backend/__init__.py": updated,
+                    "ui/index.html": INDEX,
+                    "ui/app.js": SCRIPT,
+                }
+            ),
+            headers=headers,
+        )
+        assert replaced.status_code == 200, replaced.text
+        assert replaced.json()["plugin"]["loaded"] is True
+        result = client.post(
+            "/api/plugin-actions/acme.demo.hello/invoke",
+            json={"context": {"name": "x"}},
+        )
+        assert result.status_code == 200, result.text
+        assert result.json()["result"] == {"updated": "x"}

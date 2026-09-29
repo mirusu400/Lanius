@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import sqlite3
 import time
 from collections.abc import AsyncIterator
@@ -419,13 +420,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # protocol configurations. Without those the shipped app
     # gets a 200 the webview then refuses to hand over, which surfaces as
     # "Load failed" with nothing wrong on the server.
+    allowed_origins = (
+        r"(http://(127\.0\.0\.1|localhost)(:\d+)?"
+        r"|tauri://localhost"
+        r"|https?://tauri\.localhost)"
+    )
+    allowed_origin = re.compile(allowed_origins)
+
+    @app.middleware("http")
+    async def refuse_cross_site_writes(request: Any, call_next: Any) -> Any:
+        """Stop other sites driving the API from the user's browser.
+
+        CORS only hides responses; a page can still fire a no-preflight
+        POST (for example a plugin archive to /api/plugins/install). Browsers
+        always send Origin on such requests, so any foreign one is refused.
+        Local tools that send no Origin are unaffected.
+        """
+        origin = request.headers.get("origin")
+        if (
+            request.method not in {"GET", "HEAD", "OPTIONS"}
+            and origin is not None
+            and not allowed_origin.fullmatch(origin)
+        ):
+            return JSONResponse(
+                {"detail": "cross-origin request refused"}, status_code=403
+            )
+        return await call_next(request)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=(
-            r"(http://(127\.0\.0\.1|localhost)(:\d+)?"
-            r"|tauri://localhost"
-            r"|https?://tauri\.localhost)"
-        ),
+        allow_origin_regex=allowed_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -1711,9 +1735,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 allow_unsigned=allow_unsigned,
                 replace=replace,
             )
+            # A replaced package must not keep running the old code, and its
+            # metadata only refreshes while unloaded.
+            existing = engine.plugins.plugins.get(result["id"])
+            restore_enabled = bool(existing and existing.enabled)
+            if existing is not None and existing.loaded:
+                await engine.plugins.disable_async(existing.name)
             await engine.plugins.refresh()
             plugin = engine.plugins.get(result["id"])
-            if enable:
+            if enable or restore_enabled:
                 plugin = await engine.plugins.enable_async(plugin.name)
             return {**result, "plugin": plugin.as_dict()}
         except PluginPackageError as exc:

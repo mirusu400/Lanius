@@ -31,6 +31,7 @@ MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 100 * 1024 * 1024
 MAX_FILES = 2_000
 
+_BYTECODE_DIR = "__pycache__"
 _PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 _HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -249,12 +250,15 @@ def file_sha256(path: Path) -> str:
 
 
 def verify_integrity(root: Path, manifest: PluginManifest) -> None:
+    # Python writes __pycache__ the first time the backend is imported, so it
+    # is never part of the signed file list (install refuses shipped bytecode).
     actual = {
         path.relative_to(root).as_posix(): file_sha256(path)
         for path in root.rglob("*")
         if path.is_file()
         and path.name != MANIFEST_NAME
         and path.name != INSTALL_RECORD
+        and _BYTECODE_DIR not in path.relative_to(root).parts
     }
     expected = manifest.integrity
     if actual.keys() != expected.keys():
@@ -382,6 +386,8 @@ class PluginPackageManager:
         mode = item.external_attr >> 16
         if stat.S_ISLNK(mode):
             raise PluginPackageError(f"archive contains a symbolic link: {path}")
+        if _BYTECODE_DIR in PurePosixPath(path).parts:
+            raise PluginPackageError(f"archive contains compiled bytecode: {path}")
         return path
 
     def install(
@@ -534,10 +540,18 @@ class PluginPackageManager:
         if not _PLUGIN_ID.fullmatch(plugin_id):
             raise PluginPackageError("invalid plugin id")
         root = self.backups_directory / plugin_id
+        installed = self.directory / plugin_id
+        current: str | None = None
+        if not installed.is_symlink() and (installed / MANIFEST_NAME).is_file():
+            try:
+                current = load_manifest(installed).version
+            except PluginPackageError:
+                current = None
         versions: list[Version] = []
         if root.is_dir():
             for candidate in root.iterdir():
-                if not candidate.is_dir():
+                # A backup of the installed version is not somewhere to go back to.
+                if not candidate.is_dir() or candidate.name == current:
                     continue
                 try:
                     manifest, _trust = self.inspect(candidate)
@@ -561,20 +575,23 @@ class PluginPackageManager:
         current = load_manifest(target)
         selected = self.backups_directory / plugin_id / version
         current_backup = self.backups_directory / plugin_id / current.version
-        if current_backup.exists():
-            raise PluginPackageError(
-                f"rollback backup already exists: {plugin_id} {current.version}"
-            )
         temporary = Path(tempfile.mkdtemp(prefix=".rollback-", dir=self.directory))
         holding = temporary / "current"
+        stale = temporary / "stale"
         try:
             os.replace(target, holding)
             try:
                 os.replace(selected, target)
+                # An older backup of the installed version (left by reinstalling
+                # it after a rollback) is superseded by the copy being retired.
+                if current_backup.exists():
+                    os.replace(current_backup, stale)
                 os.replace(holding, current_backup)
             except Exception:
                 if target.exists() and not selected.exists():
                     os.replace(target, selected)
+                if stale.exists() and not current_backup.exists():
+                    os.replace(stale, current_backup)
                 if holding.exists():
                     os.replace(holding, target)
                 raise

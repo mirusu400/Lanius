@@ -332,11 +332,14 @@ class PluginCatalogueManager:
                 payload = self.fetch(source.url, MAX_CATALOGUE_BYTES)
                 value = json.loads(payload.decode("utf-8"))
                 current = verify_catalogue(value, source)
+                # A cache that no longer verifies (typically because the
+                # source's signing key was rotated) cannot vouch for what was
+                # released before, so it is replaced rather than blocking
+                # every refresh until someone deletes it by hand.
                 try:
                     previous = self._read_cache(source)
-                except PluginCatalogueError as exc:
-                    if "has not been refreshed" not in str(exc):
-                        raise
+                except PluginCatalogueError:
+                    pass
                 else:
                     ensure_immutable(previous, current)
                 self._atomic_json(self._cache_path(source), current)

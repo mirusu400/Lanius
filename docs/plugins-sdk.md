@@ -35,10 +35,12 @@ deleting, or failing to activate a plugin removes all of its registrations.
 Calling the returned `Disposable.dispose()` removes an individual registration
 earlier.
 
-Contribution IDs use lowercase letters, digits, dots, dashes, and underscores.
+Contribution IDs use lowercase letters, digits, dashes, and underscores.
 The host qualifies them with the plugin ID. A local action ID `inspect` from a
-plugin named `headers` becomes `headers.inspect`. This prevents two plugins
-from silently replacing each other.
+plugin named `headers` becomes `headers.inspect`. Plugin IDs may contain dots
+but contribution IDs may not, so the owner is always everything before the
+last dot and two plugins such as `acme` and `acme.demo` cannot claim each
+other's IDs.
 
 ## Actions
 
