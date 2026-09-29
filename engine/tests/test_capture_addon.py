@@ -85,3 +85,17 @@ def test_addon_persists_synchronously_without_loop() -> None:
     addon.response(flow)
     assert store.count() == 1
     store.close()
+
+
+def test_proxied_traffic_is_recorded_as_proxied() -> None:
+    assert flow_to_record(make_flow()).source == "proxy"
+
+
+def test_a_replay_is_not_proxied_traffic() -> None:
+    """Repeater and Intruder replay through the same addons, so both write
+    the same row. They disagreed about what it was, and whichever write
+    landed last won: on a loaded machine an Intruder result could appear
+    in the history as ordinary proxy traffic."""
+    flow = make_flow()
+    flow.is_replay = "request"
+    assert flow_to_record(flow).source == "repeater"
