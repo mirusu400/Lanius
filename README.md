@@ -34,6 +34,12 @@ nightly this month reports the same version number. Nothing is downloaded
 or installed for you, and the check can be turned off for a network where
 nothing should leave the machine.
 
+For sensitive networks, **Settings > Lockdown Mode** has separate global and
+project switches. They block Lanius-owned external requests while browser and
+proxy traffic remain available. The global switch can also be forced before
+launch with `LANIUS_LOCKDOWN=1`. See [Lockdown Mode](docs/lockdown-mode.md)
+for the exact scope.
+
 | Platform | File |
 |---|---|
 | macOS (Apple Silicon) | `Lanius_*_aarch64.dmg` |

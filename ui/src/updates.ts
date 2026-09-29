@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 
 import {
   checkUpdates,
+  getLockdown,
   type UpdateChannel,
   type UpdateCheck,
 } from './api/client';
@@ -122,12 +123,18 @@ export async function runCheck(
 /** The check on startup: quiet, optional, and not on every launch. */
 export async function autoCheck(): Promise<void> {
   if (!autoCheckEnabled()) return;
+  // Local status is safe to query; if the engine is unavailable, fail closed.
+  try {
+    if ((await getLockdown()).effective) return;
+  } catch {
+    return;
+  }
   const last = lastCheckedAt();
   if (last !== null && Date.now() - last < AUTO_INTERVAL_MS) return;
   await runCheck();
 }
 
-/** Forget the last answer. For tests, and for nothing else. */
+/** Forget the last answer when its context is no longer valid. */
 export function resetUpdates(): void {
   set({ result: null, error: null, busy: false });
 }

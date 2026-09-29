@@ -29,6 +29,7 @@ from .addons.intruder import IntruderAddon
 from .addons.plugins import PluginManager
 from .addons.scope import ScopeManager
 from .config import Settings
+from .lockdown import LockdownPolicy
 from .db.store import FlowStore
 from .events import EventBroker
 from .tls import (
@@ -220,11 +221,13 @@ class ProxyEngine:
     """Runs mitmproxy inside the app's asyncio loop."""
 
     def __init__(
-        self, settings: Settings, store: FlowStore, broker: EventBroker
+        self, settings: Settings, store: FlowStore, broker: EventBroker,
+        lockdown: LockdownPolicy | None = None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.broker = broker
+        self.lockdown = lockdown or LockdownPolicy.from_env(store)
         self.master: DumpMaster | None = None
         self.scope = ScopeManager(store, broker)
         self.capture = CaptureAddon(store, broker, self.scope)
@@ -245,6 +248,7 @@ class ProxyEngine:
             store,
             broker,
             on_chain_changed=self._reorder_capture_last,
+            lockdown_enabled=lambda: self.lockdown.enabled,
         )
         self._task: asyncio.Task[None] | None = None
         # Why the proxy is not listening, when it failed to start. The API

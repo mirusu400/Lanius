@@ -19,6 +19,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from .lockdown import LockdownBlocked, LockdownPolicy
+
 logger = logging.getLogger(__name__)
 
 # Pinned to a tag rather than master: a wordlist that changes underneath
@@ -143,12 +145,23 @@ def find(list_id: str) -> Wordlist:
     return entry
 
 
-async def fetch(list_id: str) -> tuple[Wordlist, list[str]]:
+async def fetch(
+    list_id: str, policy: LockdownPolicy | None = None
+) -> tuple[Wordlist, list[str]]:
     """Download one catalogued wordlist.
 
     Reads in chunks and stops at the cap rather than trusting
     Content-Length, which a server is free to get wrong or omit.
     """
+    if policy is not None:
+        async with policy.outbound("remote wordlist download"):
+            return await _fetch(list_id, policy)
+    return await _fetch(list_id, None)
+
+
+async def _fetch(
+    list_id: str, policy: LockdownPolicy | None,
+) -> tuple[Wordlist, list[str]]:
     entry = find(list_id)
     try:
         import httpx
@@ -165,6 +178,8 @@ async def fetch(list_id: str) -> tuple[Wordlist, list[str]]:
                 chunks: list[bytes] = []
                 size = 0
                 async for chunk in response.aiter_bytes():
+                    if policy is not None:
+                        policy.require_outbound("remote wordlist download")
                     size += len(chunk)
                     if size > MAX_BYTES:
                         raise WordlistError(
@@ -172,7 +187,7 @@ async def fetch(list_id: str) -> tuple[Wordlist, list[str]]:
                             f"{MAX_BYTES // (1024 * 1024)}MB"
                         )
                     chunks.append(chunk)
-    except WordlistError:
+    except (WordlistError, LockdownBlocked):
         raise
     except asyncio.CancelledError:
         raise

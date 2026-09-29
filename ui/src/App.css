@@ -500,6 +500,22 @@ pre.body,
   border-color: var(--accent);
 }
 
+.lockdown-pill {
+  flex: none;
+  margin-left: auto;
+  border: 1px solid var(--danger);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--danger);
+  padding: 3px 10px;
+  font-size: 0.85em;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lockdown-pill + .update-pill { margin-left: 0; }
+
 .content {
   flex: 1;
   min-height: 0;
@@ -2838,6 +2854,17 @@ pre.body {
   flex: 1 1 0;
   min-width: max-content;
 }
+
+.settings-tab > .subtabs button.lockdown-tab,
+.settings-tab > .subtabs button.lockdown-tab.active,
+.lockdown-section h3,
+.lockdown-section .lockdown-label,
+.lockdown-active {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.lockdown-active { letter-spacing: 0.04em; }
 
 /* The group tabs stay put; only the settings under them scroll, so you
    can always switch group without scrolling back up first. */

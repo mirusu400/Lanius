@@ -42,6 +42,7 @@ from .. import wordlists
 from ..addons.plugins import PluginError
 from .. import codegen
 from ..build_info import build_info
+from ..lockdown import BLOCKED_DETAIL, LockdownBlocked, LockdownPolicy
 from .. import updates
 from ..addons.scope import ScopeError, rule_from_url
 from .. import browser
@@ -101,6 +102,10 @@ class MatchReplacePreviewBody(MatchReplaceBody):
 
 class BodyDisplayPatch(BaseModel):
     auto_decompress: bool
+
+
+class LockdownPatch(BaseModel):
+    enabled: bool
 
 
 class WebSocketRulesPatch(BaseModel):
@@ -268,6 +273,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.ensure_dirs()
     store = FlowStore(settings.db_path)
+    lockdown = LockdownPolicy.from_env(store)
 
     # Notable (non per-flow) events are persisted for the Logger tab.
     LOGGED_EVENTS = (
@@ -290,7 +296,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             logger.exception("failed to log event %s", event_type)
 
     broker = EventBroker(on_publish=_log_event)
-    engine = ProxyEngine(settings, store, broker)
+    engine = ProxyEngine(settings, store, broker, lockdown)
 
     # Built below, then started by the lifespan (its session manager needs a
     # running task group before it can serve requests).
@@ -316,6 +322,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 store.close()
 
     app = FastAPI(title="Lanius Engine", version=__version__, lifespan=lifespan)
+
+    @app.exception_handler(LockdownBlocked)
+    async def lockdown_blocked(_request: Request, _error: LockdownBlocked) -> JSONResponse:
+        return JSONResponse(status_code=423, content={"detail": BLOCKED_DETAIL})
 
     # MCP over streamable HTTP, on the same local-only port (codex.md §10).
     try:
@@ -368,6 +378,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.store = store
     app.state.broker = broker
     app.state.engine = engine
+    app.state.lockdown = lockdown
+
+    @app.get("/api/lockdown")
+    async def lockdown_status() -> dict[str, Any]:
+        return lockdown.status()
+
+    @app.put("/api/lockdown/project")
+    async def set_project_lockdown(body: LockdownPatch) -> dict[str, Any]:
+        result = lockdown.set_project(body.enabled)
+        if result["effective"]:
+            engine.plugins.suspend_for_lockdown()
+        else:
+            engine.plugins.load_enabled()
+        return result
 
     @app.get("/api/status")
     async def status() -> dict[str, Any]:
@@ -495,6 +519,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # imported rules sit in the database and affect nothing.
         scope = await asyncio.to_thread(engine.scope.reload)
         engine.match_replace.reload()
+        if lockdown.enabled:
+            engine.plugins.suspend_for_lockdown()
+        else:
+            engine.plugins.load_enabled()
         broker.publish("scope.changed", scope.as_dict())
         broker.publish("project.imported", counts)
         return {"ok": True, **counts}
@@ -862,7 +890,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         not phone home on its own.
         """
         try:
-            return await updates.check(channel=channel, refresh=refresh)
+            return await updates.check(channel=channel, refresh=refresh, policy=lockdown)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except updates.UpdateError as exc:
@@ -1462,7 +1490,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         on its own is not one to trust.
         """
         try:
-            entry, payloads = await wordlists.fetch(body.list_id)
+            entry, payloads = await wordlists.fetch(body.list_id, lockdown)
         except wordlists.WordlistError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         try:
@@ -1579,6 +1607,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/plugins/{name}/enable")
     async def enable_plugin(name: str) -> dict[str, Any]:
+        lockdown.require_outbound("plugin execution")
         try:
             return engine.plugins.enable(name).as_dict()
         except PluginError as exc:
@@ -1594,6 +1623,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/plugins/{name}/reload")
     async def reload_plugin(name: str) -> dict[str, Any]:
+        lockdown.require_outbound("plugin execution")
         try:
             return engine.plugins.reload(name).as_dict()
         except PluginError as exc:

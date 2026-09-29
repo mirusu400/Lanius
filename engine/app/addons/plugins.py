@@ -15,7 +15,7 @@ import sys
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Callable, List
 
 from .. import codegen
 
@@ -81,6 +81,7 @@ class PluginManager:
         broker: Any | None = None,
         addons: Any | None = None,
         on_chain_changed: Any | None = None,
+        lockdown_enabled: Callable[[], bool] | None = None,
     ) -> None:
         self.directory = Path(directory)
         self.store = store
@@ -89,6 +90,7 @@ class PluginManager:
         # Called after the addon chain changes, so the engine can keep the
         # capture addon last (it must record plugin modifications).
         self.on_chain_changed = on_chain_changed
+        self.lockdown_enabled = lockdown_enabled or (lambda: False)
         self.plugins: dict[str, Plugin] = {}
 
     # --- persistence ------------------------------------------------------
@@ -157,12 +159,21 @@ class PluginManager:
     def load_enabled(self) -> None:
         """Load every plugin marked enabled (called once the engine is up)."""
         self.discover()
+        if self.lockdown_enabled():
+            return
         for plugin in self.plugins.values():
             if plugin.enabled and not plugin.loaded:
                 try:
                     self._load(plugin)
                 except PluginError:
                     logger.warning("plugin %s failed to load", plugin.name)
+
+    def suspend_for_lockdown(self) -> None:
+        """Detach loaded plugins without changing their saved enabled state."""
+        for plugin in self.plugins.values():
+            if plugin.loaded:
+                self._unload(plugin)
+        self._publish()
 
     def _import(self, plugin: Plugin) -> Any:
         module_name = f"lanius_plugins.{plugin.name}"
@@ -233,6 +244,8 @@ class PluginManager:
                     )
 
     def _load(self, plugin: Plugin) -> Plugin:
+        if self.lockdown_enabled():
+            raise PluginError("Lockdown Mode blocks plugin execution")
         try:
             module = self._import(plugin)
             objects = self._instantiate(module)
@@ -290,6 +303,8 @@ class PluginManager:
 
     # --- public control ---------------------------------------------------
     def enable(self, name: str) -> Plugin:
+        if self.lockdown_enabled():
+            raise PluginError("Lockdown Mode blocks plugin execution")
         plugin = self.get(name)
         if not plugin.loaded:
             self._load(plugin)
@@ -307,6 +322,8 @@ class PluginManager:
         return plugin
 
     def reload(self, name: str) -> Plugin:
+        if self.lockdown_enabled():
+            raise PluginError("Lockdown Mode blocks plugin execution")
         plugin = self.get(name)
         was_enabled = plugin.enabled
         self._unload(plugin)

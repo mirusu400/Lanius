@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { captureWindowToClipboard, isDesktop, putWorkspace } from "./api/client";
+import { captureWindowToClipboard, getLockdown, isDesktop, putWorkspace } from "./api/client";
+import { LOCKDOWN_BLOCKED, LOCKDOWN_CHANGED } from "./lockdownEvents";
 import { ProjectPicker } from "./ProjectPicker";
 import { closeProject, currentProject, type Project } from "./projects";
 
@@ -83,6 +84,12 @@ export default function App() {
   useShortcut('app.screenshot', captureScreenshot, desktop);
 
   useEffect(() => {
+    const blocked = () => showToast({ message: t('lockdown.blocked'), tone: 'error' });
+    window.addEventListener(LOCKDOWN_BLOCKED, blocked);
+    return () => window.removeEventListener(LOCKDOWN_BLOCKED, blocked);
+  }, [showToast, t]);
+
+  useEffect(() => {
     if (!desktop) return;
     void currentProject()
       .then(setProject)
@@ -126,6 +133,22 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   const [settingsGroup, setSettingsGroup] = useState<string | null>(null);
   const { result: updates } = useUpdates();
   const updateAvailable = updates?.update_available ?? false;
+  const [lockdownActive, setLockdownActive] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    const refresh = () => {
+      void getLockdown()
+        .then((status) => { if (live) setLockdownActive(status.effective); })
+        .catch(() => { if (live) setLockdownActive(false); });
+    };
+    refresh();
+    window.addEventListener(LOCKDOWN_CHANGED, refresh);
+    return () => {
+      live = false;
+      window.removeEventListener(LOCKDOWN_CHANGED, refresh);
+    };
+  }, [project?.id]);
 
   // A build that is months old looks exactly like a current one, so ask
   // once on startup. Off by one checkbox in Settings, and at most once
@@ -136,6 +159,10 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
 
   const openUpdates = () => {
     setSettingsGroup("about");
+    setTab("Settings");
+  };
+  const openLockdown = () => {
+    setSettingsGroup("security");
     setTab("Settings");
   };
   const navigationShortcuts = useMemo<Record<string, () => void>>(
@@ -209,6 +236,11 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
             </button>
           ))}
         </nav>
+        {lockdownActive && (
+          <button type="button" className="lockdown-pill" onClick={openLockdown}>
+            {t('lockdown.title')}
+          </button>
+        )}
         {updateAvailable && (
           <button type="button" className="update-pill" onClick={openUpdates}>
             {t("updates.pill")}
