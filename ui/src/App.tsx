@@ -31,6 +31,7 @@ import {
 import { BusyProvider } from "./components/busy";
 import { Spinner, useDelayedBusy } from "./components/Spinner";
 import { useShortcuts } from "./useShortcut";
+import { autoCheck, useUpdates } from "./updates";
 import "./App.css";
 
 const TABS = [
@@ -91,6 +92,22 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   const onBusyChange = useCallback((value: boolean) => setBusy(value), []);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
+  // Which Settings screen to land on when something sends you there.
+  const [settingsGroup, setSettingsGroup] = useState<string | null>(null);
+  const { result: updates } = useUpdates();
+  const updateAvailable = updates?.update_available ?? false;
+
+  // A build that is months old looks exactly like a current one, so ask
+  // once on startup. Off by one checkbox in Settings, and at most once
+  // every six hours.
+  useEffect(() => {
+    void autoCheck();
+  }, []);
+
+  const openUpdates = () => {
+    setSettingsGroup("about");
+    setTab("Settings");
+  };
   const navigationShortcuts = useMemo<Record<string, () => void>>(
     () => Object.fromEntries(
       TABS.map((name) => [`app.${name.toLowerCase()}`, () => setTab(name)]),
@@ -145,16 +162,28 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
             <button
               key={name}
               className={name === tab ? "tab active" : "tab"}
-              onClick={() => setTab(name)}
+              onClick={() => {
+                if (name === "Settings") setSettingsGroup(null);
+                setTab(name);
+              }}
             >
               {name === "Dashboard"
                 ? t("dash.title")
                 : name === "Docs"
                   ? t("docs.title")
                   : name}
+              {/* A new build is worth one dot, wherever you are. */}
+              {name === "Settings" && updateAvailable && (
+                <span className="tab-dot" aria-label={t("updates.badge")} />
+              )}
             </button>
           ))}
         </nav>
+        {updateAvailable && (
+          <button type="button" className="update-pill" onClick={openUpdates}>
+            {t("updates.pill")}
+          </button>
+        )}
         {showSpinner && <Spinner />}
       </header>
       <main className="content">
@@ -179,6 +208,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
             <LoggerTab />
           ) : tab === "Settings" ? (
             <SettingsTab
+              openGroup={settingsGroup}
               project={project}
               onSwitchProject={switchProject}
               switchingProject={switching}

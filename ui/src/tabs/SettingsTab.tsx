@@ -29,6 +29,7 @@ import { ProjectSection } from "./settings/ProjectSection";
 import { ProjectCompactSection } from "./settings/ProjectCompactSection";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { TlsSection } from "./settings/TlsSection";
+import { UpdatesSection } from "./settings/UpdatesSection";
 
 const GROUPS = [
   "proxy",
@@ -52,14 +53,19 @@ function initialGroup(): Group {
 
 interface SettingsTabProps {
   project?: Project | null;
+  /** Which group to open on, when something else sent you here: the
+   *  update badge in the title bar means the About screen. */
+  openGroup?: string | null;
   onSwitchProject?: () => Promise<void>;
   switchingProject?: boolean;
   switchError?: string | null;
 }
 
-export function SettingsTab({ project, onSwitchProject, switchingProject = false, switchError }: SettingsTabProps = {}) {
+export function SettingsTab({ project, onSwitchProject, switchingProject = false, switchError, openGroup }: SettingsTabProps = {}) {
   const t = useT();
-  const [group, setGroup] = useState<Group>(initialGroup);
+  const [group, setGroup] = useState<Group>(() =>
+    GROUPS.includes(openGroup as Group) ? (openGroup as Group) : initialGroup(),
+  );
   const [error, setError] = useState<string | null>(null);
 
   const choose = (next: Group) => {
@@ -128,7 +134,12 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
           </>
         )}
 
-        {group === "about" && <AboutSection />}
+        {group === "about" && (
+          <>
+            <AboutSection />
+            <UpdatesSection />
+          </>
+        )}
       </div>
     </div>
   );

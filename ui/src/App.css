@@ -277,6 +277,37 @@ pre.body,
   border-bottom-color: var(--accent);
 }
 
+/* A newer build is published. Said twice on purpose: a dot on the tab
+   that leads to it, for whoever is looking at the tab strip, and a
+   button in the bar, because a dot alone never says what it means. */
+.tab-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+
+.update-pill {
+  flex: none;
+  margin-left: auto;
+  border: 1px solid var(--accent-dim);
+  border-radius: 999px;
+  background: var(--accent-wash);
+  color: var(--accent);
+  padding: 3px 10px;
+  font-size: 0.85em;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.update-pill:hover {
+  border-color: var(--accent);
+}
+
 .content {
   flex: 1;
   min-height: 0;

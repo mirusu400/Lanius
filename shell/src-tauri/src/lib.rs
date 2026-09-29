@@ -6,11 +6,13 @@
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
+use tauri_plugin_updater::UpdaterExt;
 
 mod projects;
 
@@ -582,11 +584,115 @@ fn parse_theme(theme: Option<&str>) -> Option<tauri::Theme> {
     }
 }
 
+/// How far the download has got.
+///
+/// Polled rather than pushed: the interface already asks the engine for
+/// things on a timer, and an event channel would be one more moving
+/// part to keep working across Tauri versions for a bar that is on
+/// screen for a few seconds.
+#[derive(Default)]
+pub struct UpdateProgress {
+    downloaded: AtomicU64,
+    /// Zero until the server says how large the download is, which some
+    /// do not.
+    total: AtomicU64,
+}
+
+/// What a newer build says about itself.
+#[derive(Clone, Serialize)]
+pub struct UpdateOffer {
+    pub version: String,
+    pub current_version: String,
+    pub date: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+pub struct UpdateProgressReport {
+    pub downloaded: u64,
+    /// None while the size is unknown, so the interface can show a bar
+    /// without a percentage rather than a wrong one.
+    pub total: Option<u64>,
+}
+
+/// Is there a signed build to install, according to the shell?
+///
+/// This is the engine's question asked again by the half that can act on
+/// the answer: the engine compares commits and hands out a link, while
+/// the updater checks the signed manifest it is allowed to install from.
+/// A build with no updater configured says so, and the interface falls
+/// back to the download link.
+#[tauri::command]
+async fn update_check(app: tauri::AppHandle) -> Result<Option<UpdateOffer>, String> {
+    let updater = app.updater().map_err(|err| err.to_string())?;
+    let found = updater.check().await.map_err(|err| err.to_string())?;
+    Ok(found.map(|update| UpdateOffer {
+        version: update.version.clone(),
+        current_version: update.current_version.clone(),
+        date: update.date.map(|date| date.to_string()),
+        notes: update.body.clone(),
+    }))
+}
+
+/// Download the new build, install it, and come back up on it.
+///
+/// The engine is stopped first: it holds the project database open and
+/// the proxy port, and an installer replacing the bundle underneath a
+/// running sidecar is how a half-written database happens.
+#[tauri::command]
+async fn update_install(app: tauri::AppHandle) -> Result<(), String> {
+    let updater = app.updater().map_err(|err| err.to_string())?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|err| err.to_string())?
+        .ok_or("there is no newer build to install")?;
+
+    let progress = app.state::<Arc<UpdateProgress>>().inner().clone();
+    progress.downloaded.store(0, Ordering::Relaxed);
+    progress.total.store(0, Ordering::Relaxed);
+
+    let counter = progress.clone();
+    update
+        .download_and_install(
+            move |chunk, total| {
+                counter
+                    .downloaded
+                    .fetch_add(chunk as u64, Ordering::Relaxed);
+                if let Some(total) = total {
+                    counter.total.store(total, Ordering::Relaxed);
+                }
+            },
+            || {},
+        )
+        .await
+        .map_err(|err| err.to_string())?;
+
+    end_project(
+        &app.state::<EngineProcess>(),
+        &app.state::<ProjectSession>(),
+    );
+    // Windows hands over to the installer, which closes the app itself,
+    // so this line is only reached on the platforms that do not.
+    app.restart();
+}
+
+/// How far `update_install` has got, for the bar on screen.
+#[tauri::command]
+fn update_progress(progress: State<'_, Arc<UpdateProgress>>) -> UpdateProgressReport {
+    let total = progress.total.load(Ordering::Relaxed);
+    UpdateProgressReport {
+        downloaded: progress.downloaded.load(Ordering::Relaxed),
+        total: (total > 0).then_some(total),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(EngineProcess::default())
         .manage(ProjectSession::default())
+        .manage(Arc::new(UpdateProgress::default()))
         .invoke_handler(tauri::generate_handler![
             engine_info,
             engine_running,
@@ -597,7 +703,10 @@ pub fn run() {
             create_project,
             open_project,
             start_temp_project,
-            close_project
+            close_project,
+            update_check,
+            update_install,
+            update_progress
         ])
         .setup(|app| {
             app.handle().plugin(
@@ -605,6 +714,16 @@ pub fn run() {
                     .level(log::LevelFilter::Info)
                     .build(),
             )?;
+            // A build made without a signing key has no updater endpoint,
+            // and that is a working build: it still says a newer one
+            // exists and links to it. So a missing updater is a note in
+            // the log, not a refusal to start.
+            if let Err(err) = app
+                .handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())
+            {
+                log::warn!("no updater in this build: {err}");
+            }
             #[cfg(unix)]
             install_signal_handlers(app.handle().clone());
             Ok(())

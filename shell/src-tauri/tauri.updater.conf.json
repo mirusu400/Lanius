@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/mirusu400/Lanius/releases/download/nightly/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU1NUI5MkIyRTQ2RTU5NzUKUldSMVdXN2tzcEpiVldGeUxoRGtGRC9pWmh6OFRnN1dwU3NKM0NxZ2dzZW5NeTBrUkFsdnlVZlAK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

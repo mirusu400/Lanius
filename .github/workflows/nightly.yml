@@ -36,6 +36,8 @@ jobs:
       sha: ${{ steps.check.outputs.sha }}
       short_sha: ${{ steps.check.outputs.short_sha }}
       date: ${{ steps.check.outputs.date }}
+      version: ${{ steps.check.outputs.version }}
+      msi_version: ${{ steps.check.outputs.msi_version }}
     steps:
       - id: check
         env:
@@ -57,6 +59,16 @@ jobs:
             echo "sha=$sha"
             echo "short_sha=${sha:0:7}"
             echo "date=$(date -u +%Y%m%d)"
+            # The in-app updater compares versions, and every build so far
+            # called itself 0.1.0, which no comparison can separate. A
+            # minute-stamped prerelease sorts by the only thing that
+            # actually orders two nightlies: when they were built. It
+            # also sorts below the 0.1.0 release itself, so a tagged
+            # build still supersedes every nightly that preceded it.
+            echo "version=0.1.0-nightly.$(date -u +%Y%m%dT%H%M)"
+            # Windows installers take three numbers and nothing else, and
+            # the number has to grow for an upgrade to be an upgrade.
+            echo "msi_version=0.1.$GITHUB_RUN_NUMBER"
           } >> "$GITHUB_OUTPUT"
 
           if [ "$EVENT" = "workflow_dispatch" ]; then
@@ -84,6 +96,16 @@ jobs:
               echo "build=false"
               echo "publish=false"
             } >> "$GITHUB_OUTPUT"
+            # A run that builds nothing still reports success, which
+            # reads as "the nightly is up to date" when it is not. Say
+            # on the run's own page why there is no new download.
+            {
+              echo "### No nightly published"
+              echo
+              echo "CI on \`${sha:0:7}\` was a **$CI_EVENT** that"
+              echo "concluded **$CONCLUSION**, so there is nothing to"
+              echo "release. Fix CI and the next commit publishes."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
   # A workflow_run already waited for CI. A manual run has not, so it
@@ -103,6 +125,15 @@ jobs:
           && needs.verify.result != 'failure' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    env:
+      # Absent until the repository has a signing key, and a build
+      # without one still ships: it simply carries no updater, and the
+      # app falls back to linking the download.
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      # Empty when the key carries no password, which is the case here.
+      # It still has to be set: an unset one makes the signer stop and
+      # ask, and nobody is at the keyboard on a runner.
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     strategy:
       fail-fast: false
       matrix:
@@ -232,6 +263,41 @@ jobs:
         working-directory: shell
         run: npm ci
 
+      # Only when there is a key to sign with. The updater refuses an
+      # unsigned build, so an endpoint without a signature would be an
+      # update nobody can install.
+      - name: Configure the in-app updater
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        working-directory: shell/src-tauri
+        shell: bash
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+          MSI_VERSION: ${{ needs.meta.outputs.msi_version }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+
+          with open("tauri.updater.conf.json", encoding="utf-8") as handle:
+              config = json.load(handle)
+
+          if not config["plugins"]["updater"]["pubkey"]:
+              raise SystemExit(
+                  "tauri.updater.conf.json has no public key: run "
+                  "`npx tauri signer generate` and paste the public half in"
+              )
+
+          config["version"] = os.environ["VERSION"]
+          config.setdefault("bundle", {}).setdefault("windows", {})["wix"] = {
+              "version": os.environ["MSI_VERSION"]
+          }
+
+          with open("tauri.release.conf.json", "w", encoding="utf-8") as handle:
+              json.dump(config, handle, indent=2)
+          print(json.dumps(config, indent=2))
+          PY
+
       - name: Build the desktop bundle
         working-directory: shell
         shell: bash
@@ -239,9 +305,15 @@ jobs:
         # loses a race with disk arbitration, so retry before failing the run.
         run: |
           set -euo pipefail
+          # Written by the previous step, and only when there is a key.
+          config=()
+          if [ -f src-tauri/tauri.release.conf.json ]; then
+            config=(--config src-tauri/tauri.release.conf.json)
+          fi
+
           build() {
             for attempt in 1 2 3; do
-              if npx tauri build --bundles "$1"; then
+              if npx tauri build "${config[@]}" --bundles "$1"; then
                 return 0
               fi
               echo "::warning::bundling '$1' failed (attempt $attempt), retrying"
@@ -262,12 +334,29 @@ jobs:
           for target in "${targets[@]}"; do
             build "$target"
             if [ "$target" = "app" ]; then
-              for app in "$bundle"/macos/*.app; do
-                [ -d "$app" ] || continue
-                name="$(basename "$app" .app)"
-                tar -czf "$staging/${name}-${{ matrix.label }}.app.tar.gz" \
-                  -C "$bundle/macos" "$(basename "$app")"
+              # With a signing key, tauri archives and signs the .app
+              # itself, and that archive is what the signature covers.
+              # Both architectures would otherwise land on one release as
+              # Lanius.app.tar.gz, so the label goes into the name: a
+              # signature is over the bytes, not over the file name.
+              signed=0
+              for archive in "$bundle"/macos/*.app.tar.gz; do
+                [ -f "$archive" ] || continue
+                name="$(basename "$archive" .app.tar.gz)"
+                cp "$archive" "$staging/${name}-${{ matrix.label }}.app.tar.gz"
+                if [ -f "$archive.sig" ]; then
+                  cp "$archive.sig" "$staging/${name}-${{ matrix.label }}.app.tar.gz.sig"
+                fi
+                signed=1
               done
+              if [ "$signed" = 0 ]; then
+                for app in "$bundle"/macos/*.app; do
+                  [ -d "$app" ] || continue
+                  name="$(basename "$app" .app)"
+                  tar -czf "$staging/${name}-${{ matrix.label }}.app.tar.gz" \
+                    -C "$bundle/macos" "$(basename "$app")"
+                done
+              fi
             fi
           done
 
@@ -284,13 +373,19 @@ jobs:
           # bundling deletes the .app directory it was built from.
           staging="${{ runner.temp }}/bundles"
           if [ -d "$staging" ]; then
-            find "$staging" -name '*.app.tar.gz' -exec cp {} "$out"/ \;
+            find "$staging" \
+              \( -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' \) \
+              -exec cp {} "$out"/ \;
           fi
 
           # `rw.*.dmg` are create-dmg scratch images, not release artifacts.
+          # The `.sig` files are what the in-app updater checks the
+          # download against, so they ship next to what they sign.
           find "$bundle" -maxdepth 2 -type f \
             \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \
-               -o -name '*.msi' -o -name '*-setup.exe' \) \
+               -o -name '*.msi' -o -name '*-setup.exe' \
+               -o -name '*.AppImage.sig' -o -name '*.msi.sig' \
+               -o -name '*-setup.exe.sig' \) \
             ! -name 'rw.*.dmg' \
             -exec cp {} "$out"/ \;
 
@@ -329,6 +424,79 @@ jobs:
 
       - name: List artifacts
         run: ls -la dist
+
+      # What the in-app updater reads. It is a release asset like any
+      # other, at a URL that does not move, because the `nightly` tag
+      # does not move either. Written from what was actually built: a
+      # platform whose bundle is missing simply is not offered an
+      # update, which is better than offering one that 404s.
+      - name: Write the update manifest
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+          SHA: ${{ needs.meta.outputs.sha }}
+          SHORT_SHA: ${{ needs.meta.outputs.short_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          dist = Path("dist")
+          repo = os.environ["REPO"]
+
+          # The updater's own names for the platforms, each mapped to the
+          # artifact it knows how to install. A .deb cannot update itself,
+          # so Debian packages are absent on purpose.
+          wanted = {
+              "darwin-aarch64": "macos-arm64.app.tar.gz",
+              "darwin-x86_64": "macos-x86_64.app.tar.gz",
+              "linux-x86_64": ".AppImage",
+              "windows-x86_64": "-setup.exe",
+          }
+
+          platforms = {}
+          for target, suffix in wanted.items():
+              for path in sorted(dist.iterdir()):
+                  if not path.name.endswith(suffix):
+                      continue
+                  signature = path.with_name(path.name + ".sig")
+                  if not signature.exists():
+                      print(f"{path.name}: no signature, skipping {target}")
+                      continue
+                  platforms[target] = {
+                      "signature": signature.read_text(encoding="utf-8").strip(),
+                      "url": (
+                          f"https://github.com/{repo}/releases/download/"
+                          f"nightly/{path.name}"
+                      ),
+                  }
+                  break
+
+          if not platforms:
+              # No signing key in this repository yet: the app still says
+              # a newer build exists and links to it.
+              print("no signed bundles, so no update manifest")
+              raise SystemExit(0)
+
+          manifest = {
+              "version": os.environ["VERSION"],
+              "notes": (
+                  "Built from "
+                  f"{os.environ['SHORT_SHA']} after CI passed."
+              ),
+              "pub_date": datetime.now(timezone.utc)
+              .isoformat(timespec="seconds")
+              .replace("+00:00", "Z"),
+              "platforms": platforms,
+          }
+          (dist / "latest.json").write_text(
+              json.dumps(manifest, indent=2), encoding="utf-8"
+          )
+          print(json.dumps(manifest, indent=2))
+          PY
 
       # One rolling tag rather than one per day. Builds now happen per
       # commit, so dated tags would pile up several a day, and

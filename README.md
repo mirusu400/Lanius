@@ -28,7 +28,11 @@ Grab the latest build from the
 [Nightly release](https://github.com/mirusu400/Lanius/releases/tag/nightly).
 It is rebuilt from every commit that lands on `main` and passes CI, so the
 download always matches the current code. Settings, About says which commit
-a build came from.
+a build came from, and checks whether a newer one has been published: a
+nightly is compared by commit and a tagged release by version, since every
+nightly this month reports the same version number. Nothing is downloaded
+or installed for you, and the check can be turned off for a network where
+nothing should leave the machine.
 
 | Platform | File |
 |---|---|
@@ -391,6 +395,34 @@ To run the pieces separately while developing:
 cd engine && python -m app.main    # proxy on :8080, API/MCP on :12954
 cd ui && npm run dev               # interface on :5173
 ```
+
+### Releasing with the in-app updater
+
+Nightlies can install themselves: Settings, About offers **Install and
+restart**, which downloads the new bundle, verifies its signature, replaces
+the app (engine included) and comes back up. It is off until the repository
+has a signing key, and until then the app only links to the download.
+
+One-time setup:
+
+```bash
+cd shell && npx tauri signer generate -w ~/.tauri/lanius.key
+gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/lanius.key
+gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD   # the password you chose
+```
+
+Then paste the public half into `pubkey` in
+`shell/src-tauri/tauri.updater.conf.json` and commit it. The private key
+never leaves your machine and the secrets; anyone holding it can publish a
+build that every installation will accept, so treat it as the release key it
+is. Nightly builds then carry a version of the form
+`0.1.0-nightly.20260928T1009`, because an updater compares versions and every
+build calling itself 0.1.0 is not comparable, and the release grows a
+`latest.json` the app reads.
+
+Debian packages cannot replace themselves, so `.deb` installs keep using the
+download link. macOS builds are still unsigned by Apple, so the first launch
+after an update can show the usual unidentified-developer warning.
 
 Everything CI checks also runs locally, in well under a minute:
 

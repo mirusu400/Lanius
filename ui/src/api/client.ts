@@ -790,6 +790,106 @@ export function getAbout(): Promise<AboutInfo> {
   return request('/api/about');
 }
 
+export type UpdateChannel = 'stable' | 'nightly';
+
+/** One published build, as the release page describes it. */
+export interface UpdateRelease {
+  channel: UpdateChannel;
+  name: string | null;
+  tag: string | null;
+  version: string | null;
+  commit: string | null;
+  commit_short: string | null;
+  url: string | null;
+  published_at: string | null;
+  prerelease: boolean;
+}
+
+export interface UpdateCheck {
+  checked_at: string;
+  channel: UpdateChannel;
+  current: AboutInfo;
+  releases: Record<UpdateChannel, UpdateRelease | null>;
+  latest: UpdateRelease | null;
+  update_available: boolean;
+  /** How it was decided: behind the published build, level with it,
+   *  a build GitHub cannot place, or not comparable at all. */
+  reason: 'behind' | 'current' | 'different' | 'unknown';
+  download_url: string;
+}
+
+/** Ask GitHub whether a newer build exists.
+ *
+ * Only ever on request: a proxy on an isolated network should not reach
+ * out on its own, so nothing here runs without someone asking for it.
+ */
+export function checkUpdates(
+  options: { channel?: UpdateChannel; refresh?: boolean } = {},
+): Promise<UpdateCheck> {
+  const params = new URLSearchParams();
+  if (options.channel) params.set('channel', options.channel);
+  if (options.refresh) params.set('refresh', 'true');
+  const query = params.toString();
+  return request(`/api/updates${query ? `?${query}` : ''}`);
+}
+
+/** What the desktop shell's updater found, when the build has one.
+ *
+ * The engine answers "is there a newer build" by comparing commits; this
+ * answers the narrower question the shell can act on: is there a signed
+ * build it is allowed to install. A build made without a signing key has
+ * no updater, and says so, which is why every call here can fail softly.
+ */
+export interface UpdateOffer {
+  version: string;
+  current_version: string;
+  date: string | null;
+  notes: string | null;
+}
+
+export interface UpdateProgress {
+  downloaded: number;
+  /** Null while the server has not said how large the download is. */
+  total: number | null;
+}
+
+function shell(): { invoke(cmd: string, args?: unknown): Promise<unknown> } | null {
+  return (
+    (window as unknown as {
+      __TAURI_INTERNALS__?: { invoke(cmd: string, args?: unknown): Promise<unknown> };
+    }).__TAURI_INTERNALS__ ?? null
+  );
+}
+
+/** True when the shell can install an update itself. */
+export function canInstallUpdates(): boolean {
+  return shell() !== null;
+}
+
+export async function desktopUpdateCheck(): Promise<UpdateOffer | null> {
+  const internals = shell();
+  if (!internals) return null;
+  return (await internals.invoke('update_check')) as UpdateOffer | null;
+}
+
+/** Download, install, and restart onto the new build.
+ *
+ * Resolves only on the platforms where the app survives its own
+ * installer; on Windows the installer closes it, so treat a resolved
+ * promise and a vanished window as the same success.
+ */
+export async function desktopUpdateInstall(): Promise<void> {
+  const internals = shell();
+  if (!internals) throw new Error('Desktop shell is unavailable');
+  await internals.invoke('update_install');
+}
+
+export async function desktopUpdateProgress(): Promise<UpdateProgress> {
+  const internals = shell();
+  if (!internals) return { downloaded: 0, total: null };
+  return (await internals.invoke('update_progress')) as UpdateProgress;
+}
+
 /** The shell's own version, when running in the desktop app. */
 export async function getShellVersion(): Promise<string | null> {
   const internals = (

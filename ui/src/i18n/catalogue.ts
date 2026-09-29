@@ -327,6 +327,45 @@ const en = {
   'about.copied': 'Copied',
   'about.repository': 'Source code',
   'about.unavailable': 'The engine is not reachable, so the build cannot be identified.',
+
+  // --- updates ---
+  'updates.section': 'Updates',
+  'updates.help':
+    'Whether a newer build has been published. Nothing is downloaded or installed for you: this asks GitHub and hands you the link.',
+  'updates.channel': 'Compare against',
+  'updates.channelAuto': 'The stream this build came from',
+  'updates.channelStable': 'Releases',
+  'updates.channelNightly': 'Nightly builds',
+  'updates.check': 'Check now',
+  'updates.checking': 'Checking...',
+  'updates.available': 'A newer build is available: {name}',
+  'updates.download': 'Download it',
+  'updates.install': 'Install and restart',
+  'updates.installing': 'Installing...',
+  'updates.installProgress': 'Downloading {percent}%',
+  'updates.installHelp':
+    'Installing replaces the whole app, engine included, and restarts it. Capture stops while it does, so finish what you are intercepting first.',
+  'updates.installFailed':
+    'Could not install it: {message}. The download link still works.',
+  'updates.current': 'This is the newest published build.',
+  'updates.different':
+    'This build is not the published one. It was either built here or has not been released.',
+  'updates.unknown':
+    'This build carries no commit to compare, so it cannot be told apart from the published one.',
+  'updates.latestStable': 'Latest release',
+  'updates.latestNightly': 'Latest nightly',
+  'updates.published': '(published {date})',
+  'updates.none': 'none published',
+  'updates.failed': 'Could not check for updates: {message}',
+  'updates.auto': 'Check automatically',
+  'updates.autoHelp':
+    'Asks GitHub at most once every six hours, and only while Lanius is open. Turn it off on a network where nothing should leave the machine.',
+  'updates.lastChecked': 'Last checked {when}',
+  'updates.never': 'Not checked yet',
+  'updates.allReleases': 'All releases',
+  'updates.pill': 'Update available',
+  'updates.badge': 'A newer build is available',
+
   'settings.group.proxy': 'Proxy',
   'settings.group.browser': 'Browser',
   'settings.group.appearance': 'Appearance',
@@ -937,6 +976,44 @@ const ko: Catalogue = {
   'about.copied': '복사했습니다',
   'about.repository': '소스 코드',
   'about.unavailable': '엔진에 연결할 수 없어 빌드를 확인하지 못했습니다.',
+
+  // --- updates ---
+  'updates.section': '업데이트',
+  'updates.help':
+    '새 빌드가 올라왔는지 확인합니다. 내려받거나 설치하지는 않습니다. GitHub에 물어보고 링크만 알려 줍니다.',
+  'updates.channel': '비교 대상',
+  'updates.channelAuto': '지금 쓰는 빌드와 같은 갈래',
+  'updates.channelStable': '정식 릴리스',
+  'updates.channelNightly': '야간 빌드',
+  'updates.check': '지금 확인',
+  'updates.checking': '확인 중...',
+  'updates.available': '새 빌드가 있습니다: {name}',
+  'updates.download': '내려받기',
+  'updates.install': '설치 후 재시작',
+  'updates.installing': '설치 중...',
+  'updates.installProgress': '내려받는 중 {percent}%',
+  'updates.installHelp':
+    '설치하면 앱 전체가 엔진까지 통째로 교체되고 다시 시작합니다. 그동안 캐처는 멈추니, 가로채는 중인 요청은 먼저 처리하세요.',
+  'updates.installFailed':
+    '설치하지 못했습니다: {message}. 내려받기 링크는 그대로 쓸 수 있습니다.',
+  'updates.current': '가장 새로운 빌드를 쓰고 있습니다.',
+  'updates.different':
+    '배포된 빌드가 아닙니다. 직접 빌드했거나 아직 릴리스되지 않은 커밋입니다.',
+  'updates.unknown': '커밋 정보가 없는 빌드라서 배포본과 비교할 수 없습니다.',
+  'updates.latestStable': '최신 릴리스',
+  'updates.latestNightly': '최신 야간 빌드',
+  'updates.published': '({date} 배포)',
+  'updates.none': '배포된 빌드 없음',
+  'updates.failed': '업데이트를 확인하지 못했습니다: {message}',
+  'updates.auto': '자동으로 확인',
+  'updates.autoHelp':
+    'Lanius가 켜져 있는 동안 여섯 시간에 한 번만 GitHub에 물어봅니다. 밖으로 나가는 통신을 막아야 하는 망에서는 꺼 두세요.',
+  'updates.lastChecked': '마지막 확인 {when}',
+  'updates.never': '아직 확인하지 않았습니다',
+  'updates.allReleases': '전체 릴리스',
+  'updates.pill': '업데이트 있음',
+  'updates.badge': '새 빌드가 있습니다',
+
   'settings.group.proxy': '프록시',
   'settings.group.browser': '브라우저',
   'settings.group.appearance': '화면',

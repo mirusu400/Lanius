@@ -1034,3 +1034,47 @@ def test_about_does_not_claim_to_be_a_release_without_one(client) -> None:
     data = client.get("/api/about").json()
     expected = "release" if data["release"] else "development"
     assert data["source"] == expected
+
+
+def test_updates_reports_what_github_published(client) -> None:
+    """The check is a fact and a link, never an install."""
+    from app import updates
+
+    updates.reset_cache()
+    releases = [
+        {
+            "tag_name": "nightly",
+            "name": "Nightly 20260928 (f2b2e22)",
+            "target_commitish": "f2b2e22b1fddabc0d3bd32c4abd5b0a813dcef62",
+            "html_url": "https://example.invalid/nightly",
+            "prerelease": True,
+        }
+    ]
+    with mock.patch.object(
+        updates, "_fetch_releases", mock.AsyncMock(return_value=releases)
+    ), mock.patch.object(updates, "_compare", mock.AsyncMock(return_value="ahead")):
+        data = client.get("/api/updates?channel=nightly").json()
+    assert data["latest"]["commit_short"] == "f2b2e22"
+    assert "update_available" in data
+    assert data["download_url"]
+    updates.reset_cache()
+
+
+def test_updates_refuses_a_channel_it_does_not_have(client) -> None:
+    assert client.get("/api/updates?channel=beta").status_code == 400
+
+
+def test_updates_says_why_it_could_not_ask(client) -> None:
+    """Offline is the common case, and the reason belongs on screen."""
+    from app import updates
+
+    updates.reset_cache()
+    with mock.patch.object(
+        updates,
+        "_fetch_releases",
+        mock.AsyncMock(side_effect=updates.UpdateError("could not reach GitHub")),
+    ):
+        response = client.get("/api/updates")
+    assert response.status_code == 502
+    assert "GitHub" in response.json()["detail"]
+    updates.reset_cache()

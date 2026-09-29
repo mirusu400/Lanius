@@ -48,3 +48,7 @@ engine/dist/
 
 # Written by the engine build, not checked in.
 engine/app/_build_stamp.py
+
+# Written by the release build from tauri.updater.conf.json: it carries
+# the version of one particular build, so it belongs to that build only.
+shell/src-tauri/tauri.release.conf.json

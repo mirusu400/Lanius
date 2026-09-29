@@ -41,6 +41,7 @@ from .. import wordlists
 from ..addons.plugins import PluginError
 from .. import codegen
 from ..build_info import build_info
+from .. import updates
 from ..addons.scope import ScopeError, rule_from_url
 from .. import browser
 from ..config import Settings
@@ -796,6 +797,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         alone does not say which build someone is running.
         """
         return build_info()
+
+    @app.get("/api/updates")
+    async def check_updates(
+        channel: str | None = None, refresh: bool = False
+    ) -> dict[str, Any]:
+        """Whether a newer build has been published.
+
+        Asked for, never volunteered: the engine makes no outbound call
+        until the UI asks, because a proxy on an isolated network should
+        not phone home on its own.
+        """
+        try:
+            return await updates.check(channel=channel, refresh=refresh)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except updates.UpdateError as exc:
+            # Offline is the common case here, and the reason belongs on
+            # screen rather than as a bare 502.
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @app.get("/api/codegen/formats")
     async def codegen_formats() -> dict[str, Any]:
