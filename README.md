@@ -425,6 +425,9 @@ settings, namespaced storage, payload extensions, and managed tasks use the
 versioned [`lanius_sdk`](./docs/plugins-sdk.md). Declared actions appear in the
 matching History, Target, message, Repeater, Intruder, or global UI location;
 package data is available through a bounded read-only resource API.
+Per-plugin diagnostics retain recent SDK logs and contribution timing; scanner
+checks that fail five times consecutively are suspended until diagnostics are
+reset.
 Installable `.lanius-plugin` archives, signatures, and sandboxed UI are
 documented in [`docs/plugin-packages.md`](./docs/plugin-packages.md).
 The Plugins tab can browse user-configured signed catalogues, install compatible
@@ -434,6 +437,9 @@ versions. The catalogue format is in
 Plugin supplied passive and active checks create deduplicated project findings
 in the **Issues** tab; limits and SDK contracts are documented in
 [`docs/plugin-scanner.md`](./docs/plugin-scanner.md).
+The complete implementation inventory, trust boundary, phase coverage, and
+recommended next extensions are in
+[`docs/plugin-platform-status.md`](./docs/plugin-platform-status.md).
 
 Plugins run inside the engine process, not a sandbox. Only enable code you
 trust.

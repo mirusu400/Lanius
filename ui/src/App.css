@@ -2840,6 +2840,57 @@ pre.body {
   padding: 16px 20px;
 }
 
+.plugin-diagnostics-panel {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+  max-height: 52%;
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+.plugin-diagnostics-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.plugin-diagnostics-grid table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.plugin-diagnostics-grid th,
+.plugin-diagnostics-grid td {
+  border-bottom: 1px solid var(--border);
+  padding: 5px 7px;
+  text-align: left;
+}
+
+.plugin-log {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  max-height: 220px;
+  overflow: auto;
+  padding: 7px;
+}
+
+.plugin-log > div {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 80px 60px minmax(0, 1fr);
+  padding: 2px 0;
+}
+
+.plugin-log-error,
+.plugin-log-critical {
+  color: var(--danger-bright);
+}
+
+.plugin-log-warning {
+  color: var(--warn);
+}
+
 .plugin-settings-heading,
 .plugin-setting-field {
   align-items: center;

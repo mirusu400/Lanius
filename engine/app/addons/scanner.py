@@ -300,16 +300,20 @@ class ScannerAddon:
     async def scan_passive(self, snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
         saved: list[dict[str, Any]] = []
         for contribution in self.registry.scan_handlers("passive_scanners"):
+            started = self.registry.begin_call(contribution)
             try:
                 for issue in await _invoke(contribution.handler, snapshot):
                     saved.append(
                         await self._report(contribution, "passive", issue, snapshot)
                     )
             except Exception as exc:
+                self.registry.finish_call(contribution, started, exc)
                 self.broker.publish(
                     "scanner.check_error",
                     {"check_id": contribution.id, "error": str(exc)},
                 )
+            else:
+                self.registry.finish_call(contribution, started)
         return saved
 
     async def _report(
@@ -472,15 +476,19 @@ class ScannerAddon:
                         point,
                         send_point,
                     )
+                    started = self.registry.begin_call(check)
                     try:
                         for issue in await _invoke(check.handler, context):
                             await self._report(check, "active", issue, snapshot)
                             job.issues += 1
                     except Exception as exc:
+                        self.registry.finish_call(check, started, exc)
                         self.broker.publish(
                             "scanner.check_error",
                             {"job_id": job.id, "check_id": check.id, "error": str(exc)},
                         )
+                    else:
+                        self.registry.finish_call(check, started)
                     job.completed += 1
                     self.broker.publish("scanner.progress", job.as_dict())
                 finally:

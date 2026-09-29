@@ -98,6 +98,13 @@ disable and reload; uninstall can explicitly remove them later.
 `context.tasks.create(awaitable)` for background work so shutdown, reload, and
 failure cleanup can cancel it deterministically.
 
+The host retains the latest 500 log entries per plugin and measures SDK action,
+payload, and scanner contribution calls. The Plugins diagnostics panel shows
+call and error counts, average and maximum duration, the last error, and output.
+Resetting diagnostics also resumes a suspended scanner check. A passive or
+active scanner check is suspended after five consecutive errors so one broken
+check cannot fail for every captured request indefinitely.
+
 ## Package resources
 
 Files stored under a package's `resources/` directory are available through

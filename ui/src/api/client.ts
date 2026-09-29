@@ -646,6 +646,20 @@ export function patchPluginSettings(
   });
 }
 
+export function getPluginDiagnostics(
+  name: string,
+): Promise<import('./types').PluginDiagnostics> {
+  return request(`/api/plugins/${encodeURIComponent(name)}/diagnostics`);
+}
+
+export function resetPluginDiagnostics(
+  name: string,
+): Promise<import('./types').PluginDiagnostics> {
+  return request(`/api/plugins/${encodeURIComponent(name)}/diagnostics/reset`, {
+    method: 'POST',
+  });
+}
+
 export function invokePluginAction(
   actionId: string,
   context: Record<string, unknown>,

@@ -1,5 +1,9 @@
 # Lanius 플러그인 플랫폼 조사
 
+> 이 문서는 구현 전 기준 커밋의 상태를 기록한 조사 자료다. 구현 후의
+> 기능과 남은 확장 지점은 [Plugin platform status and next steps](../plugin-platform-status.md)에
+> 정리되어 있다.
+
 조사일: 2026-09-29
 
 기준 커밋: `54d31df`

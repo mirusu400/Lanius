@@ -448,6 +448,34 @@ export interface PluginSettings {
   values: Record<string, unknown>;
 }
 
+export interface PluginContributionDiagnostic {
+  id: string;
+  kind: string | null;
+  title: string | null;
+  calls: number;
+  errors: number;
+  total_ms: number;
+  average_ms: number;
+  max_ms: number;
+  last_ms: number;
+  last_called_at: number | null;
+  last_error: string | null;
+  consecutive_errors: number;
+  suspended: boolean;
+}
+
+export interface PluginLogEntry {
+  timestamp: number;
+  level: string;
+  message: string;
+}
+
+export interface PluginDiagnostics {
+  plugin: string;
+  contributions: PluginContributionDiagnostic[];
+  logs: PluginLogEntry[];
+}
+
 export type PluginActionLocation =
   | 'global'
   | 'history'

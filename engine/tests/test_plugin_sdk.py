@@ -42,12 +42,13 @@ SDK_PLUGIN = textwrap.dedent(
     DESCRIPTION = "SDK contributions"
 
     def activate(context):
+        context.log.info("SDK plugin activated")
         context.actions.register(
             "inspect", "Inspect", lambda payload: {"seen": payload.get("flow_id")},
             locations=("flow", "history"),
         )
         context.codecs.register(
-            "brackets", "Brackets",
+            "inspect", "Brackets",
             encode=lambda value: f"[{value}]",
             decode=lambda value: value.removeprefix("[").removesuffix("]"),
         )
@@ -114,7 +115,16 @@ async def test_sdk_plugin_registers_and_invokes_contributions(sdk_manager) -> No
     assert await sdk_manager.registry.process_payload(
         "sdk.prefix", "value", {"prefix": "pre-"}
     ) == "pre-value"
-    assert codecs.transform("value", "sdk.brackets", "encode") == "[value]"
+    assert codecs.transform("value", "sdk.inspect", "encode") == "[value]"
+    diagnostics = sdk_manager.registry.diagnostics("sdk")
+    matching = [
+        item for item in diagnostics["contributions"] if item["id"] == "sdk.inspect"
+    ]
+    assert {item["kind"] for item in matching} == {"actions", "codecs"}
+    action = next(item for item in matching if item["kind"] == "actions")
+    assert action["calls"] == 1
+    assert action["errors"] == 0
+    assert diagnostics["logs"][-1]["message"] == "SDK plugin activated"
 
 
 def test_sdk_settings_and_storage_persist_across_reload(sdk_manager) -> None:
@@ -144,20 +154,22 @@ def test_disabling_sdk_plugin_removes_every_contribution(sdk_manager) -> None:
 
     assert all(not values for values in sdk_manager.registry.list().values())
     with pytest.raises(codecs.CodecError, match="unknown codec"):
-        codecs.transform("value", "sdk.brackets", "encode")
+        codecs.transform("value", "sdk.inspect", "encode")
 
 
 def test_sdk_resources_are_read_only_and_path_bounded(tmp_path) -> None:
     resources = tmp_path / "resources"
     (resources / "payloads").mkdir(parents=True)
     (resources / "payloads" / "names.txt").write_text("admin\nroot\n")
-    context = ContributionRegistry(None).context("sdk", resources)
+    registry = ContributionRegistry(None)
+    context = registry.context("sdk", resources)
 
     assert context.resources.list() == ("payloads/names.txt",)
     assert context.resources.list("payloads") == ("payloads/names.txt",)
     assert context.resources.read_text("payloads/names.txt") == "admin\nroot\n"
     with pytest.raises(PluginApiError, match="stay inside"):
         context.resources.read_text("../secret")
+    registry.dispose_owner("sdk")
 
 
 def test_failed_activation_rolls_back_partial_contributions(tmp_path) -> None:
@@ -226,6 +238,12 @@ def test_sdk_contributions_are_available_through_the_api(tmp_path) -> None:
             json={"context": {"location": "flow", "flow_id": "flow-9"}},
         )
         assert invoked.json() == {"result": {"seen": "flow-9"}}
+
+        diagnostics = client.get("/api/plugins/sdk/diagnostics")
+        assert diagnostics.status_code == 200
+        assert diagnostics.json()["logs"][-1]["message"] == "SDK plugin activated"
+        reset = client.post("/api/plugins/sdk/diagnostics/reset")
+        assert reset.json()["logs"] == []
 
         generated = client.post(
             "/api/plugin-payload-generators/sdk.sequence/generate",

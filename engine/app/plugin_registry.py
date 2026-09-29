@@ -5,10 +5,13 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import logging
 import os
 import re
 import tempfile
 import threading
+import time
+from collections import deque
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
@@ -44,6 +47,9 @@ _MAX_GENERATED_PAYLOADS = 100_000
 _MAX_RESOURCE_BYTES = 10 * 1024 * 1024
 _MAX_ACTION_RESULT_BYTES = 1024 * 1024
 _CONTRIBUTION_TIMEOUT_SECONDS = 30.0
+_MAX_PLUGIN_LOGS = 500
+_MAX_PLUGIN_LOG_MESSAGE = 16 * 1024
+_SCANNER_SUSPEND_AFTER_ERRORS = 5
 
 
 async def _invoke_handler(handler: Any, *args: Any) -> Any:
@@ -80,6 +86,38 @@ class Contribution:
 
     def as_dict(self) -> dict[str, Any]:
         return {"id": self.id, "plugin": self.owner, **self.metadata}
+
+
+@dataclass(slots=True)
+class ContributionHealth:
+    calls: int = 0
+    errors: int = 0
+    total_ms: float = 0.0
+    max_ms: float = 0.0
+    last_ms: float = 0.0
+    last_called_at: float | None = None
+    last_error: str | None = None
+    consecutive_errors: int = 0
+    suspended: bool = False
+
+    def as_dict(self) -> dict[str, Any]:
+        value = asdict(self)
+        value["average_ms"] = self.total_ms / self.calls if self.calls else 0.0
+        return value
+
+
+class _PluginLogHandler(logging.Handler):
+    def __init__(self, registry: "ContributionRegistry", owner: str) -> None:
+        super().__init__(logging.DEBUG)
+        self.registry = registry
+        self.owner = owner
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            message = self.format(record)
+        except Exception:
+            message = record.getMessage()
+        self.registry.append_log(self.owner, record.levelname.lower(), message)
 
 
 class UserValueStore:
@@ -153,10 +191,47 @@ class ContributionRegistry:
         }
         self._handles: dict[str, list[Disposable]] = {}
         self._tasks: dict[str, set[asyncio.Future[Any]]] = {}
+        self._health: dict[tuple[ContributionKind, str], ContributionHealth] = {}
+        self._logs: dict[str, deque[dict[str, Any]]] = {}
+        self._log_handlers: dict[
+            str, tuple[logging.Logger, _PluginLogHandler, int]
+        ] = {}
+        self._diagnostics_lock = threading.RLock()
 
     def context(self, owner: str, resource_root: Path | None = None) -> PluginContext:
         self._validate_id(owner, "plugin id")
+        self._attach_logger(owner)
         return PluginContext(owner, PluginHost(self, owner, resource_root))
+
+    def _attach_logger(self, owner: str) -> None:
+        if owner in self._log_handlers:
+            return
+        logger = logging.getLogger(f"lanius.plugin.{owner}")
+        previous_level = logger.level
+        handler = _PluginLogHandler(self, owner)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        logger.addHandler(handler)
+        logger.setLevel(logging.DEBUG)
+        self._log_handlers[owner] = (logger, handler, previous_level)
+
+    def _detach_logger(self, owner: str) -> None:
+        attached = self._log_handlers.pop(owner, None)
+        if attached is None:
+            return
+        logger, handler, previous_level = attached
+        logger.removeHandler(handler)
+        logger.setLevel(previous_level)
+
+    def append_log(self, owner: str, level: str, message: str) -> None:
+        with self._diagnostics_lock:
+            entries = self._logs.setdefault(owner, deque(maxlen=_MAX_PLUGIN_LOGS))
+            entries.append(
+                {
+                    "timestamp": time.time(),
+                    "level": level,
+                    "message": message[:_MAX_PLUGIN_LOG_MESSAGE],
+                }
+            )
 
     @staticmethod
     def _validate_id(value: str, label: str) -> None:
@@ -196,6 +271,10 @@ class ContributionRegistry:
             raise PluginApiError(f"duplicate {kind} contribution: {qualified}")
         item = Contribution(owner, local_id, kind, metadata, handler)
         bucket[qualified] = item
+        with self._diagnostics_lock:
+            health = self._health.setdefault((kind, qualified), ContributionHealth())
+            health.consecutive_errors = 0
+            health.suspended = False
 
         def remove() -> None:
             if bucket.get(qualified) is item:
@@ -229,7 +308,76 @@ class ContributionRegistry:
     def scan_handlers(
         self, kind: Literal["passive_scanners", "active_scanners"]
     ) -> List[Contribution]:
-        return list(self._items[kind].values())
+        with self._diagnostics_lock:
+            return [
+                item
+                for item in self._items[kind].values()
+                if not self._health[(item.kind, item.id)].suspended
+            ]
+
+    def begin_call(self, item: Contribution) -> float:
+        return time.perf_counter()
+
+    def finish_call(
+        self,
+        item: Contribution,
+        started: float,
+        error: BaseException | None = None,
+        *,
+        suspend_after: int | None = None,
+    ) -> None:
+        elapsed = (time.perf_counter() - started) * 1000
+        with self._diagnostics_lock:
+            health = self._health.setdefault(
+                (item.kind, item.id), ContributionHealth()
+            )
+            health.calls += 1
+            health.total_ms += elapsed
+            health.max_ms = max(health.max_ms, elapsed)
+            health.last_ms = elapsed
+            health.last_called_at = time.time()
+            if error is None:
+                health.consecutive_errors = 0
+                return
+            health.errors += 1
+            health.consecutive_errors += 1
+            health.last_error = f"{type(error).__name__}: {error}"[:4096]
+            if suspend_after is None and item.kind in {
+                "passive_scanners",
+                "active_scanners",
+            }:
+                suspend_after = _SCANNER_SUSPEND_AFTER_ERRORS
+            if suspend_after is not None and health.consecutive_errors >= suspend_after:
+                health.suspended = True
+
+    def diagnostics(self, owner: str) -> dict[str, Any]:
+        with self._diagnostics_lock:
+            contributions = []
+            for (kind, qualified_id), health in self._health.items():
+                if not qualified_id.startswith(f"{owner}."):
+                    continue
+                item = self._items[kind].get(qualified_id)
+                contributions.append(
+                    {
+                        "id": qualified_id,
+                        "kind": kind,
+                        "title": item.metadata.get("title") if item is not None else None,
+                        **health.as_dict(),
+                    }
+                )
+            return {
+                "plugin": owner,
+                "contributions": contributions,
+                "logs": list(self._logs.get(owner, ())),
+            }
+
+    def reset_diagnostics(self, owner: str) -> dict[str, Any]:
+        with self._diagnostics_lock:
+            self._logs.pop(owner, None)
+            for kind, qualified_id in list(self._health):
+                if qualified_id.startswith(f"{owner}."):
+                    self._health[(kind, qualified_id)] = ContributionHealth()
+        return self.diagnostics(owner)
 
     async def invoke_action(
         self, qualified_id: str, payload: Mapping[str, Any]
@@ -241,54 +389,82 @@ class ContributionRegistry:
             raise PluginApiError(
                 f"action {qualified_id} is not available at {location!r}"
             )
+        started = self.begin_call(item)
         try:
             result = await asyncio.wait_for(
                 _invoke_handler(item.handler, payload),
                 timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
             )
         except TimeoutError as exc:
-            raise PluginApiError(f"action {qualified_id} timed out") from exc
+            error = PluginApiError(f"action {qualified_id} timed out")
+            self.finish_call(item, started, error)
+            raise error from exc
+        except Exception as exc:
+            self.finish_call(item, started, exc)
+            raise
         try:
             size = len(json.dumps(result, ensure_ascii=False).encode())
         except (TypeError, ValueError) as exc:
-            raise PluginApiError("action result must be JSON compatible") from exc
+            error = PluginApiError("action result must be JSON compatible")
+            self.finish_call(item, started, error)
+            raise error from exc
         if size > _MAX_ACTION_RESULT_BYTES:
-            raise PluginApiError("action result exceeds 1 MiB")
+            error = PluginApiError("action result exceeds 1 MiB")
+            self.finish_call(item, started, error)
+            raise error
+        self.finish_call(item, started)
         return result
 
     async def generate_payloads(
         self, qualified_id: str, options: Mapping[str, Any]
     ) -> List[str]:
         item = self._get("payload_generators", qualified_id)
+        started = self.begin_call(item)
         try:
             values = await asyncio.wait_for(
                 _invoke_handler(item.handler, options),
                 timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
             )
-            return await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 asyncio.to_thread(_collect_payloads, values),
                 timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
             )
         except TimeoutError as exc:
-            raise PluginApiError(
+            error = PluginApiError(
                 f"payload generator {qualified_id} timed out"
-            ) from exc
+            )
+            self.finish_call(item, started, error)
+            raise error from exc
+        except Exception as exc:
+            self.finish_call(item, started, exc)
+            raise
+        self.finish_call(item, started)
+        return result
 
     async def process_payload(
         self, qualified_id: str, value: str, context: Mapping[str, Any]
     ) -> str:
         item = self._get("payload_processors", qualified_id)
+        started = self.begin_call(item)
         try:
             result = await asyncio.wait_for(
                 _invoke_handler(item.handler, value, context),
                 timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
             )
         except TimeoutError as exc:
-            raise PluginApiError(
+            error = PluginApiError(
                 f"payload processor {qualified_id} timed out"
-            ) from exc
+            )
+            self.finish_call(item, started, error)
+            raise error from exc
+        except Exception as exc:
+            self.finish_call(item, started, exc)
+            raise
         if not isinstance(result, str):
-            raise PluginApiError("payload processor must return a string")
+            error = PluginApiError("payload processor must return a string")
+            self.finish_call(item, started, error)
+            raise error
+        self.finish_call(item, started)
         return result
 
     def settings(self, owner: str) -> dict[str, Any]:
@@ -417,6 +593,7 @@ class ContributionRegistry:
         for task in self._tasks.pop(owner, set()):
             if not task.done():
                 task.cancel()
+        self._detach_logger(owner)
 
     async def dispose_owner_async(self, owner: str) -> None:
         tasks = list(self._tasks.get(owner, set()))

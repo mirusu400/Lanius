@@ -98,6 +98,34 @@ async def test_passive_checks_deduplicate_issues(tmp_path) -> None:
     store.close()
 
 
+@pytest.mark.asyncio
+async def test_repeated_scanner_errors_suspend_the_check(tmp_path) -> None:
+    store = FlowStore(tmp_path / "project.sqlite")
+    registry = ContributionRegistry(store)
+    calls = 0
+
+    def broken(_snapshot):
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("broken check")
+
+    registry.context("checks").scanner.register_passive(
+        "broken", "Broken check", broken
+    )
+    scanner = ScannerAddon(registry, store, EventBroker(), FakeRepeater())
+    for _ in range(7):
+        await scanner.scan_passive({"flow_id": "flow-1"})
+
+    health = registry.diagnostics("checks")["contributions"][0]
+    assert calls == 5
+    assert health["errors"] == 5
+    assert health["suspended"] is True
+    registry.reset_diagnostics("checks")
+    assert len(registry.scan_handlers("passive_scanners")) == 1
+    registry.dispose_owner("checks")
+    store.close()
+
+
 def test_issue_status_and_filters(tmp_path) -> None:
     store = FlowStore(tmp_path / "project.sqlite")
     now = 1.0

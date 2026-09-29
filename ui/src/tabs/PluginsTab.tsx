@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   getPluginCatalogue,
+  getPluginDiagnostics,
   getPluginSettings,
   installCataloguePlugin,
   installDevelopmentPlugin,
@@ -9,6 +10,7 @@ import {
   listPlugins,
   patchPluginSettings,
   reloadPlugin,
+  resetPluginDiagnostics,
   rollbackPlugin,
   savePluginCatalogueSources,
   setPluginAutoReload,
@@ -20,6 +22,7 @@ import type {
   PluginCatalogue,
   PluginCatalogueItem,
   PluginCatalogueSource,
+  PluginDiagnostics,
   PluginInfo,
   PluginSettingField,
   PluginSettings,
@@ -56,6 +59,7 @@ export function PluginsTab() {
   const [developmentMode, setDevelopmentMode] = useState(false);
   const [error, setError] = useState<Message | null>(null);
   const [settings, setSettings] = useState<PluginSettings | null>(null);
+  const [diagnostics, setDiagnostics] = useState<PluginDiagnostics | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<Record<string, unknown>>({});
   const [savingSettings, setSavingSettings] = useState(false);
   const [developmentPath, setDevelopmentPath] = useState('');
@@ -222,6 +226,7 @@ export function PluginsTab() {
   const openSettings = async (plugin: PluginInfo) => {
     try {
       const data = await getPluginSettings(plugin.name);
+      setDiagnostics(null);
       setSettings(data);
       setSettingsDraft(data.values);
       setError(null);
@@ -242,6 +247,26 @@ export function PluginsTab() {
       setError(rawMsg(`${settings.plugin}: ${(err as Error).message}`));
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const openDiagnostics = async (plugin: PluginInfo) => {
+    try {
+      setSettings(null);
+      setDiagnostics(await getPluginDiagnostics(plugin.name));
+      setError(null);
+    } catch (err) {
+      setError(rawMsg(`${plugin.name}: ${(err as Error).message}`));
+    }
+  };
+
+  const clearDiagnostics = async () => {
+    if (!diagnostics) return;
+    try {
+      setDiagnostics(await resetPluginDiagnostics(diagnostics.plugin));
+      setError(null);
+    } catch (err) {
+      setError(rawMsg(`${diagnostics.plugin}: ${(err as Error).message}`));
     }
   };
 
@@ -548,6 +573,9 @@ export function PluginsTab() {
                       {t('plugins.settings')}
                     </button>
                   )}
+                  <button onClick={() => void openDiagnostics(plugin)}>
+                    {t('plugins.diagnostics')}
+                  </button>
                   {plugin.ui?.views.map((view) => (
                     <button
                       key={view.id}
@@ -619,6 +647,55 @@ export function PluginsTab() {
           <button disabled={savingSettings} onClick={() => void saveSettings()}>
             {savingSettings ? t('plugins.savingSettings') : t('plugins.saveSettings')}
           </button>
+        </section>
+      )}
+      {diagnostics && (
+        <section className="plugin-diagnostics-panel" aria-label={t('plugins.diagnosticsFor', { name: diagnostics.plugin })}>
+          <div className="plugin-settings-heading">
+            <strong>{t('plugins.diagnosticsFor', { name: diagnostics.plugin })}</strong>
+            <span className="spacer" />
+            <button onClick={() => void clearDiagnostics()}>{t('plugins.resetDiagnostics')}</button>
+            <button aria-label={t('common.close')} onClick={() => setDiagnostics(null)}>×</button>
+          </div>
+          <div className="plugin-diagnostics-grid">
+            <div>
+              <h4>{t('plugins.performance')}</h4>
+              {diagnostics.contributions.length > 0 ? (
+                <table>
+                  <thead><tr>
+                    <th>{t('common.name')}</th><th>{t('plugins.calls')}</th>
+                    <th>{t('common.error')}</th><th>{t('plugins.average')}</th>
+                    <th>{t('plugins.maximum')}</th><th>{t('common.status')}</th>
+                  </tr></thead>
+                  <tbody>{diagnostics.contributions.map((item) => (
+                    <tr key={`${item.kind ?? 'removed'}:${item.id}`}>
+                      <td className="mono">{item.id}</td>
+                      <td>{item.calls}</td>
+                      <td>{item.errors}</td>
+                      <td>{item.average_ms.toFixed(1)} ms</td>
+                      <td>{item.max_ms.toFixed(1)} ms</td>
+                      <td className={item.suspended ? 'status-5xx' : 'muted'}>
+                        {item.suspended ? t('plugins.suspended') : t('plugins.active')}
+                      </td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              ) : <p className="muted">{t('plugins.noDiagnostics')}</p>}
+            </div>
+            <div>
+              <h4>{t('plugins.output')}</h4>
+              <div className="plugin-log mono">
+                {diagnostics.logs.map((entry, index) => (
+                  <div key={`${entry.timestamp}-${index}`} className={`plugin-log-${entry.level}`}>
+                    <time>{new Date(entry.timestamp * 1000).toLocaleTimeString()}</time>
+                    <strong>{entry.level}</strong>
+                    <span>{entry.message}</span>
+                  </div>
+                ))}
+                {diagnostics.logs.length === 0 && <p className="muted">{t('plugins.noLogs')}</p>}
+              </div>
+            </div>
+          </div>
         </section>
       )}
       {activeView && (

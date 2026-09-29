@@ -1883,6 +1883,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except (PluginError, PluginApiError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @app.get("/api/plugins/{name}/diagnostics")
+    async def plugin_diagnostics(name: str) -> dict[str, Any]:
+        try:
+            engine.plugins.get(name)
+            return engine.plugins.registry.diagnostics(name)
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/plugins/{name}/diagnostics/reset")
+    async def reset_plugin_diagnostics(name: str) -> dict[str, Any]:
+        try:
+            engine.plugins.get(name)
+            result = engine.plugins.registry.reset_diagnostics(name)
+            broker.publish("plugins.diagnostics", {"plugin": name, "reset": True})
+            return result
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.patch("/api/plugins/{name}/settings")
     async def patch_plugin_settings(
         name: str, payload: PluginSettingsPatch

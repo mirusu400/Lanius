@@ -89,6 +89,21 @@ beforeEach(() => {
           values: { enabled },
         });
       }
+      if (url.endsWith('/api/plugins/stamp/diagnostics/reset')) {
+        return jsonResponse({ plugin: 'stamp', contributions: [], logs: [] });
+      }
+      if (url.endsWith('/api/plugins/stamp/diagnostics')) {
+        return jsonResponse({
+          plugin: 'stamp',
+          contributions: [{
+            id: 'stamp.inspect', kind: 'actions', title: 'Inspect', calls: 4,
+            errors: 1, total_ms: 10, average_ms: 2.5, max_ms: 5, last_ms: 2,
+            last_called_at: 1, last_error: 'RuntimeError: failed',
+            consecutive_errors: 0, suspended: false,
+          }],
+          logs: [{ timestamp: 1, level: 'info', message: 'ready' }],
+        });
+      }
       if (url.includes('/auto-reload')) {
         const name = url.split('/api/plugins/')[1].split('/')[0];
         const enabled = url.endsWith('enabled=true');
@@ -208,6 +223,19 @@ describe('PluginsTab', () => {
     await user.click(checkbox);
     await user.click(within(panel).getByText(t('plugins.saveSettings')));
     await waitFor(() => expect(calls.filter((call) => call.endsWith('/api/plugins/stamp/settings')).length).toBe(2));
+  });
+
+  it('shows and resets plugin diagnostics', async () => {
+    const user = userEvent.setup();
+    render(<PluginsTab />);
+    const buttons = await screen.findAllByText(t('plugins.diagnostics'));
+    await user.click(buttons[0]);
+    expect(await screen.findByText('stamp.inspect')).toBeTruthy();
+    expect(screen.getByText('ready')).toBeTruthy();
+    await user.click(screen.getByText(t('plugins.resetDiagnostics')));
+    await waitFor(() => expect(calls.some((call) =>
+      call.endsWith('/api/plugins/stamp/diagnostics/reset'),
+    )).toBe(true));
   });
 
   it('explains an empty plugin directory', async () => {
