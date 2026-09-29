@@ -36,7 +36,7 @@ const en: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Dark, light, or follow the system. Following the system is the default, so Lanius changes with the rest of your desktop, including when it switches at sunset.',
+            body: 'Choose dark, light, Copper, Steel, Sage, or Paper. Following the system is the default, so Lanius changes with the rest of your desktop, including when it switches at sunset.',
           },
           {
             kind: 'text',
@@ -480,7 +480,7 @@ const ko: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: '다크, 라이트, 또는 시스템 설정 따르기를 고를 수 있습니다. 기본값은 시스템 따르기라, 해가 진 뒤 자동으로 바뀌는 것을 포함해 데스크톱 전체와 함께 변합니다.',
+            body: '다크, 라이트, 구리, 스틸, 세이지, 페이퍼 테마를 고를 수 있습니다. 기본값은 시스템 따르기라, 해가 진 뒤 자동으로 바뀌는 것을 포함해 데스크톱 전체와 함께 변합니다.',
           },
           {
             kind: 'text',

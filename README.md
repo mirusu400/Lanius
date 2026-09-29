@@ -169,8 +169,9 @@ binary automatically. GOST is licensed under MIT.
 
 ### Appearance
 
-**Settings > Appearance** has a dark and a light theme, and follows the system
-by default. The interface font and the editor font are set separately, with
+**Settings > Appearance** offers the original dark and light themes plus
+Copper, Steel, Sage, and Paper. It follows the system by default. The interface
+font and the editor font are set separately, with
 their own sizes, since one is for labels and the other for raw HTTP where a
 monospace font keeps columns lined up. A preview shows the result as you
 change it.
