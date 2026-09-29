@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { compareTexts, type CompareBlock } from '../api/client';
 import { useT } from '../i18n';
+import { Split } from '../components/Split';
 
 interface Result {
   blocks: CompareBlock[];
@@ -56,24 +57,27 @@ export function ComparerTab() {
       </div>
       {error && <div className="banner error">{error}</div>}
 
-      <div className="comparer-inputs">
-        <textarea
+      <Split
+        direction="horizontal"
+        storageKey="lanius.split.comparer"
+        className="comparer-inputs"
+        first={<textarea
           aria-label={t('comparer.left')}
           className="mono"
           spellCheck={false}
           placeholder={t('comparer.leftPlaceholder')}
           value={left}
           onChange={(e) => setLeft(e.target.value)}
-        />
-        <textarea
+        />}
+        second={<textarea
           aria-label={t('comparer.right')}
           className="mono"
           spellCheck={false}
           placeholder={t('comparer.rightPlaceholder')}
           value={right}
           onChange={(e) => setRight(e.target.value)}
-        />
-      </div>
+        />}
+      />
 
       {result && (
         <div className="diff mono" data-testid="diff">

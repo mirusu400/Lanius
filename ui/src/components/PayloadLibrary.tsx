@@ -21,6 +21,7 @@ import {
 import { Dialog } from './Dialog';
 import { errorMessage, renderMessage, type Message } from '../i18n/message';
 import { useT } from '../i18n';
+import { Split } from './Split';
 
 /** Enough of a list to judge it by, without rendering 30,000 lines. */
 const PREVIEW_LINES = 200;
@@ -168,8 +169,11 @@ export function PayloadLibrary({
     >
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
 
-      <div className="payload-dialog-body">
-        <div className="payload-sources">
+      <Split
+        direction="horizontal"
+        storageKey="lanius.split.payloadLibrary"
+        className="payload-dialog-body"
+        first={<div className="payload-sources">
           <div className="subtabs">
             <button
               className={source === 'saved' ? 'active' : ''}
@@ -254,9 +258,8 @@ export function PayloadLibrary({
               </ul>
             </>
           )}
-        </div>
-
-        <div className="payload-preview">
+        </div>}
+        second={<div className="payload-preview">
           {preview === null ? (
             <p className="muted">{t('payloads.previewHint')}</p>
           ) : (
@@ -273,8 +276,8 @@ export function PayloadLibrary({
               )}
             </>
           )}
-        </div>
-      </div>
+        </div>}
+      />
     </Dialog>
   );
 }

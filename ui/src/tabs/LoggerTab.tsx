@@ -6,6 +6,7 @@ import { formatTime } from './proxyModel';
 import { useT } from '../i18n';
 import { useReportBusy } from '../components/busy';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
+import { Split } from '../components/Split';
 
 const MAX_LIVE = 500;
 
@@ -99,8 +100,11 @@ export function LoggerTab() {
         </span>
       </div>
 
-      <div className="logger-split">
-        <div className="logger-live">
+      <Split
+        direction="horizontal"
+        storageKey="lanius.split.logger"
+        className="logger-split"
+        first={<div className="logger-live">
           <h4>{t('logger.liveEvents')}</h4>
           <ResizableTable columns={liveColumns} className="flow-table">
             <thead><tr>
@@ -124,17 +128,17 @@ export function LoggerTab() {
                   <ResizableFillCell />
                 </tr>
               ))}
-              <ResizableFillHeader />
             </tbody>
           </ResizableTable>
-        </div>
-        <div className="logger-stored">
+        </div>}
+        second={<div className="logger-stored">
           <h4>{t('logger.storedEvents')}</h4>
           <ResizableTable columns={storedColumns} className="flow-table">
             <thead><tr>
               {[t('flow.time'), t('logger.message')].map((label, index) => (
                 <ResizableHeader key={index} label={label} index={index} columns={storedColumns} resizeLabel={t('table.resizeColumn', { column: label })} />
               ))}
+              <ResizableFillHeader />
             </tr></thead>
             <tbody>
               {stored.map((event) => (
@@ -146,8 +150,8 @@ export function LoggerTab() {
               ))}
             </tbody>
           </ResizableTable>
-        </div>
-      </div>
+        </div>}
+      />
     </div>
   );
 }

@@ -224,6 +224,9 @@ changes a request, its detail pane keeps **Original**, **Auto-modified**, and
 **Modified request** tabs so every stage can be compared.
 Drag a table column header's right edge to resize it in History and other
 headed data tables. Column widths are remembered on this machine.
+Drag the divider between side-by-side panes to resize them in Proxy,
+WebSockets, Repeater, Intruder, Logger, Comparer, Docs, and editor dialogs.
+Each pane position is remembered independently.
 
 Right-click a request to send it to Repeater or Intruder, add it to the scope,
 or copy it as a URL. The site map, Repeater tabs and Intruder results have

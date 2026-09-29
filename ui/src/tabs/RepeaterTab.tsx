@@ -18,6 +18,7 @@ import {
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { RequestEditor } from '../components/RequestEditor';
+import { Split } from '../components/Split';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { sendTextToIntruder } from './intruderStore';
@@ -244,24 +245,27 @@ export function RepeaterTabView() {
           {active.error && (
             <div className="banner error">{renderMessage(active.error, t)}</div>
           )}
-          <div className="repeater-split">
-            <RequestEditor
+          <Split
+            direction="horizontal"
+            storageKey="lanius.split.repeater"
+            className="repeater-split"
+            first={<RequestEditor
               editorRef={editorMenu.ref}
               className="repeater-editor mono"
               label={t('repeater.request')}
               value={active.text}
               onChange={(text) => updateTab(active.id, { text })}
               onContextMenu={editorMenu.open}
-            />
-            {editorMenu.element}
-            <pre className="repeater-response mono">
+            />}
+            second={<pre className="repeater-response mono">
               {active.response
                 ? renderResponseText(active.response, (count) =>
                     t('repeater.bodyTruncated', { count: String(count) }),
                   )
                 : t('repeater.noResponse')}
-            </pre>
-          </div>
+            </pre>}
+          />
+          {editorMenu.element}
         </>
       ) : (
         <div className="intercept-idle muted">

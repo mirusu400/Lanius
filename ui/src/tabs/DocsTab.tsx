@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import { docPages, type DocBlock } from '../docs/pages';
 import { useI18n } from '../i18n';
+import { Split } from '../components/Split';
 
 /** The page you were reading, kept outside the component: React unmounts
  *  this tab when you switch away, and losing your place mid-article is
@@ -31,7 +32,12 @@ export function DocsTab() {
 
   return (
     <div className="docs-tab">
-      <nav className="docs-nav" aria-label={t('docs.contents')}>
+      <Split
+        direction="horizontal"
+        storageKey="lanius.split.docs"
+        initial={0.26}
+        className="docs-split"
+        first={<nav className="docs-nav" aria-label={t('docs.contents')}>
         {pages.map((page) => (
           <button
             key={page.id}
@@ -42,9 +48,9 @@ export function DocsTab() {
             <span>{page.summary}</span>
           </button>
         ))}
-      </nav>
+      </nav>}
 
-      <article className="docs-body">
+        second={<article className="docs-body">
         <h2>{active.title}</h2>
         <p className="docs-summary">{active.summary}</p>
         {active.sections.map((section) => (
@@ -55,7 +61,8 @@ export function DocsTab() {
             ))}
           </section>
         ))}
-      </article>
+      </article>}
+      />
     </div>
   );
 }

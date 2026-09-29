@@ -4,6 +4,7 @@ import { getMatchReplaceRules, previewMatchReplace, putMatchReplaceRules } from 
 import type { MatchReplaceRule } from '../api/types';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
 import { Dialog } from './Dialog';
+import { Split } from './Split';
 
 function newRule(): MatchReplaceRule {
   return {
@@ -174,14 +175,17 @@ export function MatchReplaceDialog({
                 <label className="match-replace-check"><input type="checkbox" checked={rule.regex} onChange={(event) => update(rule.id, { regex: event.target.checked })} />{t('matchReplace.regex')}</label>
                 <label className="match-replace-check"><input type="checkbox" checked={rule.case_sensitive} onChange={(event) => update(rule.id, { case_sensitive: event.target.checked })} />{t('matchReplace.caseSensitive')}</label>
               </div>
-              <div className="match-replace-fields">
-                <label>{t('matchReplace.match')}
+              <Split
+                direction="horizontal"
+                storageKey="lanius.split.matchReplaceFields"
+                className="match-replace-fields"
+                first={<label>{t('matchReplace.match')}
                   <textarea className="mono" value={rule.match} onChange={(event) => update(rule.id, { match: event.target.value })} />
-                </label>
-                <label>{t('matchReplace.replace')}
+                </label>}
+                second={<label>{t('matchReplace.replace')}
                   <textarea className="mono" value={rule.replace} onChange={(event) => update(rule.id, { replace: event.target.value })} />
-                </label>
-              </div>
+                </label>}
+              />
             </section>
           ))}
         </div>
@@ -209,8 +213,11 @@ export function MatchReplaceDialog({
           </button>
         </div>
         {previewError && <div className="banner error">{renderMessage(previewError, t)}</div>}
-        <div className="match-replace-preview-panes">
-          <label>{t(previewPhase === 'request' ? 'matchReplace.rawRequest' : 'matchReplace.rawResponse')}
+        <Split
+          direction="horizontal"
+          storageKey="lanius.split.matchReplacePreview"
+          className="match-replace-preview-panes"
+          first={<label>{t(previewPhase === 'request' ? 'matchReplace.rawRequest' : 'matchReplace.rawResponse')}
             <textarea
               className="mono"
               value={previewRaw}
@@ -221,11 +228,11 @@ export function MatchReplaceDialog({
                 setPreviewError(null);
               }}
             />
-          </label>
-          <label>{t('matchReplace.previewResult')}
+          </label>}
+          second={<label>{t('matchReplace.previewResult')}
             <textarea className="mono" value={previewResult ?? ''} readOnly />
-          </label>
-        </div>
+          </label>}
+        />
       </section>
     </Dialog>
   );

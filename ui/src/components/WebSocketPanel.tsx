@@ -16,6 +16,7 @@ import type {
 } from '../api/types';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
+import { Split } from './Split';
 
 const DEFAULT_RULES: WebSocketInterceptRules = {
   enabled: false,
@@ -162,8 +163,11 @@ export function WebSocketPanel() {
         <button type="button" onClick={() => void clearWebSocketMessages()}>{t('common.clear')}</button>
       </div>
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
-      <div className="websocket-split">
-        <div className="websocket-list">
+      <Split
+        direction="horizontal"
+        storageKey="lanius.split.websocket"
+        className="websocket-split"
+        first={<div className="websocket-list">
           <ResizableTable columns={columns} className="websocket-table">
             <thead><tr>
               {[t('websocket.direction'), t('flow.host'), t('flow.size'), t('common.status')].map((label, index) => (
@@ -184,8 +188,8 @@ export function WebSocketPanel() {
             </tbody>
           </ResizableTable>
           {messages.length === 0 && <p className="muted websocket-empty">{t('websocket.empty')}</p>}
-        </div>
-        <div className="websocket-editor">
+        </div>}
+        second={<div className="websocket-editor">
           {selected ? (
             <>
               <div className="websocket-editor-head">
@@ -202,8 +206,8 @@ export function WebSocketPanel() {
               <textarea className="mono" value={content} spellCheck={false} onChange={(event) => setContent(event.target.value)} />
             </>
           ) : <p className="muted">{t('websocket.select')}</p>}
-        </div>
-      </div>
+        </div>}
+      />
     </div>
   );
 }
