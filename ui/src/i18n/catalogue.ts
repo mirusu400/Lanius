@@ -259,9 +259,15 @@ const en = {
   'delete.confirmSelected': 'Delete {count} requests covered by {items} selected rows? This cannot be undone.',
   'delete.confirmSubtree':
     'Delete {count} requests under {name}? It cannot be undone.',
+  'delete.confirmSubtreeUnknown':
+    'Delete all requests under {name}? It cannot be undone.',
+  'delete.confirmSelectedSubtrees':
+    'Delete all requests covered by {items} selected rows? It cannot be undone.',
   'delete.done': '{count} deleted',
   'target.expandAll': 'Expand all',
   'target.collapseAll': 'Collapse all',
+  'target.loadMore': 'Load more requests',
+  'target.loading': 'Loading...',
   'filter.button': 'Filter...',
   'filter.buttonActive': 'Filter ({count})',
   'filter.title': 'Filter the history',
@@ -930,9 +936,15 @@ const ko: Catalogue = {
   'delete.confirmSelected': '선택한 {items}개 행에 포함된 요청 {count}건을 삭제할까요? 되돌릴 수 없습니다.',
   'delete.confirmSubtree':
     '{name} 아래 {count}개 요청을 삭제할까요? 되돌릴 수 없습니다.',
+  'delete.confirmSubtreeUnknown':
+    '{name} 아래 모든 요청을 삭제할까요? 되돌릴 수 없습니다.',
+  'delete.confirmSelectedSubtrees':
+    '선택한 {items}개 행에 포함된 모든 요청을 삭제할까요? 되돌릴 수 없습니다.',
   'delete.done': '{count}개 삭제됨',
   'target.expandAll': '모두 열기',
   'target.collapseAll': '모두 닫기',
+  'target.loadMore': '요청 더 불러오기',
+  'target.loading': '불러오는 중...',
   'filter.button': '필터...',
   'filter.buttonActive': '필터 ({count})',
   'filter.title': '기록 필터',

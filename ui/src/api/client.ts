@@ -375,9 +375,14 @@ export function getSitePaths(
   host: string,
   scheme: string,
   port: number | null,
+  options: { limit?: number; offset?: number; pathPrefix?: string } = {},
 ): Promise<{ items: import('./types').SitePath[]; count: number }> {
   const params = new URLSearchParams({ host, scheme });
   if (port !== null) params.set('port', String(port));
+  else params.set('port_is_null', 'true');
+  params.set('limit', String(options.limit ?? 200));
+  params.set('offset', String(options.offset ?? 0));
+  if (options.pathPrefix) params.set('path_prefix', options.pathPrefix);
   return request(`/api/sitemap/paths?${params}`);
 }
 

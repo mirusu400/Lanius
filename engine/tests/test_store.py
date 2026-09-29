@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import time
+import threading
 
 import sqlite3
+import pytest
 
-from app.db.schema import SCHEMA_VERSION, migrate
+from app.db.schema import SCHEMA_VERSION, _MIGRATIONS, migrate
 from app.db.store import FlowRecord, FlowStore, RequestSnapshot
 
 
@@ -48,7 +50,8 @@ def test_migrate_upgrades_a_v1_database(tmp_path) -> None:
     """An existing v1 project file must gain the v2 tables, not be recreated."""
     path = tmp_path / "old.sqlite"
     conn = sqlite3.connect(path)
-    conn.execute("CREATE TABLE flows (id TEXT PRIMARY KEY)")
+    for statement in _MIGRATIONS[1]:
+        conn.execute(statement)
     conn.execute("INSERT INTO flows (id) VALUES ('legacy')")
     conn.execute("PRAGMA user_version = 1")
     conn.commit()
@@ -64,6 +67,19 @@ def test_migrate_upgrades_a_v1_database(tmp_path) -> None:
     assert conn.execute("SELECT id FROM flows").fetchone()[0] == "legacy"
     conn.close()
 
+
+def test_failed_large_migration_rolls_back_its_schema(tmp_path) -> None:
+    conn = sqlite3.connect(tmp_path / "broken.sqlite")
+    conn.execute("CREATE TABLE flows (id TEXT PRIMARY KEY)")
+    conn.execute("PRAGMA user_version = 5")
+    conn.commit()
+    with pytest.raises(sqlite3.OperationalError):
+        migrate(conn)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert conn.execute(
+        "SELECT name FROM sqlite_master WHERE name = 'flow_totals'"
+    ).fetchone() is None
+    conn.close()
 
 def test_upsert_and_get_roundtrip() -> None:
     store = FlowStore()
@@ -267,3 +283,83 @@ def test_dashboard_counts_recent_flows_within_the_window() -> None:
     data = store.dashboard(recent_window=60.0)
     assert data["recent_flows"] == 1, "the 1000s-old flow is outside the window"
     assert data["span_seconds"] > 900
+
+
+def test_materialized_counts_follow_replacements_updates_and_deletes(tmp_path) -> None:
+    store = FlowStore(tmp_path / "metrics.sqlite")
+    store.upsert(make_record("a", host="a.test", path="/one", status_code=None,
+                             response_size=0, duration_ms=None))
+    assert store.dashboard()["pending"] == 1
+    store.upsert(make_record("a", host="b.test", path="/two", status_code=404,
+                             response_size=10, duration_ms=20.0))
+    assert store.count() == 1
+    assert [(s["host"], s["flows"], s["paths"]) for s in store.distinct_sites()] == [
+        ("b.test", 1, 1)
+    ]
+    assert store.dashboard()["status_groups"] == {"4xx": 1}
+    assert store.dashboard()["pending"] == 0
+    store._conn.execute("UPDATE flows SET status_code = 500 WHERE id = 'a'")
+    store._conn.commit()
+    assert store.dashboard()["status_groups"] == {"5xx": 1}
+    assert store.delete(["a"]) == 1
+    assert store.count() == 0
+    assert store.distinct_sites() == []
+    assert store.dashboard()["status_groups"] == {}
+    store.close()
+
+
+def test_site_pages_are_bounded_and_prefix_counts_are_exact() -> None:
+    store = FlowStore()
+    for index, path in enumerate(("/api/x", "/api/x", "/api/y", "/api_%/z", "/API/z")):
+        store.upsert(make_record(str(index), host="a.test", path=path))
+    first = store.page_paths_for_site("https", "a.test", 443, limit=2)
+    second = store.page_paths_for_site("https", "a.test", 443, limit=2, offset=2)
+    third = store.page_paths_for_site("https", "a.test", 443, limit=2, offset=4)
+    assert first["count"] == second["count"] == 5
+    assert len(first["items"]) == len(second["items"]) == 2
+    assert {row["id"] for row in first["items"] + second["items"] + third["items"]} == {
+        "0", "1", "2", "3", "4"
+    }
+    assert store.page_paths_for_site(
+        "https", "a.test", 443, path_prefix="/api"
+    )["count"] == 3
+    assert store.page_paths_for_site(
+        "https", "a.test", 443, path_prefix="/api_%"
+    )["count"] == 1
+    store.close()
+
+
+def test_file_reader_does_not_hold_capture_write_lock(tmp_path) -> None:
+    store = FlowStore(tmp_path / "separate.sqlite")
+    store.upsert(make_record("first"))
+    entered = threading.Event()
+    release = threading.Event()
+    written = threading.Event()
+
+    def pause(value: str) -> str:
+        entered.set()
+        release.wait(timeout=3)
+        return value
+
+    store._read_conn.create_function("pause", 1, pause)
+
+    def read() -> None:
+        with store._read_lock:
+            store._read_conn.execute("SELECT pause(id) FROM flows LIMIT 1").fetchone()
+
+    def write() -> None:
+        store.upsert(make_record("second"))
+        written.set()
+
+    reader = threading.Thread(target=read)
+    writer = threading.Thread(target=write)
+    reader.start()
+    assert entered.wait(timeout=2)
+    try:
+        writer.start()
+        assert written.wait(timeout=2), "a read query stalled capture writes"
+    finally:
+        release.set()
+        reader.join(timeout=3)
+        writer.join(timeout=3)
+        store.close()

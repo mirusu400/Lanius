@@ -202,6 +202,8 @@ only want to pass on a scope and a set of requests. The same screen shows
 which captured targets use space. Select targets to remove their requests and
 compact the database, or compact only to reclaim pages freed earlier. The
 preview shows request counts and the confirmation names what will be deleted.
+Existing projects build the new summary indexes once when first opened after
+upgrading; a large project can take several seconds on that first launch.
 
 ## Features
 
@@ -277,9 +279,14 @@ messages are shown and edited as Base64 so their bytes are not corrupted.
 A site map of everything you have visited, grouped by host and path. Lanius
 also collapses dynamic paths into endpoints, so `/users/1`, `/users/2` and
 `/users/3` become a single `/users/{id}` entry with the parameters it saw.
+The map first loads site summaries. Opening a site or folder loads up to 200
+requests; **Load more requests** fetches the next page. This keeps a long
+capture from loading every request into the interface at once. **Expand all**
+is available for smaller projects; open sites individually in a large one.
 In the site map, Ctrl/⌘-click to select separate sites, folders or requests,
 or Shift-click to select a visible range. Right-click a selected row to delete
-the selection together after reviewing the affected request count.
+the selection together after reviewing the confirmation. When a folder has not
+been fully loaded, the confirmation does not show an incomplete request count.
 Drag the divider between the site tree and request detail to resize either
 pane. Endpoint and Scope table columns can also be resized from their header
 edges. These sizes are remembered on this machine.
@@ -463,6 +470,16 @@ scripts/check.sh          # engine, ui and shell, as CI would
 scripts/check.sh quick    # the fast subset, for a tight loop
 scripts/check.sh engine   # one part only
 ```
+
+To repeat the disposable database benchmark after installing engine dependencies:
+
+```bash
+engine/.venv/bin/python scripts/benchmark_large_project.py --rows 2000000
+```
+
+It creates a temporary project database, measures its upgrade and common
+queries, then removes it. It does not measure proxy network throughput or UI
+frame rate.
 
 ## Legal
 

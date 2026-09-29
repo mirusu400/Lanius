@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 5
+from .metrics import MIGRATION as METRICS_MIGRATION
+
+SCHEMA_VERSION = 6
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -107,6 +109,7 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         "ALTER TABLE flows ADD COLUMN auto_modified INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE flows ADD COLUMN modified INTEGER NOT NULL DEFAULT 0",
     ),
+    6: METRICS_MIGRATION,
 }
 
 
@@ -116,9 +119,19 @@ def migrate(conn: sqlite3.Connection) -> int:
     for version in sorted(_MIGRATIONS):
         if version <= current:
             continue
-        for statement in _MIGRATIONS[version]:
-            conn.execute(statement)
-        conn.execute(f"PRAGMA user_version = {version}")
+        # A large existing capture can take seconds to backfill. Keep each
+        # version atomic so a crash cannot leave half-created summary tables
+        # while user_version still points to the older schema.
+        conn.execute("SAVEPOINT lanius_migration")
+        try:
+            for statement in _MIGRATIONS[version]:
+                conn.execute(statement)
+            conn.execute(f"PRAGMA user_version = {version}")
+            conn.execute("RELEASE SAVEPOINT lanius_migration")
+        except Exception:
+            conn.execute("ROLLBACK TO SAVEPOINT lanius_migration")
+            conn.execute("RELEASE SAVEPOINT lanius_migration")
+            raise
         current = version
     conn.commit()
     return current

@@ -283,6 +283,8 @@ cd shell && npm run tauri dev
 | 엔진 | 워치독은 `os.name`으로 분기 | 윈도우는 자기 자신에게 SIGTERM을 못 보내 SIGINT를 쓰고, `os.kill(pid,0)` 대신 `OpenProcess`로 생존 확인 |
 | 셸 | 리소스 탐색은 macOS·Linux·AppImage 레이아웃을 모두 후보로 | `Contents/Resources`만 보면 deb(`/usr/bin` → `/usr/lib/<name>`)와 AppImage(`$APPDIR`)에서 번들 엔진을 못 찾음(Linux 잡 추가 시 발견) |
 | 상위 프록시 | HTTP/HTTPS 한 홉은 mitmproxy upstream mode, SOCKS5 또는 여러 홉은 번들 GOST v3.3.0 체인을 루프백에서 실행 | mitmproxy가 브라우저 리스너와 캡처를 담당하고 GOST가 순서형 HTTP/HTTPS/SOCKS5 TCP 연결을 처리. HTTPS 홉은 인증서 검증 활성화 |
+| 대용량 프로젝트 | Dashboard·사이트 집계는 SQLite 트리거로 유지하고 파일 DB의 읽기 연결을 분리 | 200만 flow에서 전체 집계는 수초, 전체 사이트맵은 약 1.7GiB 메모리를 썼다. 요청 저장을 같은 잠금 뒤에 세우지 않으면서 집계를 빠르게 조회한다. |
+| 대용량 Target | 사이트 요약만 먼저 표시하고 펼친 사이트·폴더를 최대 200건씩 읽는다 | 모든 flow를 API·React 트리에 한 번에 펼치지 않는다. 작은 프로젝트의 기존 전체 펼치기는 유지한다. |
 
 ---
 

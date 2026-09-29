@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   addScopeFromUrl,
@@ -8,6 +8,7 @@ import {
   getScope,
   getFlow,
   getSitemap,
+  getSitePaths,
   patchScopeRule,
   setRestrictCapture,
 } from '../api/client';
@@ -25,6 +26,7 @@ import {
   sitemapRowKey,
   sitemapRows,
   useSitemapExpansion,
+  type SitePageState,
   type SitemapRowTarget,
 } from '../components/SitemapTree';
 import { ContextMenu, useContextMenu, type MenuItem } from '../components/ContextMenu';
@@ -62,6 +64,12 @@ export function TargetTab() {
   const endpointColumns = useResizableColumns('lanius.columns.endpoints', [70, 180, 300, 78, 180, 180]);
   const [view, setView] = useState<View>('sitemap');
   const [sites, setSites] = useState<Site[]>([]);
+  const [sitePaths, setSitePaths] = useState<Record<string, SitePath[]>>({});
+  const [pages, setPages] = useState<Record<string, SitePageState>>({});
+  const pagesRef = useRef(pages);
+  useEffect(() => { pagesRef.current = pages; }, [pages]);
+  const loadingPages = useRef(new Set<string>());
+  const pageGeneration = useRef(0);
   const [trees, setTrees] = useState<SiteTree[]>([]);
   const [selectedFlow, setSelectedFlow] = useState<SitePath | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -151,9 +159,7 @@ export function TargetTab() {
 
   const refreshSites = useCallback(async () => {
     try {
-      // Ask for the paths in the same request: one round trip instead of
-      // one per host, which is what made opening this tab take seconds.
-      const data = await getSitemap(inScopeOnly, true);
+      const data = await getSitemap(inScopeOnly);
       setSites(data.sites);
       setError(null);
     } catch (err) {
@@ -162,6 +168,74 @@ export function TargetTab() {
       setLoading(false);
     }
   }, [inScopeOnly]);
+
+  const resetPages = useCallback(() => {
+    pageGeneration.current += 1;
+    loadingPages.current.clear();
+    setSitePaths({});
+    setPages({});
+  }, []);
+
+  const loadPage = useCallback(async (node: TreeNode) => {
+    const site = node.site;
+    if (!site || loadingPages.current.has(node.path)) return;
+    const target = deletionTarget(node, site);
+    if (!target) return;
+    const offset = pagesRef.current[node.path]?.loaded ?? 0;
+    const generation = pageGeneration.current;
+    loadingPages.current.add(node.path);
+    setPages((current) => ({
+      ...current,
+      [node.path]: {
+        loaded: offset,
+        count: current[node.path]?.count ?? 0,
+        loading: true,
+      },
+    }));
+    try {
+      const result = await getSitePaths(site.host, site.scheme, site.port, {
+        limit: 200, offset, pathPrefix: target.pathPrefix,
+      });
+      if (pageGeneration.current !== generation) return;
+      const label = siteLabel(site);
+      setSitePaths((current) => {
+        const byId = new Map((current[label] ?? []).map((flow) => [flow.id, flow]));
+        result.items.forEach((flow) => byId.set(flow.id, flow));
+        return { ...current, [label]: [...byId.values()] };
+      });
+      setPages((current) => ({
+        ...current,
+        [node.path]: {
+          loaded: result.items.length === 0 ? result.count : offset + result.items.length,
+          count: result.count,
+          loading: false,
+        },
+      }));
+    } catch (err) {
+      if (pageGeneration.current === generation) {
+        setError(msg('target.sitemapFailed', { message: (err as Error).message }));
+        setPages((current) => {
+          const next = { ...current };
+          delete next[node.path];
+          return next;
+        });
+      }
+    } finally {
+      if (pageGeneration.current === generation) {
+        loadingPages.current.delete(node.path);
+        setPages((current) => ({
+          ...current,
+          ...(current[node.path]
+            ? { [node.path]: { ...current[node.path], loading: false } }
+            : {}),
+        }));
+      }
+    }
+  }, []);
+
+  const openNode = useCallback((node: TreeNode) => {
+    if (!pagesRef.current[node.path]) void loadPage(node);
+  }, [loadPage]);
 
   const [pendingDelete, setPendingDelete] = useState<SitemapRowTarget[] | null>(null);
 
@@ -193,10 +267,12 @@ export function TargetTab() {
         }
       }
       return {
-        message: t('delete.confirmSelected', {
-          items: pendingDelete.length,
-          count: previewIds.size,
-        }),
+        message: subtrees.length > 0
+          ? t('delete.confirmSelectedSubtrees', { items: pendingDelete.length })
+          : t('delete.confirmSelected', {
+              items: pendingDelete.length,
+              count: previewIds.size,
+            }),
         run: () => deleteFlows({
           ids: [...idsToDelete],
           subtrees,
@@ -217,15 +293,17 @@ export function TargetTab() {
     return {
       // Says how many and which folder: "delete everything under here"
       // is not a question anyone can answer without those two facts.
-      message: t('delete.confirmSubtree', {
-        count: countFlows(node),
-        name: node.name,
-      }),
+      message: pages[node.path] || (node.site && node.path === siteLabel(node.site))
+        ? t('delete.confirmSubtree', {
+            count: pages[node.path]?.count ?? node.site?.flows ?? countFlows(node),
+            name: node.name,
+          })
+        : t('delete.confirmSubtreeUnknown', { name: node.name }),
       run: () => target.host
         ? deleteFlows(target)
         : deleteFlows({ ids: flowIdsUnder(node) }),
     };
-  }, [pendingDelete, t]);
+  }, [pendingDelete, pages, t]);
 
   const runDeletion = useCallback(async () => {
     const pending = deletion;
@@ -236,11 +314,13 @@ export function TargetTab() {
       setSelectedFlow(null);
       setSelectedKeys(new Set());
       setAnchorKey(null);
+      resetPages();
+      expansion.collapseAll();
       await refreshSites();
     } catch (err) {
       setError(rawMsg((err as Error).message));
     }
-  }, [deletion, refreshSites]);
+  }, [deletion, refreshSites, resetPages, expansion]);
 
   useEffect(() => {
     void refreshScope();
@@ -274,8 +354,7 @@ export function TargetTab() {
     };
   }, [refreshSites]);
 
-  // Load the paths of every site up front: the map should be readable
-  // without clicking a host first.
+  // A site remains light until it is opened; pages are merged by flow ID.
   useEffect(() => {
     if (sites.length === 0) {
       setTrees([]);
@@ -284,9 +363,9 @@ export function TargetTab() {
     // The paths arrive with the sites, so the trees are built from what
     // is already in hand rather than fetched again.
     setTrees(
-      sites.map((site) => ({ site, root: buildTree(site.path_items ?? []) })),
+      sites.map((site) => ({ site, root: buildTree(sitePaths[siteLabel(site)] ?? []) })),
     );
-  }, [sites]);
+  }, [sites, sitePaths]);
 
   useEffect(() => {
     if (view !== 'endpoints') return;
@@ -348,16 +427,29 @@ export function TargetTab() {
           />
           {t('target.inScopeOnly')}
         </label>
-        {view === 'sitemap' && (
+        {view === 'sitemap' && (expansion.anyOpen ||
+          (sites.length <= 20 && sites.every((site) => site.flows <= 200))) && (
           <button
-            onClick={() =>
-              expansion.anyOpen ? expansion.collapseAll() : expansion.expandAll()
-            }
+            onClick={() => {
+              if (expansion.anyOpen) {
+                expansion.collapseAll();
+                return;
+              }
+              expansion.expandAll();
+              sites.forEach((site) => {
+                const label = siteLabel(site);
+                void loadPage({ name: label, path: label, site, children: [], flows: [] });
+              });
+            }}
           >
             {expansion.anyOpen ? t('target.collapseAll') : t('target.expandAll')}
           </button>
         )}
-        <button onClick={() => void refreshSites()}>{t('common.refresh')}</button>
+        <button onClick={() => {
+          resetPages();
+          expansion.collapseAll();
+          void refreshSites();
+        }}>{t('common.refresh')}</button>
       </div>
 
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
@@ -446,6 +538,9 @@ export function TargetTab() {
             </p>
             <SitemapTree
               trees={trees}
+              pages={pages}
+              onOpenNode={openNode}
+              onLoadMore={(node) => void loadPage(node)}
               selectedKeys={selectedKeys}
               onSelectRow={selectRow}
               onRowContextMenu={openRowMenu}

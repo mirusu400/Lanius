@@ -1147,26 +1147,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def sitemap(
         in_scope_only: bool = False, with_paths: bool = False
     ) -> dict[str, Any]:
-        """The site map, optionally with each site's paths included.
-
-        with_paths exists because the tree needs them for every host it
-        draws. Fetching them per host meant one request and one query per
-        host, so opening Target on a real capture took seconds and got
-        worse with every new host.
-        """
+        """Site summaries; small legacy callers can include all paths."""
         sites = await asyncio.to_thread(store.distinct_sites)
-        by_site = await asyncio.to_thread(store.paths_by_site)
+        # Keep small legacy callers working without letting a combined
+        # response materialize millions of Python objects again.
+        if with_paths and await asyncio.to_thread(store.count) > 50_000:
+            raise HTTPException(
+                status_code=413,
+                detail="site map is too large; use /api/sitemap/paths pages",
+            )
+        by_site = await asyncio.to_thread(store.paths_by_site) if with_paths else {}
+        active_rules = [rule for rule in engine.scope.scope.rules if rule.enabled]
         items = []
         for site in sites:
             key = (site["scheme"], site["host"], site["port"])
             rows = by_site.get(key, [])
-            # A site counts as in scope when any of its recorded paths is, so a
-            # rule like /users/* still marks the host as a target.
-            paths = {row["path"] for row in rows if row.get("path")}
-            inside = any(
-                engine.scope.contains(site["scheme"], site["host"], site["port"], p)
-                for p in (paths or {"/"})
+            path_independent_scope = all(
+                rule.path in ({"", "*"} if rule.match_type == "glob" else {".*"})
+                or (rule.match_type == "glob" and rule.path == "/*"
+                    and site["scheme"] in {"http", "https"})
+                for rule in active_rules
             )
+            if not active_rules:
+                inside = True
+            elif path_independent_scope or site["paths"] == 0:
+                inside = engine.scope.contains(*key, "/")
+            else:
+                def matches_site_path(path: str) -> bool:
+                    return engine.scope.contains(*key, path)
+
+                inside = await asyncio.to_thread(
+                    store.any_path_for_site,
+                    *key,
+                    matches_site_path,
+                )
             if in_scope_only and not inside:
                 continue
             item = {**site, "in_scope": inside}
@@ -1178,10 +1192,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/sitemap/paths")
     async def sitemap_paths(
-        host: str, scheme: str = "https", port: int | None = None
+        host: str,
+        scheme: str = "https",
+        port: int | None = None,
+        port_is_null: bool = False,
+        path_prefix: str | None = None,
+        limit: int = Query(200, ge=1, le=500),
+        offset: int = Query(0, ge=0),
     ) -> dict[str, Any]:
-        rows = await asyncio.to_thread(store.paths_for_site, scheme, host, port)
-        return {"items": rows, "count": len(rows)}
+        return await asyncio.to_thread(
+            store.page_paths_for_site,
+            scheme, host, port,
+            path_prefix=path_prefix, limit=limit, offset=offset,
+            port_is_null=port_is_null,
+        )
 
     @app.get("/api/endpoints")
     async def endpoints(

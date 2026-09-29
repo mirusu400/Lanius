@@ -12,7 +12,7 @@ import json
 import sqlite3
 import threading
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
 from dataclasses import fields as dataclasses_fields
 from pathlib import Path
@@ -294,11 +294,25 @@ class FlowStore:
         self._conn = sqlite3.connect(self.path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA recursive_triggers=ON")
         self._payload_sets: "PayloadSetStore | None" = None
         self._conn.execute("PRAGMA synchronous=NORMAL")
         migrate(self._conn)
+        # WAL allows capture writes to commit while a reader holds a snapshot.
+        # An in-memory store cannot be reopened, so tests share its connection.
+        self._read_lock = threading.RLock() if self.path != ":memory:" else self._lock
+        if self.path == ":memory:":
+            self._read_conn = self._conn
+        else:
+            uri = Path(self.path).resolve().as_uri() + "?mode=ro"
+            self._read_conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
+            self._read_conn.row_factory = sqlite3.Row
+            self._read_conn.execute("PRAGMA query_only=ON")
 
     def close(self) -> None:
+        if self._read_conn is not self._conn:
+            with self._read_lock:
+                self._read_conn.close()
         with self._lock:
             self._conn.close()
 
@@ -422,15 +436,11 @@ class FlowStore:
                         clauses.append("scheme = ?")
                         params.append(scheme)
                     if path_prefix:
-                        # Match a folder and its descendants, but not a
-                        # sibling prefix; escape LIKE wildcards in paths.
-                        escaped = (
-                            path_prefix.replace("\\", "\\\\")
-                            .replace("%", "\\%")
-                            .replace("_", "\\_")
-                        )
-                        clauses.append("(path = ? OR path LIKE ? ESCAPE '\\')")
-                        params.extend([path_prefix, f"{escaped.rstrip('/')}/%"])
+                        # Binary range preserves path case and treats %, _
+                        # and backslash as ordinary characters.
+                        low, high = _folder_bounds(path_prefix)
+                        clauses.append("(path = ? OR (path >= ? AND path < ?))")
+                        params.extend([path_prefix, low, high])
                     if not clauses:
                         raise ValueError("empty subtree cannot be deleted")
                     cursor = self._conn.execute(
@@ -461,8 +471,8 @@ class FlowStore:
         columns. They are useful for ranking sites, but are not a promise
         about how much VACUUM will return to the filesystem.
         """
-        with self._lock:
-            rows = self._conn.execute(
+        with self._read_lock:
+            rows = self._read_conn.execute(
                 "SELECT scheme, host, port, COUNT(*) AS flows,"
                 " SUM(COALESCE(length(request_body), 0)"
                 " + COALESCE(length(response_body), 0)"
@@ -474,9 +484,9 @@ class FlowStore:
                 " FROM flows GROUP BY scheme, host, port"
                 " ORDER BY content_bytes DESC, flows DESC"
             ).fetchall()
-            page_size = int(self._conn.execute("PRAGMA page_size").fetchone()[0])
-            free_pages = int(self._conn.execute("PRAGMA freelist_count").fetchone()[0])
-            total_flows = int(self._conn.execute("SELECT COUNT(*) FROM flows").fetchone()[0])
+            page_size = int(self._read_conn.execute("PRAGMA page_size").fetchone()[0])
+            free_pages = int(self._read_conn.execute("PRAGMA freelist_count").fetchone()[0])
+            total_flows = int(self._read_conn.execute("SELECT flows FROM flow_totals").fetchone()[0])
         path = Path(self.path)
         db_bytes = (
             sum(
@@ -500,7 +510,7 @@ class FlowStore:
         if not sites:
             return 0
         with self._lock:
-            before = self._conn.total_changes
+            deleted = 0
             with self._conn:
                 for scheme, host, port, expected in sites:
                     count = self._conn.execute(
@@ -511,16 +521,17 @@ class FlowStore:
                     if count != expected:
                         raise ValueError("capture changed; refresh the cleanup preview")
                 for scheme, host, port, _ in sites:
-                    self._conn.execute(
+                    cursor = self._conn.execute(
                         "DELETE FROM flows WHERE scheme IS ? AND host IS ? AND port IS ?",
                         (scheme, host, port),
                     )
-            return self._conn.total_changes - before
+                    deleted += cursor.rowcount
+            return deleted
 
     # --- reads ------------------------------------------------------------
     def get(self, flow_id: str) -> FlowRecord | None:
-        with self._lock:
-            row = self._conn.execute(
+        with self._read_lock:
+            row = self._read_conn.execute(
                 f"SELECT {_COLUMNS} FROM flows WHERE id = ?", (flow_id,)
             ).fetchone()
         return _row_to_record(row) if row else None
@@ -581,8 +592,8 @@ class FlowStore:
             params.extend([f"%{search}%"] * 3)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params.extend([limit, offset])
-        with self._lock:
-            rows = self._conn.execute(
+        with self._read_lock:
+            rows = self._read_conn.execute(
                 f"SELECT {_COLUMNS} FROM flows {where}"
                 " ORDER BY started_at DESC, rowid DESC LIMIT ? OFFSET ?",
                 params,
@@ -590,8 +601,8 @@ class FlowStore:
         return [_row_to_record(row) for row in rows]
 
     def count(self) -> int:
-        with self._lock:
-            return int(self._conn.execute("SELECT COUNT(*) FROM flows").fetchone()[0])
+        with self._read_lock:
+            return int(self._read_conn.execute("SELECT flows FROM flow_totals").fetchone()[0])
 
     # --- scope rules (M4) -------------------------------------------------
     def list_scope_rules(self) -> List[dict[str, Any]]:
@@ -806,62 +817,41 @@ class FlowStore:
     # --- sitemap / endpoints (M4) -----------------------------------------
     # --- dashboard aggregates --------------------------------------------
     def dashboard(self, top: int = 8, recent_window: float = 300.0) -> dict[str, Any]:
-        """Counts for the dashboard, aggregated in SQL.
-
-        Doing this in the database keeps a large capture from being pulled
-        into memory just to be counted.
-        """
-        with self._lock:
-            totals = self._conn.execute(
-                "SELECT COUNT(*) AS flows,"
-                " COUNT(DISTINCT host) AS hosts,"
-                " SUM(COALESCE(request_size, 0) + COALESCE(response_size, 0))"
-                "   AS bytes,"
-                " AVG(duration_ms) AS avg_ms,"
-                " SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors,"
-                " MIN(started_at) AS first_seen,"
-                " MAX(started_at) AS last_seen"
-                " FROM flows"
+        """Read counters maintained by flow triggers, without a table scan."""
+        with self._read_lock:
+            conn = self._read_conn
+            totals = conn.execute("SELECT * FROM flow_totals WHERE id = 1").fetchone()
+            hosts = conn.execute(
+                "SELECT COUNT(DISTINCT host) FROM flow_site_stats"
+            ).fetchone()[0]
+            first_row = conn.execute(
+                "SELECT started_at FROM flows WHERE started_at IS NOT NULL"
+                " ORDER BY started_at ASC LIMIT 1"
             ).fetchone()
-
-            # Group by hundreds so 2xx/3xx/4xx/5xx fall out directly. A flow
-            # still in flight has no status yet, so it is reported separately
-            # rather than silently counted as a success.
-            status_rows = self._conn.execute(
-                "SELECT status_code / 100 AS bucket, COUNT(*) AS count"
-                " FROM flows WHERE status_code IS NOT NULL"
-                " GROUP BY bucket ORDER BY bucket"
+            last_row = conn.execute(
+                "SELECT started_at FROM flows WHERE started_at IS NOT NULL"
+                " ORDER BY started_at DESC LIMIT 1"
+            ).fetchone()
+            status_rows = conn.execute(
+                "SELECT bucket, flows AS count FROM flow_status_stats ORDER BY bucket"
             ).fetchall()
-            pending = int(
-                self._conn.execute(
-                    "SELECT COUNT(*) FROM flows WHERE status_code IS NULL"
-                ).fetchone()[0]
-            )
-
-            method_rows = self._conn.execute(
-                "SELECT method, COUNT(*) AS count FROM flows"
-                " WHERE method IS NOT NULL"
-                " GROUP BY method ORDER BY count DESC, method"
+            method_rows = conn.execute(
+                "SELECT method, flows AS count FROM flow_method_stats"
+                " ORDER BY flows DESC, method"
             ).fetchall()
-
-            host_rows = self._conn.execute(
-                "SELECT host, scheme, port, COUNT(*) AS flows,"
-                " SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) AS errors,"
-                " SUM(COALESCE(request_size, 0) + COALESCE(response_size, 0))"
-                "   AS bytes,"
-                " MAX(started_at) AS last_seen"
-                " FROM flows WHERE host IS NOT NULL"
+            host_rows = conn.execute(
+                "SELECT host, MIN(scheme) AS scheme, MIN(port) AS port,"
+                " SUM(flows) AS flows, SUM(errors) AS errors, SUM(bytes) AS bytes,"
+                " MAX(last_seen) AS last_seen FROM flow_site_stats"
                 " GROUP BY host ORDER BY flows DESC, host LIMIT ?",
-                (top, ),
+                (top,),
             ).fetchall()
-
-            cutoff = (totals["last_seen"] or 0.0) - recent_window
-            recent = int(
-                self._conn.execute(
-                    "SELECT COUNT(*) FROM flows WHERE started_at >= ?",
-                    (cutoff, ),
-                ).fetchone()[0]
-            )
+            first_seen = first_row[0] if first_row else None
+            last_seen = last_row[0] if last_row else None
+            cutoff = (last_seen or 0.0) - recent_window
+            recent = int(conn.execute(
+                "SELECT COUNT(*) FROM flows WHERE started_at >= ?", (cutoff,)
+            ).fetchone()[0])
 
         status_groups = {
             f"{int(row['bucket'])}xx": int(row["count"])
@@ -869,19 +859,18 @@ class FlowStore:
             if row["bucket"] is not None
         }
 
-        first_seen = totals["first_seen"]
-        last_seen = totals["last_seen"]
         span = (last_seen - first_seen) if (first_seen and last_seen) else 0.0
 
         return {
             "flows": int(totals["flows"] or 0),
-            "hosts": int(totals["hosts"] or 0),
+            "hosts": int(hosts or 0),
             "bytes": int(totals["bytes"] or 0),
             "avg_duration_ms": (
-                round(float(totals["avg_ms"]), 2) if totals["avg_ms"] else None
+                round(totals["duration_sum"] / totals["duration_count"], 2)
+                if totals["duration_count"] else None
             ),
             "errors": int(totals["errors"] or 0),
-            "pending": pending,
+            "pending": int(totals["pending"]),
             "first_seen": first_seen,
             "last_seen": last_seen,
             "span_seconds": round(span, 3),
@@ -895,8 +884,8 @@ class FlowStore:
             "top_hosts": [
                 {
                     "host": row["host"],
-                    "scheme": row["scheme"],
-                    "port": row["port"],
+                    "scheme": row["scheme"] or None,
+                    "port": None if row["port"] == -1 else row["port"],
                     "flows": int(row["flows"]),
                     "errors": int(row["errors"] or 0),
                     "bytes": int(row["bytes"] or 0),
@@ -908,31 +897,92 @@ class FlowStore:
 
     def distinct_sites(self) -> List[dict[str, Any]]:
         """One row per (scheme, host, port) with flow counts."""
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT scheme, host, port, COUNT(*) AS flows,"
-                " COUNT(DISTINCT path) AS paths, MAX(started_at) AS last_seen"
-                " FROM flows WHERE host IS NOT NULL"
-                " GROUP BY scheme, host, port ORDER BY host"
+        with self._read_lock:
+            rows = self._read_conn.execute(
+                "SELECT scheme, host, port, flows, paths, last_seen"
+                " FROM flow_site_stats ORDER BY host"
             ).fetchall()
-        return [dict(row) for row in rows]
+        return [
+            {**dict(row), "scheme": row["scheme"] or None,
+             "port": None if row["port"] == -1 else row["port"]}
+            for row in rows
+        ]
 
     def distinct_paths_for_site(
         self, scheme: str, host: str, port: int | None
     ) -> List[str]:
         """Distinct paths for one site (used for scope evaluation)."""
-        clauses = ["host = ?", "scheme = ?"]
-        params: list[Any] = [host, scheme]
-        if port is not None:
-            clauses.append("port = ?")
-            params.append(port)
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT DISTINCT path FROM flows"
-                f" WHERE {' AND '.join(clauses)} AND path IS NOT NULL",
-                params,
+        with self._read_lock:
+            rows = self._read_conn.execute(
+                "SELECT path FROM flow_path_stats WHERE scheme = ? AND host = ?"
+                " AND port = ?",
+                (scheme or "", host, -1 if port is None else port),
             ).fetchall()
         return [row["path"] for row in rows]
+
+    def any_path_for_site(
+        self,
+        scheme: str | None,
+        host: str,
+        port: int | None,
+        predicate: Callable[[str], bool],
+    ) -> bool:
+        """Evaluate scope on distinct paths without materializing a capture."""
+        with self._read_lock:
+            cursor = self._read_conn.execute(
+                "SELECT path FROM flow_path_stats WHERE scheme = ? AND host = ?"
+                " AND port = ?",
+                (scheme or "", host, -1 if port is None else port),
+            )
+            return any(predicate(row[0]) for row in cursor)
+
+    def page_paths_for_site(
+        self,
+        scheme: str | None,
+        host: str,
+        port: int | None,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+        path_prefix: str | None = None,
+        port_is_null: bool = False,
+    ) -> dict[str, Any]:
+        """Fetch one bounded site or folder page for the Target tree."""
+        clauses = ["scheme IS ?", "host = ?"]
+        params: list[Any] = [scheme, host]
+        stat_clauses = ["scheme = ?", "host = ?"]
+        stat_params: list[Any] = [scheme or "", host]
+        if port is not None or port_is_null:
+            clauses.append("port IS ?")
+            params.append(port)
+            stat_clauses.append("port = ?")
+            stat_params.append(-1 if port is None else port)
+        if path_prefix:
+            low, high = _folder_bounds(path_prefix)
+            clauses.append("(path = ? OR (path >= ? AND path < ?))")
+            params.extend([path_prefix, low, high])
+        with self._read_lock:
+            if path_prefix:
+                total = self._read_conn.execute(
+                    "SELECT COALESCE(SUM(flows), 0) FROM flow_path_stats"
+                    f" WHERE {' AND '.join(stat_clauses)}"
+                    " AND (path = ? OR (path >= ? AND path < ?))",
+                    (*stat_params, path_prefix, low, high),
+                ).fetchone()[0]
+            else:
+                row = self._read_conn.execute(
+                    "SELECT COALESCE(SUM(flows), 0) FROM flow_site_stats"
+                    f" WHERE {' AND '.join(stat_clauses)}", stat_params,
+                ).fetchone()
+                total = row[0] if row else 0
+            rows = self._read_conn.execute(
+                "SELECT id, method, path, query, status_code, response_size,"
+                " started_at FROM flows"
+                f" WHERE {' AND '.join(clauses)}"
+                " ORDER BY path, method, id LIMIT ? OFFSET ?",
+                (*params, limit, offset),
+            ).fetchall()
+        return {"items": [dict(row) for row in rows], "count": int(total)}
 
     def paths_for_site(
         self, scheme: str, host: str, port: int | None
@@ -942,8 +992,8 @@ class FlowStore:
         if port is not None:
             clauses.append("port = ?")
             params.append(port)
-        with self._lock:
-            rows = self._conn.execute(
+        with self._read_lock:
+            rows = self._read_conn.execute(
                 "SELECT id, method, path, query, status_code, response_size,"
                 " started_at FROM flows"
                 f" WHERE {' AND '.join(clauses)}"
@@ -968,8 +1018,8 @@ class FlowStore:
         meant one request and one query per host, which on a real capture
         with sixty hosts took seconds and grew with every new host seen.
         """
-        with self._lock:
-            rows = self._conn.execute(
+        with self._read_lock:
+            rows = self._read_conn.execute(
                 "SELECT id, scheme, host, port, method, path, query,"
                 " status_code, response_size, started_at FROM flows"
                 " ORDER BY host, path, method"
@@ -986,6 +1036,11 @@ def _truncate(body: bytes | None) -> bytes | None:
     if body is None:
         return None
     return body[:MAX_BODY_BYTES]
+
+
+def _folder_bounds(prefix: str) -> tuple[str, str]:
+    stem = prefix.rstrip("/")
+    return f"{stem}/", f"{stem}0"
 
 
 def _row_to_record(row: sqlite3.Row) -> FlowRecord:

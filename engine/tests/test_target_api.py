@@ -190,6 +190,36 @@ def test_sitemap_paths_for_one_site(client) -> None:
     assert {i["path"] for i in data["items"]} == {"/x", "/y"}
 
 
+def test_sitemap_paths_are_paged_and_can_target_a_folder(client) -> None:
+    for path in ("/api/a", "/api/b", "/other"):
+        seed(client, host="a.test", path=path)
+    page = client.get("/api/sitemap/paths", params={
+        "host": "a.test", "scheme": "https", "port": 443,
+        "path_prefix": "/api", "limit": 1, "offset": 1,
+    }).json()
+    assert page["count"] == 2
+    assert len(page["items"]) == 1
+    assert page["items"][0]["path"] == "/api/b"
+
+
+def test_sitemap_site_list_does_not_load_all_flows(client, monkeypatch) -> None:
+    seed(client, host="a.test", path="/one")
+
+    def fail() -> None:
+        raise AssertionError("site list loaded every flow")
+
+    monkeypatch.setattr(client.app.state.store, "paths_by_site", fail)
+    response = client.get("/api/sitemap")
+    assert response.status_code == 200
+    assert response.json()["sites"][0]["flows"] == 1
+
+
+def test_legacy_combined_sitemap_refuses_a_large_capture(client, monkeypatch) -> None:
+    monkeypatch.setattr(client.app.state.store, "count", lambda: 50_001)
+    response = client.get("/api/sitemap?with_paths=true")
+    assert response.status_code == 413
+
+
 def test_endpoints_group_dynamic_paths(client) -> None:
     for i in range(3):
         seed(client, path=f"/users/{i}", query="page=1")

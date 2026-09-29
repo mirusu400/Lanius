@@ -10,6 +10,7 @@ import type { ScopeRule } from '../api/types';
 let rules: ScopeRule[] = [];
 let restrict = false;
 let calls: { url: string; method: string; body?: unknown }[] = [];
+let extraPaths: typeof paths = [];
 
 const sites = [
   {
@@ -100,6 +101,7 @@ function jsonResponse(body: unknown) {
 }
 
 beforeEach(() => {
+  extraPaths = [];
   rules = [];
   restrict = false;
   calls = [];
@@ -142,13 +144,27 @@ beforeEach(() => {
         return jsonResponse({ rules, restrict_capture: restrict });
       }
       if (url.includes('/api/sitemap/paths')) {
-        return jsonResponse({ items: paths, count: paths.length });
+        const params = new URL(url).searchParams;
+        const prefix = params.get('path_prefix');
+        const offset = Number(params.get('offset') ?? 0);
+        const limit = Number(params.get('limit') ?? 200);
+        const matching = [...paths, ...extraPaths].filter((path) =>
+          !prefix || path.path === prefix || path.path.startsWith(`${prefix}/`));
+        const page = matching.slice(offset, offset + limit);
+        return jsonResponse({
+          items: params.get('host') === 'cdn.test'
+            ? page.map((path) => ({ ...path, id: `cdn-${path.id}` }))
+            : page,
+          count: matching.length,
+        });
       }
       if (url.includes('/api/sitemap')) {
         const onlyScope = url.includes('in_scope_only=true');
-        const shown = onlyScope ? sites.filter((s) => s.in_scope) : sites;
-        // The server sends the paths along with the sites when asked, so
-        // the tree can be built from one response.
+        const shown = (onlyScope ? sites.filter((s) => s.in_scope) : sites)
+          .map((site) => site.host === 'api.test'
+            ? { ...site, flows: site.flows + extraPaths.length }
+            : site);
+        // Old callers can still request the combined response.
         const withPaths = url.includes('with_paths=true');
         return jsonResponse({
           sites: withPaths
@@ -220,6 +236,35 @@ describe('TargetTab', () => {
     const calls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
     expect(calls.filter((u) => u.includes('/api/sitemap/paths'))).toHaveLength(0);
     expect(calls.filter((u) => u.includes('/api/sitemap'))).toHaveLength(1);
+  });
+
+  it('loads only one bounded page when a site opens, then loads more on demand', async () => {
+    extraPaths = Array.from({ length: 201 }, (_, index) => ({
+      id: `extra-${index}`,
+      method: 'GET',
+      path: `/extra/${index}`,
+      query: null,
+      status_code: 200,
+      response_size: 1,
+      started_at: index + 10,
+    }));
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await waitFor(() => expect(treeRows()).toHaveLength(2));
+    expect(calls.filter((call) => call.url.includes('/api/sitemap/paths'))).toHaveLength(0);
+    await user.click(rowFor('https://api.test')!);
+    await screen.findByRole('button', { name: t('target.loadMore') });
+    expect(calls.filter((call) => call.url.includes('/api/sitemap/paths'))).toHaveLength(1);
+    expect(calls.find((call) => call.url.includes('/api/sitemap/paths'))!.url)
+      .toContain('limit=200');
+    await user.click(screen.getByRole('button', { name: t('target.loadMore') }));
+    await waitFor(() => expect(
+      calls.filter((call) => call.url.includes('/api/sitemap/paths')),
+    ).toHaveLength(2));
+    expect(calls.filter((call) => call.url.includes('/api/sitemap/paths'))[1].url)
+      .toContain('offset=200');
+    await waitFor(() => expect(screen.queryByRole('button', { name: t('target.loadMore') }))
+      .toBeNull());
   });
 
   it('starts with every site closed', async () => {
@@ -380,7 +425,7 @@ describe('TargetTab', () => {
     await user.click(await screen.findByRole('menuitem', {
       name: t('menu.deleteSelected', { count: 2 }),
     }));
-    expect(screen.getByText(t('delete.confirmSelected', { items: 2, count: 8 }))).toBeTruthy();
+    expect(screen.getByText(t('delete.confirmSelectedSubtrees', { items: 2 }))).toBeTruthy();
     expect(calls.some((call) => call.url.endsWith('/api/flows/delete'))).toBe(false);
     await user.click(screen.getByRole('button', { name: t('common.cancel') }));
     expect(calls.some((call) => call.url.endsWith('/api/flows/delete'))).toBe(false);
@@ -436,7 +481,7 @@ describe('TargetTab', () => {
     await user.click(await screen.findByRole('menuitem', {
       name: t('menu.deleteSelected', { count: 2 }),
     }));
-    expect(screen.getByText(t('delete.confirmSelected', { items: 2, count: 4 }))).toBeTruthy();
+    expect(screen.getByText(t('delete.confirmSelectedSubtrees', { items: 2 }))).toBeTruthy();
     await user.click(screen.getByRole('button', { name: t('common.delete') }));
     await waitFor(() => {
       const call = calls.find((item) => item.url.endsWith('/api/flows/delete'));
@@ -505,15 +550,14 @@ describe('TargetTab', () => {
     expect(calls.some((c) => c.url.endsWith('/api/flows/delete'))).toBe(false);
   });
 
-  it('says how much a folder would take', async () => {
-    // "Delete everything under here" is unanswerable without a number.
+  it('does not understate a folder count before its page is loaded', async () => {
     const user = userEvent.setup();
     render(<TargetTab />);
     await expandAll(user);
     fireEvent.contextMenu(rowFor('users')!);
     await user.click(await screen.findByRole('menuitem', { name: t('menu.deletePath') }));
     expect(
-      await screen.findByText(t('delete.confirmSubtree', { count: 3, name: 'users' })),
+      await screen.findByText(t('delete.confirmSubtreeUnknown', { name: 'users' })),
     ).toBeTruthy();
   });
 
