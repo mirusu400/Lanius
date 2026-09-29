@@ -385,16 +385,16 @@ class ProxyEngine:
         return master
 
     def _reorder_capture_last(self, master: DumpMaster | None = None) -> None:
-        """Persist final HTTP and WebSocket content after user plugins.
+        """Analyze and persist final traffic content after user plugins.
 
         mitmproxy runs hooks in chain order. A plugin may edit a frame or
-        request, so both persistence hooks must run after it.
+        request, so scanner and persistence hooks must run after it.
         """
         master = master or self.master
         if master is None:
             return
         chain = master.addons.chain
-        for addon in (self.websockets, self.scanner, self.capture):
+        for addon in (self.scanner, self.websockets, self.capture):
             if addon in chain:
                 chain.remove(addon)
                 chain.append(addon)
