@@ -42,7 +42,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('Lockdown scope egress', () => {
+describe('Lockdown settings', () => {
   it('persists the option and shows when enforcement is effective', async () => {
     render(<LockdownSection />);
     const checkbox = await screen.findByLabelText(t('lockdown.scopeEgress'));
@@ -56,5 +56,37 @@ describe('Lockdown scope egress', () => {
       },
     ]));
     expect(await screen.findByText(t('lockdown.scopeEgressActive'))).toBeTruthy();
+  });
+
+  it('covers the screen with a circular progress indicator while changing modes', async () => {
+    let finishWrite: ((response: Response) => void) | undefined;
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if (init?.method === 'PUT' && String(url).endsWith('/api/lockdown/project')) {
+        return new Promise<Response>((resolve) => {
+          finishWrite = resolve;
+        });
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => status(),
+      } as Response;
+    });
+
+    render(<LockdownSection />);
+    const checkbox = await screen.findByLabelText(t('lockdown.project'));
+    await userEvent.click(checkbox);
+
+    const progress = screen.getByRole('status', { name: t('common.loading') });
+    expect(progress.closest('.lockdown-busy-overlay')).toBeTruthy();
+
+    finishWrite?.({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => status(),
+    } as Response);
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   });
 });

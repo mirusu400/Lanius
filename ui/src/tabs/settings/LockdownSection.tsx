@@ -13,6 +13,7 @@ import {
   type GlobalLockdownStatus,
   type LockdownStatus,
 } from '../../api/client';
+import { Spinner } from '../../components/Spinner';
 import { notifyLockdownChanged } from '../../lockdownEvents';
 import { useT } from '../../i18n';
 import { resetUpdates } from '../../updates';
@@ -55,7 +56,12 @@ export function LockdownSection() {
   };
 
   return (
-    <section className="lockdown-section">
+    <section className="lockdown-section" aria-busy={busy}>
+      {busy && (
+        <div className="lockdown-busy-overlay">
+          <Spinner />
+        </div>
+      )}
       <h3>{t('lockdown.title')}</h3>
       <p className="muted">{t('lockdown.help')}</p>
       {status?.effective && <p className="lockdown-active">{t('lockdown.active')}</p>}

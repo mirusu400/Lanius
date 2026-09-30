@@ -3901,8 +3901,6 @@ pre.body {
   min-width: max-content;
 }
 
-.settings-tab > .subtabs button.lockdown-tab,
-.settings-tab > .subtabs button.lockdown-tab.active,
 .lockdown-section h3,
 .lockdown-section .lockdown-label,
 .lockdown-active {
@@ -3911,6 +3909,23 @@ pre.body {
 }
 
 .lockdown-active { letter-spacing: 0.04em; }
+
+/* Changing Lockdown Mode can restart the engine. Keep the current screen
+   visible beneath a translucent shield while the transition completes. */
+.lockdown-busy-overlay {
+  align-items: center;
+  background: color-mix(in srgb, var(--bg) 68%, transparent);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: fixed;
+  z-index: 200;
+}
+
+.lockdown-busy-overlay .spinner {
+  height: 48px;
+  width: 48px;
+}
 
 /* The group tabs stay put; only the settings under them scroll, so you
    can always switch group without scrolling back up first. */

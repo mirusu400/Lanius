@@ -82,7 +82,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
         {GROUPS.map((name) => (
           <button
             key={name}
-            className={`${group === name ? "active" : ""} ${name === "security" ? "lockdown-tab" : ""}`.trim()}
+            className={group === name ? "active" : ""}
             onClick={() => choose(name)}
           >
             {t(`settings.group.${name}`)}
