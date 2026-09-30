@@ -520,7 +520,7 @@ jobs:
               -f ref=refs/tags/nightly -f sha="$SHA"
           fi
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: nightly
           target_commitish: ${{ needs.meta.outputs.sha }}
