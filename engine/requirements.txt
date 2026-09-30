@@ -7,7 +7,7 @@
 # them, then return to a normal release constraint.
 mitmproxy @ git+https://github.com/mitmproxy/mitmproxy.git@d0d5a70be9bfc4f99e6d90e4aa10acc142b85d21
 fastapi>=0.141
-uvicorn[standard]>=0.52
+uvicorn[standard]>=0.54.0
 mcp>=2.2
 cryptography>=50.0.1
 h2>=4.4.1
