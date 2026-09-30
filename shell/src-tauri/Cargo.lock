@@ -1819,7 +1819,7 @@ name = "lanius"
 version = "0.1.0"
 dependencies = [
  "block2",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "libc",
  "log",
  "objc2-app-kit",
