@@ -12,4 +12,4 @@ mcp>=2.2
 cryptography>=50.0.1
 h2>=4.4.1
 tornado>=6.5.8
-packaging>=26
+packaging>=26.3
