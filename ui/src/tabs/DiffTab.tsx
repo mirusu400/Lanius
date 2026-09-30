@@ -12,7 +12,7 @@ interface Result {
   identical: boolean;
 }
 
-export function ComparerTab() {
+export function DiffTab() {
   const t = useT();
   const [left, setLeft] = useState('');
   const [right, setRight] = useState('');
@@ -30,24 +30,24 @@ export function ComparerTab() {
   };
 
   return (
-    <div className="comparer-tab">
-      <div className="comparer-controls">
+    <div className="diff-tab">
+      <div className="diff-controls">
         <select
-          aria-label={t('comparer.mode')}
+          aria-label={t('diff.mode')}
           value={mode}
           onChange={(e) => setMode(e.target.value as 'word' | 'byte')}
         >
-          <option value="word">{t('comparer.word')}</option>
-          <option value="byte">{t('comparer.byte')}</option>
+          <option value="word">{t('diff.word')}</option>
+          <option value="byte">{t('diff.byte')}</option>
         </select>
         <button className="send" onClick={() => void run()}>
-          {t('comparer.compare')}
+          {t('diff.compare')}
         </button>
         {result && (
           <span className="muted mono">
             {result.identical
-              ? t('comparer.identical')
-              : t('comparer.summary', {
+              ? t('diff.identical')
+              : t('diff.summary', {
                   added: result.added,
                   removed: result.removed,
                   percent: (result.similarity * 100).toFixed(1),
@@ -59,21 +59,21 @@ export function ComparerTab() {
 
       <Split
         direction="horizontal"
-        storageKey="lanius.split.comparer"
-        className="comparer-inputs"
+        storageKey="lanius.split.diff"
+        className="diff-inputs"
         first={<textarea
-          aria-label={t('comparer.left')}
+          aria-label={t('diff.left')}
           className="mono"
           spellCheck={false}
-          placeholder={t('comparer.leftPlaceholder')}
+          placeholder={t('diff.leftPlaceholder')}
           value={left}
           onChange={(e) => setLeft(e.target.value)}
         />}
         second={<textarea
-          aria-label={t('comparer.right')}
+          aria-label={t('diff.right')}
           className="mono"
           spellCheck={false}
-          placeholder={t('comparer.rightPlaceholder')}
+          placeholder={t('diff.rightPlaceholder')}
           value={right}
           onChange={(e) => setRight(e.target.value)}
         />}

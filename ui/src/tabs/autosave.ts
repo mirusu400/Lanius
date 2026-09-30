@@ -1,6 +1,6 @@
 /** Autosave for the tab stores.
  *
- * Repeater and Decoder tabs lived only in the browser, so closing Lanius
+ * Replay and Decoder tabs lived only in the browser, so closing Lanius
  * threw away whatever you had open. They are written to the engine as you
  * work, debounced so typing does not mean a request per keystroke.
  */
@@ -25,6 +25,7 @@ export function autosave<T>(
   key: string,
   subscribe: (listener: (value: T) => void) => () => void,
   restore: (value: T) => void,
+  legacyKey?: string,
 ): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let loaded = false;
@@ -33,6 +34,10 @@ export function autosave<T>(
   let inFlight: Promise<void> = Promise.resolve();
 
   const loadPromise = getWorkspace<T>(key)
+    .then(async (saved) => {
+      if (saved.value != null || !legacyKey) return saved;
+      return getWorkspace<T>(legacyKey);
+    })
     .then(({ value }) => {
       if (disposed) return;
       if (value != null) restore(value);

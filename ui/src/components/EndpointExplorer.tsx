@@ -4,8 +4,8 @@ import { addScopeFromUrl, deleteFlows, getEndpointFlows, getFlow } from '../api/
 import type { EndpointGroup, FlowDetail, SitePath } from '../api/types';
 import { formatBytes, formatTime, formatUrl, statusClass } from '../tabs/proxyModel';
 import { endpointHost } from '../tabs/targetModel';
-import { sendToRepeater } from '../tabs/repeaterStore';
-import { sendToIntruder } from '../tabs/intruderStore';
+import { sendToReplay } from '../tabs/replayStore';
+import { sendToFuzzer } from '../tabs/fuzzerStore';
 import { renderMessage, useT } from '../i18n';
 import { ContextMenu, useContextMenu, type MenuItem } from './ContextMenu';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -123,8 +123,8 @@ export function EndpointExplorer({
   };
 
   const menuItems: MenuItem[] = menu.target ? [
-    { label: t('menu.sendToRepeater'), onSelect: withDetail(menu.target, (detail) => sendToRepeater(detail, detail)) },
-    { label: t('menu.sendToIntruder'), onSelect: withDetail(menu.target, (detail) => sendToIntruder(detail, detail)) },
+    { label: t('menu.sendToReplay'), onSelect: withDetail(menu.target, (detail) => sendToReplay(detail, detail)) },
+    { label: t('menu.sendToFuzzer'), onSelect: withDetail(menu.target, (detail) => sendToFuzzer(detail, detail)) },
     {
       label: t('menu.addToScope'),
       separator: true,

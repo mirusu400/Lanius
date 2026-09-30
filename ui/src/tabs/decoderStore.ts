@@ -1,6 +1,6 @@
 /** Decoder tab store.
  *
- * Tabs live outside the component for the same reason Repeater's do:
+ * Tabs live outside the component for the same reason Replay's do:
  * React unmounts a tab when you switch away, so component state would
  * throw away every payload the moment you looked at the Proxy history.
  */

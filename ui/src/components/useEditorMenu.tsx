@@ -1,4 +1,4 @@
-/** Context menu for the request editors in Repeater and Intruder.
+/** Context menu for the request editors in Replay and Fuzzer.
  *
  * Without one, right-clicking the body fell through to the webview's own
  * text menu, which knows nothing about the request being edited. This

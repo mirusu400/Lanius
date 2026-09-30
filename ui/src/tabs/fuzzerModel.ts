@@ -1,34 +1,51 @@
-/** Pure helpers for the Intruder tab. */
+/** Pure helpers for the Fuzzer tab. */
 
-import type { AttackResult, AttackType, FlowDetail, FlowSummary } from '../api/types';
+import type { RunResult, RunMode, FlowDetail, FlowSummary } from '../api/types';
 import type { TranslationKey } from '../i18n/catalogue';
 
-export const MARKER = '\u00a7';
+export const OPEN_MARKER = '{{';
+export const CLOSE_MARKER = '}}';
 
-export const ATTACK_TYPES: {
-  value: AttackType;
+export const RUN_MODES: {
+  value: RunMode;
   label: string;
   hint: TranslationKey;
 }[] = [
-  { value: 'sniper', label: 'Sniper', hint: 'intruder.sniperHint' },
   {
-    value: 'battering_ram',
-    label: 'Battering ram',
-    hint: 'intruder.batteringRamHint',
+    value: 'single_position',
+    label: 'Single position',
+    hint: 'fuzzer.singlePositionHint',
   },
-  { value: 'pitchfork', label: 'Pitchfork', hint: 'intruder.pitchforkHint' },
   {
-    value: 'cluster_bomb',
-    label: 'Cluster bomb',
-    hint: 'intruder.clusterBombHint',
+    value: 'shared_payload',
+    label: 'Shared payload',
+    hint: 'fuzzer.sharedPayloadHint',
+  },
+  { value: 'lockstep', label: 'Lockstep', hint: 'fuzzer.lockstepHint' },
+  {
+    value: 'cartesian',
+    label: 'Cartesian product',
+    hint: 'fuzzer.cartesianHint',
   },
 ];
 
-/** Count balanced `§...§` spans; -1 means the markers are unbalanced. */
+/** Count balanced `{{...}}` spans; -1 means markers are invalid. */
 export function countPositions(template: string): number {
-  const occurrences = (template.match(new RegExp(MARKER, 'g')) ?? []).length;
-  if (occurrences % 2 !== 0) return -1;
-  return occurrences / 2;
+  let cursor = 0;
+  let count = 0;
+  while (cursor < template.length) {
+    const open = template.indexOf(OPEN_MARKER, cursor);
+    const close = template.indexOf(CLOSE_MARKER, cursor);
+    if (open < 0) return close < 0 ? count : -1;
+    if (close >= 0 && close < open) return -1;
+    const end = template.indexOf(CLOSE_MARKER, open + OPEN_MARKER.length);
+    if (end < 0) return -1;
+    const nested = template.indexOf(OPEN_MARKER, open + OPEN_MARKER.length);
+    if (nested >= 0 && nested < end) return -1;
+    count += 1;
+    cursor = end + CLOSE_MARKER.length;
+  }
+  return count;
 }
 
 /** Wrap the current selection in payload markers. */
@@ -40,15 +57,17 @@ export function addMarker(
   if (start === end) return template;
   return (
     template.slice(0, start) +
-    MARKER +
+    OPEN_MARKER +
     template.slice(start, end) +
-    MARKER +
+    CLOSE_MARKER +
     template.slice(end)
   );
 }
 
 export function clearMarkers(template: string): string {
-  return template.split(MARKER).join('');
+  return template
+    .split(OPEN_MARKER).join('')
+    .split(CLOSE_MARKER).join('');
 }
 
 /** Parse a textarea wordlist into payloads (blank lines dropped). */
@@ -61,22 +80,22 @@ export function parsePayloads(text: string): string[] {
 
 /** Expected request count, mirroring the engine (shown before launching). */
 export function estimateRequests(
-  attackType: AttackType,
+  mode: RunMode,
   positions: number,
   sets: string[][],
 ): number {
   if (positions <= 0 || sets.length === 0) return 0;
-  switch (attackType) {
-    case 'sniper':
+  switch (mode) {
+    case 'single_position':
       return positions * (sets[0]?.length ?? 0);
-    case 'battering_ram':
+    case 'shared_payload':
       return sets[0]?.length ?? 0;
-    case 'pitchfork': {
+    case 'lockstep': {
       const used = sets.slice(0, positions);
       if (used.length < positions) return 0;
       return Math.min(...used.map((s) => s.length));
     }
-    case 'cluster_bomb': {
+    case 'cartesian': {
       const used = sets.slice(0, positions);
       if (used.length < positions) return 0;
       return used.reduce((total, s) => total * s.length, 1);
@@ -84,12 +103,12 @@ export function estimateRequests(
   }
 }
 
-/** How many payload sets a given attack type consumes. */
+/** How many payload sets a given run type consumes. */
 export function requiredSets(
-  attackType: AttackType,
+  mode: RunMode,
   positions: number,
 ): number {
-  return attackType === 'sniper' || attackType === 'battering_ram'
+  return mode === 'single_position' || mode === 'shared_payload'
     ? 1
     : Math.max(positions, 1);
 }
@@ -116,7 +135,7 @@ export function templateFromFlow(
 }
 
 /** Results whose length differs from the majority often indicate a hit. */
-export function markOutliers(results: AttackResult[]): Set<number> {
+export function markOutliers(results: RunResult[]): Set<number> {
   if (results.length < 3) return new Set();
   const counts = new Map<number, number>();
   for (const result of results) {

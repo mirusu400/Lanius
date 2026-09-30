@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from app import charset
-from app.addons.repeater import build_flow
+from app.addons.replay import build_flow
 from app.config import Settings
 from app.db.store import FlowStore
 from app.events import EventBroker
@@ -97,8 +97,8 @@ def test_characters_a_charset_cannot_express_are_escaped() -> None:
     assert encoded.decode("euc-kr") == "가 &#127919;"
 
 
-def test_repeater_sends_the_body_in_the_declared_charset(tmp_path, site) -> None:
-    """The point of the whole exercise: Korean typed into Repeater has to
+def test_replay_sends_the_body_in_the_declared_charset(tmp_path, site) -> None:
+    """The point of the whole exercise: Korean typed into Replay has to
     reach an EUC-KR endpoint as EUC-KR."""
 
     async def run() -> None:
@@ -123,7 +123,7 @@ def test_repeater_sends_the_body_in_the_declared_charset(tmp_path, site) -> None
                     len(text.encode(name))
                 ), path
 
-                record = await engine.repeater.send(flow, timeout=15)
+                record = await engine.replay.send(flow, timeout=15)
                 body = (record.response_body or b"").decode(name, "replace")
                 assert "verdict=ok" in body, f"{path}: {body[:120]}"
                 assert text.encode(name).hex() in body, (

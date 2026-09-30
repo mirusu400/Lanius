@@ -1,12 +1,12 @@
-/** Tiny pub/sub store so the Proxy tab can push requests into Repeater. */
+/** Tiny pub/sub store so the Proxy tab can push requests into Replay. */
 
 import type { FlowDetail, FlowSummary } from '../api/types';
-import { tabFromFlow, withUniqueIds, type RepeaterTab } from './repeaterModel';
+import { tabFromFlow, withUniqueIds, type ReplayTab } from './replayModel';
 import { asMessage } from '../i18n/message';
 
-type Listener = (tabs: RepeaterTab[]) => void;
+type Listener = (tabs: ReplayTab[]) => void;
 
-let tabs: RepeaterTab[] = [];
+let tabs: ReplayTab[] = [];
 const listeners = new Set<Listener>();
 
 function emit(): void {
@@ -19,11 +19,11 @@ export function subscribe(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
-export function getTabs(): RepeaterTab[] {
+export function getTabs(): ReplayTab[] {
   return tabs;
 }
 
-export function setTabs(next: RepeaterTab[]): void {
+export function setTabs(next: ReplayTab[]): void {
   // Restored projects may carry an error saved before errors became
   // messages, when the translated sentence was stored directly.
   tabs = withUniqueIds(
@@ -32,13 +32,13 @@ export function setTabs(next: RepeaterTab[]): void {
   emit();
 }
 
-export function addTab(tab: RepeaterTab): RepeaterTab {
+export function addTab(tab: ReplayTab): ReplayTab {
   tabs = [...tabs, tab];
   emit();
   return tab;
 }
 
-export function updateTab(id: string, patch: Partial<RepeaterTab>): void {
+export function updateTab(id: string, patch: Partial<ReplayTab>): void {
   tabs = tabs.map((t) => (t.id === id ? { ...t, ...patch } : t));
   emit();
 }
@@ -48,11 +48,11 @@ export function removeTab(id: string): void {
   emit();
 }
 
-/** "Send to Repeater" from the Proxy history. */
-export function sendToRepeater(
+/** "Send to Replay" from the Proxy history. */
+export function sendToReplay(
   flow: FlowSummary,
   detail?: FlowDetail | null,
-): RepeaterTab {
+): ReplayTab {
   return addTab(tabFromFlow(flow, detail));
 }
 

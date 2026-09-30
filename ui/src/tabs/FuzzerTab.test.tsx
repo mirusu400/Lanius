@@ -1,16 +1,16 @@
-/** Renders the real Intruder tab against a mocked engine. */
+/** Renders the real Fuzzer tab against a mocked engine. */
 import {cleanup, screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { IntruderTab } from './IntruderTab';
-import { resetTarget, sendToIntruder } from './intruderStore';
-import type { AttackResult, FlowSummary } from '../api/types';
+import { FuzzerTab } from './FuzzerTab';
+import { resetTarget, sendToFuzzer } from './fuzzerStore';
+import type { RunResult, FlowSummary } from '../api/types';
 
-let started: { url: string; attack_type: string; payload_sets: string[][] }[] =
+let started: { url: string; mode: string; payload_sets: string[][] }[] =
   [];
-let results: AttackResult[] = [];
+let results: RunResult[] = [];
 let status = 'completed';
 
 const flow: FlowSummary = {
@@ -99,11 +99,11 @@ beforeEach(() => {
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-      if (url.endsWith('/api/intruder/attacks') && init?.method === 'POST') {
+      if (url.endsWith('/api/fuzzer/runs') && init?.method === 'POST') {
         started.push(body);
         return jsonResponse({
           id: 'atk1',
-          attack_type: body.attack_type,
+          mode: body.mode,
           url: body.url,
           status,
           total: results.length,
@@ -113,10 +113,10 @@ beforeEach(() => {
           error: null,
         });
       }
-      if (url.includes('/api/intruder/attacks/atk1')) {
+      if (url.includes('/api/fuzzer/runs/atk1')) {
         return jsonResponse({
           id: 'atk1',
-          attack_type: 'sniper',
+          mode: 'single_position',
           url: 'http://app.test',
           status,
           total: results.length,
@@ -138,43 +138,44 @@ afterEach(() => {
 });
 
 const templateBox = () =>
-  screen.getByRole('textbox', { name: t('intruder.templateLabel') }) as HTMLTextAreaElement;
+  screen.getByRole('textbox', { name: t('fuzzer.templateLabel') }) as HTMLTextAreaElement;
 
-describe('IntruderTab', () => {
+describe('FuzzerTab', () => {
   it('shows the position and request estimate', () => {
-    render(<IntruderTab />);
-    expect(screen.getByText(t('intruder.positions', { count: 1, requests: 3 }))).toBeTruthy();
+    render(<FuzzerTab />);
+    expect(screen.getByText(t('fuzzer.positions', { count: 1, requests: 3 }))).toBeTruthy();
   });
 
   it('updates the estimate when payloads change', async () => {
     const user = userEvent.setup();
-    render(<IntruderTab />);
-    await user.clear(screen.getByLabelText(t('intruder.payloadSet', { index: 1 })));
-    await user.type(screen.getByLabelText(t('intruder.payloadSet', { index: 1 })), 'a\nb');
-    await waitFor(() => expect(screen.getByText(t('intruder.positions', { count: 1, requests: 2 }))).toBeTruthy());
+    render(<FuzzerTab />);
+    await user.clear(screen.getByLabelText(t('fuzzer.payloadSet', { index: 1 })));
+    await user.type(screen.getByLabelText(t('fuzzer.payloadSet', { index: 1 })), 'a\nb');
+    await waitFor(() => expect(screen.getByText(t('fuzzer.positions', { count: 1, requests: 2 }))).toBeTruthy());
   });
 
   it('adds and clears payload markers', async () => {
     const user = userEvent.setup();
-    render(<IntruderTab />);
-    await user.click(screen.getByRole('button', { name: t('intruder.clearMarkers') }));
-    await waitFor(() => expect(screen.getByText(t('intruder.positions', { count: 0, requests: 0 }))).toBeTruthy());
-    expect(templateBox().value).not.toContain('\u00a7');
+    render(<FuzzerTab />);
+    await user.click(screen.getByRole('button', { name: t('fuzzer.clearMarkers') }));
+    await waitFor(() => expect(screen.getByText(t('fuzzer.positions', { count: 0, requests: 0 }))).toBeTruthy());
+    expect(templateBox().value).not.toContain('{{');
+    expect(templateBox().value).not.toContain('}}');
   });
 
   it('marks the selected text', async () => {
     const user = userEvent.setup();
-    render(<IntruderTab />);
-    await user.click(screen.getByRole('button', { name: t('intruder.clearMarkers') }));
+    render(<FuzzerTab />);
+    await user.click(screen.getByRole('button', { name: t('fuzzer.clearMarkers') }));
     await user.clear(templateBox());
     await user.type(templateBox(), 'GET /?q=abc HTTP/1.1');
 
     const editor = templateBox();
     editor.setSelectionRange(8, 11);
     document.dispatchEvent(new Event('selectionchange'));
-    await user.click(screen.getByRole('button', { name: t('intruder.addMarker') }));
+    await user.click(screen.getByRole('button', { name: t('fuzzer.addMarker') }));
 
-    expect(templateBox().value).toBe('GET /?q=\u00a7abc\u00a7 HTTP/1.1');
+    expect(templateBox().value).toBe('GET /?q={{abc}} HTTP/1.1');
   });
 
   it('still marks when the selection is lost on the way to the button', async () => {
@@ -182,8 +183,8 @@ describe('IntruderTab', () => {
     // textarea's selection before the handler runs. Without remembering
     // it, the button silently did nothing.
     const user = userEvent.setup();
-    render(<IntruderTab />);
-    await user.click(screen.getByRole('button', { name: t('intruder.clearMarkers') }));
+    render(<FuzzerTab />);
+    await user.click(screen.getByRole('button', { name: t('fuzzer.clearMarkers') }));
     await user.clear(templateBox());
     await user.type(templateBox(), 'GET /?q=abc HTTP/1.1');
 
@@ -193,37 +194,33 @@ describe('IntruderTab', () => {
     // The selection is gone by the time the click lands.
     editor.setSelectionRange(0, 0);
 
-    await user.click(screen.getByRole('button', { name: t('intruder.addMarker') }));
-    expect(templateBox().value).toBe('GET /?q=\u00a7abc\u00a7 HTTP/1.1');
+    await user.click(screen.getByRole('button', { name: t('fuzzer.addMarker') }));
+    expect(templateBox().value).toBe('GET /?q={{abc}} HTTP/1.1');
   });
 
   it('warns about unbalanced markers', async () => {
-    const user = userEvent.setup();
-    render(<IntruderTab />);
-    await user.clear(templateBox());
-    await user.type(templateBox(), 'GET /?a=\u00a7x HTTP/1.1');
+    render(<FuzzerTab />);
+    fireEvent.change(templateBox(), { target: { value: 'GET /?a={{x HTTP/1.1' } });
     expect(await screen.findByText(t('intercept.unbalancedMarker'))).toBeTruthy();
   });
 
-  it('grows payload set inputs for cluster bomb', async () => {
+  it('grows payload set inputs for Cartesian product mode', async () => {
     const user = userEvent.setup();
-    render(<IntruderTab />);
-    await user.clear(templateBox());
-    await user.type(
-      templateBox(),
-      'GET /?u=\u00a7a\u00a7&p=\u00a7b\u00a7 HTTP/1.1',
-    );
+    render(<FuzzerTab />);
+    fireEvent.change(templateBox(), {
+      target: { value: 'GET /?u={{a}}&p={{b}} HTTP/1.1' },
+    });
     await user.selectOptions(
-      screen.getByLabelText(t('intruder.attackType')),
-      'cluster_bomb',
+      screen.getByLabelText(t('fuzzer.mode')),
+      'cartesian',
     );
-    expect(await screen.findByLabelText(t('intruder.payloadSet', { index: 2 }))).toBeTruthy();
+    expect(await screen.findByLabelText(t('fuzzer.payloadSet', { index: 2 }))).toBeTruthy();
   });
 
-  it('starts an attack and renders results', async () => {
+  it('starts a run and renders results', async () => {
     const user = userEvent.setup();
-    render(<IntruderTab />);
-    await user.click(screen.getByRole('button', { name: t('intruder.start') }));
+    render(<FuzzerTab />);
+    await user.click(screen.getByRole('button', { name: t('fuzzer.start') }));
 
     expect(await screen.findByText('letmein')).toBeTruthy();
     expect(started[0].payload_sets).toEqual([['a', 'b', 'c']]);
@@ -232,8 +229,8 @@ describe('IntruderTab', () => {
 
   it('highlights the response whose length stands out', async () => {
     const user = userEvent.setup();
-    render(<IntruderTab />);
-    await user.click(screen.getByRole('button', { name: t('intruder.start') }));
+    render(<FuzzerTab />);
+    await user.click(screen.getByRole('button', { name: t('fuzzer.start') }));
     await screen.findByText('letmein');
 
     const row = screen.getByText('letmein').closest('tr');
@@ -244,36 +241,36 @@ describe('IntruderTab', () => {
   });
 
   it('picks up a request sent from the Proxy tab', async () => {
-    render(<IntruderTab />);
-    sendToIntruder(flow);
+    render(<FuzzerTab />);
+    sendToFuzzer(flow);
     await waitFor(() =>
       expect(templateBox().value).toContain('GET /login?pw=guess'),
     );
-    expect(screen.getByLabelText(t('intruder.targetUrl'))).toHaveProperty(
+    expect(screen.getByLabelText(t('fuzzer.targetUrl'))).toHaveProperty(
       'value',
       'http://app.test',
     );
   });
 
-  it('offers a stop button while an attack runs', async () => {
+  it('offers a stop button while a run is active', async () => {
     status = 'running';
     const user = userEvent.setup();
-    render(<IntruderTab />);
-    await user.click(screen.getByRole('button', { name: t('intruder.start') }));
-    expect(await screen.findByRole('button', { name: t('intruder.stop') })).toBeTruthy();
+    render(<FuzzerTab />);
+    await user.click(screen.getByRole('button', { name: t('fuzzer.start') }));
+    expect(await screen.findByRole('button', { name: t('fuzzer.stop') })).toBeTruthy();
   });
 });
 
 describe('result context menu', () => {
   it('offers to resend a result, which is the point of finding one', async () => {
-    render(<IntruderTab />);
-    await userEvent.click(screen.getByRole('button', { name: t('intruder.start') }));
+    render(<FuzzerTab />);
+    await userEvent.click(screen.getByRole('button', { name: t('fuzzer.start') }));
     const row = await screen.findByText('letmein');
 
     fireEvent.contextMenu(row.closest('tr')!);
 
     expect(
-      screen.getByRole('menuitem', { name: t('menu.sendToRepeater') }),
+      screen.getByRole('menuitem', { name: t('menu.sendToReplay') }),
     ).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: t('menu.copyPayload') })).toBeTruthy();
   });
@@ -290,15 +287,15 @@ describe('result context menu', () => {
         flow_id: null,
       },
     ];
-    render(<IntruderTab />);
-    await userEvent.click(screen.getByRole('button', { name: t('intruder.start') }));
+    render(<FuzzerTab />);
+    await userEvent.click(screen.getByRole('button', { name: t('fuzzer.start') }));
     const row = await screen.findByText('x');
 
     fireEvent.contextMenu(row.closest('tr')!);
 
     expect(
       (screen.getByRole('menuitem', {
-        name: t('menu.sendToRepeater'),
+        name: t('menu.sendToReplay'),
       }) as HTMLButtonElement).disabled,
     ).toBe(true);
   });

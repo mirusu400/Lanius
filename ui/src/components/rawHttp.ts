@@ -1,7 +1,7 @@
 /** Rebuild the raw HTTP text of a captured exchange.
  *
  * The store keeps a request in parts, so "raw" has to be put back
- * together. Shared with Repeater, which needs the same text to make an
+ * together. Shared with Replay, which needs the same text to make an
  * editable request out of a flow.
  */
 
@@ -23,7 +23,7 @@ export function rawRequest(
   const line = `${flow.method ?? 'GET'} ${requestTarget(flow)} ${version}`;
   // Fall back to a Host header: without one the text is not a request
   // any server would accept, which matters because this is the text
-  // Repeater edits and sends.
+  // Replay edits and sends.
   const headers = detail?.request_headers ?? [['Host', flow.host ?? '']];
   return join(line, headers, detail?.request_body ?? '');
 }

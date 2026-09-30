@@ -12,7 +12,7 @@ export interface KeyboardShortcut {
 
 export interface ShortcutDefinition {
   id: string;
-  category: 'general' | 'navigation' | 'repeater';
+  category: 'general' | 'navigation' | 'replay';
   label: TranslationKey;
   description?: TranslationKey;
   defaults: Record<ShortcutPlatform, KeyboardShortcut | null>;
@@ -49,10 +49,10 @@ const navigation = [
   ['dashboard', 'shortcuts.openDashboard', 'Digit0'],
   ['proxy', 'shortcuts.openProxy', 'Digit1'],
   ['target', 'shortcuts.openTarget', 'Digit2'],
-  ['repeater', 'shortcuts.openRepeater', 'Digit3'],
-  ['intruder', 'shortcuts.openIntruder', 'Digit4'],
+  ['replay', 'shortcuts.openReplay', 'Digit3'],
+  ['fuzzer', 'shortcuts.openFuzzer', 'Digit4'],
   ['decoder', 'shortcuts.openDecoder', 'Digit5'],
-  ['comparer', 'shortcuts.openComparer', 'Digit6'],
+  ['diff', 'shortcuts.openDiff', 'Digit6'],
   ['logger', 'shortcuts.openLogger', 'Digit7'],
   ['plugins', 'shortcuts.openPlugins', 'Digit8'],
   ['settings', 'shortcuts.openSettings', 'Digit9'],
@@ -79,40 +79,40 @@ export const SHORTCUTS: ShortcutDefinition[] = [
     defaults: defaultFor(code, { alt: true }),
   })),
   {
-    id: 'repeater.send',
-    category: 'repeater',
-    label: 'shortcuts.repeaterSend',
-    description: 'shortcuts.repeaterSendHelp',
+    id: 'replay.send',
+    category: 'replay',
+    label: 'shortcuts.replaySend',
+    description: 'shortcuts.replaySendHelp',
     defaults: defaultFor('Enter'),
   },
   {
-    id: 'repeater.new',
-    category: 'repeater',
-    label: 'shortcuts.repeaterNew',
+    id: 'replay.new',
+    category: 'replay',
+    label: 'shortcuts.replayNew',
     defaults: defaultFor('KeyN', { alt: true }),
   },
   {
-    id: 'repeater.duplicate',
-    category: 'repeater',
-    label: 'shortcuts.repeaterDuplicate',
+    id: 'replay.duplicate',
+    category: 'replay',
+    label: 'shortcuts.replayDuplicate',
     defaults: defaultFor('KeyU', { alt: true }),
   },
   {
-    id: 'repeater.close',
-    category: 'repeater',
-    label: 'shortcuts.repeaterClose',
+    id: 'replay.close',
+    category: 'replay',
+    label: 'shortcuts.replayClose',
     defaults: defaultFor('KeyX', { alt: true }),
   },
   {
-    id: 'repeater.previous',
-    category: 'repeater',
-    label: 'shortcuts.repeaterPrevious',
+    id: 'replay.previous',
+    category: 'replay',
+    label: 'shortcuts.replayPrevious',
     defaults: defaultFor('BracketLeft', { alt: true }),
   },
   {
-    id: 'repeater.next',
-    category: 'repeater',
-    label: 'shortcuts.repeaterNext',
+    id: 'replay.next',
+    category: 'replay',
+    label: 'shortcuts.replayNext',
     defaults: defaultFor('BracketRight', { alt: true }),
   },
 ];

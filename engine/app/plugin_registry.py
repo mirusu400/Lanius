@@ -689,7 +689,7 @@ class PluginHost:
         if not title.strip() or not callable(handler):
             raise PluginApiError("an action needs a title and callable handler")
         allowed = {
-            "global", "history", "flow", "request", "response", "repeater", "intruder"
+            "global", "history", "flow", "request", "response", "replay", "fuzzer"
         }
         if not locations or any(location not in allowed for location in locations):
             raise PluginApiError("action has an unsupported location")

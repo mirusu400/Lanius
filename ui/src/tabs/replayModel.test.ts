@@ -10,8 +10,8 @@ import {
   tabFromFlow,
   toSendPayload,
   trimResponse,
-  type RepeaterResponse,
-} from './repeaterModel';
+  type ReplayResponse,
+} from './replayModel';
 
 function flow(overrides: Partial<FlowSummary> = {}): FlowSummary {
   return {
@@ -162,7 +162,7 @@ describe('toSendPayload', () => {
 });
 
 describe('renderResponseText', () => {
-  const base: RepeaterResponse = {
+  const base: ReplayResponse = {
     id: 'r1',
     status_code: 200,
     reason: 'OK',

@@ -7,7 +7,7 @@ from mitmproxy.test import tflow, tutils
 from app.addons.capture import flow_to_record
 from app.addons.intercept import apply_edits, paused_payload
 from app.addons.match_replace import MatchReplaceAddon
-from app.addons.repeater import build_flow, render_raw
+from app.addons.replay import build_flow, render_raw
 from app.db.store import FlowRecord, FlowStore
 from app.events import EventBroker
 
@@ -79,7 +79,7 @@ def test_intercept_displays_and_reencodes_compressed_body() -> None:
     assert gzip.decompress(flow.request.raw_content or b"") == b"after"
 
 
-def test_repeater_encodes_request_and_decodes_response() -> None:
+def test_replay_encodes_request_and_decodes_response() -> None:
     flow = build_flow(
         url="https://example.com/",
         method="POST",

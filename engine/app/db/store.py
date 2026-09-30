@@ -961,7 +961,7 @@ class FlowStore:
             )
             self._conn.commit()
 
-    # --- workspace (Repeater/Decoder/Intruder state) ----------------------
+    # --- workspace (Replay/Decoder/Fuzzer state) ----------------------
     def get_workspace(self, key: str) -> Any | None:
         """Saved workspace state, or None if this key was never written."""
         with self._lock:

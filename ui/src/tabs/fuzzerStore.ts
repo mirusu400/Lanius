@@ -1,17 +1,17 @@
-/** Shared store so the Proxy tab can push a request into Intruder. */
+/** Shared store so the Proxy tab can push a request into Fuzzer. */
 
 import type { FlowDetail, FlowSummary } from '../api/types';
-import { templateFromFlow } from './intruderModel';
+import { templateFromFlow } from './fuzzerModel';
 
-export interface IntruderTarget {
+export interface FuzzerTarget {
   url: string;
   template: string;
   seq: number;
 }
 
-type Listener = (target: IntruderTarget | null) => void;
+type Listener = (target: FuzzerTarget | null) => void;
 
-let current: IntruderTarget | null = null;
+let current: FuzzerTarget | null = null;
 let seq = 0;
 const listeners = new Set<Listener>();
 
@@ -23,21 +23,21 @@ export function subscribeTarget(listener: Listener): () => void {
 
 /** Send a request the user has already edited, as raw text.
  *
- * Repeater holds an edited request rather than a captured flow, so there
- * was no way to carry it into Intruder without going back to the history
+ * Replay holds an edited request rather than a captured flow, so there
+ * was no way to carry it into Fuzzer without going back to the history
  * and losing the edits.
  */
-export function sendTextToIntruder(url: string, template: string): IntruderTarget {
+export function sendTextToFuzzer(url: string, template: string): FuzzerTarget {
   seq += 1;
   current = { url, template, seq };
   for (const listener of listeners) listener(current);
   return current;
 }
 
-export function sendToIntruder(
+export function sendToFuzzer(
   flow: FlowSummary,
   detail?: FlowDetail | null,
-): IntruderTarget {
+): FuzzerTarget {
   seq += 1;
   const { url, template } = templateFromFlow(flow, detail);
   current = { url, template, seq };

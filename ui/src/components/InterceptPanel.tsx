@@ -21,8 +21,8 @@ export function InterceptPanel({
   onResolved,
 }: Props) {
   const t = useT();
-  // Which held request is being shown. Burp lets you pick from the queue
-  // rather than only ever seeing the oldest, which matters once several
+  // Which held request is being shown. Pick from the queue rather than
+  // only ever seeing the oldest, which matters once several
   // are waiting and the one you care about is not first.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const current =

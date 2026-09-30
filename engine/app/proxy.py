@@ -23,9 +23,9 @@ from mitmproxy_rs.local import LocalRedirector
 from .addons.capture import CaptureAddon
 from .addons.intercept import InterceptAddon
 from .addons.match_replace import MatchReplaceAddon
-from .addons.repeater import RepeaterAddon
+from .addons.replay import ReplayAddon
 from .addons.websocket_proxy import WebSocketProxyAddon
-from .addons.intruder import IntruderAddon
+from .addons.fuzzer import FuzzerAddon
 from .addons.plugins import PluginManager
 from .addons.scanner import ScannerAddon
 from .plugin_packages import PluginPackageManager
@@ -244,8 +244,8 @@ class ProxyEngine:
             on_forwarded=self.capture.request_updated,
         )
         self.websockets = WebSocketProxyAddon(broker, store=store)
-        self.repeater = RepeaterAddon(store)
-        self.intruder = IntruderAddon(self.repeater, broker)
+        self.replay = ReplayAddon(store)
+        self.fuzzer = FuzzerAddon(self.replay, broker)
         self.plugin_packages = PluginPackageManager(
             settings.plugins_dir,
             trusted_keys_path=settings.plugin_trusted_keys,
@@ -273,7 +273,7 @@ class ProxyEngine:
             self.plugins.registry,
             store,
             broker,
-            self.repeater,
+            self.replay,
             self.scope,
         )
         self._task: asyncio.Task[None] | None = None
@@ -380,9 +380,9 @@ class ProxyEngine:
         master.addons.add(self.websockets)
         master.addons.add(self.scanner)
         master.addons.add(self.capture)
-        master.addons.add(self.repeater)
+        master.addons.add(self.replay)
         # Not via the running hook: it does not fire for every mode set.
-        self.repeater.attach(master.options)
+        self.replay.attach(master.options)
         self.websockets.attach(master)
         self.plugins.addons = master.addons
         self.plugins.load_enabled()
@@ -764,12 +764,12 @@ class ProxyEngine:
         """Has mitmproxy run the addons' ``running`` hook yet?
 
         Accepting a connection is not the same as being ready: the hook
-        that hands Repeater its options runs separately, and with an extra
+        that hands Replay its options runs separately, and with an extra
         mode configured it can land after the port is already open. Callers
-        that returned at that moment got a Repeater which reported the
+        that returned at that moment got a Replay which reported the
         engine as not running, permanently, until the next restart.
         """
-        return self.repeater.options is not None
+        return self.replay.options is not None
 
     async def _can_connect(self) -> bool:
         try:

@@ -1,7 +1,7 @@
 """Test sites that speak one charset each.
 
 Built to answer a specific question: does Lanius carry Korean and other
-non-ASCII text through Repeater, Intruder and Intercept without mangling
+non-ASCII text through Replay, Fuzzer and Intercept without mangling
 it, when the site is not UTF-8?
 
 Each route echoes back what it received, decoded with its own charset, so

@@ -45,21 +45,21 @@ other's IDs.
 ## Actions
 
 `context.actions.register` adds a command with one or more UI locations:
-`global`, `history`, `flow`, `request`, `response`, `repeater`, or `intruder`.
+`global`, `history`, `flow`, `request`, `response`, `replay`, or `fuzzer`.
 Handlers receive a JSON compatible context mapping and may return a value or an
 awaitable. The contribution catalogue is available at
 `GET /api/plugin-contributions`; actions run through
 `POST /api/plugin-actions/{id}/invoke`.
 
 The declared locations are rendered in HTTP history, Target, request and
-response details, Repeater, Intruder, or the global Plugins toolbar. Synchronous
+response details, Replay, Fuzzer, or the global Plugins toolbar. Synchronous
 handlers run outside the engine event loop. Actions and payload handlers have a
 30 second host timeout, and action results must be JSON compatible and no more
 than 1 MiB.
 
 Flow locations include `flow_id` and a serializable flow summary. Request and
 response detail menus also include the loaded detail and a `message` field.
-Repeater and Intruder include their current raw request and parsed request when
+Replay and Fuzzer include their current raw request and parsed request when
 valid. The host adds the exact `location` chosen by the UI before invocation.
 
 ## Codecs
@@ -69,7 +69,7 @@ codec is exposed under its qualified ID and participates in the same decoder
 chain as built in codecs. An ID collision rejects activation instead of
 overwriting an existing transform.
 
-## Intruder payload extensions
+## Fuzzer payload extensions
 
 `context.payloads.register_generator` produces payload strings from a JSON
 options mapping. `register_processor` transforms a payload before use. Both

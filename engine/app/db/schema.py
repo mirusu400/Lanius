@@ -75,7 +75,7 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         """,
     ),
     3: (
-        # Workspace state: Repeater tabs, Decoder tabs, Intruder configs.
+        # Workspace state: Replay tabs, Decoder tabs, Fuzzer configs.
         # These lived only in the browser, so closing Lanius threw away
         # every request you had been working on.
         """
@@ -87,8 +87,8 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         """,
     ),
     4: (
-        # Named payload lists for Intruder, so a wordlist is pasted once
-        # rather than every time an attack is set up.
+        # Named payload lists for Fuzzer, so a wordlist is pasted once
+        # rather than every time a fuzz run is set up.
         """
         CREATE TABLE IF NOT EXISTS payload_sets (
             id          TEXT PRIMARY KEY,

@@ -15,7 +15,7 @@ from typing import Any, Literal, Protocol
 API_VERSION = "1.1"
 
 ActionLocation = Literal[
-    "global", "history", "flow", "request", "response", "repeater", "intruder"
+    "global", "history", "flow", "request", "response", "replay", "fuzzer"
 ]
 SettingScope = Literal["project", "user"]
 SettingKind = Literal["string", "boolean", "integer", "number", "enum"]

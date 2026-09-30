@@ -6,12 +6,12 @@ import { closeProject, currentProject, type Project } from "./projects";
 
 import { DashboardTab } from "./tabs/DashboardTab";
 import { ProxyTab } from "./tabs/ProxyTab";
-import { RepeaterTabView } from "./tabs/RepeaterTab";
+import { ReplayTabView } from "./tabs/ReplayTab";
 import { TargetTab } from "./tabs/TargetTab";
 import { IssuesTab } from "./tabs/IssuesTab";
-import { IntruderTab } from "./tabs/IntruderTab";
+import { FuzzerTab } from "./tabs/FuzzerTab";
 import { DecoderTab } from "./tabs/DecoderTab";
-import { ComparerTab } from "./tabs/ComparerTab";
+import { DiffTab } from "./tabs/DiffTab";
 import { PluginsTab } from "./tabs/PluginsTab";
 import { LoggerTab } from "./tabs/LoggerTab";
 import { SettingsTab } from "./tabs/SettingsTab";
@@ -22,8 +22,8 @@ import {
   getTabs,
   resetTabs,
   setTabs,
-  subscribe as subscribeRepeater,
-} from "./tabs/repeaterStore";
+  subscribe as subscribeReplay,
+} from "./tabs/replayStore";
 import {
   getDecoderTabs,
   resetDecoderTabs,
@@ -43,10 +43,10 @@ const TABS = [
   "Proxy",
   "Target",
   "Issues",
-  "Repeater",
-  "Intruder",
+  "Replay",
+  "Fuzzer",
   "Decoder",
-  "Comparer",
+  "Diff",
   "Logger",
   "Plugins",
   "Settings",
@@ -104,7 +104,7 @@ export default function App() {
     // autosave is debounced and may still have a pending write.
     await flushAutosaves();
     await Promise.all([
-      putWorkspace('repeater', getTabs()),
+      putWorkspace('replay', getTabs()),
       putWorkspace('decoder', getDecoderTabs()),
     ]);
     await closeProject();
@@ -192,14 +192,16 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   useEffect(() => {
     const stop = [
       autosave(
-        "repeater",
-        (listener) => subscribeRepeater(() => listener(getTabs())),
+        "replay",
+        (listener) => subscribeReplay(() => listener(getTabs())),
         setTabs,
+        "repeater",
       ),
       autosave(
         "decoder",
         (listener) => subscribeDecoder(() => listener(getDecoderTabs())),
         setDecoderTabs,
+        "transform",
       ),
     ];
     return () => stop.forEach((fn) => fn());
@@ -262,14 +264,14 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
             <TargetTab />
           ) : tab === "Issues" ? (
             <IssuesTab />
-          ) : tab === "Repeater" ? (
-            <RepeaterTabView />
-          ) : tab === "Intruder" ? (
-            <IntruderTab />
+          ) : tab === "Replay" ? (
+            <ReplayTabView />
+          ) : tab === "Fuzzer" ? (
+            <FuzzerTab />
           ) : tab === "Decoder" ? (
             <DecoderTab />
-          ) : tab === "Comparer" ? (
-            <ComparerTab />
+          ) : tab === "Diff" ? (
+            <DiffTab />
           ) : tab === "Plugins" ? (
             <PluginsTab />
           ) : tab === "Logger" ? (

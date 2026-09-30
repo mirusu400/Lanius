@@ -9,7 +9,7 @@ import { renderWithI18n as render } from '../test-utils';
 afterEach(cleanup);
 
 const items = [
-  { label: 'Send to Repeater', onSelect: vi.fn() },
+  { label: 'Send to Replay', onSelect: vi.fn() },
   { label: 'Copy URL', onSelect: vi.fn() },
 ];
 

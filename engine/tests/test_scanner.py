@@ -49,7 +49,7 @@ def captured_record(flow_id: str = "flow-1") -> FlowRecord:
     )
 
 
-class FakeRepeater:
+class FakeReplay:
     auto_decompress = True
 
     def __init__(self) -> None:
@@ -78,7 +78,7 @@ async def test_passive_checks_deduplicate_issues(tmp_path) -> None:
             evidence={"status": snapshot["status_code"]},
         ),
     )
-    scanner = ScannerAddon(registry, store, broker, FakeRepeater())
+    scanner = ScannerAddon(registry, store, broker, FakeReplay())
     snapshot = {
         "flow_id": "flow-1",
         "url": "https://example.test/",
@@ -112,7 +112,7 @@ async def test_repeated_scanner_errors_suspend_the_check(tmp_path) -> None:
     registry.context("checks").scanner.register_passive(
         "broken", "Broken check", broken
     )
-    scanner = ScannerAddon(registry, store, EventBroker(), FakeRepeater())
+    scanner = ScannerAddon(registry, store, EventBroker(), FakeReplay())
     for _ in range(7):
         await scanner.scan_passive({"flow_id": "flow-1"})
 
@@ -216,8 +216,8 @@ async def test_active_scan_sends_bounded_mutations_and_reports_issues(tmp_path) 
     registry.context("checks").scanner.register_active(
         "probe", "Probe", active
     )
-    repeater = FakeRepeater()
-    scanner = ScannerAddon(registry, store, EventBroker(), repeater)
+    replay = FakeReplay()
+    scanner = ScannerAddon(registry, store, EventBroker(), replay)
 
     job = await scanner.start_active(
         "flow-1", concurrency=2, requests_per_second=50
@@ -228,7 +228,7 @@ async def test_active_scan_sends_bounded_mutations_and_reports_issues(tmp_path) 
     assert job.requests == job.total == 5
     assert job.completed == 5
     assert job.issues == 5
-    assert len(repeater.sent) == 5
+    assert len(replay.sent) == 5
     assert len(store.list_issues()) == 5
     store.close()
 

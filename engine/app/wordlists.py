@@ -1,7 +1,7 @@
 """Fetching wordlists from SecLists.
 
 Hunting down a wordlist, downloading it and pasting it in is most of the
-work of setting up an attack, so Lanius can fetch the common ones.
+work of setting up a fuzz run, so Lanius can fetch the common ones.
 
 Three deliberate constraints. The catalogue is a fixed list in this file
 rather than a directory listing, so enabling this feature cannot be

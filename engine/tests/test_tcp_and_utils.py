@@ -1,4 +1,4 @@
-"""Raw TCP capture and Decoder/Comparer API tests (M6)."""
+"""Raw TCP capture and Decoder/Diff API tests (M6)."""
 
 from __future__ import annotations
 
@@ -117,7 +117,7 @@ def test_tcp_respects_scope_capture_restriction(client) -> None:
     assert client.get("/api/flows").json()["count"] == 0
 
 
-# --- decoder API ----------------------------------------------------------
+# --- decoder API ------------------------------------------------------------
 
 
 def test_codecs_endpoint(client) -> None:
@@ -162,7 +162,7 @@ def test_decode_rejects_unknown_codec(client) -> None:
     assert res.status_code == 400
 
 
-# --- comparer API ---------------------------------------------------------
+# --- diff API ---------------------------------------------------------
 
 
 def test_compare_endpoint_word_mode(client) -> None:

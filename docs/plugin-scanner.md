@@ -42,7 +42,7 @@ def activate(context):
 ```
 
 `scan.send()` replaces only the current insertion point and sends the request
-through the existing Repeater/mitmproxy path. TLS, upstream routing, traffic
+through the existing Replay/mitmproxy path. TLS, upstream routing, traffic
 plugins, capture, and passive checks therefore behave the same as other Lanius
 requests.
 

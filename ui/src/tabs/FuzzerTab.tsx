@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
-  getAttack,
-  startAttack,
-  stopAttack,
-  type AttackConfig,
+  getRun,
+  startRun,
+  stopRun,
+  type RunConfig,
 } from '../api/client';
 import { connectStream } from '../api/stream';
-import type { Attack, AttackResult, AttackType } from '../api/types';
+import type { FuzzRun, RunResult, RunMode } from '../api/types';
 import {
-  ATTACK_TYPES,
+  RUN_MODES,
   addMarker,
   clearMarkers,
   countPositions,
@@ -17,11 +17,11 @@ import {
   markOutliers,
   parsePayloads,
   requiredSets,
-} from './intruderModel';
-import { subscribeTarget } from './intruderStore';
+} from './fuzzerModel';
+import { subscribeTarget } from './fuzzerStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
-import { toSendPayload } from './repeaterModel';
+import { toSendPayload } from './replayModel';
 import { PayloadPicker } from '../components/PayloadPicker';
 import { RequestEditor } from '../components/RequestEditor';
 import { Split } from '../components/Split';
@@ -29,29 +29,29 @@ import { ResponseInspector } from '../components/ResponseInspector';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { usePluginActions } from '../components/usePluginActions';
-import { sendToRepeater } from './repeaterStore';
+import { sendToReplay } from './replayStore';
 import { getFlow } from '../api/client';
 import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 
-const DEFAULT_TEMPLATE = 'GET /?q=\u00a7test\u00a7 HTTP/1.1\nHost: example.com\n\n';
+const DEFAULT_TEMPLATE = 'GET /?q={{test}} HTTP/1.1\nHost: example.com\n\n';
 
-export function IntruderTab() {
+export function FuzzerTab() {
   const t = useT();
-  const resultColumns = useResizableColumns('lanius.columns.intruder', [70, 340, 85, 90, 110]);
+  const resultColumns = useResizableColumns('lanius.columns.fuzzer', [70, 340, 85, 90, 110]);
   const [url, setUrl] = useState('http://example.com');
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
-  const [attackType, setAttackType] = useState<AttackType>('sniper');
+  const [mode, setRunMode] = useState<RunMode>('single_position');
   const [payloadText, setPayloadText] = useState(['a\nb\nc']);
-  const [attack, setAttack] = useState<Attack | null>(null);
+  const [run, setRun] = useState<FuzzRun | null>(null);
   const [selectedResultIndex, setSelectedResultIndex] = useState<number | null>(null);
-  // How hard to push. Gentle by default: an attack that knocks a service
+  // How hard to push. Gentle by default: a run that knocks a service
   // over tells you nothing.
   const [concurrency, setConcurrency] = useState(5);
   const [delay, setDelay] = useState(0);
   const [error, setError] = useState<Message | null>(null);
 
-  const attackIdRef = useRef<string | null>(null);
+  const runIdRef = useRef<string | null>(null);
 
   useEffect(
     () =>
@@ -59,7 +59,7 @@ export function IntruderTab() {
         if (!target) return;
         setUrl(target.url);
         setTemplate(target.template);
-        setAttack(null);
+        setRun(null);
         setSelectedResultIndex(null);
       }),
     [],
@@ -70,11 +70,11 @@ export function IntruderTab() {
     () => payloadText.map((text) => parsePayloads(text)),
     [payloadText],
   );
-  const needed = requiredSets(attackType, Math.max(positions, 0));
+  const needed = requiredSets(mode, Math.max(positions, 0));
   const estimate =
-    positions > 0 ? estimateRequests(attackType, positions, sets) : 0;
+    positions > 0 ? estimateRequests(mode, positions, sets) : 0;
 
-  // Keep the payload set count in step with the attack type / positions.
+  // Keep the payload set count in step with the run type / positions.
   useEffect(() => {
     setPayloadText((prev) => {
       if (prev.length === needed) return prev;
@@ -87,9 +87,9 @@ export function IntruderTab() {
 
   const refresh = useCallback(async (id: string) => {
     try {
-      setAttack(await getAttack(id));
+      setRun(await getRun(id));
     } catch {
-      /* attack may not exist yet */
+      /* run may not exist yet */
     }
   }, []);
 
@@ -98,12 +98,12 @@ export function IntruderTab() {
       connectStream({
         onEvent: (event) => {
           if (
-            event.type !== 'intruder.result' &&
-            event.type !== 'intruder.finished'
+            event.type !== 'fuzzer.result' &&
+            event.type !== 'fuzzer.finished'
           ) {
             return;
           }
-          const id = attackIdRef.current;
+          const id = runIdRef.current;
           if (!id) return;
           void refresh(id);
         },
@@ -117,7 +117,7 @@ export function IntruderTab() {
   // The template carries payload markers, which are not part of the
   // request. They are stripped first, so the generated code is the
   // request as it would be sent with an empty payload rather than one
-  // with stray section signs in it.
+  // with stray marker braces in it.
   const codegenTarget = () => {
     try {
       const payload = toSendPayload(url, clearMarkers(template));
@@ -133,12 +133,12 @@ export function IntruderTab() {
   };
   const pluginActions = usePluginActions((message) => setError(rawMsg(message)));
   const pluginMenu = pluginActions.buildMenu(
-    ['intruder', 'request'],
+    ['fuzzer', 'request'],
     {
       url,
       raw_request: template,
       request: codegenTarget(),
-      attack_type: attackType,
+      run_mode: mode,
       payload_sets: sets,
     },
   );
@@ -146,7 +146,7 @@ export function IntruderTab() {
   const editorMenu = useEditorMenu(
     [
       {
-        label: t('intruder.addMarker'),
+        label: t('fuzzer.addMarker'),
         needsSelection: true,
         onSelect: (_selection, editor) =>
           setTemplate(
@@ -154,7 +154,7 @@ export function IntruderTab() {
           ),
       },
       {
-        label: t('intruder.clearMarkers'),
+        label: t('fuzzer.clearMarkers'),
         onSelect: () => setTemplate(clearMarkers(template)),
       },
       // Rewrites the template rather than changing how it is shown, so
@@ -223,18 +223,18 @@ export function IntruderTab() {
 
   const launch = async () => {
     setError(null);
-    const config: AttackConfig = {
+    const config: RunConfig = {
       url,
       template,
-      attack_type: attackType,
+      mode: mode,
       payload_sets: sets,
       concurrency,
       delay,
     };
     try {
-      const started = await startAttack(config);
-      attackIdRef.current = started.id;
-      setAttack({ ...started, results: [] });
+      const started = await startRun(config);
+      runIdRef.current = started.id;
+      setRun({ ...started, results: [] });
       setSelectedResultIndex(null);
       void refresh(started.id);
     } catch (err) {
@@ -243,49 +243,49 @@ export function IntruderTab() {
   };
 
   const halt = async () => {
-    if (!attack) return;
-    await stopAttack(attack.id);
-    void refresh(attack.id);
+    if (!run) return;
+    await stopRun(run.id);
+    void refresh(run.id);
   };
 
-  const menu = useContextMenu<AttackResult>();
+  const menu = useContextMenu<RunResult>();
 
   const outliers = useMemo(
-    () => markOutliers(attack?.results ?? []),
-    [attack],
+    () => markOutliers(run?.results ?? []),
+    [run],
   );
-  const running = attack?.status === 'running' || attack?.status === 'pending';
-  const selectedResult = attack?.results.find((result) => result.index === selectedResultIndex) ?? null;
+  const running = run?.status === 'running' || run?.status === 'pending';
+  const selectedResult = run?.results.find((result) => result.index === selectedResultIndex) ?? null;
 
   return (
-    <div className="intruder-tab">
-      <div className="intruder-controls">
+    <div className="fuzzer-tab">
+      <div className="fuzzer-controls">
         <input
           className="target"
-          aria-label={t('intruder.targetUrl')}
+          aria-label={t('fuzzer.targetUrl')}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
         />
         <select
-          aria-label={t('intruder.attackType')}
-          value={attackType}
-          onChange={(e) => setAttackType(e.target.value as AttackType)}
+          aria-label={t('fuzzer.mode')}
+          value={mode}
+          onChange={(e) => setRunMode(e.target.value as RunMode)}
         >
-          {ATTACK_TYPES.map((t) => (
+          {RUN_MODES.map((t) => (
             <option key={t.value} value={t.value}>
               {t.label}
             </option>
           ))}
         </select>
-        <button onClick={mark}>{t('intruder.addMarker')}</button>
+        <button onClick={mark}>{t('fuzzer.addMarker')}</button>
         <button onClick={() => setTemplate(clearMarkers(template))}>
-          {t('intruder.clearMarkers')}
+          {t('fuzzer.clearMarkers')}
         </button>
 
         {/* How hard to push. A fixed rate suits neither a load test nor
             a target that falls over at three requests a second. */}
         <label className="speed-field">
-          {t('intruder.concurrency')}
+          {t('fuzzer.concurrency')}
           <input
             type="number"
             min={1}
@@ -300,7 +300,7 @@ export function IntruderTab() {
           />
         </label>
         <label className="speed-field">
-          {t('intruder.delay')}
+          {t('fuzzer.delay')}
           <input
             type="number"
             min={0}
@@ -317,16 +317,16 @@ export function IntruderTab() {
         <span className="spacer" />
         <span className="muted">
           {positions < 0
-            ? t('intruder.positionsError')
-            : t('intruder.positions', {
+            ? t('fuzzer.positionsError')
+            : t('fuzzer.positions', {
                 count: positions,
                 requests: estimate,
               })}
         </span>
         <button className="send" onClick={launch} disabled={running}>
-          {running ? t('intruder.attacking') : t('intruder.start')}
+          {running ? t('fuzzer.running') : t('fuzzer.start')}
         </button>
-        {running && <button onClick={halt}>{t('intruder.stop')}</button>}
+        {running && <button onClick={halt}>{t('fuzzer.stop')}</button>}
       </div>
       {positions < 0 && (
         <div className="banner error">{t('intercept.unbalancedMarker')}</div>
@@ -335,15 +335,15 @@ export function IntruderTab() {
 
       <Split
         direction="horizontal"
-        storageKey="lanius.split.intruder"
+        storageKey="lanius.split.fuzzer"
         initial={0.46}
-        className="intruder-split"
-        first={<div className="intruder-left">
-          <h4>{t('intruder.template')}</h4>
+        className="fuzzer-split"
+        first={<div className="fuzzer-left">
+          <h4>{t('fuzzer.template')}</h4>
           <RequestEditor
             editorRef={editorRef}
-            label={t('intruder.templateLabel')}
-            className="intruder-editor mono"
+            label={t('fuzzer.templateLabel')}
+            className="fuzzer-editor mono"
             value={template}
             onChange={setTemplate}
             onContextMenu={editorMenu.open}
@@ -351,11 +351,11 @@ export function IntruderTab() {
           />
           {editorMenu.element}
           <h4>
-            {t('intruder.payloadSets')}{' '}
+            {t('fuzzer.payloadSets')}{' '}
             <span className="muted">
               {(() => {
-                const hint = ATTACK_TYPES.find(
-                  (type) => type.value === attackType,
+                const hint = RUN_MODES.find(
+                  (type) => type.value === mode,
                 )?.hint;
                 return hint ? t(hint) : '';
               })()}
@@ -376,33 +376,33 @@ export function IntruderTab() {
             ))}
           </div>
         </div>}
-        second={<div className="intruder-results">
+        second={<div className="fuzzer-results">
           <div className="results-header">
-            {attack ? (
+            {run ? (
               <span className="mono">
-                {attack.status} · {attack.completed}/{attack.total}
+                {run.status} · {run.completed}/{run.total}
               </span>
             ) : (
-              <span className="muted">{t('intruder.noResults')}</span>
+              <span className="muted">{t('fuzzer.noResults')}</span>
             )}
           </div>
           <Split
             direction="vertical"
-            storageKey="lanius.split.intruder.response"
+            storageKey="lanius.split.fuzzer.response"
             initial={0.55}
-            className="intruder-response-split"
-            first={<div className="intruder-results-list">
+            className="fuzzer-response-split"
+            first={<div className="fuzzer-results-list">
               <ResizableTable columns={resultColumns} className="flow-table">
                 <thead>
                   <tr>
-                    {['#', t('intruder.payload'), t('flow.status'), t('intruder.length'), t('flow.time')].map((label, index) => (
+                    {['#', t('fuzzer.payload'), t('flow.status'), t('fuzzer.length'), t('flow.time')].map((label, index) => (
                       <ResizableHeader key={index} label={label} index={index} columns={resultColumns} resizeLabel={t('table.resizeColumn', { column: label })} />
                     ))}
                     <ResizableFillHeader />
                   </tr>
                 </thead>
                 <tbody>
-                  {(attack?.results ?? []).map((result) => (
+                  {(run?.results ?? []).map((result) => (
                     <tr
                       key={result.index}
                       className={[outliers.has(result.index) ? 'outlier' : '', selectedResultIndex === result.index ? 'selected' : ''].filter(Boolean).join(' ') || undefined}
@@ -437,7 +437,7 @@ export function IntruderTab() {
             second={<ResponseInspector
               flowId={selectedResult?.flow_id ?? null}
               title={selectedResult ? `${t('detail.response')} #${selectedResult.index}` : undefined}
-              empty={selectedResult?.error ?? t('intruder.selectResult')}
+              empty={selectedResult?.error ?? t('fuzzer.selectResult')}
             />}
           />
           <ContextMenu
@@ -446,7 +446,7 @@ export function IntruderTab() {
               menu.target
                 ? [
                     {
-                      label: t('menu.sendToRepeater'),
+                      label: t('menu.sendToReplay'),
                       // A result only carries a flow id, so the request
                       // has to be fetched before it can be resent.
                       disabled: !menu.target.flow_id,
@@ -454,7 +454,7 @@ export function IntruderTab() {
                         const id = menu.target?.flow_id;
                         if (!id) return;
                         void getFlow(id)
-                          .then((detail) => sendToRepeater(detail, detail))
+                          .then((detail) => sendToReplay(detail, detail))
                           .catch(() => undefined);
                       },
                     },

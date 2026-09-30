@@ -1,4 +1,4 @@
-/** The payload list for one attack position.
+/** The payload list for one fuzz position.
  *
  * A place to type a list, with the library a click away when the list is
  * longer than something worth typing.
@@ -55,7 +55,7 @@ export function PayloadPicker({
     <div className="payload-picker">
       <div className="payload-picker-head">
         <label htmlFor={`payloads-${index}`}>
-          {t('intruder.payloadSet', { index: String(index + 1) })}
+          {t('fuzzer.payloadSet', { index: String(index + 1) })}
         </label>
         <span className="muted">
           {t('payloads.count', { count: String(count) })}
@@ -73,7 +73,7 @@ export function PayloadPicker({
 
       <textarea
         id={`payloads-${index}`}
-        className="intruder-payloads mono"
+        className="fuzzer-payloads mono"
         spellCheck={false}
         value={value}
         onChange={(event) => onChange(event.target.value)}

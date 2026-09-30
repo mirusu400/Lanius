@@ -1,11 +1,11 @@
-/** Repeater state: raw HTTP request text <-> engine send payload. */
+/** Replay state: raw HTTP request text <-> engine send payload. */
 
 import { rawRequest } from '../components/rawHttp';
 import type { FlowDetail, FlowSummary } from '../api/types';
 import { ParseError } from '../i18n/ParseError';
 import type { Message } from '../i18n/message';
 
-export interface RepeaterResponse {
+export interface ReplayResponse {
   id: string;
   status_code: number | null;
   reason: string | null;
@@ -21,12 +21,12 @@ export interface RepeaterResponse {
   truncated?: number;
 }
 
-export interface RepeaterTab {
+export interface ReplayTab {
   id: string;
   title: string;
   url: string;
   text: string;
-  response: RepeaterResponse | null;
+  response: ReplayResponse | null;
   sending: boolean;
   // A message rather than a sentence: these tabs are saved to the project
   // and restored later, possibly in another language.
@@ -65,7 +65,7 @@ export function nextTabId(): string {
  * Existing projects were saved with colliding ids, so they have to be
  * repaired on load rather than only prevented from here on.
  */
-export function withUniqueIds(tabs: RepeaterTab[]): RepeaterTab[] {
+export function withUniqueIds(tabs: ReplayTab[]): ReplayTab[] {
   const seen = new Set<string>();
   return tabs.map((tab) => {
     if (tab.id && !seen.has(tab.id)) {
@@ -86,11 +86,11 @@ export function originOf(flow: FlowSummary): string {
   return `${flow.scheme}://${flow.host}${isDefaultPort ? '' : `:${flow.port}`}`;
 }
 
-/** Build a Repeater tab from a history flow (Send to Repeater). */
+/** Build a Replay tab from a history flow (Send to Replay). */
 export function tabFromFlow(
   flow: FlowSummary,
   detail?: FlowDetail | null,
-): RepeaterTab {
+): ReplayTab {
   return {
     id: nextTabId(),
     title: `${flow.method} ${flow.path ?? '/'}`,
@@ -107,7 +107,7 @@ export function tabFromFlow(
   };
 }
 
-export function emptyTab(): RepeaterTab {
+export function emptyTab(): ReplayTab {
   return {
     id: nextTabId(),
     title: 'New request',
@@ -165,7 +165,7 @@ export const BODY_DISPLAY_LIMIT = 64 * 1024;
 export const BODY_KEEP_LIMIT = 256 * 1024;
 
 /** Trim a response before it is stored, noting what was dropped. */
-export function trimResponse(response: RepeaterResponse): RepeaterResponse {
+export function trimResponse(response: ReplayResponse): ReplayResponse {
   const body = response.body ?? '';
   if (body.length <= BODY_KEEP_LIMIT) return response;
   return {
@@ -176,7 +176,7 @@ export function trimResponse(response: RepeaterResponse): RepeaterResponse {
 }
 
 export function renderResponseText(
-  response: RepeaterResponse,
+  response: ReplayResponse,
   note: (hidden: number) => string = (n) => `[${n} more characters not shown]`,
 ): string {
   if (response.error && response.status_code === null) {

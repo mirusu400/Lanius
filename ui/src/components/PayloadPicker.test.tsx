@@ -1,4 +1,4 @@
-/** The payload box for one attack position. */
+/** The payload box for one fuzz position. */
 import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

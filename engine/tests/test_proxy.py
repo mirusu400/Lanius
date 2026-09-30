@@ -905,25 +905,25 @@ async def test_stop_releases_the_listening_port(tmp_path) -> None:
         rebind.bind(("127.0.0.1", port))
 
 
-async def test_repeater_works_with_local_capture_configured(tmp_path) -> None:
-    """Repeater reported 'proxy engine is not running' forever whenever a
+async def test_replay_works_with_local_capture_configured(tmp_path) -> None:
+    """Replay reported 'proxy engine is not running' forever whenever a
     local-capture mode was set.
 
     mitmproxy only runs the `running` hook once the whole addon chain has
     started, and with that mode present it never fired. The port was open
-    and traffic flowed, so nothing looked wrong until Repeater or Intruder
+    and traffic flowed, so nothing looked wrong until Replay or Fuzzer
     was used.
     """
     proxy = engine(tmp_path, free_port())
     proxy.store.set_setting(ProxyEngine.CAPTURE_SETTING, "")
     await proxy.start()
     try:
-        assert proxy.repeater.options is not None, (
-            "Repeater never received its options, so it refuses to send"
+        assert proxy.replay.options is not None, (
+            "Replay never received its options, so it refuses to send"
         )
         # And it survives the listener moving.
         await proxy.set_listener("127.0.0.1", free_port())
-        assert proxy.repeater.options is not None
+        assert proxy.replay.options is not None
     finally:
         await proxy.stop()
 

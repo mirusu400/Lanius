@@ -230,10 +230,10 @@ export type EngineEvent =
       };
     }
   | { type: 'scope.changed'; data: ScopeState }
-  | { type: 'intruder.started' | 'intruder.finished'; data: AttackSummary }
+  | { type: 'fuzzer.started' | 'fuzzer.finished'; data: RunSummary }
   | {
-      type: 'intruder.result';
-      data: { attack_id: string; result: AttackResult };
+      type: 'fuzzer.result';
+      data: { run_id: string; result: RunResult };
     };
 
 export interface FlowFilters {
@@ -305,15 +305,15 @@ export interface EndpointGroup {
   last_seen: number | null;
 }
 
-// --- intruder (M5) --------------------------------------------------------
+// --- fuzzer (M5) --------------------------------------------------------
 
-export type AttackType =
-  | 'sniper'
-  | 'battering_ram'
-  | 'pitchfork'
-  | 'cluster_bomb';
+export type RunMode =
+  | 'single_position'
+  | 'shared_payload'
+  | 'lockstep'
+  | 'cartesian';
 
-export interface AttackResult {
+export interface RunResult {
   index: number;
   payloads: string[];
   status_code: number | null;
@@ -323,9 +323,9 @@ export interface AttackResult {
   flow_id: string | null;
 }
 
-export interface AttackSummary {
+export interface RunSummary {
   id: string;
-  attack_type: AttackType;
+  mode: RunMode;
   url: string;
   status: 'pending' | 'running' | 'completed' | 'stopped' | 'failed';
   total: number;
@@ -335,8 +335,8 @@ export interface AttackSummary {
   error: string | null;
 }
 
-export interface Attack extends AttackSummary {
-  results: AttackResult[];
+export interface FuzzRun extends RunSummary {
+  results: RunResult[];
 }
 
 // --- plugins (M7) ---------------------------------------------------------
@@ -482,8 +482,8 @@ export type PluginActionLocation =
   | 'flow'
   | 'request'
   | 'response'
-  | 'repeater'
-  | 'intruder';
+  | 'replay'
+  | 'fuzzer';
 
 export interface PluginActionContribution {
   id: string;

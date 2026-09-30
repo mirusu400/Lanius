@@ -1,8 +1,8 @@
 """Scope: persisted include/exclude rules restricting capture and tools.
 
 A flow is in scope when it matches at least one enabled include rule and no
-enabled exclude rule (Burp semantics). With no include rules everything is in
-scope, so a fresh project still records traffic.
+enabled exclude rule. With no include rules everything is in scope, so a fresh
+project still records traffic.
 """
 
 from __future__ import annotations

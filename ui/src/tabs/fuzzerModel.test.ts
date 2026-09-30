@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AttackResult, FlowDetail, FlowSummary } from '../api/types';
+import type { RunResult, FlowDetail, FlowSummary } from '../api/types';
 import {
-  MARKER,
+  OPEN_MARKER,
+  CLOSE_MARKER,
   addMarker,
   clearMarkers,
   countPositions,
@@ -11,11 +12,12 @@ import {
   parsePayloads,
   requiredSets,
   templateFromFlow,
-} from './intruderModel';
+} from './fuzzerModel';
 
-const M = MARKER;
+const O = OPEN_MARKER;
+const C = CLOSE_MARKER;
 
-function result(index: number, length: number): AttackResult {
+function result(index: number, length: number): RunResult {
   return {
     index,
     payloads: [`p${index}`],
@@ -29,19 +31,21 @@ function result(index: number, length: number): AttackResult {
 
 describe('countPositions', () => {
   it('counts balanced marker pairs', () => {
-    expect(countPositions(`GET /?a=${M}1${M}&b=${M}2${M} HTTP/1.1`)).toBe(2);
+    expect(countPositions(`GET /?a=${O}1${C}&b=${O}2${C} HTTP/1.1`)).toBe(2);
     expect(countPositions('GET / HTTP/1.1')).toBe(0);
   });
 
   it('reports unbalanced markers as -1', () => {
-    expect(countPositions(`GET /?a=${M}1 HTTP/1.1`)).toBe(-1);
+    expect(countPositions(`GET /?a=${O}1 HTTP/1.1`)).toBe(-1);
+    expect(countPositions(`GET /?a=1${C} HTTP/1.1`)).toBe(-1);
+    expect(countPositions(`GET /?a=${O}1${O}2${C}${C} HTTP/1.1`)).toBe(-1);
   });
 });
 
 describe('addMarker', () => {
   it('wraps the selected range', () => {
     expect(addMarker('GET /a?q=word HTTP/1.1', 9, 13)).toBe(
-      `GET /a?q=${M}word${M} HTTP/1.1`,
+      `GET /a?q=${O}word${C} HTTP/1.1`,
     );
   });
 
@@ -52,7 +56,7 @@ describe('addMarker', () => {
 
 describe('clearMarkers', () => {
   it('removes every marker but keeps the values', () => {
-    expect(clearMarkers(`GET /?a=${M}1${M} HTTP/1.1`)).toBe(
+    expect(clearMarkers(`GET /?a=${O}1${C} HTTP/1.1`)).toBe(
       'GET /?a=1 HTTP/1.1',
     );
   });
@@ -74,34 +78,34 @@ describe('estimateRequests', () => {
     ['x', 'y', 'z'],
   ];
 
-  it('matches the engine for each attack type', () => {
-    expect(estimateRequests('sniper', 2, sets)).toBe(4);
-    expect(estimateRequests('battering_ram', 3, sets)).toBe(2);
-    expect(estimateRequests('pitchfork', 2, sets)).toBe(2);
-    expect(estimateRequests('cluster_bomb', 2, sets)).toBe(6);
+  it('matches the engine for each run type', () => {
+    expect(estimateRequests('single_position', 2, sets)).toBe(4);
+    expect(estimateRequests('shared_payload', 3, sets)).toBe(2);
+    expect(estimateRequests('lockstep', 2, sets)).toBe(2);
+    expect(estimateRequests('cartesian', 2, sets)).toBe(6);
   });
 
   it('returns 0 without positions or sets', () => {
-    expect(estimateRequests('sniper', 0, sets)).toBe(0);
-    expect(estimateRequests('sniper', 2, [])).toBe(0);
+    expect(estimateRequests('single_position', 0, sets)).toBe(0);
+    expect(estimateRequests('single_position', 2, [])).toBe(0);
   });
 
   it('returns 0 when multi-set modes lack sets', () => {
-    expect(estimateRequests('cluster_bomb', 2, [['a']])).toBe(0);
-    expect(estimateRequests('pitchfork', 3, sets)).toBe(0);
+    expect(estimateRequests('cartesian', 2, [['a']])).toBe(0);
+    expect(estimateRequests('lockstep', 3, sets)).toBe(0);
   });
 });
 
 describe('requiredSets', () => {
   it('single-set modes need one set', () => {
-    expect(requiredSets('sniper', 3)).toBe(1);
-    expect(requiredSets('battering_ram', 3)).toBe(1);
+    expect(requiredSets('single_position', 3)).toBe(1);
+    expect(requiredSets('shared_payload', 3)).toBe(1);
   });
 
   it('multi-set modes need one set per position', () => {
-    expect(requiredSets('pitchfork', 3)).toBe(3);
-    expect(requiredSets('cluster_bomb', 2)).toBe(2);
-    expect(requiredSets('cluster_bomb', 0)).toBe(1);
+    expect(requiredSets('lockstep', 3)).toBe(3);
+    expect(requiredSets('cartesian', 2)).toBe(2);
+    expect(requiredSets('cartesian', 0)).toBe(1);
   });
 });
 

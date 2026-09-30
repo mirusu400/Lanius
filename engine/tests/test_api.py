@@ -561,15 +561,15 @@ def test_the_full_process_list_is_larger_than_the_visible_one(client) -> None:
 
 
 def test_workspace_starts_empty(client) -> None:
-    assert client.get("/api/workspace/repeater").json()["value"] is None
+    assert client.get("/api/workspace/replay").json()["value"] is None
 
 
 def test_workspace_round_trips(client) -> None:
-    """Repeater and Decoder tabs lived only in the browser, so closing
+    """Replay and Decoder tabs lived only in the browser, so closing
     Lanius threw away whatever you had open."""
     tabs = [{"id": "r1", "title": "login"}]
-    client.put("/api/workspace/repeater", json={"value": tabs})
-    assert client.get("/api/workspace/repeater").json()["value"] == tabs
+    client.put("/api/workspace/replay", json={"value": tabs})
+    assert client.get("/api/workspace/replay").json()["value"] == tabs
 
 
 def test_workspace_rejects_a_payload_with_no_value(client) -> None:
@@ -605,7 +605,7 @@ def test_sqlite_backup_contains_raw_history_and_websockets(client, tmp_path) -> 
 
 def test_export_can_leave_out_the_capture(client) -> None:
     """A long capture dwarfs everything else, and sharing a scope plus a
-    set of Repeater requests is the common case."""
+    set of Replay requests is the common case."""
     assert "flows" not in client.get(
         "/api/project/export?include_flows=false"
     ).json()
@@ -613,16 +613,16 @@ def test_export_can_leave_out_the_capture(client) -> None:
 
 def test_import_restores_scope_workspace_and_flows(client) -> None:
     seed(client, "f1", host="imported.example")
-    client.put("/api/workspace/repeater", json={"value": [{"id": "r1"}]})
+    client.put("/api/workspace/replay", json={"value": [{"id": "r1"}]})
     client.post("/api/scope/rules", json={"kind": "include", "host": "a.example"})
     exported = client.get("/api/project/export").json()
 
     client.delete("/api/flows")
-    client.put("/api/workspace/repeater", json={"value": []})
+    client.put("/api/workspace/replay", json={"value": []})
 
     result = client.post("/api/project/import", json=exported).json()
     assert result["ok"] is True
-    assert client.get("/api/workspace/repeater").json()["value"] == [{"id": "r1"}]
+    assert client.get("/api/workspace/replay").json()["value"] == [{"id": "r1"}]
     assert client.get("/api/flows").json()["count"] == 1
 
 
@@ -959,7 +959,7 @@ def test_codegen_keeps_a_nonstandard_port(client) -> None:
 
 
 def test_codegen_from_an_unsaved_request(client) -> None:
-    """Repeater and Intruder send the request being edited, which has no id."""
+    """Replay and Fuzzer send the request being edited, which has no id."""
     response = client.post(
         "/api/codegen",
         json={

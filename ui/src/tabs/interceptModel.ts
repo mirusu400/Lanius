@@ -1,4 +1,4 @@
-/** Raw HTTP text <-> structured edits, so the editor feels like Burp. */
+/** Raw HTTP text <-> structured edits for precise request editing. */
 
 import type { FlowEdits, PausedFlow } from '../api/types';
 import { ParseError } from '../i18n/ParseError';

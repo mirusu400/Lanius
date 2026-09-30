@@ -7,7 +7,7 @@ those values replaced by ``[redacted]``.
 
 It is also the smallest example of a plugin that adds a menu entry rather
 than touching traffic: declare ``codegen_formats`` and the entry appears
-in the right-click menu of Repeater, Intruder and the history, with no UI
+in the right-click menu of Replay, Fuzzer and the history, with no UI
 code here.
 
 Copy this file into your plugins directory (default ``~/.lanius/plugins``)

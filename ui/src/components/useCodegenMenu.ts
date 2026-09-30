@@ -1,4 +1,4 @@
-/** The "copy as" menu, shared by Repeater, Intruder and the history.
+/** The "copy as" menu, shared by Replay, Fuzzer and the history.
  *
  * All three want the same thing: take the request I am looking at and
  * give me something I can run somewhere else. The formats come from the

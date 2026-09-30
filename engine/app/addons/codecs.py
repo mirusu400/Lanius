@@ -1,4 +1,4 @@
-"""Decoder / Comparer utilities (M6).
+"""Decoder / Diff utilities (M6).
 
 Pure, dependency-light transforms shared by the UI and (later) plugins.
 """
@@ -198,7 +198,7 @@ def available_codecs() -> dict[str, list[str]]:
     }
 
 
-# --- comparer -------------------------------------------------------------
+# --- diff -------------------------------------------------------------
 
 
 def compare(left: str, right: str, mode: Literal["word", "byte"] = "word") -> dict[str, Any]:

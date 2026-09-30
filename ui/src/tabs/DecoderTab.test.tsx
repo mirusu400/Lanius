@@ -60,7 +60,7 @@ describe('decoder tabs', () => {
   });
 
   it('keeps each tab’s input separate', async () => {
-    // Burp loses the first payload when you paste a second; this must not.
+    // A second payload must not discard the first tab's work.
     render(<DecoderTab />);
     await userEvent.type(input(), 'first');
 

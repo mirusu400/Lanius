@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProxyTab } from './ProxyTab';
 import { clearSelection } from './selectionStore';
-import { getTabs, resetTabs } from './repeaterStore';
+import { getTabs, resetTabs } from './replayStore';
 import type { FlowSummary } from '../api/types';
 
 const seeded: FlowSummary = {
@@ -346,7 +346,7 @@ describe('selection across tabs', () => {
 describe('sending a flow onward', () => {
   it('carries the headers and body, not just the request line', async () => {
     // The table row is a summary with neither, so without fetching the
-    // full flow first the request arrived in Repeater as one bare line,
+    // full flow first the request arrived in Replay as one bare line,
     // missing everything that was being tested.
     const user = userEvent.setup();
     resetTabs();
@@ -354,7 +354,7 @@ describe('sending a flow onward', () => {
     const row = (await screen.findByText('/seeded')).closest('tr')!;
     fireEvent.contextMenu(row);
     await user.click(
-      screen.getByRole('menuitem', { name: t('menu.sendToRepeater') }),
+      screen.getByRole('menuitem', { name: t('menu.sendToReplay') }),
     );
 
     await waitFor(() => expect(getTabs()).toHaveLength(1));

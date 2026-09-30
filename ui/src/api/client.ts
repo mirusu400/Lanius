@@ -323,15 +323,15 @@ export function clearWebSocketMessages(): Promise<{ ok: boolean }> {
   return request('/api/websockets', { method: 'DELETE' });
 }
 
-// --- repeater (M3) --------------------------------------------------------
+// --- replay (M3) --------------------------------------------------------
 
-export function sendRepeaterRequest(payload: {
+export function sendReplayRequest(payload: {
   url: string;
   method: string;
   headers: [string, string][];
   body: string;
-}): Promise<import('../tabs/repeaterModel').RepeaterResponse> {
-  return request('/api/repeater/send', {
+}): Promise<import('../tabs/replayModel').ReplayResponse> {
+  return request('/api/replay/send', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify(payload),
@@ -464,24 +464,24 @@ export function getEndpointFlows(
   return request(`/api/endpoints/flows?${params}`);
 }
 
-// --- intruder (M5) --------------------------------------------------------
+// --- fuzzer (M5) --------------------------------------------------------
 
 export function getPositions(
   template: string,
 ): Promise<{ count: number; preview: string }> {
-  return request('/api/intruder/positions', {
+  return request('/api/fuzzer/positions', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify({ template }),
   });
 }
 
-export interface AttackConfig {
+export interface RunConfig {
   url: string;
   template: string;
-  attack_type: import('./types').AttackType;
+  mode: import('./types').RunMode;
   payload_sets: string[][];
-  /** Saved sets to use, so a wordlist is not posted with every attack. */
+  /** Saved sets to use, so a wordlist is not posted with every run. */
   payload_set_ids?: string[];
   concurrency?: number;
   delay?: number;
@@ -504,35 +504,35 @@ export interface WordlistEntry {
   url: string;
 }
 
-export function planAttack(config: AttackConfig): Promise<{ total: number }> {
-  return request('/api/intruder/plan', {
+export function planRun(config: RunConfig): Promise<{ total: number }> {
+  return request('/api/fuzzer/plan', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify(config),
   });
 }
 
-export function startAttack(
-  config: AttackConfig,
-): Promise<import('./types').AttackSummary> {
-  return request('/api/intruder/attacks', {
+export function startRun(
+  config: RunConfig,
+): Promise<import('./types').RunSummary> {
+  return request('/api/fuzzer/runs', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify(config),
   });
 }
 
-export function getAttack(id: string): Promise<import('./types').Attack> {
-  return request(`/api/intruder/attacks/${id}`);
+export function getRun(id: string): Promise<import('./types').FuzzRun> {
+  return request(`/api/fuzzer/runs/${id}`);
 }
 
-export function stopAttack(
+export function stopRun(
   id: string,
-): Promise<import('./types').AttackSummary> {
-  return request(`/api/intruder/attacks/${id}/stop`, { method: 'POST' });
+): Promise<import('./types').RunSummary> {
+  return request(`/api/fuzzer/runs/${id}/stop`, { method: 'POST' });
 }
 
-// --- decoder / comparer (M6) ----------------------------------------------
+// --- decoder / diff (M6) ----------------------------------------------
 
 export interface ChainStep {
   codec: string;

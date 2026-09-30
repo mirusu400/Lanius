@@ -47,12 +47,12 @@ def flow_to_record(flow: http.HTTPFlow) -> FlowRecord:
         request_body=req.raw_content or b"",
         request_size=len(req.raw_content or b""),
         started_at=req.timestamp_start,
-        # A replayed request is Repeater's or Intruder's, not traffic that
+        # A replayed request is Replay's or Fuzzer's, not traffic that
         # arrived through the proxy. mitmproxy runs a replay through the
         # addons as well, so both halves write the same row: whichever
         # landed last decided what the row said it was, and on a loaded
         # machine that was the wrong one. Both now say the same thing.
-        source="repeater" if flow.is_replay == "request" else "proxy",
+        source="replay" if flow.is_replay == "request" else "proxy",
         comment=flow.comment or None,
     )
     original_data = flow.metadata.get(ORIGINAL)

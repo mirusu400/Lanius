@@ -360,9 +360,9 @@ select {
 /* The editors and the bodies they show: the text a user actually reads
    for long stretches, so they follow the monospace setting too. */
 .intercept-editor,
-.repeater-editor,
-.repeater-response,
-.intruder-editor,
+.replay-editor,
+.replay-response,
+.fuzzer-editor,
 .scope-editor,
 .decoder-input,
 .decoder-output,
@@ -1092,7 +1092,7 @@ pre.body,
   min-height: 0;
 }
 
-/* --- intruder payloads --- */
+/* --- fuzzer payloads --- */
 .speed-field {
   display: inline-flex;
   align-items: center;
@@ -1152,7 +1152,7 @@ pre.body,
 /* A payload is one line. Wrapping hides where a line ends, which is the
    one thing that has to be visible when a payload is long: a wrapped
    line and two short ones look the same. */
-.intruder-payloads {
+.fuzzer-payloads {
   flex: 1;
   min-height: 120px;
   resize: vertical;
@@ -2078,29 +2078,29 @@ pre.body {
   text-align: center;
 }
 
-/* --- repeater --- */
-.repeater-tab {
+/* --- replay --- */
+.replay-tab {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
-.repeater-tabs {
+.replay-tabs {
   flex-wrap: wrap;
 }
 
 /* A long path made a single tab wider than the window, pushing the others
    off and making them look unclickable. Cap the width and let the middle
    of the title go, keeping the method and the end of the path visible. */
-.repeater-tabs button:not(.new-tab),
-.intruder-tabs button:not(.new-tab) {
+.replay-tabs button:not(.new-tab),
+.fuzzer-tabs button:not(.new-tab) {
   max-width: 240px;
   white-space: nowrap;
 }
 
 /* The title shrinks, not the close button: losing the × would leave a tab
    that cannot be closed. */
-.repeater-tabs button .tab-title {
+.replay-tabs button .tab-title {
   display: inline-block;
   max-width: 190px;
   overflow: hidden;
@@ -2109,21 +2109,21 @@ pre.body {
   white-space: nowrap;
 }
 
-.repeater-tabs .close {
+.replay-tabs .close {
   color: var(--muted);
   margin-left: 8px;
 }
 
-.repeater-tabs .close:hover {
+.replay-tabs .close:hover {
   color: var(--danger);
 }
 
-.repeater-tabs .new-tab {
+.replay-tabs .new-tab {
   color: var(--accent);
   font-weight: 700;
 }
 
-.repeater-controls {
+.replay-controls {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2132,7 +2132,7 @@ pre.body {
   border-bottom: 1px solid var(--border);
 }
 
-.repeater-controls .target {
+.replay-controls .target {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 3px;
@@ -2141,7 +2141,7 @@ pre.body {
   padding: 5px 8px;
 }
 
-.repeater-controls .send {
+.replay-controls .send {
   background: var(--accent);
   border: none;
   border-radius: 3px;
@@ -2151,7 +2151,7 @@ pre.body {
   padding: 5px 18px;
 }
 
-.repeater-controls .send:disabled {
+.replay-controls .send:disabled {
   background: var(--accent-dim);
   cursor: default;
 }
@@ -2160,14 +2160,14 @@ pre.body {
   color: var(--muted);
 }
 
-.repeater-split {
+.replay-split {
   display: flex;
   flex: 1;
   min-height: 0;
 }
 
-.repeater-editor,
-.repeater-response {
+.replay-editor,
+.replay-response {
   flex: 1;
   background: var(--bg-sunken);
   color: var(--fg);
@@ -2178,7 +2178,7 @@ pre.body {
   word-break: break-all;
 }
 
-.repeater-editor {
+.replay-editor {
   border: none;
   outline: none;
   resize: none;
@@ -2213,16 +2213,16 @@ pre.body {
   padding: 8px;
 }
 
-.response-inspector-body .repeater-response {
+.response-inspector-body .replay-response {
   min-height: 0;
   padding: 0;
 }
 
-.to-repeater {
+.to-replay {
   margin-left: 12px;
 }
 
-.detail-tabs .to-repeater:hover {
+.detail-tabs .to-replay:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -2457,14 +2457,14 @@ pre.body {
   color: var(--danger);
 }
 
-/* --- intruder --- */
-.intruder-tab {
+/* --- fuzzer --- */
+.fuzzer-tab {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
-.intruder-controls {
+.fuzzer-controls {
   align-items: center;
   background: var(--bg-alt);
   border-bottom: 1px solid var(--border);
@@ -2473,24 +2473,24 @@ pre.body {
   padding: 8px;
 }
 
-.intruder-controls input.target {
+.fuzzer-controls input.target {
   flex: 1;
 }
 
-.intruder-controls input,
-.intruder-controls select,
-.intruder-controls button {
+.fuzzer-controls input,
+.fuzzer-controls select,
+.fuzzer-controls button {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
 }
 
-.intruder-controls button {
+.fuzzer-controls button {
   cursor: pointer;
 }
 
-.intruder-controls button.send {
+.fuzzer-controls button.send {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--on-accent);
@@ -2498,19 +2498,19 @@ pre.body {
   padding: 5px 16px;
 }
 
-.intruder-controls button.send:disabled {
+.fuzzer-controls button.send:disabled {
   background: var(--accent-dim);
   border-color: var(--accent-dim);
   cursor: default;
 }
 
-.intruder-split {
+.fuzzer-split {
   display: flex;
   flex: 1;
   min-height: 0;
 }
 
-.intruder-left {
+.fuzzer-left {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -2519,7 +2519,7 @@ pre.body {
   padding: 8px;
 }
 
-.intruder-left h4 {
+.fuzzer-left h4 {
   color: var(--muted);
   font-size: 0.85em;
   letter-spacing: 0.08em;
@@ -2527,7 +2527,7 @@ pre.body {
   text-transform: uppercase;
 }
 
-.intruder-editor {
+.fuzzer-editor {
   background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: 3px;
@@ -2557,7 +2557,7 @@ pre.body {
   resize: none;
 }
 
-.intruder-results {
+.fuzzer-results {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -2566,12 +2566,12 @@ pre.body {
   overflow: hidden;
 }
 
-.intruder-response-split {
+.fuzzer-response-split {
   flex: 1;
   min-height: 0;
 }
 
-.intruder-results-list {
+.fuzzer-results-list {
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -2591,14 +2591,14 @@ pre.body {
 
 /* --- decoder --- */
 .decoder-tab,
-.comparer-tab {
+.diff-tab {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
 .decoder-controls,
-.comparer-controls {
+.diff-controls {
   align-items: center;
   background: var(--bg-alt);
   border-bottom: 1px solid var(--border);
@@ -2608,8 +2608,8 @@ pre.body {
 }
 
 .decoder-controls button,
-.comparer-controls button,
-.comparer-controls select,
+.diff-controls button,
+.diff-controls select,
 .chain-controls select,
 .chain-controls button {
   background: var(--bg);
@@ -2619,7 +2619,7 @@ pre.body {
   cursor: pointer;
 }
 
-.comparer-controls button.send {
+.diff-controls button.send {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--on-accent);
@@ -2673,14 +2673,14 @@ pre.body {
   overflow: auto;
 }
 
-/* --- comparer --- */
-.comparer-inputs {
+/* --- diff --- */
+.diff-inputs {
   flex: 0 0 auto;
   height: 230px;
   padding: 10px;
 }
 
-.comparer-inputs textarea {
+.diff-inputs textarea {
   background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: 3px;

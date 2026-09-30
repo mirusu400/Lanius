@@ -36,8 +36,8 @@ import { useReportBusy } from '../components/busy';
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { usePluginActions } from '../components/usePluginActions';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { sendToRepeater } from './repeaterStore';
-import { sendToIntruder } from './intruderStore';
+import { sendToReplay } from './replayStore';
+import { sendToFuzzer } from './fuzzerStore';
 import {
   buildTree,
   deletionTarget,
@@ -725,7 +725,7 @@ function treeMenuItems(
 
   const { flow } = target;
   // The tree only carries a summary, so fetch the request before sending
-  // it on; otherwise Repeater would open with no headers or body.
+  // it on; otherwise Replay would open with no headers or body.
   const withDetail = (send: (detail: FlowDetail) => void) => () => {
     void getFlow(flow.id)
       .then(send)
@@ -734,12 +734,12 @@ function treeMenuItems(
 
   return [
     {
-      label: t('menu.sendToRepeater'),
-      onSelect: withDetail((detail) => sendToRepeater(detail, detail)),
+      label: t('menu.sendToReplay'),
+      onSelect: withDetail((detail) => sendToReplay(detail, detail)),
     },
     {
-      label: t('menu.sendToIntruder'),
-      onSelect: withDetail((detail) => sendToIntruder(detail)),
+      label: t('menu.sendToFuzzer'),
+      onSelect: withDetail((detail) => sendToFuzzer(detail)),
     },
     {
       label: t('menu.copyPath'),

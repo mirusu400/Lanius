@@ -1,4 +1,4 @@
-"""Repeater: send a (possibly edited) request through the mitmproxy engine.
+"""Replay: send a (possibly edited) request through the mitmproxy engine.
 
 Reuses mitmproxy's client-replay machinery (``ReplayHandler``) so TLS, HTTP/2,
 upstream modes and all addon hooks behave exactly as for proxied traffic
@@ -32,8 +32,8 @@ DEFAULT_TIMEOUT = 30.0
 LOCAL_CLIENT = ("127.0.0.1", 0)
 
 
-class RepeaterError(Exception):
-    """Invalid repeater request (mapped to HTTP 4xx)."""
+class ReplayError(Exception):
+    """Invalid replay request (mapped to HTTP 4xx)."""
 
 
 def build_flow(
@@ -48,7 +48,7 @@ def build_flow(
     """Construct a standalone flow ready for replay."""
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
-        raise RepeaterError(f"invalid url: {url!r}")
+        raise ReplayError(f"invalid url: {url!r}")
     port = parts.port or (443 if parts.scheme == "https" else 80)
     path = parts.path or "/"
     if parts.query:
@@ -61,7 +61,7 @@ def build_flow(
     # is reported as such rather than failing to unpack somewhere else.
     for item in headers or []:
         if len(item) != 2:
-            raise RepeaterError(f"invalid header entry: {item!r}")
+            raise ReplayError(f"invalid header entry: {item!r}")
 
     # Encode with the charset this request declares, not always UTF-8:
     # sending UTF-8 bytes to an EUC-KR endpoint delivers mojibake.
@@ -91,7 +91,7 @@ def build_flow(
         try:
             body_bytes = encode_content(body_bytes, body_encoding)
         except (TypeError, ValueError) as exc:
-            raise RepeaterError(f"invalid Content-Encoding: {exc}") from exc
+            raise ReplayError(f"invalid Content-Encoding: {exc}") from exc
     flow.request = http.Request.make(method.upper(), url, body_bytes)
     flow.request.path = path
     flow.request.http_version = http_version
@@ -116,7 +116,7 @@ def build_flow(
     return flow
 
 
-class RepeaterAddon:
+class ReplayAddon:
     """Sends one-off requests and returns the resulting flow."""
 
     def __init__(self, store: FlowStore) -> None:
@@ -137,7 +137,7 @@ class RepeaterAddon:
 
         mitmproxy only runs ``running`` once the whole addon chain has
         started, and with a local-capture mode configured that never
-        happened: the port was open and traffic flowed, but Repeater kept
+        happened: the port was open and traffic flowed, but Replay kept
         reporting the engine as not running. The options are known when
         the master is built, so pass them in rather than waiting.
         """
@@ -147,7 +147,7 @@ class RepeaterAddon:
         self, flow: http.HTTPFlow, timeout: float = DEFAULT_TIMEOUT
     ) -> FlowRecord:
         if self.options is None:
-            raise RepeaterError("proxy engine is not running")
+            raise ReplayError("proxy engine is not running")
 
         flow.is_replay = "request"
         handler = ReplayHandler(flow, self.options)
@@ -155,7 +155,7 @@ class RepeaterAddon:
         try:
             await asyncio.wait_for(handler.replay(), timeout=timeout)
         except TimeoutError as exc:
-            raise RepeaterError(f"request timed out after {timeout}s") from exc
+            raise ReplayError(f"request timed out after {timeout}s") from exc
 
         record = _to_record(flow, started)
         await asyncio.to_thread(self.store.upsert, record)
@@ -166,7 +166,7 @@ def _to_record(flow: http.HTTPFlow, started: float) -> FlowRecord:
     from .capture import flow_to_record
 
     record = flow_to_record(flow)
-    record.source = "repeater"
+    record.source = "replay"
     if record.started_at is None:
         record.started_at = started
     if record.duration_ms is None and record.completed_at:
@@ -184,7 +184,7 @@ def _content_type(headers: list[tuple[str, str]] | None) -> str | None:
 def render_raw(
     record: FlowRecord, *, auto_decompress: bool = True
 ) -> dict[str, Any]:
-    """Response view for the Repeater UI."""
+    """Response view for the Replay UI."""
     shown, body_encoding, decoded, decode_error = body_for_display(
         record.response_headers,
         record.response_body,

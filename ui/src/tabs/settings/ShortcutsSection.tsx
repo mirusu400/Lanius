@@ -83,7 +83,7 @@ export function ShortcutsSection() {
     <section>
       <h3>{t('shortcuts.section')}</h3>
       <p className="muted">{t('shortcuts.help')}</p>
-      {(['general', 'navigation', 'repeater'] as const).map((category) => (
+      {(['general', 'navigation', 'replay'] as const).map((category) => (
         <div className="shortcut-group" key={category}>
           <h4>{t(`shortcuts.group.${category}`)}</h4>
           <div className="shortcut-list">

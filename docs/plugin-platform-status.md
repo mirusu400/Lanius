@@ -12,8 +12,8 @@ used to choose the implementation order.
 | Runtime | Legacy mitmproxy addons and SDK plugins; deterministic ordering; complete hot-load lifecycle; transactional rollback; package module cleanup; manual reload; optional file watching; startup safe mode |
 | Discovery | Metadata and hook discovery without importing disabled loose-file plugins; package manifests expose metadata and compatibility before activation |
 | SDK | Versioned `lanius_sdk` 1.1 with owner-scoped disposable registrations |
-| Contributions | Context actions, codecs, Intruder payload generators and processors, typed settings, user/project storage, managed tasks, logging, passive scanner checks, and active scanner checks |
-| Product surfaces | Plugin actions in Proxy history, Target, request/response details, Repeater, Intruder, and the global Plugins toolbar |
+| Contributions | Context actions, codecs, Fuzzer payload generators and processors, typed settings, user/project storage, managed tasks, logging, passive scanner checks, and active scanner checks |
+| Product surfaces | Plugin actions in Proxy history, Target, request/response details, Replay, Fuzzer, and the global Plugins toolbar |
 | Package data | Read-only, path-confined `resources/` access with per-read size limits |
 | Distribution | `.lanius-plugin` archives, integrity maps, SHA-256 verification, Ed25519 signatures, atomic install, uninstall, and development symlinks |
 | Frontend | Manifest-declared plugin views in sandboxed iframes; a narrow host RPC bridge that can list and invoke actions owned by the same plugin |
@@ -76,7 +76,7 @@ internals:
 - project flow queries and annotations
 - scope reads and updates
 - site-map and endpoint reads/writes
-- Repeater send/open operations
+- Replay send/open operations
 - WebSocket message reads and sends
 - issue reads and report/export helpers
 

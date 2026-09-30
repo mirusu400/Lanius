@@ -9,8 +9,8 @@ import type { FlowSummary } from '../api/types';
 import type { Translator } from '../i18n';
 
 export interface FlowMenuActions {
-  sendToRepeater: (flow: FlowSummary) => void;
-  sendToIntruder: (flow: FlowSummary) => void;
+  sendToReplay: (flow: FlowSummary) => void;
+  sendToFuzzer: (flow: FlowSummary) => void;
   addToScope: (flow: FlowSummary) => void;
   copy: (text: string) => void;
   /** Optional so a menu without deletion still renders. */
@@ -42,12 +42,12 @@ export function flowMenuItems(
 ): MenuItem[] {
   return [
     {
-      label: t('menu.sendToRepeater'),
-      onSelect: () => actions.sendToRepeater(flow),
+      label: t('menu.sendToReplay'),
+      onSelect: () => actions.sendToReplay(flow),
     },
     {
-      label: t('menu.sendToIntruder'),
-      onSelect: () => actions.sendToIntruder(flow),
+      label: t('menu.sendToFuzzer'),
+      onSelect: () => actions.sendToFuzzer(flow),
     },
     {
       label: t('menu.addToScope'),

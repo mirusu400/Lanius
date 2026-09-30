@@ -1,8 +1,7 @@
 /** Decoder tabs: several payloads, each with its own chain.
  *
- * Burp's decoder holds one payload at a time, so comparing two tokens
- * means losing the first. These tabs keep input and chain together, the
- * way Repeater keeps requests.
+ * Each tab keeps its input and operation chain together, the way Replay
+ * keeps requests, so switching payloads does not discard earlier work.
  */
 
 import type { ChainStep } from '../api/client';

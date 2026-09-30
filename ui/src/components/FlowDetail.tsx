@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { getFlow } from '../api/client';
 import type { FlowDetail, FlowSummary, RequestVariant } from '../api/types';
 import { formatUrl } from '../tabs/proxyModel';
-import { sendToRepeater } from '../tabs/repeaterStore';
-import { sendToIntruder } from '../tabs/intruderStore';
+import { sendToReplay } from '../tabs/replayStore';
+import { sendToFuzzer } from '../tabs/fuzzerStore';
 import { ContextMenu, useContextMenu, type MenuItem } from './ContextMenu';
 import { Split } from './Split';
 import { useCodegenMenu } from './useCodegenMenu';
@@ -22,7 +22,7 @@ import { ResponsePreview } from './ResponsePreview';
 
 interface Props {
   flow: FlowSummary | null;
-  onSentToRepeater?: () => void;
+  onSentToReplay?: () => void;
   splitStorageKey?: string;
   initialSplit?: number;
 }
@@ -198,7 +198,7 @@ function Half({
   );
 }
 
-export function FlowDetailView({ flow, onSentToRepeater, splitStorageKey = 'lanius.split.detail', initialSplit = 0.5 }: Props) {
+export function FlowDetailView({ flow, onSentToReplay, splitStorageKey = 'lanius.split.detail', initialSplit = 0.5 }: Props) {
   const t = useT();
   const [detail, setDetail] = useState<FlowDetail | null>(null);
   const [reveal, setReveal] = useState(false);
@@ -272,19 +272,19 @@ export function FlowDetailView({ flow, onSentToRepeater, splitStorageKey = 'lani
   );
   const menuItems: MenuItem[] = [
     {
-      label: t('menu.sendToRepeater'),
+      label: t('menu.sendToReplay'),
       onSelect: () => {
         const captured = target.current;
         if (!captured) return;
-        sendToRepeater(captured.flow, captured.detail);
-        onSentToRepeater?.();
+        sendToReplay(captured.flow, captured.detail);
+        onSentToReplay?.();
       },
     },
     {
-      label: t('menu.sendToIntruder'),
+      label: t('menu.sendToFuzzer'),
       onSelect: () => {
         const captured = target.current;
-        if (captured) sendToIntruder(captured.flow, captured.detail);
+        if (captured) sendToFuzzer(captured.flow, captured.detail);
       },
     },
     codegen.buildMenu({ flow_id: flow.id }),

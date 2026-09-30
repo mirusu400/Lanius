@@ -1,4 +1,4 @@
-"""Repeater tests: these send real requests to a local HTTP server."""
+"""Replay tests: these send real requests to a local HTTP server."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 from fastapi.testclient import TestClient
 
-from app.addons.repeater import RepeaterError, build_flow
+from app.addons.replay import ReplayError, build_flow
 from app.api.server import create_app
 from app.config import Settings
 
@@ -99,7 +99,7 @@ def test_build_flow_keeps_explicit_headers_and_body() -> None:
 
 def test_build_flow_rejects_bad_urls() -> None:
     for bad in ["", "ftp://a.com/", "not-a-url", "http:///nohost"]:
-        with pytest.raises(RepeaterError):
+        with pytest.raises(ReplayError):
             build_flow(url=bad)
 
 
@@ -108,7 +108,7 @@ def test_build_flow_rejects_bad_urls() -> None:
 
 def test_send_reaches_a_real_server(client, echo_server) -> None:
     res = client.post(
-        "/api/repeater/send",
+        "/api/replay/send",
         json={"url": f"{echo_server}/hello", "headers": [["X-Probe", "42"]]},
     )
     assert res.status_code == 200
@@ -121,7 +121,7 @@ def test_send_reaches_a_real_server(client, echo_server) -> None:
 
 def test_send_post_body(client, echo_server) -> None:
     data = client.post(
-        "/api/repeater/send",
+        "/api/replay/send",
         json={"url": f"{echo_server}/p", "method": "POST", "body": "a=1"},
     ).json()
     assert "POST /p" in data["body"]
@@ -130,30 +130,30 @@ def test_send_post_body(client, echo_server) -> None:
 
 def test_send_preserves_non_200_status(client, echo_server) -> None:
     data = client.post(
-        "/api/repeater/send", json={"url": f"{echo_server}/missing"}
+        "/api/replay/send", json={"url": f"{echo_server}/missing"}
     ).json()
     assert data["status_code"] == 404
 
 
 def test_sent_request_is_recorded_in_history(client, echo_server) -> None:
     sent = client.post(
-        "/api/repeater/send", json={"url": f"{echo_server}/recorded"}
+        "/api/replay/send", json={"url": f"{echo_server}/recorded"}
     ).json()
     stored = client.get(f"/api/flows/{sent['id']}").json()
-    assert stored["source"] == "repeater"
+    assert stored["source"] == "replay"
     assert stored["path"] == "/recorded"
     assert stored["status_code"] == 200
 
 
 def test_send_rejects_invalid_url(client) -> None:
-    res = client.post("/api/repeater/send", json={"url": "nope"})
+    res = client.post("/api/replay/send", json={"url": "nope"})
     assert res.status_code == 400
 
 
 def test_send_reports_connection_errors(client) -> None:
     dead = free_port()
     data = client.post(
-        "/api/repeater/send", json={"url": f"http://127.0.0.1:{dead}/"}
+        "/api/replay/send", json={"url": f"http://127.0.0.1:{dead}/"}
     ).json()
     assert data["status_code"] is None
     assert data["error"]
@@ -161,10 +161,10 @@ def test_send_reports_connection_errors(client) -> None:
 
 def test_repeated_sends_are_independent(client, echo_server) -> None:
     first = client.post(
-        "/api/repeater/send", json={"url": f"{echo_server}/one"}
+        "/api/replay/send", json={"url": f"{echo_server}/one"}
     ).json()
     second = client.post(
-        "/api/repeater/send", json={"url": f"{echo_server}/two"}
+        "/api/replay/send", json={"url": f"{echo_server}/two"}
     ).json()
     assert first["id"] != second["id"]
     assert "/one" in first["body"]
@@ -172,13 +172,13 @@ def test_repeated_sends_are_independent(client, echo_server) -> None:
 
 
 def test_build_flow_rejects_malformed_header_entry() -> None:
-    with pytest.raises(RepeaterError):
+    with pytest.raises(ReplayError):
         build_flow(url="http://example.com/", headers=[["only-one"]])
 
 
 def test_content_length_is_set_for_bodies(client, echo_server) -> None:
     data = client.post(
-        "/api/repeater/send",
+        "/api/replay/send",
         json={"url": f"{echo_server}/cl", "method": "POST", "body": "12345"},
     ).json()
     assert "body=12345" in data["body"]

@@ -11,7 +11,7 @@ import logging
 from typing import Any, Sequence
 
 from ..addons.intercept import InterceptError
-from ..addons.repeater import RepeaterError, build_flow
+from ..addons.replay import ReplayError, build_flow
 from ..addons.scope import ScopeError
 from ..db.store import FlowRecord, FlowStore
 
@@ -243,7 +243,7 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
 
     @server.tool(
         description=(
-            "Send a request through the proxy engine (Repeater). Returns the "
+            "Send a request through the proxy engine (Replay). Returns the "
             "response with redacted headers unless reveal_secrets is true."
         )
     )
@@ -260,8 +260,8 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
             flow = build_flow(
                 url=url, method=method, headers=headers or [], body=body
             )
-            record = await engine.repeater.send(flow)
-        except RepeaterError as exc:
+            record = await engine.replay.send(flow)
+        except ReplayError as exc:
             return {"error": str(exc)}
         return flow_detail(record, reveal=reveal_secrets)
 
@@ -294,8 +294,8 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
                 if body is not None
                 else (record.request_body or b"").decode("utf-8", errors="replace"),
             )
-            replayed = await engine.repeater.send(flow)
-        except RepeaterError as exc:
+            replayed = await engine.replay.send(flow)
+        except ReplayError as exc:
             return {"error": str(exc)}
         return flow_detail(replayed, reveal=reveal_secrets)
 

@@ -191,16 +191,16 @@ describe('FlowDetailView', () => {
   it('has no send buttons: those moved to the right-click menu', async () => {
     render(<FlowDetailView flow={httpFlow} />);
     await screen.findByText(t('detail.request'));
-    expect(screen.queryByRole('button', { name: t('menu.sendToRepeater') })).toBeNull();
-    expect(screen.queryByRole('button', { name: t('menu.sendToIntruder') })).toBeNull();
+    expect(screen.queryByRole('button', { name: t('menu.sendToReplay') })).toBeNull();
+    expect(screen.queryByRole('button', { name: t('menu.sendToFuzzer') })).toBeNull();
   });
 
   it('offers them on right-click instead', async () => {
     render(<FlowDetailView flow={httpFlow} />);
     const half = (await screen.findByText(t('detail.request'))).closest('section')!;
     fireEvent.contextMenu(half);
-    expect(screen.getByRole('menuitem', { name: t('menu.sendToRepeater') })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: t('menu.sendToIntruder') })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: t('menu.sendToReplay') })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: t('menu.sendToFuzzer') })).toBeTruthy();
   });
 
   it('keeps the reveal toggle reachable next to a long URL', async () => {

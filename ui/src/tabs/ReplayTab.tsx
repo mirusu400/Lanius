@@ -1,20 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { sendRepeaterRequest } from '../api/client';
+import { sendReplayRequest } from '../api/client';
 import {
   emptyTab,
   nextTabId,
   renderResponseText,
   toSendPayload,
   trimResponse,
-  type RepeaterTab,
-} from './repeaterModel';
+  type ReplayTab,
+} from './replayModel';
 import {
   addTab,
   removeTab,
   subscribe,
   updateTab,
-} from './repeaterStore';
+} from './replayStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { RequestEditor } from '../components/RequestEditor';
@@ -23,13 +23,13 @@ import { ResponseInspector } from '../components/ResponseInspector';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { usePluginActions } from '../components/usePluginActions';
-import { sendTextToIntruder } from './intruderStore';
 import { errorMessage, rawMsg, renderMessage, useT } from '../i18n';
+import { sendTextToFuzzer } from './fuzzerStore';
 import { useShortcut } from '../useShortcut';
 
-export function RepeaterTabView() {
+export function ReplayTabView() {
   const t = useT();
-  const [tabs, setTabs] = useState<RepeaterTab[]>([]);
+  const [tabs, setTabs] = useState<ReplayTab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const menu = useContextMenu<string>();
@@ -54,7 +54,7 @@ export function RepeaterTabView() {
     setActiveId(next.id);
   };
 
-  const duplicateTab = (source: RepeaterTab) => {
+  const duplicateTab = (source: ReplayTab) => {
     const next = addTab({ ...source, id: nextTabId(), sending: false, error: null });
     setActiveId(next.id);
   };
@@ -72,7 +72,7 @@ export function RepeaterTabView() {
     setActiveId(tabs[(index + step + tabs.length) % tabs.length].id);
   };
 
-  // The request here has been edited, so carrying it to Intruder as text
+  // The request here has been edited, so carrying it to Fuzzer as text
   // keeps those edits; going back to the history would lose them.
   const codegen = useCodegenMenu();
   // Built from the text in the editor, not from the flow it came from,
@@ -98,9 +98,9 @@ export function RepeaterTabView() {
   });
   const pluginMenu = active
     ? pluginActions.buildMenu(
-        ['repeater', 'request'],
+        ['replay', 'request'],
         {
-          repeater_tab_id: active.id,
+          replay_tab_id: active.id,
           url: active.url,
           raw_request: active.text,
           request: codegenTarget(),
@@ -112,9 +112,9 @@ export function RepeaterTabView() {
   const editorMenu = useEditorMenu(
     [
       {
-        label: t('editor.sendToIntruder'),
+        label: t('editor.sendToFuzzer'),
         onSelect: (_selection, editor) => {
-          if (active) sendTextToIntruder(active.url, editor.value);
+          if (active) sendTextToFuzzer(active.url, editor.value);
         },
       },
       // An explicit action rather than a view toggle: this rewrites the
@@ -152,7 +152,7 @@ export function RepeaterTabView() {
     updateTab(active.id, { sending: true, error: null });
     try {
       const payload = toSendPayload(active.url, active.text);
-      const response = await sendRepeaterRequest(payload);
+      const response = await sendReplayRequest(payload);
       updateTab(requestId, { response: trimResponse(response), sending: false });
     } catch (err) {
       updateTab(requestId, { sending: false, error: errorMessage(err) });
@@ -161,20 +161,20 @@ export function RepeaterTabView() {
     }
   };
 
-  useShortcut('repeater.send', send, Boolean(active && !active.sending));
-  useShortcut('repeater.new', createTab);
-  useShortcut('repeater.duplicate', () => {
+  useShortcut('replay.send', send, Boolean(active && !active.sending));
+  useShortcut('replay.new', createTab);
+  useShortcut('replay.duplicate', () => {
     if (active) duplicateTab(active);
   }, Boolean(active));
-  useShortcut('repeater.close', () => {
+  useShortcut('replay.close', () => {
     if (active) closeTab(active.id);
   }, Boolean(active));
-  useShortcut('repeater.previous', () => selectRelativeTab(-1), Boolean(active && tabs.length > 1));
-  useShortcut('repeater.next', () => selectRelativeTab(1), Boolean(active && tabs.length > 1));
+  useShortcut('replay.previous', () => selectRelativeTab(-1), Boolean(active && tabs.length > 1));
+  useShortcut('replay.next', () => selectRelativeTab(1), Boolean(active && tabs.length > 1));
 
   return (
-    <div className="repeater-tab">
-      <div className="subtabs repeater-tabs">
+    <div className="replay-tab">
+      <div className="subtabs replay-tabs">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -188,7 +188,7 @@ export function RepeaterTabView() {
             <span
               className="close"
               role="button"
-              aria-label={t('repeater.closeTab', { title: tab.title })}
+              aria-label={t('replay.closeTab', { title: tab.title })}
               onClick={(e) => {
                 e.stopPropagation();
                 closeTab(tab.id);
@@ -211,7 +211,7 @@ export function RepeaterTabView() {
                     onSelect: () => {
                       const source = tabs.find((tab) => tab.id === menu.target);
                       // Copying a request to try a variation without
-                      // losing the original is the common Repeater move.
+                      // losing the original is the common Replay move.
                       if (source) duplicateTab(source);
                     },
                   },
@@ -238,19 +238,19 @@ export function RepeaterTabView() {
 
       {active ? (
         <>
-          <div className="repeater-controls">
+          <div className="replay-controls">
             <input
               className="target"
               value={active.url}
               onChange={(e) => updateTab(active.id, { url: e.target.value })}
-              placeholder={t('repeater.targetPlaceholder')}
+              placeholder={t('replay.targetPlaceholder')}
             />
             <button
               className="send"
               onClick={send}
               disabled={active.sending}
             >
-              {active.sending ? t('repeater.sending') : t('repeater.send')}
+              {active.sending ? t('replay.sending') : t('replay.send')}
             </button>
             {active.response && (
               <span className="resp-meta mono">
@@ -267,12 +267,12 @@ export function RepeaterTabView() {
           )}
           <Split
             direction="horizontal"
-            storageKey="lanius.split.repeater"
-            className="repeater-split"
+            storageKey="lanius.split.replay"
+            className="replay-split"
             first={<RequestEditor
               editorRef={editorMenu.ref}
-              className="repeater-editor mono"
-              label={t('repeater.request')}
+              className="replay-editor mono"
+              label={t('replay.request')}
               value={active.text}
               onChange={(text) => updateTab(active.id, { text })}
               onContextMenu={editorMenu.open}
@@ -281,17 +281,17 @@ export function RepeaterTabView() {
               flowId={active.response?.id ?? null}
               raw={active.response
                 ? renderResponseText(active.response, (count) =>
-                    t('repeater.bodyTruncated', { count: String(count) }),
+                    t('replay.bodyTruncated', { count: String(count) }),
                   )
                 : undefined}
-              empty={t('repeater.noResponse')}
+              empty={t('replay.noResponse')}
             />}
           />
           {editorMenu.element}
         </>
       ) : (
         <div className="intercept-idle muted">
-          {t('repeater.noTabs')}
+          {t('replay.noTabs')}
         </div>
       )}
     </div>

@@ -17,10 +17,10 @@ Lanius sits between your browser and the web so you can see every request,
 stop it mid flight, change it, and send it again. It is named after the shrike
 (genus *Lanius*), a bird that ambushes its prey and pins it to a thorn.
 
-If you have used Burp Suite, you will feel at home. Lanius embeds
-[mitmproxy](https://mitmproxy.org/) as its engine, so TLS interception,
-HTTP/2 and WebSocket handling are battle tested, and adds a desktop interface
-and the workflow tools on top.
+Lanius embeds [mitmproxy](https://mitmproxy.org/) as its engine, so TLS
+interception, HTTP/2 and WebSocket handling are battle tested. Its desktop
+interface adds project-based capture, live editing, request replay, payload
+fuzzing, encoding and decoding, diffs, plugins, and native MCP tools.
 
 ## Download
 
@@ -195,7 +195,7 @@ an export.
 Switch between Lanius screens with **⌘+Option+0–9** on macOS or
 **Ctrl+Alt+0–9** on Linux and Windows (Dashboard is 0, Proxy is 1, and the
 remaining screens follow the tab bar). Use **⌘+Option+D** or **Ctrl+Alt+D**
-for Docs. **Settings > Shortcuts** lists every screen and Repeater action, and
+for Docs. **Settings > Shortcuts** lists every screen and Replay action, and
 lets you record, disable, or reset each shortcut. These choices are saved on
 this machine.
 
@@ -233,8 +233,8 @@ headers such as `Authorization` and `Cookie` are masked by default; reveal them
 with one click when you need to.
 
 Bodies carrying `Content-Encoding: gzip`, `deflate`, `br`, or `zstd` are
-decompressed for display by default in History, Intercept, Repeater and
-Intruder. The original bytes stay in the capture and edited requests are
+decompressed for display by default in History, Intercept, Replay and
+Fuzzer. The original bytes stay in the capture and edited requests are
 encoded again before sending. This can be disabled under **Settings > Proxy >
 HTTP body display**. `Accept-Encoding` only advertises acceptable response
 formats and does not mean that the request body itself is compressed.
@@ -260,11 +260,11 @@ returned `anchor` and `next_cursor` on later flow pages.
 Drag a table column header's right edge to resize it in History and other
 headed data tables. Column widths are remembered on this machine.
 Drag the divider between side-by-side panes to resize them in Proxy,
-WebSockets, Repeater, Intruder, Logger, Comparer, Docs, and editor dialogs.
+WebSockets, Replay, Fuzzer, Logger, Diff, Docs, and editor dialogs.
 Each pane position is remembered independently.
 
-Right-click a request to send it to Repeater or Intruder, add it to the scope,
-or copy it as a URL. The site map, Repeater tabs and Intruder results have
+Right-click a request to send it to Replay or Fuzzer, add it to the scope,
+or copy it as a URL. The site map, Replay tabs and Fuzzer results have
 their own menus.
 
 ### Taking a request elsewhere
@@ -272,7 +272,7 @@ their own menus.
 **Copy as** turns the request you are looking at into something you can run
 somewhere else: curl, `fetch`, or Python `requests`. It is built from the
 request the proxy actually saw, headers and body included, so the code repeats
-it rather than approximating it. Available in Repeater and Intruder too, where
+it rather than approximating it. Available in Replay and Fuzzer too, where
 it reflects your edits.
 
 **CSRF proof of concept** builds a page that makes a browser send the request
@@ -333,7 +333,7 @@ Drag the divider between the site tree and request detail to resize either
 pane. Endpoint and Scope table columns can also be resized from their header
 edges. These sizes are remembered on this machine.
 Click an endpoint to browse every captured request in that group, inspect its
-request and response, or right-click it to send it to Repeater or Intruder.
+request and response, or right-click it to send it to Replay or Fuzzer.
 Endpoint counts, status codes and query parameter names cover the full saved
 history. Requests within an endpoint load in pages. The displayed path values
 and example URLs are samples of captured requests.
@@ -350,31 +350,31 @@ Enable **Regex** to match host names with a regular expression instead; use
 `.*` for any number of characters and `?` to make the preceding item optional.
 When a scheme is omitted, all ports match unless a port is specified.
 
-### Repeater
+### Replay
 
 Send a request again, as many times as you like, tweaking it between attempts.
 Open several tabs to compare different variations side by side. Send the active
 request with **⌘+Enter** on macOS or **Ctrl+Enter** on Linux and Windows. Change,
-disable, or restore shortcuts under **Settings > Shortcuts**. Repeater also has
+disable, or restore shortcuts under **Settings > Shortcuts**. Replay also has
 shortcuts for creating, duplicating, closing, and moving between request tabs.
 
-### Intruder
+### Fuzzer
 
-Mark payload positions and run a wordlist against them. All four classic attack
-types are supported:
+Mark payload positions and run a wordlist against them. Four run modes are
+supported:
 
 | Type | Behaviour |
 |---|---|
-| Sniper | One position at a time |
-| Battering ram | The same value in every position |
-| Pitchfork | Payload sets advance together |
-| Cluster bomb | Every combination |
+| Single position | One position at a time |
+| Shared payload | The same value in every position |
+| Lockstep | Payload sets advance together |
+| Cartesian product | Every combination |
 
 Results show status, length and timing, and responses whose length stands out
 from the rest are highlighted automatically, so a successful login in a pile of
 failures is hard to miss.
 
-### Decoder and Comparer
+### Decoder and Diff
 
 Chain encoders and decoders: URL, Base64, hex, HTML, gzip, JWT and common
 hashes. Every step shows its own output, so you can see where a chain goes
@@ -430,7 +430,7 @@ Three working examples ship in [`plugins/`](./plugins/), and the full hook
 list is in [`plugins/README.md`](./plugins/README.md). Actions, codecs,
 settings, namespaced storage, payload extensions, and managed tasks use the
 versioned [`lanius_sdk`](./docs/plugins-sdk.md). Declared actions appear in the
-matching History, Target, message, Repeater, Intruder, or global UI location;
+matching History, Target, message, Replay, Fuzzer, or global UI location;
 package data is available through a bounded read-only resource API.
 Per-plugin diagnostics retain recent SDK logs and contribution timing; scanner
 checks that fail five times consecutively are suspended until diagnostics are

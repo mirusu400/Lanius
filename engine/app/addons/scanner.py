@@ -21,7 +21,7 @@ from ..db.store import FlowRecord, FlowStore
 from ..events import EventBroker
 from ..plugin_registry import Contribution, ContributionRegistry
 from .capture import flow_to_record
-from .repeater import RepeaterAddon, build_flow
+from .replay import ReplayAddon, build_flow
 
 MAX_ACTIVE_REQUESTS = 1_000
 MAX_ACTIVE_CONCURRENCY = 10
@@ -241,13 +241,13 @@ class ScannerAddon:
         registry: ContributionRegistry,
         store: FlowStore,
         broker: EventBroker,
-        repeater: RepeaterAddon,
+        replay: ReplayAddon,
         scope: Any | None = None,
     ) -> None:
         self.registry = registry
         self.store = store
         self.broker = broker
-        self.repeater = repeater
+        self.replay = replay
         self.scope = scope
         self.jobs: dict[str, ScanJob] = {}
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
@@ -445,8 +445,8 @@ class ScannerAddon:
             await limiter.wait()
             async with request_semaphore:
                 request = _mutated_request(record, point, payload)
-                flow = build_flow(**request, encode_content_body=self.repeater.auto_decompress)
-                response = await self.repeater.send(flow)
+                flow = build_flow(**request, encode_content_body=self.replay.auto_decompress)
+                response = await self.replay.send(flow)
                 return request_snapshot(response)
 
         queue: asyncio.Queue[tuple[Contribution, InsertionPoint] | None] = (

@@ -1,6 +1,6 @@
 /** What is selected in the Proxy history.
  *
- * Kept outside the component for the same reason the Repeater and
+ * Kept outside the component for the same reason the Replay and
  * Decoder tabs are: React unmounts a tab when you switch away, so the
  * selection would be thrown away the moment you looked at anything else
  * and come back to nothing selected.

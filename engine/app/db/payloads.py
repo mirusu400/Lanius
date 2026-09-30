@@ -1,8 +1,8 @@
-"""Named payload lists for Intruder.
+"""Named payload lists for Fuzzer.
 
 A wordlist is pasted once and used from then on, rather than pasted into
-every attack. Sets are stored in the project database, so they travel
-with a project export the way scope rules and Repeater tabs do.
+every fuzz run. Sets are stored in the project database, so they travel
+with a project export the way scope rules and Replay tabs do.
 
 Payloads are held as text with one per line rather than as JSON: a
 wordlist is already that shape, it stays readable in the database, and a

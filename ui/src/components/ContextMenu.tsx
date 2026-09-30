@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-/** Right-click menus, the way Burp uses them.
+/** Right-click menus for request and response actions.
  *
  * A menu that opens off the edge of the window is worse than none, so it
  * measures itself and flips before painting.

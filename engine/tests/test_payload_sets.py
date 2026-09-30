@@ -1,6 +1,6 @@
 """Saved payload sets, and fetching wordlists.
 
-A wordlist used to be pasted into every attack. These check it can be
+A wordlist used to be pasted into every run. These check it can be
 kept by name and reused, and that fetching one is bounded and honest.
 """
 
@@ -16,7 +16,7 @@ from app.config import Settings
 from app.db.payloads import MAX_PAYLOADS, parse_payloads
 from app import wordlists
 
-MARK = "\u00a7"
+OPEN, CLOSE = "{{", "}}"
 
 
 def free_port() -> int:
@@ -120,17 +120,17 @@ class TestStoring:
         assert client.get("/api/payload-sets/nope").status_code == 404
 
 
-class TestUsingASetInAnAttack:
-    def test_an_attack_can_name_a_saved_set(self, client) -> None:
+class TestUsingASetInAFuzzRun:
+    def test_a_run_can_name_a_saved_set(self, client) -> None:
         """The point of saving one: not posting a wordlist every time."""
         set_id = client.post(
             "/api/payload-sets", json={"name": "w", "payloads": "a\nb\nc"}
         ).json()["id"]
         planned = client.post(
-            "/api/intruder/attacks",
+            "/api/fuzzer/runs",
             json={
                 "url": "http://127.0.0.1:1",
-                "template": f"GET /{MARK}x{MARK} HTTP/1.1\r\nHost: t\r\n\r\n",
+                "template": f"GET /{OPEN}x{CLOSE} HTTP/1.1\r\nHost: t\r\n\r\n",
                 "payload_sets": [],
                 "payload_set_ids": [set_id],
             },
@@ -140,10 +140,10 @@ class TestUsingASetInAnAttack:
 
     def test_naming_a_set_that_is_gone_is_a_404(self, client) -> None:
         r = client.post(
-            "/api/intruder/attacks",
+            "/api/fuzzer/runs",
             json={
                 "url": "http://127.0.0.1:1",
-                "template": f"GET /{MARK}x{MARK} HTTP/1.1\r\nHost: t\r\n\r\n",
+                "template": f"GET /{OPEN}x{CLOSE} HTTP/1.1\r\nHost: t\r\n\r\n",
                 "payload_set_ids": ["missing"],
             },
         )

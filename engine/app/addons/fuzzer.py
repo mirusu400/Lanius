@@ -1,6 +1,6 @@
-"""Intruder: payload positions + wordlist fuzzing.
+"""Fuzzer: payload positions + wordlist fuzzing.
 
-Attacks run through the Repeater's engine-backed send path, and request
+Fuzz runs use Replay's engine-backed send path, and request
 generation is offloaded to a worker thread so the mitmproxy event loop keeps
 serving traffic (codex.md §5, §9).
 """
@@ -17,13 +17,14 @@ from typing import Any, Iterator, Literal, Sequence
 
 logger = logging.getLogger(__name__)
 
-MARKER = "§"
-AttackType = Literal["sniper", "battering_ram", "pitchfork", "cluster_bomb"]
-ATTACK_TYPES: tuple[AttackType, ...] = (
-    "sniper",
-    "battering_ram",
-    "pitchfork",
-    "cluster_bomb",
+OPEN_MARKER = "{{"
+CLOSE_MARKER = "}}"
+RunMode = Literal["single_position", "shared_payload", "lockstep", "cartesian"]
+RUN_MODES: tuple[RunMode, ...] = (
+    "single_position",
+    "shared_payload",
+    "lockstep",
+    "cartesian",
 )
 
 MAX_REQUESTS = 100_000
@@ -33,12 +34,12 @@ MAX_REQUESTS = 100_000
 MAX_CONCURRENCY = 64
 DEFAULT_CONCURRENCY = 5
 # A minute between requests is slow enough for the most delicate target
-# worth testing; beyond that an attack is better paused.
+# worth testing; beyond that a run is better paused.
 MAX_DELAY = 60.0
 
 
-class IntruderError(Exception):
-    """Invalid attack configuration (mapped to HTTP 4xx)."""
+class FuzzerError(Exception):
+    """Invalid run configuration (mapped to HTTP 4xx)."""
 
 
 @dataclass(slots=True)
@@ -50,31 +51,44 @@ class Position:
     value: str
 
 
-def find_positions(template: str, marker: str = MARKER) -> list[Position]:
-    """Locate ``§payload§`` spans in a request template."""
+def find_positions(
+    template: str,
+    open_marker: str = OPEN_MARKER,
+    close_marker: str = CLOSE_MARKER,
+) -> list[Position]:
+    """Locate ``{{payload}}`` spans in a request template."""
     positions: list[Position] = []
     index = 0
     while True:
-        start = template.find(marker, index)
+        start = template.find(open_marker, index)
+        stray_close = template.find(close_marker, index)
         if start == -1:
+            if stray_close != -1:
+                raise FuzzerError("unbalanced payload marker")
             break
-        end = template.find(marker, start + len(marker))
+        if stray_close != -1 and stray_close < start:
+            raise FuzzerError("unbalanced payload marker")
+        value_start = start + len(open_marker)
+        end = template.find(close_marker, value_start)
         if end == -1:
-            raise IntruderError("unbalanced payload marker")
+            raise FuzzerError("unbalanced payload marker")
+        nested = template.find(open_marker, value_start, end)
+        if nested != -1:
+            raise FuzzerError("nested payload markers are not supported")
         positions.append(
             Position(
                 start=start,
-                end=end + len(marker),
-                value=template[start + len(marker) : end],
+                end=end + len(close_marker),
+                value=template[value_start:end],
             )
         )
-        index = end + len(marker)
+        index = end + len(close_marker)
     return positions
 
 
-def strip_markers(template: str, marker: str = MARKER) -> str:
+def strip_markers(template: str) -> str:
     """The request as it would be sent with no payloads applied."""
-    positions = find_positions(template, marker)
+    positions = find_positions(template)
     out: list[str] = []
     cursor = 0
     for position in positions:
@@ -86,12 +100,12 @@ def strip_markers(template: str, marker: str = MARKER) -> str:
 
 
 def apply_payloads(
-    template: str, payloads: Sequence[str | None], marker: str = MARKER
+    template: str, payloads: Sequence[str | None]
 ) -> str:
     """Substitute payloads into positions; ``None`` keeps the base value."""
-    positions = find_positions(template, marker)
+    positions = find_positions(template)
     if len(payloads) != len(positions):
-        raise IntruderError(
+        raise FuzzerError(
             f"expected {len(positions)} payloads, got {len(payloads)}"
         )
     out: list[str] = []
@@ -105,30 +119,30 @@ def apply_payloads(
 
 
 def count_requests(
-    attack_type: AttackType, position_count: int, payload_sets: Sequence[Sequence[str]]
+    mode: RunMode, position_count: int, payload_sets: Sequence[Sequence[str]]
 ) -> int:
-    """How many requests an attack will generate."""
+    """How many requests a run will generate."""
     if position_count == 0:
-        raise IntruderError("no payload positions marked")
+        raise FuzzerError("no payload positions marked")
     if not payload_sets or not any(payload_sets):
-        raise IntruderError("no payloads provided")
+        raise FuzzerError("no payloads provided")
 
-    if attack_type == "sniper":
+    if mode == "single_position":
         return position_count * len(payload_sets[0])
-    if attack_type == "battering_ram":
+    if mode == "shared_payload":
         return len(payload_sets[0])
-    if attack_type == "pitchfork":
+    if mode == "lockstep":
         sets = payload_sets[:position_count]
         if len(sets) < position_count:
-            raise IntruderError(
-                f"pitchfork needs {position_count} payload sets, got {len(sets)}"
+            raise FuzzerError(
+                f"lockstep needs {position_count} payload sets, got {len(sets)}"
             )
         return min(len(s) for s in sets)
-    # cluster bomb
+    # Cartesian product.
     sets = payload_sets[:position_count]
     if len(sets) < position_count:
-        raise IntruderError(
-            f"cluster bomb needs {position_count} payload sets, got {len(sets)}"
+        raise FuzzerError(
+            f"cartesian mode needs {position_count} payload sets, got {len(sets)}"
         )
     total = 1
     for payload_set in sets:
@@ -137,34 +151,34 @@ def count_requests(
 
 
 def generate_payload_tuples(
-    attack_type: AttackType,
+    mode: RunMode,
     position_count: int,
     payload_sets: Sequence[Sequence[str]],
 ) -> Iterator[tuple[list[str | None], list[str]]]:
     """Yield ``(payloads_per_position, labels)`` for every request."""
-    if attack_type == "sniper":
+    if mode == "single_position":
         # One position at a time; the rest keep their base value.
         for index in range(position_count):
             for payload in payload_sets[0]:
                 slots: list[str | None] = [None] * position_count
                 slots[index] = payload
                 yield slots, [payload]
-    elif attack_type == "battering_ram":
+    elif mode == "shared_payload":
         for payload in payload_sets[0]:
             yield [payload] * position_count, [payload]
-    elif attack_type == "pitchfork":
+    elif mode == "lockstep":
         sets = [list(s) for s in payload_sets[:position_count]]
         for combo in zip(*sets):
             yield list(combo), list(combo)
-    else:  # cluster_bomb
+    else:  # cartesian
         sets = [list(s) for s in payload_sets[:position_count]]
         for combo in itertools.product(*sets):
             yield list(combo), list(combo)
 
 
 @dataclass(slots=True)
-class AttackResult:
-    """One request/response pair from an attack."""
+class RunResult:
+    """One request/response pair from a run."""
 
     index: int
     payloads: list[str]
@@ -187,10 +201,10 @@ class AttackResult:
 
 
 @dataclass(slots=True)
-class AttackSpeed:
+class RunSpeed:
     """How hard to push the target.
 
-    Defaults are deliberately gentle: an attack that knocks a service
+    Defaults are deliberately gentle: a run that knocks a service
     over tells you nothing, and the person running it usually has
     permission for the traffic rather than for the outage.
     """
@@ -203,27 +217,27 @@ class AttackSpeed:
 
     def __post_init__(self) -> None:
         if not 1 <= self.concurrency <= MAX_CONCURRENCY:
-            raise IntruderError(
+            raise FuzzerError(
                 f"concurrency must be between 1 and {MAX_CONCURRENCY}"
             )
         if not 0 <= self.delay <= MAX_DELAY:
-            raise IntruderError(f"delay must be between 0 and {MAX_DELAY} seconds")
+            raise FuzzerError(f"delay must be between 0 and {MAX_DELAY} seconds")
 
     def as_dict(self) -> dict[str, Any]:
         return {"concurrency": self.concurrency, "delay": self.delay}
 
 
 @dataclass(slots=True)
-class Attack:
-    """A running or finished attack."""
+class FuzzRun:
+    """A running or finished run."""
 
     id: str
-    attack_type: AttackType
+    mode: RunMode
     url: str
     template: str
     total: int
-    speed: AttackSpeed = field(default_factory=lambda: AttackSpeed())
-    results: list[AttackResult] = field(default_factory=list)
+    speed: RunSpeed = field(default_factory=lambda: RunSpeed())
+    results: list[RunResult] = field(default_factory=list)
     status: str = "pending"
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
@@ -236,7 +250,7 @@ class Attack:
     def summary(self) -> dict[str, Any]:
         return {
             "id": self.id,
-            "attack_type": self.attack_type,
+            "mode": self.mode,
             "url": self.url,
             "status": self.status,
             "total": self.total,
@@ -262,11 +276,11 @@ def parse_request_template(url: str, text: str) -> dict[str, Any]:
     head = [line for line in head if line]
     body = "" if separator == -1 else normalized[separator + 2 :]
     if not head:
-        raise IntruderError("empty request")
+        raise FuzzerError("empty request")
 
     parts = head[0].split()
     if len(parts) < 2:
-        raise IntruderError("malformed request line")
+        raise FuzzerError("malformed request line")
     method, target = parts[0], parts[1]
 
     headers: list[list[str]] = []
@@ -285,14 +299,14 @@ def parse_request_template(url: str, text: str) -> dict[str, Any]:
     return {"url": absolute, "method": method, "headers": headers, "body": body}
 
 
-class IntruderAddon:
-    """Runs attacks and keeps their results in memory."""
+class FuzzerAddon:
+    """Runs payload fuzzing jobs and keeps their results in memory."""
 
-    def __init__(self, repeater: Any, broker: Any = None, concurrency: int = 5) -> None:
-        self.repeater = repeater
+    def __init__(self, replay: Any, broker: Any = None, concurrency: int = 5) -> None:
+        self.replay = replay
         self.broker = broker
         self.concurrency = concurrency
-        self.attacks: dict[str, Attack] = {}
+        self.runs: dict[str, FuzzRun] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
     def _publish(self, event: str, data: Any) -> None:
@@ -302,17 +316,17 @@ class IntruderAddon:
     def plan(
         self,
         *,
-        attack_type: AttackType,
+        mode: RunMode,
         template: str,
         payload_sets: Sequence[Sequence[str]],
     ) -> int:
-        if attack_type not in ATTACK_TYPES:
-            raise IntruderError(f"unknown attack type: {attack_type!r}")
+        if mode not in RUN_MODES:
+            raise FuzzerError(f"unknown run type: {mode!r}")
         positions = find_positions(template)
-        total = count_requests(attack_type, len(positions), payload_sets)
+        total = count_requests(mode, len(positions), payload_sets)
         if total > MAX_REQUESTS:
-            raise IntruderError(
-                f"attack would send {total} requests (limit {MAX_REQUESTS})"
+            raise FuzzerError(
+                f"run would send {total} requests (limit {MAX_REQUESTS})"
             )
         return total
 
@@ -321,69 +335,69 @@ class IntruderAddon:
         *,
         url: str,
         template: str,
-        attack_type: AttackType = "sniper",
+        mode: RunMode = "single_position",
         payload_sets: Sequence[Sequence[str]],
-        speed: AttackSpeed | None = None,
-    ) -> Attack:
+        speed: RunSpeed | None = None,
+    ) -> FuzzRun:
         total = self.plan(
-            attack_type=attack_type, template=template, payload_sets=payload_sets
+            mode=mode, template=template, payload_sets=payload_sets
         )
-        attack = Attack(
+        run = FuzzRun(
             id=uuid.uuid4().hex[:12],
-            attack_type=attack_type,
+            mode=mode,
             url=url,
             template=template,
             total=total,
             # Falls back to the addon's configured default, so an
             # existing caller keeps the behaviour it had.
-            speed=speed or AttackSpeed(concurrency=self.concurrency),
+            speed=speed or RunSpeed(concurrency=self.concurrency),
         )
-        self.attacks[attack.id] = attack
+        self.runs[run.id] = run
         task = asyncio.create_task(
-            self._run(attack, payload_sets), name=f"intruder-{attack.id}"
+            self._run(run, payload_sets), name=f"fuzzer-{run.id}"
         )
-        self._tasks[attack.id] = task
-        return attack
+        self._tasks[run.id] = task
+        return run
 
-    def stop(self, attack_id: str) -> Attack:
-        attack = self.attacks.get(attack_id)
-        if attack is None:
-            raise IntruderError(f"attack {attack_id} not found")
-        task = self._tasks.get(attack_id)
+    def stop(self, run_id: str) -> FuzzRun:
+        run = self.runs.get(run_id)
+        if run is None:
+            raise FuzzerError(f"run {run_id} not found")
+        task = self._tasks.get(run_id)
         if task is not None and not task.done():
             task.cancel()
-        attack.status = "stopped"
-        attack.finished_at = time.time()
-        self._publish("intruder.finished", attack.summary())
-        return attack
+        run.status = "stopped"
+        run.finished_at = time.time()
+        self._publish("fuzzer.finished", run.summary())
+        return run
 
-    def get(self, attack_id: str) -> Attack:
-        attack = self.attacks.get(attack_id)
-        if attack is None:
-            raise IntruderError(f"attack {attack_id} not found")
-        return attack
+    def get(self, run_id: str) -> FuzzRun:
+        run = self.runs.get(run_id)
+        if run is None:
+            raise FuzzerError(f"run {run_id} not found")
+        return run
 
     async def _run(
-        self, attack: Attack, payload_sets: Sequence[Sequence[str]]
+        self, run: FuzzRun, payload_sets: Sequence[Sequence[str]]
     ) -> None:
-        from .repeater import build_flow
+        from .replay import build_flow
 
-        attack.status = "running"
-        self._publish("intruder.started", attack.summary())
-        positions = len(find_positions(attack.template))
+        run.status = "running"
+        self._publish("fuzzer.started", run.summary())
+        positions = len(find_positions(run.template))
 
         async def run_one(index: int, slots: list[str | None], labels: list[str]) -> None:
-            result = AttackResult(index=index, payloads=labels)
+            result = RunResult(index=index, payloads=labels)
             try:
                 # Building requests is pure CPU work: keep it off the loop.
                 payload = await asyncio.to_thread(
-                    _render_request, attack.url, attack.template, slots
+                    _render_request, run.url, run.template, slots
                 )
                 flow = build_flow(
                     **payload,
-                    encode_content_body=self.repeater.auto_decompress,
+                    encode_content_body=self.replay.auto_decompress,
                 )
-                record = await self.repeater.send(flow)
+                record = await self.replay.send(flow)
                 result.status_code = record.status_code
                 result.length = record.response_size
                 result.duration_ms = record.duration_ms
@@ -393,19 +407,19 @@ class IntruderAddon:
                 raise
             except Exception as exc:  # network/parse errors are per-request
                 result.error = str(exc)
-            attack.results.append(result)
+            run.results.append(result)
             self._publish(
-                "intruder.result",
-                {"attack_id": attack.id, "result": result.as_dict()},
+                "fuzzer.result",
+                {"run_id": run.id, "result": result.as_dict()},
             )
 
         try:
             # Fed through a queue rather than scheduled all at once: a
             # gather over the 100k request limit builds 100k coroutines
             # before sending anything, which measured at 139MB of memory
-            # held for the whole attack.
+            # held for the whole run.
             queue: asyncio.Queue[tuple[int, list[str | None], list[str]] | None] = (
-                asyncio.Queue(maxsize=attack.speed.concurrency * 2)
+                asyncio.Queue(maxsize=run.speed.concurrency * 2)
             )
 
             async def worker() -> None:
@@ -414,23 +428,23 @@ class IntruderAddon:
                     try:
                         if item is None:
                             return
-                        if attack.speed.delay:
+                        if run.speed.delay:
                             # Before the request, not after: the last
-                            # request of an attack should not be followed
+                            # request of a run should not be followed
                             # by a wait nobody is using.
-                            await asyncio.sleep(attack.speed.delay)
+                            await asyncio.sleep(run.speed.delay)
                         await run_one(*item)
                     finally:
                         queue.task_done()
 
             workers = [
                 asyncio.create_task(worker())
-                for _ in range(attack.speed.concurrency)
+                for _ in range(run.speed.concurrency)
             ]
             try:
                 for index, (slots, labels) in enumerate(
                     generate_payload_tuples(
-                        attack.attack_type, positions, payload_sets
+                        run.mode, positions, payload_sets
                     )
                 ):
                     await queue.put((index, slots, labels))
@@ -438,26 +452,26 @@ class IntruderAddon:
                     await queue.put(None)
                 await asyncio.gather(*workers)
             except BaseException:
-                # Includes cancellation: stopping an attack should not
+                # Includes cancellation: stopping a run should not
                 # leave workers waiting on a queue nobody will fill.
                 for task in workers:
                     task.cancel()
                 await asyncio.gather(*workers, return_exceptions=True)
                 raise
-            attack.status = "completed"
+            run.status = "completed"
         except asyncio.CancelledError:
-            attack.status = "stopped"
-        except IntruderError as exc:
-            attack.status = "failed"
-            attack.error = str(exc)
+            run.status = "stopped"
+        except FuzzerError as exc:
+            run.status = "failed"
+            run.error = str(exc)
         except Exception as exc:  # pragma: no cover - defensive
-            attack.status = "failed"
-            attack.error = str(exc)
-            logger.exception("attack %s crashed", attack.id)
+            run.status = "failed"
+            run.error = str(exc)
+            logger.exception("run %s crashed", run.id)
         finally:
-            attack.finished_at = time.time()
-            attack.results.sort(key=lambda r: r.index)
-            self._publish("intruder.finished", attack.summary())
+            run.finished_at = time.time()
+            run.results.sort(key=lambda r: r.index)
+            self._publish("fuzzer.finished", run.summary())
 
 
 def _render_request(

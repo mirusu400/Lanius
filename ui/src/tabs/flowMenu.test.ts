@@ -35,16 +35,16 @@ describe('flowUrl', () => {
 
 describe('flowMenuItems', () => {
   const actions = {
-    sendToRepeater: vi.fn(),
-    sendToIntruder: vi.fn(),
+    sendToReplay: vi.fn(),
+    sendToFuzzer: vi.fn(),
     addToScope: vi.fn(),
     copy: vi.fn(),
   };
 
-  it('offers the actions Burp users reach for', () => {
+  it('offers the core request workflow actions', () => {
     const labels = flowMenuItems(flow, t, actions).map((i) => i.label);
-    expect(labels).toContain(t('menu.sendToRepeater'));
-    expect(labels).toContain(t('menu.sendToIntruder'));
+    expect(labels).toContain(t('menu.sendToReplay'));
+    expect(labels).toContain(t('menu.sendToFuzzer'));
     expect(labels).toContain(t('menu.addToScope'));
   });
 
@@ -71,6 +71,6 @@ describe('flowMenuItems', () => {
   it('renders without a submenu, so the menu survives a codegen failure', () => {
     const labels = flowMenuItems(flow, t, actions).map((i) => i.label);
     expect(labels).not.toContain(t('menu.copyAs'));
-    expect(labels).toContain(t('menu.sendToRepeater'));
+    expect(labels).toContain(t('menu.sendToReplay'));
   });
 });

@@ -67,7 +67,7 @@ describe('autosave', () => {
     // Stores emit freely, and the payload can be large. Re-sending an
     // identical one is pure cost on every keystroke elsewhere.
     const store = makeStore({ tabs: ['a'] });
-    autosave('repeater', (l) => store.subscribe(l), () => {});
+    autosave('replay', (l) => store.subscribe(l), () => {});
 
     // Let the load settle and the first save go out, so what follows is
     // measured against a known baseline.
@@ -89,7 +89,7 @@ describe('autosave', () => {
 
   it('writes once for a burst of changes', async () => {
     const store = makeStore({ n: 0 });
-    autosave('repeater', (l) => store.subscribe(l), () => {});
+    autosave('replay', (l) => store.subscribe(l), () => {});
     await vi.runOnlyPendingTimersAsync();
     puts = [];
 
@@ -102,11 +102,11 @@ describe('autosave', () => {
   });
 
   it('restores what was saved, and does not write it straight back', async () => {
-    stored.repeater = { tabs: ['restored'] };
+    stored.replay = { tabs: ['restored'] };
     const restored: unknown[] = [];
     const store = makeStore({ tabs: [] as string[] });
 
-    autosave('repeater', (l) => store.subscribe(l), (v) => restored.push(v));
+    autosave('replay', (l) => store.subscribe(l), (v) => restored.push(v));
     await vi.runAllTimersAsync();
 
     expect(restored).toEqual([{ tabs: ['restored'] }]);
@@ -115,14 +115,31 @@ describe('autosave', () => {
     expect(puts).toHaveLength(0);
   });
 
+  it('falls back to a legacy workspace key when the new key is empty', async () => {
+    stored.transform = { tabs: ['legacy decoder'] };
+    const restored: unknown[] = [];
+    const store = makeStore({ tabs: [] as string[] });
+
+    autosave(
+      'decoder',
+      (listener) => store.subscribe(listener),
+      (value) => restored.push(value),
+      'transform',
+    );
+    await vi.runAllTimersAsync();
+
+    expect(restored).toEqual([{ tabs: ['legacy decoder'] }]);
+    expect(puts).toHaveLength(0);
+  });
+
   it('flushes the latest edit before changing projects', async () => {
     const store = makeStore({ tabs: [] as string[] });
-    const dispose = autosave('repeater', (l) => store.subscribe(l), () => {});
+    const dispose = autosave('replay', (l) => store.subscribe(l), () => {});
     await vi.runOnlyPendingTimersAsync();
 
     store.set({ tabs: ['unsaved edit'] });
     await flushAutosaves();
-    expect(puts).toEqual([{ key: 'repeater', value: { tabs: ['unsaved edit'] } }]);
+    expect(puts).toEqual([{ key: 'replay', value: { tabs: ['unsaved edit'] } }]);
     dispose();
   });
 });

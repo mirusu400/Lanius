@@ -1,4 +1,4 @@
-/** Tests for the copy-as menu shared by Repeater, Intruder and history. */
+/** Tests for the copy-as menu shared by Replay, Fuzzer and history. */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';

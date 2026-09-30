@@ -389,7 +389,7 @@ const en: DocPage[] = [
   {
     id: 'decoder',
     title: 'Decoder',
-    summary: 'Chain transforms across several payloads at once.',
+    summary: 'Chain encoding and decoding steps across several payloads at once.',
     sections: [
       {
         heading: 'Tabs',
@@ -405,7 +405,7 @@ const en: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Add steps to transform the input in order, each one feeding the next. A step is a codec and a direction, so base64 decode followed by gzip decode is two steps. Every step shows its own output, so you can see where a chain goes wrong.',
+            body: 'Add steps to process the input in order, each one feeding the next. A step is a codec and a direction, so base64 decode followed by gzip decode is two steps. Every step shows its own output, so you can see where a chain goes wrong.',
           },
         ],
       },
@@ -430,7 +430,7 @@ const en: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Choose a temporary, new, or existing project at launch. Captured traffic, scope, proxy settings, and the tabs you have open in Repeater and Decoder are written to that project as you work. Use Settings > Project to switch projects.',
+            body: 'Choose a temporary, new, or existing project at launch. Captured traffic, scope, proxy settings, and the tabs you have open in Replay and Decoder are written to that project as you work. Use Settings > Project to switch projects.',
           },
         ],
       },
@@ -869,7 +869,7 @@ const ko: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: '시작할 때 임시, 새 프로젝트, 기존 프로젝트 중 하나를 선택합니다. 캡처한 트래픽, 범위, 프록시 설정, Repeater와 Decoder에 열어 둔 탭이 해당 프로젝트에 자동 저장됩니다. Settings > Project에서 다른 프로젝트를 선택할 수 있습니다.',
+            body: '시작할 때 임시, 새 프로젝트, 기존 프로젝트 중 하나를 선택합니다. 캡처한 트래픽, 범위, 프록시 설정, Replay와 Decoder에 열어 둔 탭이 해당 프로젝트에 자동 저장됩니다. Settings > Project에서 다른 프로젝트를 선택할 수 있습니다.',
           },
         ],
       },

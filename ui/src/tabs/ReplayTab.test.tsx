@@ -1,12 +1,12 @@
-/** Renders the real Repeater tab against a mocked engine. */
+/** Renders the real Replay tab against a mocked engine. */
 import {cleanup, screen, waitFor } from '@testing-library/react';
 import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import type { Locale } from '../i18n';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { RepeaterTabView } from './RepeaterTab';
-import { resetTabs, sendToRepeater, getTabs, setTabs } from './repeaterStore';
+import { ReplayTabView } from './ReplayTab';
+import { resetTabs, sendToReplay, getTabs, setTabs } from './replayStore';
 import type { FlowSummary } from '../api/types';
 
 const flow: FlowSummary = {
@@ -68,32 +68,32 @@ afterEach(() => {
 });
 
 const editor = () =>
-  screen.getByRole('textbox', { name: t('repeater.request') }) as HTMLTextAreaElement;
+  screen.getByRole('textbox', { name: t('replay.request') }) as HTMLTextAreaElement;
 
-describe('RepeaterTab', () => {
+describe('ReplayTab', () => {
   it('shows guidance when there are no tabs', () => {
-    render(<RepeaterTabView />);
-    expect(screen.getByText(t('repeater.noTabs'))).toBeTruthy();
+    render(<ReplayTabView />);
+    expect(screen.getByText(t('replay.noTabs'))).toBeTruthy();
   });
 
   it('creates a new empty tab with +', async () => {
     const user = userEvent.setup();
-    render(<RepeaterTabView />);
+    render(<ReplayTabView />);
     await user.click(screen.getByRole('button', { name: '+' }));
     expect(editor().value).toContain('GET / HTTP/1.1');
   });
 
   it('picks up a request pushed from the Proxy tab', async () => {
-    render(<RepeaterTabView />);
-    sendToRepeater(flow);
+    render(<ReplayTabView />);
+    sendToReplay(flow);
     await waitFor(() => expect(editor().value).toContain('GET /hello'));
     expect(screen.getByDisplayValue('http://echo.test')).toBeTruthy();
   });
 
   it('sends the edited request and shows the response', async () => {
     const user = userEvent.setup();
-    render(<RepeaterTabView />);
-    sendToRepeater(flow);
+    render(<ReplayTabView />);
+    sendToReplay(flow);
     await waitFor(() => expect(editor()).toBeTruthy());
 
     await user.clear(editor());
@@ -101,7 +101,7 @@ describe('RepeaterTab', () => {
       editor(),
       'POST /submit HTTP/1.1{enter}Host: echo.test{enter}{enter}a=1',
     );
-    await user.click(screen.getByRole('button', { name: t('repeater.send') }));
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
 
     await waitFor(() => expect(screen.getByText(/pong/)).toBeTruthy());
     expect(sent[0]).toEqual({
@@ -115,30 +115,30 @@ describe('RepeaterTab', () => {
 
   it('reports malformed requests without calling the engine', async () => {
     const user = userEvent.setup();
-    render(<RepeaterTabView />);
-    sendToRepeater(flow);
+    render(<ReplayTabView />);
+    sendToReplay(flow);
     await waitFor(() => expect(editor()).toBeTruthy());
     await user.clear(editor());
     await user.type(editor(), 'OOPS');
-    await user.click(screen.getByRole('button', { name: t('repeater.send') }));
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
     expect(await screen.findByText(t('parse.badRequestLine'))).toBeTruthy();
     expect(sent).toHaveLength(0);
   });
 
   it('keeps a saved error translatable across a restart in another language', async () => {
-    // Repeater tabs are autosaved into the project and restored later,
+    // Replay tabs are autosaved into the project and restored later,
     // possibly with a different language selected. Storing the translated
     // sentence would pin the old language into the saved file, so the tab
     // holds the key instead.
     const user = userEvent.setup();
     const other: Locale = TEST_LOCALE === 'en' ? 'ko' : 'en';
 
-    const { unmount } = render(<RepeaterTabView />);
-    sendToRepeater(flow);
+    const { unmount } = render(<ReplayTabView />);
+    sendToReplay(flow);
     await waitFor(() => expect(editor()).toBeTruthy());
     await user.clear(editor());
     await user.type(editor(), 'OOPS');
-    await user.click(screen.getByRole('button', { name: t('repeater.send') }));
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
     await screen.findByText(t('parse.badRequestLine'));
 
     // Round-trip through the same JSON the autosave writes.
@@ -149,7 +149,7 @@ describe('RepeaterTab', () => {
     setTabs(saved);
 
     // Reopen in the other language: the banner must be in that language.
-    render(<RepeaterTabView />, { locale: other });
+    render(<ReplayTabView />, { locale: other });
     expect(await screen.findByText(tk(other)('parse.badRequestLine'))).toBeTruthy();
     expect(screen.queryByText(t('parse.badRequestLine'))).toBeNull();
   });
@@ -173,7 +173,7 @@ describe('RepeaterTab', () => {
     // The collision is repaired on load, so every tab is reachable.
     expect(new Set(getTabs().map((tab) => tab.id)).size).toBe(3);
 
-    render(<RepeaterTabView />);
+    render(<ReplayTabView />);
     // The close control carries the title too, so pick the tab itself.
     const tab = (title: string) =>
       screen
@@ -206,7 +206,7 @@ describe('RepeaterTab', () => {
       },
     ]);
 
-    render(<RepeaterTabView />);
+    render(<ReplayTabView />);
     expect(
       await screen.findByText('a sentence saved by an older build'),
     ).toBeTruthy();
@@ -214,9 +214,9 @@ describe('RepeaterTab', () => {
 
   it('supports multiple independent tabs', async () => {
     const user = userEvent.setup();
-    render(<RepeaterTabView />);
-    sendToRepeater(flow);
-    sendToRepeater({ ...flow, id: 'f2', path: '/second' });
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    sendToReplay({ ...flow, id: 'f2', path: '/second' });
     // wait on the DOM, not the store, so React effects have flushed
     await waitFor(() => expect(editor()?.value).toContain('/second'));
     expect(getTabs()).toHaveLength(2);
@@ -229,10 +229,10 @@ describe('RepeaterTab', () => {
 
   it('closes a tab', async () => {
     const user = userEvent.setup();
-    render(<RepeaterTabView />);
-    sendToRepeater(flow);
+    render(<ReplayTabView />);
+    sendToReplay(flow);
     await waitFor(() => expect(editor()).toBeTruthy());
-    await user.click(screen.getByLabelText(t('repeater.closeTab', { title: 'GET /hello' })));
+    await user.click(screen.getByLabelText(t('replay.closeTab', { title: 'GET /hello' })));
     await waitFor(() => expect(getTabs()).toHaveLength(0));
   });
 });

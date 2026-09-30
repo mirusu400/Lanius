@@ -32,8 +32,8 @@ import {
   setSelectedFlow,
   subscribe as subscribeSelection,
 } from './selectionStore';
-import { sendToRepeater } from './repeaterStore';
-import { sendToIntruder } from './intruderStore';
+import { sendToReplay } from './replayStore';
+import { sendToFuzzer } from './fuzzerStore';
 import { addScopeFromUrl } from '../api/client';
 import { FlowDetailView } from '../components/FlowDetail';
 import { FilterBar } from '../components/FilterBar';
@@ -427,16 +427,16 @@ export function ProxyTab() {
                 ? flowMenuItems(menu.target, t, {
                     // The table row is a summary with no headers or
                     // body, so the full flow is fetched first. Without
-                    // this the request arrived in Repeater as a bare
+                    // this the request arrived in Replay as a bare
                     // request line, missing everything being tested.
-                    sendToRepeater: (flow) => {
+                    sendToReplay: (flow) => {
                       void withDetail(flow, (detail) =>
-                        sendToRepeater(flow, detail),
+                        sendToReplay(flow, detail),
                       );
                     },
-                    sendToIntruder: (flow) => {
+                    sendToFuzzer: (flow) => {
                       void withDetail(flow, (detail) =>
-                        sendToIntruder(flow, detail),
+                        sendToFuzzer(flow, detail),
                       );
                     },
                     addToScope: (flow) => {

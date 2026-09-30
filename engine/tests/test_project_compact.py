@@ -72,7 +72,7 @@ def test_selected_target_is_deleted_and_other_project_state_stays(client: TestCl
     seed(client, "keep", "same.test")
     seed(client, "remove", "same.test", 8443)
     client.post("/api/scope/rules", json={"kind": "include", "host": "same.test"})
-    client.put("/api/workspace/repeater", json={"value": [{"name": "saved tab"}]})
+    client.put("/api/workspace/replay", json={"value": [{"name": "saved tab"}]})
     before = client.get("/api/project/compact").json()
 
     result = client.post(
@@ -85,7 +85,7 @@ def test_selected_target_is_deleted_and_other_project_state_stays(client: TestCl
     assert client.get("/api/flows/remove").status_code == 404
     assert client.get("/api/flows/keep").status_code == 200
     assert len(client.get("/api/scope").json()["rules"]) == 1
-    assert client.get("/api/workspace/repeater").json()["value"] == [
+    assert client.get("/api/workspace/replay").json()["value"] == [
         {"name": "saved tab"}
     ]
 

@@ -130,7 +130,7 @@ def test_chain_failure_propagates() -> None:
         run_chain("!!!", [ChainStep("gzip", "decode")])
 
 
-# --- comparer -------------------------------------------------------------
+# --- diff -------------------------------------------------------------
 
 
 def test_compare_identical_texts() -> None:

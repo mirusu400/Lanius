@@ -14,7 +14,7 @@
 
 Lanius의 현재 플러그인 기능은 **mitmproxy 애드온을 런타임에 싣는 최소 기능 제품**으로는 잘 동작한다. Python 플러그인이 실제 프록시 애드온 체인에 들어가 HTTP, TCP, WebSocket 트래픽을 읽고 수정할 수 있고, 활성 상태 저장, enable/disable, 수동 reload, 오류 표시, Copy as 메뉴용 코드 생성기 등록까지 구현되어 있다. 전용 테스트 31개도 모두 통과한다.
 
-하지만 서드파티 플러그인 생태계를 만들기에는 "트래픽 훅" 이외의 공식 확장 지점이 부족하다. 지금은 플러그인이 Lanius 내부 모듈을 직접 import하거나 mitmproxy 전역 객체에 의존해야 한다. 전용 탭, 메시지 에디터, 일반 컨텍스트 메뉴, 설정, 단축키, Intruder payload, 스캐너 check, issue 저장, 프로젝트 저장소, 설치와 업데이트를 위한 안정된 API가 없다.
+하지만 서드파티 플러그인 생태계를 만들기에는 "트래픽 훅" 이외의 공식 확장 지점이 부족하다. 지금은 플러그인이 Lanius 내부 모듈을 직접 import하거나 mitmproxy 전역 객체에 의존해야 한다. 전용 탭, 메시지 에디터, 일반 컨텍스트 메뉴, 설정, 단축키, Fuzzer payload, 스캐너 check, issue 저장, 프로젝트 저장소, 설치와 업데이트를 위한 안정된 API가 없다.
 
 따라서 예제 플러그인을 많이 추가하기 전에 다음 세 층을 순서대로 만드는 것이 좋다.
 
@@ -53,7 +53,7 @@ Lanius의 현재 플러그인 기능은 **mitmproxy 애드온을 런타임에 �
 - async hook 구현
 - mitmproxy API를 이용한 추가 request 발행과 flow 조작
 - Lanius 내부 Python module을 직접 import해 codec, code generation 같은 기능 재사용
-- `codegen_formats`로 Proxy, Target, Repeater, Intruder의 Copy as 메뉴에 생성기 추가
+- `codegen_formats`로 Proxy, Target, Replay, Fuzzer의 Copy as 메뉴에 생성기 추가
 - 외부 API 호출, subprocess 실행, 로컬 파일 접근 등 일반 Python이 할 수 있는 작업
 
 `PluginManager`가 plugin object를 실제 `AddonManager`에 추가하므로, dispatch 자체는 [`mitmproxy event hook 목록`](https://docs.mitmproxy.org/stable/api/events.html)에 있는 hook 전반을 처리한다. 현재 문서와 Plugins 탭에 표시되는 hook은 `request`, `response`, TCP 일부, `websocket_message`, `running`, `done` 등 10개만 하드코딩되어 있어 실제 능력을 제대로 보여주지 못한다. 예를 들어 `requestheaders`, `responseheaders`, `websocket_start/end`, client/server connection, TLS, DNS, UDP, QUIC hook은 실행 가능하지만 목록에는 나타나지 않는다.
@@ -163,7 +163,7 @@ plugin별 log/output/error, 최근 오류 수, hook 실행 시간, timeout 가�
 | Custom message editor | 없음 | P2 |
 | Settings panel | 없음 | P1 |
 | Hotkey/menu bar | app 자체 shortcut만 있음 | P1/P2 |
-| Intruder payload | plugin API 없음 | P1 |
+| Fuzzer payload | plugin API 없음 | P1 |
 | Scanner check | scanner/issue 모델 자체가 없음 | P3 |
 | Site map/scope/tool APIs | REST와 내부 Python object는 존재 | P1 wrapper |
 | Persistence | enable 목록만 공식 지원 | P1 |
@@ -261,8 +261,8 @@ def activate(ctx):
 - `sdk.traffic`: live event 구독, stored flow query, annotation/highlight
 - `sdk.scope`: scope 조회와 변경
 - `sdk.site_map`: host, path, endpoint query와 추가
-- `sdk.repeater`: 새 tab으로 보내기, programmatic send
-- `sdk.intruder`: payload generator, payload processor, attack 시작과 결과 event
+- `sdk.replay`: 새 tab으로 보내기, programmatic send
+- `sdk.fuzzer`: payload generator, payload processor, attack 시작과 결과 event
 - `sdk.scanner`: passive/active check, insertion point, issue report와 dedup
 - `sdk.websocket`: message event, send/repeat, editor action
 - `sdk.ui`: tab/page, context action, editor, column, badge, notification, hotkey
@@ -317,7 +317,7 @@ trusted in-process Python addon에 대해서는 이 permission이 enforcement bo
 - action/context menu registry
 - typed settings와 user/project persistence
 - codegen/codec/column/highlight 등록
-- Intruder payload generator/processor
+- Fuzzer payload generator/processor
 - flow query, replay, scope, site map facade
 - namespaced storage, logging, background task
 - 모든 registration의 owner 기반 dispose
@@ -375,8 +375,8 @@ trusted in-process Python addon에 대해서는 이 permission이 enforcement bo
 | Plugin | 필요한 contribution | 가치 |
 |---|---|---|
 | Hackvertor 계열 Transform Library | codec, editor action, context menu | 수동 테스트 전반에서 재사용 가능 |
-| Custom Payload Kit | Intruder generator/processor, settings | SDK의 payload API를 검증하기 좋음 |
-| Request Minimizer | request action, repeater send, diff | 작고 명확한 headless plugin |
+| Custom Payload Kit | Fuzzer generator/processor, settings | SDK의 payload API를 검증하기 좋음 |
+| Request Minimizer | request action, replay send, diff | 작고 명확한 headless plugin |
 | Token Sync | traffic event, project storage, settings | session API와 persistence를 검증 |
 | Copy as Toolkit | codegen/action | 기존 확장 지점을 안정화하는 예제 |
 | Header/Parameter Highlighter | column/highlight/filter | history contribution을 검증 |
@@ -391,7 +391,7 @@ trusted in-process Python addon에 대해서는 이 permission이 enforcement bo
 | Passive Secrets Scanner | passive check, issue model, evidence |
 | JS Link/Endpoint Finder | passive check, site map write |
 | GraphQL Toolkit | custom editor, introspection action, site map |
-| OpenAPI/Postman/HAR Importer | file picker, site map/repeater write |
+| OpenAPI/Postman/HAR Importer | file picker, site map/replay write |
 | Nuclei Bridge | subprocess, task progress, issue import |
 | sqlmap Launcher | context action, subprocess, structured output |
 | 403 Bypass/Content-Type Tester | action, request mutation matrix, result tab |
@@ -408,7 +408,7 @@ trusted in-process Python addon에 대해서는 이 permission이 enforcement bo
 2. `plugin.json`과 local package install/uninstall
 3. owner/disposable contribution registry
 4. action/context menu, settings, storage, logging, task API
-5. codec과 Intruder payload provider
+5. codec과 Fuzzer payload provider
 6. first-party plugin 3개: Transform Library, Token Sync, Custom Payload Kit
 
 이 범위는 scanner와 arbitrary UI를 서두르지 않으면서도 현재의 단일 codegen hook을 실제 plugin platform으로 바꾼다. 이후 UI bridge를 붙일 때 같은 manifest, lifecycle, owner registry, permission, storage를 재사용할 수 있다.

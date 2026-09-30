@@ -5,8 +5,8 @@ import { useT } from '../i18n';
 import { rawResponse } from './rawHttp';
 import { ResponsePreview } from './ResponsePreview';
 
-/** The same recorded response can be inspected from Repeater or Intruder.
- * Repeater already has raw text; Intruder retrieves it from its result flow.
+/** The same recorded response can be inspected from Replay or Fuzzer.
+ * Replay already has raw text; Fuzzer retrieves it from its result flow.
  */
 export function ResponseInspector({
   flowId,
@@ -52,7 +52,7 @@ export function ResponseInspector({
         ? <ResponsePreview flowId={flowId} />
         : error ? <p className="banner error">{error}</p>
           : rawText === undefined ? <p className="muted">{t('detail.preview.loading')}</p>
-            : <pre className="repeater-response mono">{rawText}</pre>}
+            : <pre className="replay-response mono">{rawText}</pre>}
     </div>
   </section>;
 }

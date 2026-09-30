@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from .. import __version__
 from ..addons.intercept import InterceptError
 from ..addons.match_replace import MatchReplaceError, preview as preview_match_replace
-from ..addons.repeater import RepeaterError, build_flow, render_raw
+from ..addons.replay import ReplayError, build_flow, render_raw
 from ..addons.websocket_proxy import WebSocketProxyError
 from ..addons.codecs import (
     ChainStep,
@@ -31,10 +31,10 @@ from ..addons.codecs import (
     compare,
     run_chain,
 )
-from ..addons.intruder import (
+from ..addons.fuzzer import (
     DEFAULT_CONCURRENCY,
-    AttackSpeed,
-    IntruderError,
+    RunSpeed,
+    FuzzerError,
     find_positions,
     strip_markers,
 )
@@ -92,7 +92,7 @@ class ForwardBody(BaseModel):
     response_body: str | None = None
 
 
-class RepeaterRequest(BaseModel):
+class ReplayRequest(BaseModel):
     url: str
     method: str = "GET"
     headers: list[list[str]] = []
@@ -138,8 +138,8 @@ class WebSocketRepeatBody(WebSocketForwardBody):
 class CodegenBody(BaseModel):
     """A request to render as code.
 
-    Either a stored flow (flow_id) or one being edited in Repeater or
-    Intruder, which has no id yet.
+    Either a stored flow (flow_id) or one being edited in Replay or
+    Fuzzer, which has no id yet.
     """
 
     kind: str
@@ -217,13 +217,13 @@ class CaptureRestriction(BaseModel):
     restrict_capture: bool
 
 
-class AttackBody(BaseModel):
+class FuzzRunBody(BaseModel):
     url: str
     template: str
-    attack_type: str = "sniper"
+    mode: str = "single_position"
     payload_sets: list[list[str]] = []
     #: Ids of saved sets, used for any position a literal list does not
-    #: cover. Saves posting a 30,000 line wordlist with every attack.
+    #: cover. Saves posting a 30,000 line wordlist with every run.
     payload_set_ids: list[str] = []
     concurrency: int | None = None
     delay: float | None = None
@@ -348,8 +348,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         "plugins.changed",
         "issues.",
         "scanner.",
-        "intruder.started",
-        "intruder.finished",
+        "fuzzer.started",
+        "fuzzer.finished",
         "flows.cleared",
         "flows.deleted",
     )
@@ -542,7 +542,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/workspace/{key}")
     async def get_workspace(key: str) -> dict[str, Any]:
-        """Saved state for one part of the UI, e.g. the Repeater tabs."""
+        """Saved state for one part of the UI, e.g. the Replay tabs."""
         return {"key": key, "value": await asyncio.to_thread(store.get_workspace, key)}
 
     @app.put("/api/workspace/{key}")
@@ -561,7 +561,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """The whole project as one document.
 
         Flows are optional because a long capture dwarfs everything else,
-        and sharing a scope and a set of Repeater requests is the common
+        and sharing a scope and a set of Replay requests is the common
         case.
         """
         if include_flows and await asyncio.to_thread(store.count) > 100_000:
@@ -1238,9 +1238,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine.websockets.clear(persist=False)
         return {"ok": True}
 
-    # --- repeater (M3) ----------------------------------------------------
-    @app.post("/api/repeater/send")
-    async def repeater_send(req: RepeaterRequest) -> dict[str, Any]:
+    # --- replay (M3) ----------------------------------------------------
+    @app.post("/api/replay/send")
+    async def replay_send(req: ReplayRequest) -> dict[str, Any]:
         try:
             flow = build_flow(
                 url=req.url,
@@ -1250,8 +1250,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 http_version=req.http_version,
                 encode_content_body=auto_decompress_enabled(store),
             )
-            record = await engine.repeater.send(flow, timeout=req.timeout)
-        except RepeaterError as exc:
+            record = await engine.replay.send(flow, timeout=req.timeout)
+        except ReplayError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return render_raw(
             record, auto_decompress=auto_decompress_enabled(store)
@@ -1456,9 +1456,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             scope_predicate=predicate, scope_site_wide=site_wide,
         )
 
-    # --- intruder (M5) ----------------------------------------------------
-    @app.post("/api/intruder/positions")
-    async def intruder_positions(body: PositionsBody) -> dict[str, Any]:
+    # --- fuzzer (M5) ----------------------------------------------------
+    @app.post("/api/fuzzer/positions")
+    async def fuzzer_positions(body: PositionsBody) -> dict[str, Any]:
         try:
             positions = find_positions(body.template)
             return {
@@ -1469,25 +1469,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "count": len(positions),
                 "preview": strip_markers(body.template),
             }
-        except IntruderError as exc:
+        except FuzzerError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @app.post("/api/intruder/plan")
-    async def intruder_plan(body: AttackBody) -> dict[str, Any]:
+    @app.post("/api/fuzzer/plan")
+    async def fuzzer_plan(body: FuzzRunBody) -> dict[str, Any]:
         try:
-            total = engine.intruder.plan(
-                attack_type=body.attack_type,  # type: ignore[arg-type]
+            total = engine.fuzzer.plan(
+                mode=body.mode,  # type: ignore[arg-type]
                 template=body.template,
                 payload_sets=body.payload_sets,
             )
-        except IntruderError as exc:
+        except FuzzerError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"total": total}
 
-    def _resolve_payload_sets(body: AttackBody) -> list[list[str]]:
+    def _resolve_payload_sets(body: FuzzRunBody) -> list[list[str]]:
         """Literal lists first, then any saved sets named by id.
 
-        Both are allowed so a quick one-off attack does not need a saved
+        Both are allowed so a quick one-off run does not need a saved
         set, and a real wordlist does not need to be posted every time.
         """
         sets = [list(entry) for entry in body.payload_sets]
@@ -1500,9 +1500,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             sets.append(found.payloads)
         return sets
 
-    def _speed(body: AttackBody) -> AttackSpeed:
+    def _speed(body: FuzzRunBody) -> RunSpeed:
         try:
-            return AttackSpeed(
+            return RunSpeed(
                 concurrency=(
                     body.concurrency
                     if body.concurrency is not None
@@ -1510,22 +1510,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
                 delay=body.delay or 0.0,
             )
-        except IntruderError as exc:
+        except FuzzerError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @app.post("/api/intruder/attacks")
-    async def intruder_start(body: AttackBody) -> dict[str, Any]:
+    @app.post("/api/fuzzer/runs")
+    async def fuzzer_start(body: FuzzRunBody) -> dict[str, Any]:
         try:
-            attack = await engine.intruder.start(
+            run = await engine.fuzzer.start(
                 url=body.url,
                 template=body.template,
-                attack_type=body.attack_type,  # type: ignore[arg-type]
+                mode=body.mode,  # type: ignore[arg-type]
                 payload_sets=_resolve_payload_sets(body),
                 speed=_speed(body),
             )
-        except IntruderError as exc:
+        except FuzzerError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return attack.summary()
+        return run.summary()
 
     # --- payload sets -----------------------------------------------------
     @app.get("/api/payload-sets")
@@ -1602,33 +1602,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return saved.summary()
 
-    @app.get("/api/intruder/attacks")
-    async def intruder_list() -> dict[str, Any]:
+    @app.get("/api/fuzzer/runs")
+    async def fuzzer_list() -> dict[str, Any]:
         return {
-            "items": [a.summary() for a in engine.intruder.attacks.values()],
+            "items": [run.summary() for run in engine.fuzzer.runs.values()],
         }
 
-    @app.get("/api/intruder/attacks/{attack_id}")
-    async def intruder_get(attack_id: str) -> dict[str, Any]:
+    @app.get("/api/fuzzer/runs/{run_id}")
+    async def fuzzer_get(run_id: str) -> dict[str, Any]:
         try:
-            return engine.intruder.get(attack_id).as_dict()
-        except IntruderError as exc:
+            return engine.fuzzer.get(run_id).as_dict()
+        except FuzzerError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.post("/api/intruder/attacks/{attack_id}/stop")
-    async def intruder_stop(attack_id: str) -> dict[str, Any]:
+    @app.post("/api/fuzzer/runs/{run_id}/stop")
+    async def fuzzer_stop(run_id: str) -> dict[str, Any]:
         try:
-            return engine.intruder.stop(attack_id).summary()
-        except IntruderError as exc:
+            return engine.fuzzer.stop(run_id).summary()
+        except FuzzerError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    # --- decoder / comparer (M6) ------------------------------------------
+    # --- decoder / diff (M6) ------------------------------------------
     @app.get("/api/codecs")
     async def list_codecs() -> dict[str, Any]:
         return available_codecs()
 
     @app.post("/api/decode")
-    async def decode(body: DecodeBody) -> dict[str, Any]:
+    async def decode_chain(body: DecodeBody) -> dict[str, Any]:
         steps = [
             ChainStep(codec=s.codec, direction=s.direction)  # type: ignore[arg-type]
             for s in body.steps

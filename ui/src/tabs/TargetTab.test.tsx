@@ -399,7 +399,7 @@ describe('TargetTab', () => {
   });
 
   it('offers the code formats on a request in the tree', async () => {
-    // Send to Repeater and Intruder were here already; the same request
+    // Send to Replay and Fuzzer were here already; the same request
     // could not be copied as curl without going back to the history.
     const user = userEvent.setup();
     render(<TargetTab />);

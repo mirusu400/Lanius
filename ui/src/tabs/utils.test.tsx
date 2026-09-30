@@ -1,4 +1,4 @@
-/** Decoder + Comparer tabs rendered against a mocked engine. */
+/** Decoder + Diff tabs rendered against a mocked engine. */
 import {cleanup, screen, waitFor } from '@testing-library/react';
 import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DecoderTab } from './DecoderTab';
 import { resetDecoderTabs } from './decoderStore';
-import { ComparerTab } from './ComparerTab';
+import { DiffTab } from './DiffTab';
 
 let decodeCalls: { value: string; steps: { codec: string; direction: string }[] }[] =
   [];
@@ -148,24 +148,24 @@ describe('DecoderTab', () => {
   });
 });
 
-describe('ComparerTab', () => {
+describe('DiffTab', () => {
   it('renders a diff with change counts', async () => {
     const user = userEvent.setup();
-    render(<ComparerTab />);
-    await user.type(screen.getByLabelText(t('comparer.left')), 'the quick');
-    await user.type(screen.getByLabelText(t('comparer.right')), 'the slow extra');
-    await user.click(screen.getByRole('button', { name: t('comparer.compare') }));
+    render(<DiffTab />);
+    await user.type(screen.getByLabelText(t('diff.left')), 'the quick');
+    await user.type(screen.getByLabelText(t('diff.right')), 'the slow extra');
+    await user.click(screen.getByRole('button', { name: t('diff.compare') }));
 
     const diff = await screen.findByTestId('diff');
     expect(diff.textContent).toContain('quick\u2192slow');
     expect(diff.textContent).toContain('extra');
-    expect(screen.getByText(t('comparer.summary', { added: 2, removed: 1, percent: '50.0' }))).toBeTruthy();
+    expect(screen.getByText(t('diff.summary', { added: 2, removed: 1, percent: '50.0' }))).toBeTruthy();
   });
 
   it('marks insertions and replacements with classes', async () => {
     const user = userEvent.setup();
-    render(<ComparerTab />);
-    await user.click(screen.getByRole('button', { name: t('comparer.compare') }));
+    render(<DiffTab />);
+    await user.click(screen.getByRole('button', { name: t('diff.compare') }));
     await screen.findByTestId('diff');
     expect(document.querySelectorAll('.diff-replace')).toHaveLength(1);
     expect(document.querySelectorAll('.diff-insert')).toHaveLength(1);
@@ -173,9 +173,9 @@ describe('ComparerTab', () => {
 
   it('supports byte mode', async () => {
     const user = userEvent.setup();
-    render(<ComparerTab />);
-    await user.selectOptions(screen.getByLabelText(t('comparer.mode')), 'byte');
-    await user.click(screen.getByRole('button', { name: t('comparer.compare') }));
+    render(<DiffTab />);
+    await user.selectOptions(screen.getByLabelText(t('diff.mode')), 'byte');
+    await user.click(screen.getByRole('button', { name: t('diff.compare') }));
     await screen.findByTestId('diff');
     const call = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } })
       .mock.calls.at(-1);
