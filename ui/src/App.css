@@ -4121,6 +4121,8 @@ pre.body {
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--fg);
+  cursor: pointer;
+  font: inherit;
   padding: 5px 12px;
   text-decoration: none;
 }

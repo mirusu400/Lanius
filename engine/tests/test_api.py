@@ -11,6 +11,7 @@ from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from app.api.server import create_app, redact_headers
 from app.config import Settings
@@ -132,6 +133,64 @@ def test_websocket_receives_hello_and_events(client) -> None:
         event = ws.receive_json()
         assert event["type"] == "flow.request"
         assert event["data"]["id"] == "x"
+
+
+def test_websocket_refuses_a_foreign_browser_origin(client) -> None:
+    with pytest.raises(WebSocketDisconnect) as refused:
+        with client.websocket_connect(
+            "/ws", headers={"Origin": "https://evil.test"}
+        ):
+            pass
+    assert refused.value.code == 1008
+
+
+def test_desktop_api_and_websocket_require_the_session_token(tmp_path) -> None:
+    token = "0123456789abcdef" * 4
+    settings = Settings(
+        proxy_port=free_port(),
+        api_port=free_port(),
+        api_token=token,
+        data_dir=tmp_path,
+        db_path=tmp_path / "test.sqlite",
+        confdir=tmp_path / "mitm",
+    )
+    with TestClient(create_app(settings)) as protected:
+        refused = protected.get("/api/status")
+        assert refused.status_code == 401
+        assert refused.headers["www-authenticate"] == "Bearer"
+        assert (
+            protected.get(
+                "/api/status", headers={"Authorization": "Bearer wrong"}
+            ).status_code
+            == 401
+        )
+        assert (
+            protected.get(
+                "/api/status", headers={"Authorization": f"Bearer {token}"}
+            ).status_code
+            == 200
+        )
+
+        with pytest.raises(WebSocketDisconnect) as missing_token:
+            with protected.websocket_connect(
+                "/ws", headers={"Origin": "tauri://localhost"}
+            ):
+                pass
+        assert missing_token.value.code == 1008
+
+        with protected.websocket_connect(
+            "/ws",
+            headers={"Origin": "tauri://localhost"},
+            subprotocols=["lanius", f"lanius-auth-{token}"],
+        ) as ws:
+            assert ws.accepted_subprotocol == "lanius"
+            assert ws.receive_json()["type"] == "hello"
+
+        assert protected.get("/api/ca/pem").status_code == 401
+        # Sandboxed plugin files are URL-loaded static resources and carry no
+        # project/capture data, so this narrow path remains reachable.
+        assert protected.get("/api/plugin-ui/missing/index.html").status_code != 401
+        assert protected.post("/api/plugin-ui/missing/index.html").status_code == 401
 
 
 def test_redact_headers_none_passthrough() -> None:
@@ -801,6 +860,7 @@ def test_cors_still_refuses_a_remote_origin(client) -> None:
         "http://tauri.localhost.evil.test",
         "https://tauri.localhost.evil.test",
         "http://127.0.0.1.evil.test",
+        "http://localhost:5174",
     ):
         response = client.get("/api/status", headers={"Origin": origin})
         assert response.headers.get("access-control-allow-origin") is None, (

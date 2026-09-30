@@ -44,6 +44,9 @@ if [ "$target" = "all" ] || [ "$target" = "quick" ] || [ "$target" = "engine" ];
     step "tests" --in engine .venv/bin/python -m pytest -q
   fi
   step "types" --in engine .venv/bin/python -m mypy
+  if [ "$target" != "quick" ]; then
+    step "dependency audit" --in engine .venv/bin/python -m pip_audit --local --progress-spinner=off
+  fi
 fi
 
 if [ "$target" = "all" ] || [ "$target" = "quick" ] || [ "$target" = "ui" ]; then
@@ -51,6 +54,9 @@ if [ "$target" = "all" ] || [ "$target" = "quick" ] || [ "$target" = "ui" ]; the
   step "types" npm --prefix ui run typecheck
   step "lint" npm --prefix ui run lint
   step "css" node ui/scripts/check-css.mjs
+  if [ "$target" != "quick" ]; then
+    step "dependency audit" npm --prefix ui audit --audit-level=high
+  fi
   if [ "$target" = "quick" ]; then
     step "tests" npm --prefix ui run test -- --run
   else
@@ -93,6 +99,12 @@ if [ "$target" = "all" ] || [ "$target" = "shell" ]; then
   step "format" cargo fmt --manifest-path shell/src-tauri/Cargo.toml --check
   step "clippy" cargo clippy --manifest-path shell/src-tauri/Cargo.toml --all-targets -- -D warnings
   step "tests" cargo test --manifest-path shell/src-tauri/Cargo.toml
+  step "tooling dependency audit" npm --prefix shell audit --audit-level=high
+  if command -v cargo-audit >/dev/null 2>&1; then
+    step "Rust dependency audit" cargo audit --file shell/src-tauri/Cargo.lock
+  else
+    printf '  skip %-28s %s\n' "Rust dependency audit" "install cargo-audit to run locally"
+  fi
   restore_engine_resource
   trap - EXIT INT TERM
 fi

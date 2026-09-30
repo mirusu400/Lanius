@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,12 +24,22 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def ensure_private_dir(path: Path) -> None:
+    """Create a storage directory and remove group/other access on POSIX."""
+    path.mkdir(parents=True, exist_ok=True)
+    if os.name == "posix":
+        path.chmod(stat.S_IRWXU)
+
+
 @dataclass(slots=True)
 class Settings:
     proxy_host: str = "127.0.0.1"
     proxy_port: int = 8080
     api_host: str = "127.0.0.1"  # local-only binding (codex.md §10)
     api_port: int = 12954
+    # Per-shell-session capability used by the desktop UI. Standalone engine
+    # runs intentionally remain usable by local CLI clients when this is unset.
+    api_token: str | None = None
     data_dir: Path = None  # type: ignore[assignment]
     db_path: Path = None  # type: ignore[assignment]
     confdir: Path = None  # type: ignore[assignment]
@@ -87,11 +98,12 @@ class Settings:
             proxy_port=int(os.environ.get("LANIUS_PROXY_PORT", "8080")),
             api_host=os.environ.get("LANIUS_API_HOST", "127.0.0.1"),
             api_port=int(os.environ.get("LANIUS_API_PORT", "12954")),
+            api_token=os.environ.get("LANIUS_API_TOKEN", "").strip() or None,
             log_level=os.environ.get("LANIUS_LOG_LEVEL", "info"),
             disable_plugins=_env_bool("LANIUS_DISABLE_PLUGINS"),
             plugin_dev_mode=_env_bool("LANIUS_PLUGIN_DEV_MODE"),
         )
 
     def ensure_dirs(self) -> None:
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.plugins_dir.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self.data_dir)
+        ensure_private_dir(self.plugins_dir)

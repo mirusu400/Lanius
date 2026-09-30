@@ -1,7 +1,7 @@
 /** WebSocket client with auto-reconnect for the live flow stream. */
 
 import type { EngineEvent } from './types';
-import { API_BASE } from './client';
+import { API_BASE, API_TOKEN } from './client';
 
 export function websocketUrl(): string {
   return `${API_BASE.replace(/^http/, 'ws')}/ws`;
@@ -24,7 +24,9 @@ export function connectStream(handlers: StreamHandlers): () => void {
   const open = () => {
     if (disposed) return;
     handlers.onState?.('connecting');
-    socket = new WebSocket(websocketUrl());
+    socket = API_TOKEN
+      ? new WebSocket(websocketUrl(), ['lanius', `lanius-auth-${API_TOKEN}`])
+      : new WebSocket(websocketUrl());
 
     socket.onopen = () => {
       attempt = 0;

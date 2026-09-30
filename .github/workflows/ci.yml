@@ -48,7 +48,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: engine/requirements-dev.txt
+          cache-dependency-path: |
+            engine/requirements.txt
+            engine/requirements-dev.txt
 
       - name: Install dependencies
         working-directory: engine
@@ -59,6 +61,11 @@ jobs:
       - name: Type check
         working-directory: engine
         run: python -m mypy
+
+      - name: Dependency audit
+        if: runner.os == 'Linux'
+        working-directory: engine
+        run: python -m pip_audit --local --progress-spinner=off
 
       - name: Tests
         working-directory: engine
@@ -84,6 +91,10 @@ jobs:
       - name: Install dependencies
         working-directory: ui
         run: npm ci
+
+      - name: Dependency audit
+        working-directory: ui
+        run: npm audit --audit-level=high
 
       - name: Type check
         working-directory: ui
@@ -120,6 +131,26 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: shell/src-tauri
+
+      - uses: actions/setup-node@v7
+        if: runner.os == 'Linux'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: shell/package-lock.json
+
+      - name: Audit shell tooling dependencies
+        if: runner.os == 'Linux'
+        working-directory: shell
+        run: npm audit --audit-level=high
+
+      - name: Install Rust dependency auditor
+        if: runner.os == 'Linux'
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Rust dependencies
+        if: runner.os == 'Linux'
+        run: cargo audit --file shell/src-tauri/Cargo.lock
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'

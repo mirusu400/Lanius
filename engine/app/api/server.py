@@ -7,6 +7,7 @@ import contextlib
 import json
 import logging
 import re
+import secrets
 import sqlite3
 import time
 from collections.abc import AsyncIterator
@@ -432,11 +433,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # gets a 200 the webview then refuses to hand over, which surfaces as
     # "Load failed" with nothing wrong on the server.
     allowed_origins = (
-        r"(http://(127\.0\.0\.1|localhost)(:\d+)?"
+        r"(http://(127\.0\.0\.1|localhost):5173"
         r"|tauri://localhost"
         r"|https?://tauri\.localhost)"
     )
     allowed_origin = re.compile(allowed_origins)
+
+    def valid_api_token(value: str | None) -> bool:
+        expected = settings.api_token
+        if expected is None or value is None or not value.startswith("Bearer "):
+            return expected is None
+        return secrets.compare_digest(value.removeprefix("Bearer "), expected)
+
+    @app.middleware("http")
+    async def require_api_token(request: Request, call_next: Any) -> Any:
+        """Protect capture data from unrelated local pages and processes.
+
+        Sandboxed plugin UI files are URL-loaded resources, so they cannot
+        attach an Authorization header. They expose no capture data; every
+        other API route still requires the token.
+        """
+        path = request.url.path
+        public_resource = request.method in {"GET", "HEAD"} and path.startswith(
+            "/api/plugin-ui/"
+        )
+        if (
+            settings.api_token is not None
+            and path.startswith("/api/")
+            and request.method != "OPTIONS"
+            and not public_resource
+            and not valid_api_token(request.headers.get("authorization"))
+        ):
+            return JSONResponse(
+                {"detail": "API authentication required"},
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return await call_next(request)
 
     @app.middleware("http")
     async def refuse_cross_site_writes(request: Any, call_next: Any) -> Any:
@@ -2225,7 +2258,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.websocket("/ws")
     async def ws_stream(websocket: WebSocket) -> None:
-        await websocket.accept()
+        origin = websocket.headers.get("origin")
+        if origin is not None and not allowed_origin.fullmatch(origin):
+            await websocket.close(code=1008, reason="origin refused")
+            return
+
+        protocols = {
+            item.strip()
+            for item in websocket.headers.get("sec-websocket-protocol", "").split(",")
+            if item.strip()
+        }
+        if settings.api_token is not None:
+            authenticated = any(
+                item.startswith("lanius-auth-")
+                and secrets.compare_digest(
+                    item.removeprefix("lanius-auth-"), settings.api_token
+                )
+                for item in protocols
+            )
+            if not authenticated:
+                await websocket.close(code=1008, reason="authentication required")
+                return
+
+        await websocket.accept(subprotocol="lanius" if "lanius" in protocols else None)
         async with broker.stream() as queue:
             await websocket.send_json({"type": "hello", "data": {"version": __version__}})
             try:

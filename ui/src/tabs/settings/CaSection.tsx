@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react';
 
-import { caDownloadUrl, getCaInfo, type CaInfo } from '../../api/client';
+import {
+  downloadCaCertificate,
+  getCaInfo,
+  type CaInfo,
+} from '../../api/client';
 import { useT } from '../../i18n';
 
 /** Sentinel used to place a React node inside a translated sentence. */
@@ -26,6 +30,20 @@ export function CaSection({ onError }: { onError?: (message: string) => void }) 
       .catch((e) => onError?.((e as Error).message));
   }, [onError]);
 
+  const download = async (format: string) => {
+    try {
+      const blob = await downloadCaCertificate(format);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `mitmproxy-ca-cert.${format}`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (error) {
+      onError?.((error as Error).message);
+    }
+  };
+
   return (
     <section>
       <section>
@@ -41,14 +59,15 @@ export function CaSection({ onError }: { onError?: (message: string) => void }) 
             </dl>
             <div className="ca-downloads">
               {Object.entries(ca.available).map(([format, exists]) => (
-                <a
+                <button
                   key={format}
+                  type="button"
                   className={exists ? 'ca-link' : 'ca-link disabled'}
-                  href={exists ? caDownloadUrl(format) : undefined}
-                  download
+                  disabled={!exists}
+                  onClick={() => void download(format)}
                 >
                   {t('settings.caDownload', { format })}
-                </a>
+                </button>
               ))}
             </div>
             <p className="muted">

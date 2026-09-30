@@ -207,11 +207,11 @@ describe('SettingsTab', () => {
 
   it('offers CA downloads for available formats only', async () => {
     render(<CaSection />);
-    const pem = (await screen.findByText(t('settings.caDownload', { format: 'pem' }))) as HTMLAnchorElement;
-    expect(pem.getAttribute('href')).toContain('/api/ca/pem');
-    const p12 = screen.getByText(t('settings.caDownload', { format: 'p12' }));
+    const pem = (await screen.findByText(t('settings.caDownload', { format: 'pem' }))) as HTMLButtonElement;
+    expect(pem.disabled).toBe(false);
+    const p12 = screen.getByText(t('settings.caDownload', { format: 'p12' })) as HTMLButtonElement;
     expect(p12.className).toContain('disabled');
-    expect(p12.getAttribute('href')).toBeNull();
+    expect(p12.disabled).toBe(true);
   });
 
   it('links to mitm.it for device installation', async () => {

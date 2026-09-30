@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 import threading
 
@@ -37,6 +38,23 @@ def test_migrate_sets_user_version(tmp_path) -> None:
     version = store._conn.execute("PRAGMA user_version").fetchone()[0]
     assert version == SCHEMA_VERSION
     store.close()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
+def test_store_repairs_private_directory_and_database_permissions(tmp_path) -> None:
+    project = tmp_path / "project"
+    project.mkdir(mode=0o777)
+    project.chmod(0o777)
+    path = project / "capture.sqlite"
+    path.write_bytes(b"")
+    path.chmod(0o666)
+
+    store = FlowStore(path)
+    try:
+        assert project.stat().st_mode & 0o777 == 0o700
+        assert path.stat().st_mode & 0o777 == 0o600
+    finally:
+        store.close()
 
 
 def test_migrate_is_idempotent(tmp_path) -> None:

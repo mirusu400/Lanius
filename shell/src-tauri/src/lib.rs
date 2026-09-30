@@ -8,7 +8,7 @@ use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -33,6 +33,7 @@ pub struct EngineProcess(Mutex<Option<Child>>);
 #[derive(Clone, Serialize)]
 pub struct EngineInfo {
     pub api_url: String,
+    pub api_token: String,
     pub proxy: String,
     pub managed: bool,
     /// The shell's own version, which is not necessarily the engine's:
@@ -46,11 +47,34 @@ impl EngineInfo {
     fn local() -> Self {
         Self {
             api_url: format!("http://{API_HOST}:{}", api_port()),
+            api_token: api_token().to_string(),
             proxy: format!("{API_HOST}:{}", proxy_port()),
             managed: false,
             shell_version: env!("CARGO_PKG_VERSION").to_string(),
         }
     }
+}
+
+/// A capability shared only with the engine child and this desktop webview.
+/// It is intentionally regenerated whenever the shell starts.
+fn api_token() -> &'static str {
+    static TOKEN: OnceLock<String> = OnceLock::new();
+    TOKEN.get_or_init(|| {
+        if let Ok(value) = std::env::var("LANIUS_API_TOKEN") {
+            let value = value.trim();
+            if !value.is_empty()
+                && value.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~')
+                })
+            {
+                return value.to_string();
+            }
+            log::warn!("ignoring invalid LANIUS_API_TOKEN");
+        }
+        let mut bytes = [0_u8; 32];
+        getrandom::fill(&mut bytes).expect("operating system randomness is unavailable");
+        bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    })
 }
 
 fn port_open(port: u16) -> bool {
@@ -119,10 +143,9 @@ fn read_desktop_settings() -> Result<DesktopSettings, String> {
 
 fn save_desktop_settings(settings: &DesktopSettings) -> Result<(), String> {
     let path = desktop_settings_path()?;
-    std::fs::create_dir_all(path.parent().ok_or("invalid settings path")?)
-        .map_err(|err| err.to_string())?;
+    projects::ensure_private_dir(path.parent().ok_or("invalid settings path")?)?;
     let data = serde_json::to_vec_pretty(settings).map_err(|err| err.to_string())?;
-    std::fs::write(path, data).map_err(|err| err.to_string())
+    projects::write_private(&path, &data)
 }
 
 fn saved_api_port() -> Option<u16> {
@@ -327,6 +350,7 @@ fn start_engine(
         // Ports are overridable: another tool may already hold 8080, and
         // hardcoding it would leave the app unable to start at all.
         .env("LANIUS_API_PORT", api_port().to_string())
+        .env("LANIUS_API_TOKEN", api_token())
         .env("LANIUS_PROXY_PORT", proxy_port().to_string())
         .env(
             "LANIUS_LOCKDOWN_GLOBAL",
@@ -573,34 +597,18 @@ fn project_egress_allowed() -> Result<Result<(), String>, ()> {
     stream
         .set_read_timeout(Some(Duration::from_millis(500)))
         .map_err(|_| ())?;
-    stream
-        .write_all(
-            b"GET /api/lockdown HTTP/1.1
-
-Host: localhost
-
-Connection: close
-
-
-
-",
-        )
-        .map_err(|_| ())?;
+    let request = format!(
+        "GET /api/lockdown HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {}\r\nConnection: close\r\n\r\n",
+        api_token()
+    );
+    stream.write_all(request.as_bytes()).map_err(|_| ())?;
     let mut response = Vec::new();
     stream
         .take(4096)
         .read_to_end(&mut response)
         .map_err(|_| ())?;
     let response = String::from_utf8(response).map_err(|_| ())?;
-    let (headers, body) = response
-        .split_once(
-            "
-
-
-
-",
-        )
-        .ok_or(())?;
+    let (headers, body) = response.split_once("\r\n\r\n").ok_or(())?;
     if !headers.starts_with("HTTP/1.1 200 ") {
         return Err(());
     }

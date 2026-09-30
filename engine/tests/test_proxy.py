@@ -131,6 +131,14 @@ def test_parse_args_overrides() -> None:
     assert watch is True
 
 
+def test_parse_args_carries_the_shell_session_token(monkeypatch) -> None:
+    from app.main import parse_args
+
+    monkeypatch.setenv("LANIUS_API_TOKEN", "desktop-session-token")
+    settings, _watch = parse_args([])
+    assert settings.api_token == "desktop-session-token"
+
+
 def test_watchdog_exits_when_the_parent_dies(tmp_path) -> None:
     """The sidecar must not outlive the desktop shell (verified for real)."""
     import subprocess

@@ -27,6 +27,7 @@ tauri-plugin-log = "2"
 # frozen engine with it, so a replaced bundle replaces both halves.
 tauri-plugin-updater = "2"
 tokio = { version = "1", features = ["macros", "time"] }
+getrandom = "0.3"
 
 # Signal handling and process groups are POSIX only.
 [target.'cfg(unix)'.dependencies]

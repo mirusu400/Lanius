@@ -5,7 +5,7 @@ import {
   exportProject,
   getLockdown,
   importProjectFile,
-  projectBackupUrl,
+  downloadProjectBackup,
   restartProjectEngine,
 } from '../../api/client';
 import { notifyLockdownChanged } from '../../lockdownEvents';
@@ -88,6 +88,24 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
     }
   };
 
+  const backupDatabase = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const blob = await downloadProjectBackup();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'lanius-project.sqlite';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section>
       <h3>{t('project.section')}</h3>
@@ -112,12 +130,9 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
       {switchError && <div className="banner error" role="alert">{switchError}</div>}
 
       <div className="project-actions">
-        <button type="button" disabled={busy} onClick={() => {
-          const link = document.createElement('a');
-          link.href = projectBackupUrl();
-          link.download = 'lanius-project.sqlite';
-          link.click();
-        }}>{t('project.backupDatabase')}</button>
+        <button type="button" disabled={busy} onClick={() => void backupDatabase()}>
+          {t('project.backupDatabase')}
+        </button>
         <button type="button" disabled={busy} onClick={() => void download(true)}>
           {t('project.export')}
         </button>

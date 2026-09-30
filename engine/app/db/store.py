@@ -11,7 +11,9 @@ import base64
 import contextlib
 import json
 import math
+import os
 import sqlite3
+import stat
 import tempfile
 import threading
 import time
@@ -334,11 +336,20 @@ class FlowStore:
     def __init__(self, path: str | Path = ":memory:") -> None:
         self.path = str(path)
         if self.path != ":memory:":
-            Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+            parent = Path(self.path).parent
+            parent.mkdir(parents=True, exist_ok=True)
+            if os.name == "posix":
+                parent.chmod(stat.S_IRWXU)
         self._lock = threading.RLock()
         self._conn = sqlite3.connect(self.path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        if self.path != ":memory:" and os.name == "posix":
+            Path(self.path).chmod(stat.S_IRUSR | stat.S_IWUSR)
+            for suffix in ("-wal", "-shm"):
+                sidecar = Path(f"{self.path}{suffix}")
+                if sidecar.exists():
+                    sidecar.chmod(stat.S_IRUSR | stat.S_IWUSR)
         self._conn.execute("PRAGMA recursive_triggers=ON")
         self._payload_sets: "PayloadSetStore | None" = None
         self._conn.execute("PRAGMA synchronous=NORMAL")

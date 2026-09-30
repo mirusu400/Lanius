@@ -172,6 +172,7 @@ def parse_args(argv: list[str] | None = None) -> tuple[Settings, bool]:
         proxy_port=args.proxy_port,
         api_host=args.api_host,
         api_port=args.api_port,
+        api_token=defaults.api_token,
         db_path=args.db_path,
         log_level=args.log_level,
     )

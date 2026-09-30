@@ -3,6 +3,8 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  server: { host: '127.0.0.1', port: 5173 },
+  // The engine's Origin allowlist is deliberately exact. Do not silently
+  // move to a port that it must (correctly) reject.
+  server: { host: '127.0.0.1', port: 5173, strictPort: true },
   plugins: [react()],
 })

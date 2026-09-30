@@ -44,7 +44,7 @@ off a webpage.
 
 | Check | Result |
 |---|---|
-| `mitmproxy` version we bundle | 12.2.3 |
+| `mitmproxy` version we bundle | 13.0.0.dev0, pinned to upstream commit `d0d5a70be9bfc4f99e6d90e4aa10acc142b85d21` |
 | `LocalMode` exists in the installed build | yes, documented as "OS-level transparent proxy" |
 | `mitmproxy_rs.local.start_local_redirector` docstring | "Start an OS-level proxy to intercept traffic from the current machine. *Availability: Windows, Linux, and macOS*" |
 | `LocalRedirector.unavailable_reason()` on this Mac | `None`, i.e. supported here |

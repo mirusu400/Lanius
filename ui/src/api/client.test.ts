@@ -1,6 +1,32 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildFlowQuery } from './client';
+import { buildFlowQuery, getStatus, setApiToken } from './client';
+
+afterEach(() => {
+  setApiToken('');
+  vi.unstubAllGlobals();
+});
+
+describe('desktop API authentication', () => {
+  it('adds the session token to REST requests', async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    setApiToken('desktop-secret');
+
+    await getStatus();
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get('Authorization')).toBe(
+      'Bearer desktop-secret',
+    );
+  });
+});
 
 describe('buildFlowQuery', () => {
   it('always sets a limit', () => {

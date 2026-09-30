@@ -24,26 +24,39 @@ export let API_BASE =
   import.meta.env.VITE_LANIUS_API ||
   'http://127.0.0.1:12954';
 
+/** Per-shell-session capability. Empty only for standalone browser/CLI use. */
+export let API_TOKEN =
+  (typeof window !== 'undefined' &&
+    (window as { __LANIUS_API_TOKEN__?: string }).__LANIUS_API_TOKEN__) ||
+  import.meta.env.VITE_LANIUS_API_TOKEN ||
+  '';
+
 export function setApiBase(url: string): void {
   API_BASE = url;
+}
+
+export function setApiToken(token: string): void {
+  API_TOKEN = token;
 }
 
 export async function syncApiBaseWithShell(): Promise<void> {
   if (!isDesktop()) return;
   const internals = (window as unknown as {
-    __TAURI_INTERNALS__: { invoke(cmd: string): Promise<{ api_url: string }> };
+    __TAURI_INTERNALS__: { invoke(cmd: string): Promise<{ api_url: string; api_token?: string }> };
   }).__TAURI_INTERNALS__;
   const info = await internals.invoke('engine_info');
   setApiBase(info.api_url);
+  setApiToken(info.api_token ?? '');
 }
 
 export async function setDesktopApiPort(port: number): Promise<void> {
   if (!isDesktop()) throw new Error('Desktop shell is unavailable');
   const internals = (window as unknown as {
-    __TAURI_INTERNALS__: { invoke(cmd: string, args: { port: number }): Promise<{ api_url: string }> };
+    __TAURI_INTERNALS__: { invoke(cmd: string, args: { port: number }): Promise<{ api_url: string; api_token?: string }> };
   }).__TAURI_INTERNALS__;
   const info = await internals.invoke('set_api_port', { port });
   setApiBase(info.api_url);
+  setApiToken(info.api_token ?? '');
 }
 
 /** True when running inside the desktop shell. */
@@ -54,8 +67,21 @@ export function isDesktop(): boolean {
   );
 }
 
+function authenticatedInit(init?: RequestInit): RequestInit | undefined {
+  // Preserve the exact object in browser-development mode. Besides avoiding
+  // needless preflights, this keeps simple fetch mocks and CLI use unchanged.
+  if (!API_TOKEN) return init;
+  const headers = new Headers(init?.headers);
+  headers.set('Authorization', `Bearer ${API_TOKEN}`);
+  return { ...init, headers };
+}
+
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(`${API_BASE}${path}`, authenticatedInit(init));
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, init);
+  const res = await apiFetch(path, init);
   if (!res.ok) {
     // The engine explains refusals in `detail`: which port was busy, that
     // no browser is installed. Reporting only the status threw that away
@@ -859,8 +885,10 @@ export function getCaInfo(): Promise<CaInfo> {
   return request('/api/ca');
 }
 
-export function caDownloadUrl(format: string): string {
-  return `${API_BASE}/api/ca/${format}`;
+export async function downloadCaCertificate(format: string): Promise<Blob> {
+  const res = await apiFetch(`/api/ca/${encodeURIComponent(format)}`);
+  if (!res.ok) throw new Error(await errorDetail(res));
+  return res.blob();
 }
 
 export function getDashboard(top = 8): Promise<import('./types').Dashboard> {
@@ -983,8 +1011,10 @@ export function exportProject(includeFlows = true): Promise<Record<string, unkno
   return request(`/api/project/export?include_flows=${includeFlows}`);
 }
 
-export function projectBackupUrl(): string {
-  return `${API_BASE}/api/project/backup`;
+export async function downloadProjectBackup(): Promise<Blob> {
+  const res = await apiFetch('/api/project/backup');
+  if (!res.ok) throw new Error(await errorDetail(res));
+  return res.blob();
 }
 
 export function importProject(
