@@ -43,7 +43,7 @@ OUTPUT_PLUGIN = textwrap.dedent(
 
 
 def write_plugin(directory, name: str, source: str = OUTPUT_PLUGIN) -> None:
-    (directory / f"{name}.py").write_text(source)
+    (directory / f"{name}.py").write_text(source, encoding="utf-8")
 
 
 def manager_for(tmp_path) -> PluginManager:

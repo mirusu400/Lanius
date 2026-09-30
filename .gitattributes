@@ -1,0 +1,3 @@
+# Plugin manifests hash the package payload byte-for-byte. Keep bundled sample
+# payloads identical on every platform, including Windows checkouts.
+engine/plugin_samples/** text eol=lf
