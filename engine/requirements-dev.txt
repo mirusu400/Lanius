@@ -7,7 +7,7 @@ pip-audit>=2.9
 # pip-audit's CacheControl dependency uses msgpack; keep its fixed release in
 # the development/CI environment too so the audit tool does not reintroduce
 # the advisory it is meant to catch.
-msgpack>=1.2.1
+msgpack>=1.2.2
 # Not used by the engine. The Python that codegen produces imports it,
 # and one test runs that output to prove it sends the captured bytes.
 requests>=2.32
