@@ -76,6 +76,14 @@ class ScopeRule:
             self.path, path, self.match_type
         )
 
+    def matches_origin(self, scheme: str, host: str, port: int | None) -> bool:
+        """Whether this rule could match some path on an origin."""
+        if self.protocol != "any" and self.protocol != scheme:
+            return False
+        if self.port is not None and self.port != port:
+            return False
+        return _match(self.host, host, self.match_type)
+
 
 def _match(pattern: str, value: str, match_type: MatchType) -> bool:
     if pattern in ("", "*"):
@@ -125,6 +133,22 @@ class Scope:
         if parts.query:
             path = f"{path}?{parts.query}"
         return self.contains(parts.scheme, parts.hostname, port, path)
+
+    def could_contain_origin(
+        self, scheme: str | None, host: str | None, port: int | None
+    ) -> bool:
+        """Can any request path on this origin be in scope?
+
+        CONNECT does not expose the eventual HTTP path. This is deliberately
+        permissive about excludes: the exact request is checked later, before
+        the lazy upstream connection is opened.
+        """
+        scheme = (scheme or "http").lower()
+        host = (host or "").lower()
+        includes = self.includes
+        if not includes:
+            return True
+        return any(rule.matches_origin(scheme, host, port) for rule in includes)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -273,6 +297,11 @@ class ScopeManager:
         self, scheme: str | None, host: str | None, port: int | None, path: str | None
     ) -> bool:
         return self.scope.contains(scheme, host, port, path)
+
+    def could_contain_origin(
+        self, scheme: str | None, host: str | None, port: int | None
+    ) -> bool:
+        return self.scope.could_contain_origin(scheme, host, port)
 
     def should_capture(
         self, scheme: str | None, host: str | None, port: int | None, path: str | None

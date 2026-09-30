@@ -9,6 +9,7 @@ import {
   restartProjectEngine,
   setGlobalLockdown,
   setProjectLockdown,
+  setScopeEgress,
   type GlobalLockdownStatus,
   type LockdownStatus,
 } from '../../api/client';
@@ -35,15 +36,15 @@ export function LockdownSection() {
     void refresh().catch((err: unknown) => setError(String(err)));
   }, []);
 
-  const change = async (kind: 'global' | 'project', enabled: boolean) => {
+  const change = async (kind: 'global' | 'project' | 'scope-egress', enabled: boolean) => {
     setBusy(true);
     setError(null);
     try {
       if (kind === 'global') await setGlobalLockdown(enabled);
-      else {
+      else if (kind === 'project') {
         await setProjectLockdown(enabled);
         if (enabled) await restartProjectEngine();
-      }
+      } else await setScopeEgress(enabled);
       await refresh();
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err));
@@ -85,6 +86,22 @@ export function LockdownSection() {
         </label>
       </div>
       <p className="muted">{t('lockdown.projectHelp')}</p>
+
+      <div className="settings-row">
+        <label className="lockdown-label">
+          <input
+            type="checkbox"
+            checked={status?.scope_egress_enabled ?? false}
+            disabled={busy || status === null}
+            onChange={(event) => void change('scope-egress', event.target.checked)}
+          />{' '}
+          {t('lockdown.scopeEgress')}
+        </label>
+      </div>
+      <p className="muted">{t('lockdown.scopeEgressHelp')}</p>
+      {status?.scope_egress_effective && (
+        <p className="lockdown-active">{t('lockdown.scopeEgressActive')}</p>
+      )}
     </section>
   );
 }

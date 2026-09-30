@@ -29,6 +29,12 @@ def test_include_rule_limits_to_matching_hosts() -> None:
     assert scope.contains("https", "other.com", 443, "/") is False
 
 
+def test_origin_check_ignores_path_until_the_http_request_is_visible() -> None:
+    scope = Scope(rules=[rule(host="target.com", path="/api/*")])
+    assert scope.could_contain_origin("https", "target.com", 443) is True
+    assert scope.could_contain_origin("https", "other.com", 443) is False
+
+
 def test_glob_host_wildcards() -> None:
     scope = Scope(rules=[rule(host="*.target.com")])
     assert scope.contains("https", "api.target.com", 443, "/") is True

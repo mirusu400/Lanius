@@ -1122,6 +1122,8 @@ export interface LockdownStatus {
   global_enabled: boolean;
   project_enabled: boolean;
   effective: boolean;
+  scope_egress_enabled: boolean;
+  scope_egress_effective: boolean;
 }
 
 export function getLockdown(): Promise<LockdownStatus> {
@@ -1130,6 +1132,14 @@ export function getLockdown(): Promise<LockdownStatus> {
 
 export function setProjectLockdown(enabled: boolean): Promise<LockdownStatus> {
   return request('/api/lockdown/project', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export function setScopeEgress(enabled: boolean): Promise<LockdownStatus> {
+  return request('/api/lockdown/scope-egress', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled }),

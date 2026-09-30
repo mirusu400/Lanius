@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { captureWindowToClipboard, getLockdown, isDesktop, putWorkspace } from "./api/client";
 import { LOCKDOWN_BLOCKED, LOCKDOWN_CHANGED } from "./lockdownEvents";
+import { connectStream } from "./api/stream";
 import { ProjectPicker } from "./ProjectPicker";
 import { closeProject, currentProject, type Project } from "./projects";
 
@@ -136,6 +137,20 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   const { result: updates } = useUpdates();
   const updateAvailable = updates?.update_available ?? false;
   const [lockdownActive, setLockdownActive] = useState(false);
+  const { showToast } = useToast();
+
+  useEffect(() => connectStream({
+    onEvent: (event) => {
+      if (event.type !== 'engine.scope_egress_blocked') return;
+      const target = event.data.port === null
+        ? event.data.host
+        : `${event.data.host}:${event.data.port}`;
+      showToast({
+        message: t('lockdown.scopeEgressBlocked', { target }),
+        tone: 'error',
+      });
+    },
+  }), [project?.id, showToast, t]);
 
   useEffect(() => {
     let live = true;

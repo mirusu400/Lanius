@@ -70,7 +70,26 @@ def test_off_by_default(client) -> None:
         "global_enabled": False,
         "project_enabled": False,
         "effective": False,
+        "scope_egress_enabled": False,
+        "scope_egress_effective": False,
     }
+
+
+def test_scope_egress_is_project_owned_and_only_effective_with_lockdown(client) -> None:
+    status = client.put(
+        "/api/lockdown/scope-egress", json={"enabled": True}
+    ).json()
+    assert status["scope_egress_enabled"] is True
+    assert status["scope_egress_effective"] is False
+
+    status = client.put("/api/lockdown/project", json={"enabled": True}).json()
+    assert status["scope_egress_effective"] is True
+    assert client.app.state.engine.master.options.connection_strategy == "lazy"
+
+    status = client.put("/api/lockdown/project", json={"enabled": False}).json()
+    assert status["scope_egress_enabled"] is True
+    assert status["scope_egress_effective"] is False
+    assert client.app.state.engine.master.options.connection_strategy == "eager"
 
 
 def test_global_env_forces_it_on(tmp_path, monkeypatch) -> None:
@@ -166,6 +185,17 @@ def test_import_cannot_turn_lockdown_off(client) -> None:
     exported["settings"]["lockdown.project"] = "0"
     assert client.post("/api/project/import", json=exported).status_code == 200
     assert client.get("/api/lockdown").json()["project_enabled"] is True
+
+
+def test_import_cannot_turn_an_effective_scope_guard_off(client) -> None:
+    client.put("/api/lockdown/scope-egress", json={"enabled": True})
+    lock(client)
+    exported = client.get("/api/project/export").json()
+    exported["settings"]["lockdown.scope_egress"] = "0"
+    assert client.post("/api/project/import", json=exported).status_code == 200
+    status = client.get("/api/lockdown").json()
+    assert status["scope_egress_enabled"] is True
+    assert status["scope_egress_effective"] is True
 
 
 def test_catalogue_refresh_is_refused(client) -> None:

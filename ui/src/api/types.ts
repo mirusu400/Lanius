@@ -221,6 +221,16 @@ export type EngineEvent =
   | { type: 'engine.started' | 'engine.stopped'; data: Record<string, unknown> }
   | { type: 'engine.local_capture_blocked'; data: LocalCaptureState }
   | {
+      type: 'engine.scope_egress_blocked';
+      data: {
+        scheme: string;
+        host: string;
+        port: number | null;
+        path: string;
+        source: 'proxy' | 'replay';
+      };
+    }
+  | {
       type: 'engine.mode_failed';
       data: {
         spec: string;

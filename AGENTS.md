@@ -10,7 +10,14 @@ outbound connection must be reviewed against it before the connection starts.
   does not enforce the policy. HTTP refusals use status 423 with
   `LOCKDOWN_MODE_BLOCKED`; the shared UI client turns that into an error toast.
 - Browser traffic, proxy forwarding, upstream connections and explicitly
-  requested Replay/Fuzzer traffic are user traffic and remain available.
+  requested Replay/Fuzzer traffic are user traffic and remain available by
+  default. When the project-owned scope egress option is enabled and Lockdown
+  is effective, only in-scope HTTP/HTTPS traffic may connect; Replay/Fuzzer
+  follows the same rule and raw TCP/UDP is refused outright.
+- Scope egress must be decided before DNS/socket creation. Keep mitmproxy on
+  lazy connections while it is effective, re-check requests after automatic or
+  Intercept edits, and close existing connections whenever active scope rules
+  change. A UI-only filter or capture restriction is not enforcement.
 - Plugins are arbitrary Python and can bypass an in-process HTTP wrapper.
   Keep plugin loading and execution suspended while Lockdown Mode is active.
   `PluginManager.suspended` is the one predicate for this; it covers safe mode

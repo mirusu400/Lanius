@@ -122,6 +122,8 @@ class ReplayAddon:
     def __init__(self, store: FlowStore) -> None:
         self.store = store
         self.options: Options | None = None
+        self._active: set[asyncio.Task[Any]] = set()
+        self._policy_cancelled: set[asyncio.Task[Any]] = set()
 
     @property
     def auto_decompress(self) -> bool:
@@ -151,15 +153,48 @@ class ReplayAddon:
 
         flow.is_replay = "request"
         handler = ReplayHandler(flow, self.options)
+        task = asyncio.current_task()
+        if task is not None:
+            self._active.add(task)
         started = time.time()
         try:
             await asyncio.wait_for(handler.replay(), timeout=timeout)
         except TimeoutError as exc:
             raise ReplayError(f"request timed out after {timeout}s") from exc
+        except asyncio.CancelledError:
+            if task is not None and task in self._policy_cancelled:
+                raise ReplayError("request cancelled by the Lockdown scope guard") from None
+            raise
+        finally:
+            # ReplayHandler normally closes these after response/error. A
+            # policy transition can cancel replay earlier, so clean up here as
+            # well to ensure no standalone upstream connection survives.
+            handlers = [
+                item.handler
+                for item in handler.transports.values()
+                if item.handler is not None and not item.handler.done()
+            ]
+            for active in handlers:
+                active.cancel("Lockdown scope guard changed")
+            if handlers:
+                await asyncio.gather(*handlers, return_exceptions=True)
+            if task is not None:
+                self._active.discard(task)
+                self._policy_cancelled.discard(task)
 
         record = _to_record(flow, started)
         await asyncio.to_thread(self.store.upsert, record)
         return record
+
+    async def cancel_active(self) -> None:
+        """Cancel standalone Replay/Fuzzer connections during policy changes."""
+        current = asyncio.current_task()
+        tasks = [task for task in self._active if task is not current and not task.done()]
+        self._policy_cancelled.update(tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def _to_record(flow: http.HTTPFlow, started: float) -> FlowRecord:

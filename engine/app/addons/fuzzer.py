@@ -371,6 +371,20 @@ class FuzzerAddon:
         self._publish("fuzzer.finished", run.summary())
         return run
 
+    async def stop_all(self) -> None:
+        """Stop all live jobs before a stricter network policy takes effect."""
+        tasks: list[asyncio.Task[None]] = []
+        for run_id, task in list(self._tasks.items()):
+            if task.done():
+                continue
+            run = self.runs.get(run_id)
+            if run is not None:
+                run.status = "stopped"
+            task.cancel()
+            tasks.append(task)
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     def get(self, run_id: str) -> FuzzRun:
         run = self.runs.get(run_id)
         if run is None:

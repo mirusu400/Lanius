@@ -148,6 +148,12 @@ class WebSocketProxyAddon:
             self._resolve(message_id, "forward")
         return count
 
+    def drop_all(self) -> int:
+        count = len(self.paused)
+        for message_id in list(self.paused):
+            self.drop(message_id)
+        return count
+
     def repeat(
         self,
         flow_id: str,

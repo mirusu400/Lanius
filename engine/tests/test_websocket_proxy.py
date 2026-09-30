@@ -59,6 +59,21 @@ async def test_intercept_drop() -> None:
     assert message.dropped is True
 
 
+@pytest.mark.asyncio
+async def test_drop_all_drops_paused_messages() -> None:
+    addon = WebSocketProxyAddon(EventBroker())
+    addon.set_rules(enabled=True)
+    flow = websocket_flow()
+    message = WebSocketMessage(1, True, b"held")
+    flow.websocket.messages.append(message)
+    task = asyncio.create_task(addon.websocket_message(flow))
+    await asyncio.sleep(0)
+
+    assert addon.drop_all() == 1
+    await task
+    assert message.dropped is True
+
+
 def test_repeat_injects_into_active_connection() -> None:
     calls = []
 

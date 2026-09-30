@@ -37,9 +37,11 @@ the machine.
 
 For sensitive networks, **Settings > Lockdown Mode** has separate global and
 project switches. They block Lanius-owned external requests while browser and
-proxy traffic remain available. The global switch can also be forced before
-launch with `LANIUS_LOCKDOWN=1`. See [Lockdown Mode](docs/lockdown-mode.md)
-for the exact scope.
+proxy traffic remain available by default. A project option can additionally
+drop out-of-scope HTTP/HTTPS proxy traffic and all raw TCP/UDP while Lockdown is
+active. The global switch can also be forced before launch with
+`LANIUS_LOCKDOWN=1`. See [Lockdown Mode](docs/lockdown-mode.md) for the exact
+scope.
 
 | Platform | File |
 |---|---|
@@ -342,7 +344,9 @@ lines and its editor height can be adjusted.
 
 Define a **scope** with include and exclude rules to keep your attention on the
 application under test. Scope rules persist across restarts, and you can tell
-Lanius to stop recording out of scope traffic entirely.
+Lanius to stop recording out of scope traffic entirely. In Lockdown settings,
+the separate scope egress option can prevent that traffic from being sent at
+all while Lockdown is active.
 The Scope field accepts full URLs or scheme-free host patterns. A plain domain
 matches any host containing that text, on both HTTP and HTTPS. In the default
 mode, `*` matches any number of characters and `?` matches one character.

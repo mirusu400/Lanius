@@ -31,6 +31,7 @@ from .addons.scanner import ScannerAddon
 from .plugin_packages import PluginPackageManager
 from .plugin_catalogue import PluginCatalogueManager
 from .addons.scope import ScopeManager
+from .addons.scope_egress import ScopeEgressEarlyAddon, ScopeEgressGuardAddon
 from .config import Settings
 from .lockdown import LockdownPolicy
 from .db.store import FlowStore
@@ -233,6 +234,8 @@ class ProxyEngine:
         self.lockdown = lockdown or LockdownPolicy.from_env(store)
         self.master: DumpMaster | None = None
         self.scope = ScopeManager(store, broker)
+        self.scope_egress = ScopeEgressGuardAddon(self.scope, self.lockdown, broker)
+        self.scope_egress_early = ScopeEgressEarlyAddon(self.scope_egress)
         self.capture = CaptureAddon(store, broker, self.scope)
         self.match_replace = MatchReplaceAddon(store, broker)
         self.intercept = InterceptAddon(
@@ -241,7 +244,7 @@ class ProxyEngine:
             # A request edited while held does not fire the request hook a
             # second time. Persist it immediately so History can show the
             # final "Modified request" even before a response arrives.
-            on_forwarded=self.capture.request_updated,
+            on_forwarded=self._intercept_forwarded,
         )
         self.websockets = WebSocketProxyAddon(broker, store=store)
         self.replay = ReplayAddon(store)
@@ -286,6 +289,13 @@ class ProxyEngine:
         self.upstream_hops: list[str] = []
         self._upstream_bridge: UpstreamBridge | None = None
         self._apply_saved_upstream()
+
+    def _intercept_forwarded(self, flow: Any) -> bool:
+        """Re-check edited requests before Intercept releases them."""
+        allowed = self.scope_egress.allows_http(flow)
+        if allowed:
+            self.capture.request_updated(flow)
+        return allowed
 
     LISTEN_HOST_SETTING = "listen_host"
     LISTEN_PORT_SETTING = "listen_port"
@@ -349,6 +359,7 @@ class ProxyEngine:
         return modes
 
     def _build_master(self) -> DumpMaster:
+        self.scope_egress.reset_connections()
         opts = options.Options(
             listen_host=self.settings.proxy_host,
             confdir=str(self.settings.confdir),
@@ -361,6 +372,14 @@ class ProxyEngine:
             tcp_hosts=list(self.settings.tcp_hosts),
         )
         master = DumpMaster(opts, with_termlog=False, with_dumper=False)
+        # In eager mode mitmproxy may resolve/connect/TLS-handshake an HTTPS
+        # origin before the decrypted path is visible. Strict scope egress
+        # therefore uses lazy connections and approves the exact request first.
+        master.options.update(
+            connection_strategy=(
+                "lazy" if self.lockdown.scope_egress_effective else "eager"
+            )
+        )
         # Applying a TLS option makes mitmproxy probe which versions this
         # OpenSSL supports, which raises rather than returning False here.
         patch_version_probe()
@@ -375,8 +394,14 @@ class ProxyEngine:
             master.addons.remove(errorcheck)
         # Automatic replacements must be visible in Intercept, and capture
         # stays last so it persists the final form of each message.
+        master.addons.add(self.scope_egress_early)
+        # DNS resolution is itself outbound. Put the early guard before every
+        # bundled addon so a DNS flow cannot reach mitmproxy's resolver first.
+        master.addons.chain.remove(self.scope_egress_early)
+        master.addons.chain.insert(0, self.scope_egress_early)
         master.addons.add(self.match_replace)
         master.addons.add(self.intercept)
+        master.addons.add(self.scope_egress)
         master.addons.add(self.websockets)
         master.addons.add(self.scanner)
         master.addons.add(self.capture)
@@ -784,8 +809,12 @@ class ProxyEngine:
         return True
 
     async def stop(self) -> None:
-        self.intercept.resume_all()
-        self.websockets.resume_all()
+        if self.scope_egress.active:
+            self.intercept.drop_all()
+            self.websockets.drop_all()
+        else:
+            self.intercept.resume_all()
+            self.websockets.resume_all()
         await self.plugins.stop_runtime()
         if self.master is not None:
             await self._stop_listeners()
@@ -807,6 +836,15 @@ class ProxyEngine:
             self._upstream_bridge = None
         self.websockets.master = None
         self.broker.publish("engine.stopped", {})
+
+    async def restart_for_scope_egress(self) -> None:
+        """Close all user egress and rebuild mitmproxy with current policy."""
+        await self.fuzzer.stop_all()
+        await self.replay.cancel_active()
+        if not self.running:
+            return
+        await self.stop()
+        await self.start()
 
     async def _stop_listeners(self) -> None:
         """Close the listening sockets before shutting the master down.

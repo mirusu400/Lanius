@@ -483,8 +483,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.put("/api/lockdown/project")
     async def set_project_lockdown(body: LockdownPatch) -> dict[str, Any]:
+        was_scope_egress = lockdown.scope_egress_effective
         result = lockdown.set_project(body.enabled)
         await _apply_lockdown_to_plugins(result["effective"])
+        if was_scope_egress != result["scope_egress_effective"]:
+            await engine.restart_for_scope_egress()
+        return result
+
+    @app.put("/api/lockdown/scope-egress")
+    async def set_scope_egress(body: LockdownPatch) -> dict[str, Any]:
+        was_effective = lockdown.scope_egress_effective
+        result = lockdown.set_scope_egress(body.enabled)
+        if was_effective != result["scope_egress_effective"]:
+            await engine.restart_for_scope_egress()
         return result
 
     @app.get("/api/status")
@@ -610,16 +621,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=422, detail=f"unsupported project version: {version!r}"
             )
         was_locked = lockdown.project_enabled
+        was_scope_egress = lockdown.scope_egress_effective
         counts = await asyncio.to_thread(store.import_project, payload)
         # Project exports carry this setting too. Apply an imported switch
         # before any pending product request can continue. A file can turn
         # Lockdown on but never off: only the user's own switch loosens it.
-        lockdown.set_project(was_locked or lockdown.project_enabled)
+        imported = lockdown.reload()
+        lockdown.set_project(was_locked or imported["project_enabled"])
+        # The same rule applies to an effective scope guard: importing an
+        # untrusted project may tighten it, but cannot silently open egress.
+        if was_scope_egress:
+            lockdown.set_scope_egress(True)
         # The scope lives in memory once loaded, so without this the
         # imported rules sit in the database and affect nothing.
         scope = await asyncio.to_thread(engine.scope.reload)
         engine.match_replace.reload()
         await _apply_lockdown_to_plugins(lockdown.enabled)
+        if lockdown.scope_egress_effective:
+            # Rules and routing settings have just been replaced. Close every
+            # old session before accepting traffic under the new snapshot.
+            await engine.restart_for_scope_egress()
         broker.publish("scope.changed", scope.as_dict())
         broker.publish("project.imported", counts)
         return {"ok": True, **counts}
@@ -1270,6 +1291,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         except ScopeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if lockdown.scope_egress_effective:
+            await engine.restart_for_scope_egress()
         return rule.as_dict()
 
     @app.post("/api/scope/from-url")
@@ -1281,6 +1304,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             rule = await asyncio.to_thread(lambda: engine.scope.add_rule(**fields))
         except ScopeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if lockdown.scope_egress_effective:
+            await engine.restart_for_scope_egress()
         return rule.as_dict()
 
     @app.patch("/api/scope/rules/{rule_id}")
@@ -1292,6 +1317,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         except ScopeError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if lockdown.scope_egress_effective:
+            await engine.restart_for_scope_egress()
         return scope.as_dict()
 
     @app.delete("/api/scope/rules/{rule_id}")
@@ -1300,6 +1327,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await asyncio.to_thread(lambda: engine.scope.delete_rule(rule_id))
         except ScopeError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if lockdown.scope_egress_effective:
+            await engine.restart_for_scope_egress()
         return {"ok": True}
 
     @app.patch("/api/scope")

@@ -109,7 +109,7 @@ class InterceptAddon:
         rules: InterceptRules | None = None,
         *,
         store: FlowStore | None = None,
-        on_forwarded: Callable[[http.HTTPFlow], None] | None = None,
+        on_forwarded: Callable[[http.HTTPFlow], bool | None] | None = None,
     ) -> None:
         self.broker = broker
         self.rules = rules or InterceptRules()
@@ -151,6 +151,7 @@ class InterceptAddon:
 
     def forward(self, flow_id: str, edits: dict[str, Any] | None = None) -> None:
         flow, phase = self._take(flow_id)
+        allowed = True
         if edits:
             apply_edits(
                 flow,
@@ -159,9 +160,16 @@ class InterceptAddon:
                 body_is_decoded=self._auto_decompress(),
             )
             if self.on_forwarded is not None:
-                self.on_forwarded(flow)
+                allowed = self.on_forwarded(flow) is not False
+        # Resume before kill: kill() clears ``intercepted`` without waking
+        # wait_for_resume(), which would otherwise leave the hook hung.
         flow.resume()
-        self.broker.publish("intercept.resolved", {"id": flow_id, "action": "forward"})
+        action = "forward"
+        if not allowed:
+            action = "drop"
+            if flow.killable:
+                flow.kill()
+        self.broker.publish("intercept.resolved", {"id": flow_id, "action": action})
 
     def drop(self, flow_id: str) -> None:
         flow, _phase = self._take(flow_id)
@@ -182,6 +190,13 @@ class InterceptAddon:
             self.broker.publish(
                 "intercept.resolved", {"id": flow_id, "action": "forward"}
             )
+        return count
+
+    def drop_all(self) -> int:
+        """Release and kill every paused flow during a security transition."""
+        count = len(self.paused)
+        for flow_id in list(self.paused):
+            self.drop(flow_id)
         return count
 
     # --- internals --------------------------------------------------------

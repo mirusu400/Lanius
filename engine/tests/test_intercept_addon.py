@@ -88,6 +88,26 @@ def test_forward_applies_request_edits() -> None:
     assert flow.request.content == b"payload"
 
 
+def test_forward_drops_an_edit_rejected_by_the_egress_guard() -> None:
+    broker = EventBroker()
+    queue = broker.subscribe()
+    a = InterceptAddon(
+        broker,
+        InterceptRules(enabled=True),
+        on_forwarded=lambda _flow: False,
+    )
+    flow = make_flow()
+    a.request(flow)
+    queue.get_nowait()  # intercept.paused
+
+    a.forward(flow.id, {"host": "outside.test"})
+
+    assert flow.error is not None
+    assert not flow.intercepted
+    event = queue.get_nowait()
+    assert event["data"]["action"] == "drop"
+
+
 def test_forward_applies_response_edits() -> None:
     a = addon(enabled=True, intercept_requests=False, intercept_responses=True)
     flow = make_flow(with_response=True)
