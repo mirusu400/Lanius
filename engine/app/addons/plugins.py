@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import functools
 import importlib
 import importlib.util
 import inspect
@@ -25,6 +26,7 @@ from mitmproxy import hooks as mitm_hooks
 
 from .. import codegen
 from ..plugin_registry import ContributionRegistry
+from ..plugin_output import install_output_routers
 from ..plugin_packages import (
     PluginPackageError,
     PluginPackageManager,
@@ -297,6 +299,7 @@ class PluginManager:
         self.safe_mode = safe_mode
         self.lockdown_enabled = lockdown_enabled or (lambda: False)
         self.registry = registry or ContributionRegistry(store, user_values_path)
+        install_output_routers()
         self.packages = packages
         self.runtime_started = False
         self.plugins: dict[str, Plugin] = {}
@@ -649,6 +652,7 @@ class PluginManager:
 
     def _import(self, plugin: Plugin) -> Any:
         module_name = _module_name(plugin.name)
+        self.registry.attach_module_logger(plugin.name, module_name)
         _purge_modules(plugin.name)
         _purge_bytecode(plugin.path)
         if plugin.package_root is not None:
@@ -748,9 +752,68 @@ class PluginManager:
         for obj in objects:
             invoke(obj, mitm_hooks.ConfigureHook(updated))
 
+    def _instrument_hooks(self, plugin: Plugin, objects: List[Any]) -> None:
+        """Run every mitmproxy hook with plugin-owned output attribution."""
+
+        for obj in objects:
+            for hook_name in _module_hooks(obj):
+                original = getattr(obj, hook_name)
+                if getattr(original, "__lanius_output_wrapped__", False):
+                    continue
+
+                if inspect.iscoroutinefunction(original):
+
+                    async def async_hook(
+                        *args: Any,
+                        __original: Any = original,
+                        __hook_name: str = hook_name,
+                        **kwargs: Any,
+                    ) -> Any:
+                        try:
+                            with self.registry.execution(plugin.name):
+                                return await __original(*args, **kwargs)
+                        except Exception as exc:
+                            self.registry.append_exception(
+                                plugin.name, f"hook {__hook_name}", exc
+                            )
+                            raise
+
+                    wrapped: Any = async_hook
+                    functools.update_wrapper(wrapped, original)
+                else:
+
+                    def sync_hook(
+                        *args: Any,
+                        __original: Any = original,
+                        __hook_name: str = hook_name,
+                        **kwargs: Any,
+                    ) -> Any:
+                        try:
+                            with self.registry.execution(plugin.name):
+                                return __original(*args, **kwargs)
+                        except Exception as exc:
+                            self.registry.append_exception(
+                                plugin.name, f"hook {__hook_name}", exc
+                            )
+                            raise
+
+                    wrapped = sync_hook
+                    functools.update_wrapper(wrapped, original)
+                setattr(wrapped, "__lanius_output_wrapped__", True)
+                try:
+                    setattr(obj, hook_name, wrapped)
+                except (AttributeError, TypeError) as exc:
+                    raise PluginError(
+                        f"cannot instrument hook {hook_name!r} on {type(obj).__name__}"
+                    ) from exc
+
     def _load(self, plugin: Plugin) -> Plugin:
         if self.suspended:
             raise PluginError(self.suspended_reason)
+        with self.registry.execution(plugin.name):
+            return self._load_in_context(plugin)
+
+    def _load_in_context(self, plugin: Plugin) -> Plugin:
         plugin.uses_sdk = False
         try:
             module = self._import(plugin)
@@ -760,12 +823,15 @@ class PluginManager:
                 raise PluginError(
                     "plugin must define `activate`, `addons = [...]` or a `Plugin` class"
                 )
+            self._instrument_hooks(plugin, objects)
         except PluginError as exc:
+            self.registry.append_exception(plugin.name, "load", exc)
             self.registry.dispose_owner(plugin.name)
             plugin.error = str(exc)
             plugin.loaded = False
             raise
         except Exception as exc:
+            self.registry.append_exception(plugin.name, "load", exc)
             self.registry.dispose_owner(plugin.name)
             plugin.error = f"{type(exc).__name__}: {exc}"
             plugin.loaded = False
@@ -797,6 +863,7 @@ class PluginManager:
                 self._initial_configure(objects)
             self._capture_registry_changes(plugin, before_commands, before_options)
         except Exception as exc:
+            self.registry.append_exception(plugin.name, "registration", exc)
             addons = self.addons
             for obj in reversed(registered):
                 try:

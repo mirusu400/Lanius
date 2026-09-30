@@ -64,19 +64,37 @@ fi
 if [ "$target" = "all" ] || [ "$target" = "shell" ]; then
   echo "shell"
   # tauri resolves bundle resources at compile time, so clippy cannot run
-  # without a frozen engine. CI writes a placeholder; do the same here
-  # rather than freezing the real thing for a lint pass.
-  if [ ! -e engine/dist/lanius-engine ]; then
-    mkdir -p engine/dist
-    : > engine/dist/lanius-engine
+  # without a frozen engine. A real PyInstaller directory is also unsuitable:
+  # tauri-build recursively emits rerun directives and can treat ordinary
+  # files inside that resource as directories. Temporarily replace either
+  # state with the same single-file placeholder CI uses.
+  engine_resource="engine/dist/lanius-engine"
+  engine_resource_backup=""
+  restore_engine_resource() {
+    if [ -n "$engine_resource_backup" ]; then
+      unlink "$engine_resource"
+      mv "$engine_resource_backup/lanius-engine" "$engine_resource"
+      rmdir "$engine_resource_backup"
+      engine_resource_backup=""
+    elif [ "${placeholder:-0}" = "1" ] && [ -f "$engine_resource" ]; then
+      unlink "$engine_resource"
+    fi
+  }
+  mkdir -p engine/dist
+  if [ -d "$engine_resource" ]; then
+    engine_resource_backup=$(mktemp -d /tmp/lanius-check-resource.XXXXXX)
+    mv "$engine_resource" "$engine_resource_backup/lanius-engine"
+    : > "$engine_resource"
+  elif [ ! -e "$engine_resource" ]; then
+    : > "$engine_resource"
     placeholder=1
   fi
+  trap restore_engine_resource EXIT INT TERM
   step "format" cargo fmt --manifest-path shell/src-tauri/Cargo.toml --check
   step "clippy" cargo clippy --manifest-path shell/src-tauri/Cargo.toml --all-targets -- -D warnings
   step "tests" cargo test --manifest-path shell/src-tauri/Cargo.toml
-  if [ "${placeholder:-0}" = "1" ]; then
-    rm -f engine/dist/lanius-engine
-  fi
+  restore_engine_resource
+  trap - EXIT INT TERM
 fi
 
 if [ "$target" = "all" ]; then

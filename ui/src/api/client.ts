@@ -590,6 +590,8 @@ export function listPlugins(): Promise<{
   items: import('./types').PluginInfo[];
   directory: string;
   safe_mode: boolean;
+  suspended: boolean;
+  suspended_reason: string | null;
   development_mode: boolean;
 }> {
   return request('/api/plugins');
@@ -662,6 +664,37 @@ export function resetPluginDiagnostics(
   name: string,
 ): Promise<import('./types').PluginDiagnostics> {
   return request(`/api/plugins/${encodeURIComponent(name)}/diagnostics/reset`, {
+    method: 'POST',
+  });
+}
+
+export function getPluginLogs(
+  name: string,
+  after = 0,
+  limit = 500,
+): Promise<import('./types').PluginLogPage> {
+  const query = new URLSearchParams({ after: String(after), limit: String(limit) });
+  return request(`/api/plugins/${encodeURIComponent(name)}/logs?${query}`);
+}
+
+export function clearPluginLogs(
+  name: string,
+): Promise<import('./types').PluginLogPage> {
+  return request(`/api/plugins/${encodeURIComponent(name)}/logs`, {
+    method: 'DELETE',
+  });
+}
+
+export function listPluginSamples(): Promise<{
+  items: import('./types').PluginSampleInfo[];
+}> {
+  return request('/api/plugin-samples');
+}
+
+export function installPluginSample(
+  pluginId: string,
+): Promise<{ plugin: import('./types').PluginInfo }> {
+  return request(`/api/plugin-samples/${encodeURIComponent(pluginId)}/install`, {
     method: 'POST',
   });
 }

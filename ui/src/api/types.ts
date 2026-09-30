@@ -377,7 +377,7 @@ export interface PluginPackageInfo {
   signature_present: boolean;
   trust: 'trusted' | 'unsigned' | 'development' | 'unmanaged';
   development: boolean;
-  source: 'archive' | 'catalogue' | 'development' | 'unmanaged';
+  source: 'archive' | 'catalogue' | 'development' | 'unmanaged' | 'bundled';
   catalog_source: string | null;
 }
 
@@ -475,9 +475,30 @@ export interface PluginContributionDiagnostic {
 }
 
 export interface PluginLogEntry {
+  sequence: number;
   timestamp: number;
+  plugin: string;
+  source: 'sdk' | 'logging' | 'stdout' | 'stderr' | 'host';
   level: string;
   message: string;
+}
+
+export interface PluginLogPage {
+  plugin: string;
+  items: PluginLogEntry[];
+  count: number;
+  next_sequence: number;
+  dropped: number;
+}
+
+export interface PluginSampleInfo {
+  id: string;
+  name: string;
+  version: string;
+  description: string | null;
+  author: string | null;
+  installed: boolean;
+  installed_version: string | null;
 }
 
 export interface PluginDiagnostics {

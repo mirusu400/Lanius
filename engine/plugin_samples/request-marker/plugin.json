@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "id": "lanius.request-marker",
+  "name": "Request Marker",
+  "version": "1.0.0",
+  "description": "Adds a configurable X-Lanius-Sample header and demonstrates the plugin SDK.",
+  "author": {
+    "name": "Lanius"
+  },
+  "compatibility": {
+    "lanius": ">=0.1,<1",
+    "sdk": ">=1,<2"
+  },
+  "backend": {
+    "runtime": "trusted",
+    "entrypoint": "backend/__init__.py"
+  },
+  "ui": {
+    "views": [
+      {
+        "id": "dashboard",
+        "title": "Request Marker",
+        "entrypoint": "ui/index.html"
+      }
+    ]
+  },
+  "permissions": [
+    "actions.invoke",
+    "settings.read"
+  ],
+  "integrity": {
+    "files": {
+      "backend/__init__.py": "cb32a983ebc547299cf77b0e80cc66a67aaced2e95bf932784c4fdd417775045",
+      "ui/index.html": "1e0a29f29182152d9d23dae716b624ef071e2078d2567f4e357ead058776ac4f",
+      "ui/app.js": "30fe30c05870f2a66bb64c9d4c9a07fe443f1f62caacc1759cdd86a376603242"
+    }
+  }
+}

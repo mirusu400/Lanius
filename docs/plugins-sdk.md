@@ -100,12 +100,34 @@ disable and reload; uninstall can explicitly remove them later.
 `context.tasks.create(awaitable)` for background work so shutdown, reload, and
 failure cleanup can cancel it deterministically.
 
-The host retains the latest 500 log entries per plugin and measures SDK action,
-payload, and scanner contribution calls. The Plugins diagnostics panel shows
-call and error counts, average and maximum duration, the last error, and output.
-Resetting diagnostics also resumes a suspended scanner check. A passive or
-active scanner check is suspended after five consecutive errors so one broken
-check cannot fail for every captured request indefinitely.
+The host combines five sources in a plugin-owned, in-memory log stream:
+
+- `sdk`: `context.log`
+- `logging`: the plugin module's standard Python logger and descendants
+- `stdout`: `print()` and direct stdout writes, recorded at `info`
+- `stderr`: direct stderr writes, recorded at `error`
+- `host`: load, activation, managed task, action, scanner, and traffic-hook
+  failures observed by Lanius
+
+Each entry contains `sequence`, `timestamp`, `plugin`, `source`, `level`, and
+`message`. The host retains the latest 500 entries per plugin and limits each
+message to 16 KiB. Buffers exist only for the current engine session: they are
+not persisted in the project, exported, or copied to the Logger tab. Incremental
+clients use `GET /api/plugins/{id}/logs?after={sequence}&limit=500`, and
+`DELETE /api/plugins/{id}/logs` clears only that plugin's log buffer.
+
+Output attribution covers host-managed import, activation, mitmproxy hooks,
+SDK actions and payload handlers, scanner handlers, and managed tasks. File
+descriptor output from a subprocess and output from unmanaged native threads
+are outside this contract. Writes made outside a plugin execution context pass
+through to the engine's original stdout or stderr.
+
+The performance panel measures SDK action, payload, and scanner contribution
+calls. It shows call and error counts, average and maximum duration, and the
+last error. Resetting diagnostics resets those counters and resumes a suspended
+scanner check without deleting logs. A passive or active scanner check is
+suspended after five consecutive errors so one broken check cannot fail for
+every captured request indefinitely.
 
 ## Package resources
 

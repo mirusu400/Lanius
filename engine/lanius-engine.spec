@@ -62,6 +62,7 @@ if not gost_binary.is_file():
     raise RuntimeError("GOST binary missing; run python scripts/fetch_gost.py before PyInstaller")
 binaries.append((str(gost_binary), "."))
 datas.append(("vendor/gost/LICENSE", "gost-license"))
+datas.append(("plugin_samples", "plugin-samples"))
 excludes = ["mcp.cli", "typer", "tkinter", "matplotlib", "PyInstaller"]
 
 a = Analysis(

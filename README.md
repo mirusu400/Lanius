@@ -403,10 +403,12 @@ choice is remembered.
 
 Plugins are ordinary mitmproxy addons. Drop a Python file into
 `~/.lanius/plugins`, then enable it from the **Plugins** tab. It applies to
-live traffic immediately. Plugins can be reordered, reloaded manually, or
-watched and reloaded automatically after an edit without restarting. Set
-`LANIUS_DISABLE_PLUGINS=1` before launch to inspect a project in plugin safe
-mode.
+live traffic immediately. The management screen separates installed plugins
+from catalogue releases and gives each installed plugin its own overview,
+settings, live logs, performance diagnostics, and packaged views. Plugins can
+be reordered, reloaded manually, or watched and reloaded automatically after
+an edit without restarting. Set `LANIUS_DISABLE_PLUGINS=1` before launch to
+inspect a project in plugin safe mode.
 
 ```python
 DESCRIPTION = "Tag responses that are missing a CSP header"
@@ -430,15 +432,22 @@ class Plugin:
     }
 ```
 
-Three working examples ship in [`plugins/`](./plugins/), and the full hook
-list is in [`plugins/README.md`](./plugins/README.md). Actions, codecs,
+Loose-file development examples ship in [`plugins/`](./plugins/), and the full
+hook list is in [`plugins/README.md`](./plugins/README.md). The empty Plugins
+screen can also install the bundled **Request Marker** package. It starts
+disabled, adds a configurable `X-Lanius-Sample` request header when enabled,
+and demonstrates SDK actions, settings, logging, traffic hooks, and a sandboxed
+view. Actions, codecs,
 settings, namespaced storage, payload extensions, and managed tasks use the
 versioned [`lanius_sdk`](./docs/plugins-sdk.md). Declared actions appear in the
 matching History, Target, message, Replay, Fuzzer, or global UI location;
 package data is available through a bounded read-only resource API.
-Per-plugin diagnostics retain recent SDK logs and contribution timing; scanner
-checks that fail five times consecutively are suspended until diagnostics are
-reset.
+Each plugin has a session-only 500-entry log buffer that combines SDK logging,
+Python logging, stdout/stderr, and host-captured lifecycle or hook failures.
+Logs are viewed, filtered, copied, paused, or cleared separately from
+performance diagnostics; they are not written into projects or exports.
+Scanner checks that fail five times consecutively are suspended until
+diagnostics are reset.
 Installable `.lanius-plugin` archives, signatures, and sandboxed UI are
 documented in [`docs/plugin-packages.md`](./docs/plugin-packages.md).
 The Plugins tab can browse user-configured signed catalogues, install compatible

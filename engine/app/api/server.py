@@ -50,6 +50,7 @@ from ..plugin_packages import (
     load_manifest,
 )
 from ..plugin_catalogue import PluginCatalogueError
+from ..plugin_samples import bundled_sample_archive, bundled_samples
 from .. import codegen
 from ..build_info import build_info
 from ..lockdown import BLOCKED_DETAIL, LockdownBlocked, LockdownPolicy
@@ -1730,8 +1731,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "items": engine.plugins.list(),
             "directory": str(settings.plugins_dir),
             "safe_mode": engine.plugins.safe_mode,
+            "suspended": engine.plugins.suspended,
+            "suspended_reason": (
+                engine.plugins.suspended_reason if engine.plugins.suspended else None
+            ),
             "development_mode": settings.plugin_dev_mode,
         }
+
+    @app.get("/api/plugin-samples")
+    async def list_plugin_samples() -> dict[str, Any]:
+        await engine.plugins.refresh()
+        items = await asyncio.to_thread(bundled_samples)
+        for item in items:
+            plugin = engine.plugins.plugins.get(str(item["id"]))
+            item["installed"] = plugin is not None
+            item["installed_version"] = (
+                plugin.meta.get("version") if plugin is not None else None
+            )
+        return {"items": items}
+
+    @app.post("/api/plugin-samples/{plugin_id}/install")
+    async def install_plugin_sample(plugin_id: str) -> dict[str, Any]:
+        """Install a local bundled sample, but never enable it implicitly."""
+
+        try:
+            archive = await asyncio.to_thread(bundled_sample_archive, plugin_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="plugin sample not found") from exc
+        try:
+            result = await asyncio.to_thread(
+                engine.plugin_packages.install,
+                archive,
+                allow_unsigned=True,
+                install_record={"source": "bundled"},
+            )
+            await engine.plugins.refresh()
+            plugin = engine.plugins.get(plugin_id)
+            return {**result, "plugin": plugin.as_dict()}
+        except PluginPackageError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except PluginError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/plugins/{name}/enable")
     async def enable_plugin(name: str) -> dict[str, Any]:
@@ -1989,6 +2029,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             engine.plugins.get(name)
             return engine.plugins.registry.diagnostics(name)
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/plugins/{name}/logs")
+    async def plugin_logs(
+        name: str,
+        after: int = Query(0, ge=0),
+        limit: int = Query(500, ge=1, le=500),
+    ) -> dict[str, Any]:
+        try:
+            engine.plugins.get(name)
+            return engine.plugins.registry.logs(name, after=after, limit=limit)
+        except PluginError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.delete("/api/plugins/{name}/logs")
+    async def clear_plugin_logs(name: str) -> dict[str, Any]:
+        try:
+            engine.plugins.get(name)
+            return engine.plugins.registry.clear_logs(name)
         except PluginError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

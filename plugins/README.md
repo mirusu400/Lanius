@@ -25,6 +25,13 @@ owned by the plugin and are removed automatically on disable or reload.
 Installable archives and sandboxed UI views use the
 [`plugin.json` package format](../docs/plugin-packages.md).
 
+The Plugins onboarding screen can install the bundled **Request Marker**
+package without a network request. It is deliberately installed disabled. Once
+enabled it adds `X-Lanius-Sample`, exposes header and request-log settings,
+counts requests, and provides actions plus a sandboxed statistics view. This is
+the reference example for a complete `.lanius-plugin`; the files in this
+directory remain smaller loose-file examples intended for local development.
+
 ## Available hooks
 
 The complete mitmproxy addon hook set is available, including lifecycle,
@@ -39,11 +46,15 @@ The Plugins tab controls the order in which enabled plugins see traffic. It
 can also watch an individual plugin and reload it after any Python source file
 in the plugin changes. Loading, unloading and reloading are serialized on the
 engine event loop, and plugin registrations are removed when the plugin is
-disabled.
+disabled. Its Logs detail view captures managed `print()`, stderr,
+`logging.getLogger(__name__)`, SDK logger messages, and host-reported load or
+hook failures without mixing them into the application Logger tab.
 
 Start the engine with `LANIUS_DISABLE_PLUGINS=1` to open a project in safe
 mode. Installed plugins remain listed and retain their enabled state, but no
-plugin code is executed.
+plugin code is executed. Lockdown Mode applies the same execution suspension.
+The bundled sample is a local install and can still be installed in Lockdown;
+it cannot execute until Lockdown is left.
 
 ## A note on trust
 

@@ -28,10 +28,13 @@ Lockdown on but never off; only the project checkbox can disable it.
 Blocked product operations include GitHub update checks and installation,
 remote SecLists downloads, plugin catalogue refreshes and installs, and user
 plugins. Plugins are suspended rather than disabled: their enabled flags stay
-on disk, so turning Lockdown Mode off loads the same set again. The Python engine guards its
-outbound paths; the desktop shell independently guards its updater and fails
-closed when it cannot confirm the active project policy. A blocked API request
-returns HTTP 423 and the UI displays an error toast.
+on disk, so turning Lockdown Mode off loads the same set again. Installing the
+bundled Request Marker sample remains available because it copies only local
+application resources; the installed sample is still prevented from executing.
+The Python engine guards its outbound paths; the desktop shell independently
+guards its updater and fails closed when it cannot confirm the active project
+policy. A blocked API request returns HTTP 423 and the UI displays an error
+toast.
 
 Turning on project mode cancels in-flight engine update checks and wordlist
 downloads. In the desktop app it also restarts the engine, ending background

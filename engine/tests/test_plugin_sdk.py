@@ -243,7 +243,7 @@ def test_sdk_contributions_are_available_through_the_api(tmp_path) -> None:
         assert diagnostics.status_code == 200
         assert diagnostics.json()["logs"][-1]["message"] == "SDK plugin activated"
         reset = client.post("/api/plugins/sdk/diagnostics/reset")
-        assert reset.json()["logs"] == []
+        assert reset.json()["logs"][-1]["message"] == "SDK plugin activated"
 
         generated = client.post(
             "/api/plugin-payload-generators/sdk.sequence/generate",
@@ -255,6 +255,41 @@ def test_sdk_contributions_are_available_through_the_api(tmp_path) -> None:
             "/api/plugins/sdk/settings", json={"values": {"enabled": False}}
         )
         assert updated.json()["values"]["enabled"] is False
+
+
+def test_plugin_log_api_pages_and_clears_logs_without_resetting_health(tmp_path) -> None:
+    plugin_dir = tmp_path / "plugins"
+    plugin_dir.mkdir()
+    (plugin_dir / "sdk.py").write_text(SDK_PLUGIN)
+    settings = Settings(
+        proxy_port=free_port(),
+        api_port=free_port(),
+        data_dir=tmp_path,
+        db_path=tmp_path / "logs.sqlite",
+        confdir=tmp_path / "mitm",
+        plugins_dir=plugin_dir,
+    )
+
+    with TestClient(create_app(settings)) as client:
+        assert client.post("/api/plugins/sdk/enable").status_code == 200
+        assert client.post(
+            "/api/plugin-actions/sdk.inspect/invoke",
+            json={"context": {"location": "flow", "flow_id": "f-1"}},
+        ).status_code == 200
+        page = client.get("/api/plugins/sdk/logs").json()
+        assert page["count"] == 1
+        assert page["items"][0]["source"] == "sdk"
+        assert page["items"][0]["plugin"] == "sdk"
+        cursor = page["next_sequence"]
+        assert client.get(
+            "/api/plugins/sdk/logs", params={"after": cursor}
+        ).json()["items"] == []
+
+        cleared = client.delete("/api/plugins/sdk/logs").json()
+        assert cleared["items"] == []
+        diagnostics = client.get("/api/plugins/sdk/diagnostics").json()
+        inspect = next(item for item in diagnostics["contributions"] if item["id"] == "sdk.inspect")
+        assert inspect["calls"] == 1
 
 
 def test_dotted_plugin_ids_cannot_collide_with_each_other(tmp_path) -> None:

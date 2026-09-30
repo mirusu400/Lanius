@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Request Marker</title>
+    <style>
+      :root { color-scheme: light dark; font: 14px system-ui, sans-serif; }
+      body { margin: 0; padding: 24px; background: #11161d; color: #e7edf5; }
+      main { max-width: 620px; margin: auto; display: grid; gap: 16px; }
+      section { border: 1px solid #334052; border-radius: 10px; padding: 18px; background: #18212c; }
+      h1, p { margin: 0; }
+      .stat { display: flex; align-items: baseline; justify-content: space-between; margin-top: 12px; }
+      #count { font-size: 42px; font-weight: 700; color: #8fd3ad; }
+      code { color: #d4b879; }
+      button { border: 1px solid #4a5b70; border-radius: 6px; padding: 8px 12px; background: #253244; color: inherit; cursor: pointer; }
+      button:hover { border-color: #8fd3ad; }
+      #error { color: #ff9d9d; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <h1>Request Marker</h1>
+        <p>Demonstrates a backend hook, SDK settings, actions, logs, and a sandboxed UI.</p>
+        <div class="stat"><span>Marked requests</span><strong id="count">0</strong></div>
+        <p><code id="header">X-Lanius-Sample: 1</code></p>
+      </section>
+      <section>
+        <button id="refresh" type="button">Refresh</button>
+        <button id="reset" type="button">Reset count</button>
+        <p id="error" role="alert"></p>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

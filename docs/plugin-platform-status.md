@@ -16,10 +16,10 @@ used to choose the implementation order.
 | Product surfaces | Plugin actions in Proxy history, Target, request/response details, Replay, Fuzzer, and the global Plugins toolbar |
 | Package data | Read-only, path-confined `resources/` access with per-read size limits |
 | Distribution | `.lanius-plugin` archives, integrity maps, SHA-256 verification, Ed25519 signatures, atomic install, uninstall, and development symlinks |
-| Frontend | Manifest-declared plugin views in sandboxed iframes; a narrow host RPC bridge that can list and invoke actions owned by the same plugin |
+| Frontend | Installed/Catalogue management workspace; per-plugin overview, settings, live logs, diagnostics, and manifest-declared views in sandboxed iframes; a narrow host RPC bridge that can list and invoke actions owned by the same plugin |
 | Scanner | Bounded passive and active execution, insertion points, scope/rate/concurrency/request limits, cancellation, deduplicated project issues, issue UI, and JSON export |
 | Catalogue | User-configured signed catalogues, immutable releases, signer binding, compatibility checks, install/update, retained backup, rollback, and revocation enforcement |
-| Operations | Recent per-plugin logs, contribution latency/error counters, automatic suspension after five consecutive scanner failures, and manual diagnostic reset |
+| Operations | Per-plugin SDK/Python/stdout/stderr/host logs with incremental polling and independent clearing; contribution latency/error counters; automatic suspension after five consecutive scanner failures; manual diagnostic reset |
 
 Registrations belong to the plugin that created them. Disable, reload,
 activation failure, and deletion dispose registrations and managed tasks as one
@@ -48,10 +48,14 @@ limits, but ordinary mitmproxy hooks remain synchronous in-process callbacks.
 | P2 packages and UI | Complete for signed local packages, resources, sandboxed views, and action RPC | Custom message editors, columns, hotkeys, and richer host widgets are not available |
 | P3 scanner and issues | Complete for bounded passive/active checks and persisted findings | Out-of-band testing and external scanner adapters are not included |
 | P4 catalogue | Complete for signed-source lifecycle and recovery | There is no hosted public registry, review service, rating, or automatic update policy |
-| P5 diagnostics | Complete for SDK calls, scanner circuit breaking, and plugin logs | CPU/memory accounting and raw traffic-hook telemetry are not collected |
+| P5 diagnostics | Complete for SDK calls, scanner circuit breaking, managed output capture, hook error capture, and plugin logs | CPU/memory accounting and raw traffic-hook latency are not collected |
 
-No new first-party or example plugin was added as part of this platform work.
-The implementation establishes the host contracts that plugins can use later.
+The app bundles an installable **Request Marker** reference package. It modifies
+a request header, declares settings and actions, emits lifecycle and per-request
+logs, counts handled requests, and exposes a sandboxed statistics/reset view.
+Installation is local and remains available in Lockdown Mode, while execution
+continues to be suspended there. The sample is installed disabled so enabling
+trusted code remains an explicit user action.
 
 ## Recommended next increments
 

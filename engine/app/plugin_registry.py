@@ -11,8 +11,10 @@ import re
 import tempfile
 import threading
 import time
+import traceback
 from collections import deque
-from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, List, Literal
@@ -29,6 +31,7 @@ from lanius_sdk import (
 )
 
 from .addons import codecs
+from .plugin_output import capture_plugin_output
 
 ContributionKind = Literal[
     "actions",
@@ -110,17 +113,25 @@ class ContributionHealth:
 
 
 class _PluginLogHandler(logging.Handler):
-    def __init__(self, registry: "ContributionRegistry", owner: str) -> None:
+    def __init__(
+        self, registry: "ContributionRegistry", owner: str, source: str
+    ) -> None:
         super().__init__(logging.DEBUG)
         self.registry = registry
         self.owner = owner
+        self.source = source
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
             message = self.format(record)
         except Exception:
             message = record.getMessage()
-        self.registry.append_log(self.owner, record.levelname.lower(), message)
+        self.registry.append_log(
+            self.owner,
+            record.levelname.lower(),
+            message,
+            source=self.source,
+        )
 
 
 class UserValueStore:
@@ -196,7 +207,12 @@ class ContributionRegistry:
         self._tasks: dict[str, set[asyncio.Future[Any]]] = {}
         self._health: dict[tuple[ContributionKind, str], ContributionHealth] = {}
         self._logs: dict[str, deque[dict[str, Any]]] = {}
+        self._log_sequences: dict[str, int] = {}
+        self._log_dropped: dict[str, int] = {}
         self._log_handlers: dict[
+            str, tuple[logging.Logger, _PluginLogHandler, int]
+        ] = {}
+        self._module_log_handlers: dict[
             str, tuple[logging.Logger, _PluginLogHandler, int]
         ] = {}
         self._diagnostics_lock = threading.RLock()
@@ -211,30 +227,105 @@ class ContributionRegistry:
             return
         logger = logging.getLogger(f"lanius.plugin.{owner}")
         previous_level = logger.level
-        handler = _PluginLogHandler(self, owner)
+        handler = _PluginLogHandler(self, owner, "sdk")
         handler.setFormatter(logging.Formatter("%(message)s"))
         logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)
         self._log_handlers[owner] = (logger, handler, previous_level)
 
+    def attach_module_logger(self, owner: str, module_name: str) -> None:
+        """Capture ``logging.getLogger(__name__)`` from a plugin package."""
+
+        if owner in self._module_log_handlers:
+            return
+        logger = logging.getLogger(module_name)
+        previous_level = logger.level
+        handler = _PluginLogHandler(self, owner, "logging")
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        logger.addHandler(handler)
+        logger.setLevel(logging.DEBUG)
+        self._module_log_handlers[owner] = (logger, handler, previous_level)
+
     def _detach_logger(self, owner: str) -> None:
         attached = self._log_handlers.pop(owner, None)
-        if attached is None:
-            return
-        logger, handler, previous_level = attached
-        logger.removeHandler(handler)
-        logger.setLevel(previous_level)
+        if attached is not None:
+            logger, handler, previous_level = attached
+            logger.removeHandler(handler)
+            logger.setLevel(previous_level)
 
-    def append_log(self, owner: str, level: str, message: str) -> None:
+        module = self._module_log_handlers.pop(owner, None)
+        if module is not None:
+            module_logger, module_handler, module_level = module
+            module_logger.removeHandler(module_handler)
+            module_logger.setLevel(module_level)
+
+    def append_log(
+        self, owner: str, level: str, message: str, *, source: str = "sdk"
+    ) -> None:
         with self._diagnostics_lock:
             entries = self._logs.setdefault(owner, deque(maxlen=_MAX_PLUGIN_LOGS))
+            if len(entries) == entries.maxlen:
+                self._log_dropped[owner] = self._log_dropped.get(owner, 0) + 1
+            sequence = self._log_sequences.get(owner, 0) + 1
+            self._log_sequences[owner] = sequence
             entries.append(
                 {
+                    "sequence": sequence,
                     "timestamp": time.time(),
+                    "plugin": owner,
+                    "source": source,
                     "level": level,
-                    "message": message[:_MAX_PLUGIN_LOG_MESSAGE],
+                    "message": str(message)[:_MAX_PLUGIN_LOG_MESSAGE],
                 }
             )
+
+    def append_exception(
+        self, owner: str, where: str, error: BaseException
+    ) -> None:
+        detail = "".join(
+            traceback.format_exception(type(error), error, error.__traceback__, limit=8)
+        ).rstrip()
+        self.append_log(owner, "error", f"{where}: {detail}", source="host")
+
+    @contextmanager
+    def execution(self, owner: str) -> Iterator[None]:
+        """Attribute stdout/stderr emitted by managed plugin work."""
+
+        with capture_plugin_output(
+            owner,
+            lambda source, level, message: self.append_log(
+                owner, level, message, source=source
+            ),
+        ):
+            yield
+
+    def logs(self, owner: str, *, after: int = 0, limit: int = 500) -> dict[str, Any]:
+        with self._diagnostics_lock:
+            entries = [
+                entry
+                for entry in self._logs.get(owner, ())
+                if int(entry["sequence"]) > after
+            ][:limit]
+            latest = self._log_sequences.get(owner, 0)
+            return {
+                "plugin": owner,
+                "items": entries,
+                "count": len(entries),
+                # Advance only through entries actually returned. Otherwise a
+                # client using a small limit would skip the rest of the page.
+                # When the buffer is empty (for example after DELETE), move to
+                # the latest allocated sequence so cleared entries stay gone.
+                "next_sequence": (
+                    int(entries[-1]["sequence"]) if entries else max(after, latest)
+                ),
+                "dropped": self._log_dropped.get(owner, 0),
+            }
+
+    def clear_logs(self, owner: str) -> dict[str, Any]:
+        with self._diagnostics_lock:
+            self._logs.pop(owner, None)
+            self._log_dropped.pop(owner, None)
+        return self.logs(owner, after=self._log_sequences.get(owner, 0))
 
     @staticmethod
     def _validate_id(value: str, label: str) -> None:
@@ -383,7 +474,6 @@ class ContributionRegistry:
 
     def reset_diagnostics(self, owner: str) -> dict[str, Any]:
         with self._diagnostics_lock:
-            self._logs.pop(owner, None)
             for kind, qualified_id in list(self._health):
                 if qualified_id.rpartition(".")[0] == owner:
                     self._health[(kind, qualified_id)] = ContributionHealth()
@@ -401,16 +491,19 @@ class ContributionRegistry:
             )
         started = self.begin_call(item)
         try:
-            result = await asyncio.wait_for(
-                _invoke_handler(item.handler, payload),
-                timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
-            )
+            with self.execution(item.owner):
+                result = await asyncio.wait_for(
+                    _invoke_handler(item.handler, payload),
+                    timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
+                )
         except TimeoutError as exc:
             error = PluginApiError(f"action {qualified_id} timed out")
             self.finish_call(item, started, error)
+            self.append_exception(item.owner, f"action {qualified_id}", error)
             raise error from exc
         except Exception as exc:
             self.finish_call(item, started, exc)
+            self.append_exception(item.owner, f"action {qualified_id}", exc)
             raise
         try:
             size = len(json.dumps(result, ensure_ascii=False).encode())
@@ -431,22 +524,25 @@ class ContributionRegistry:
         item = self._get("payload_generators", qualified_id)
         started = self.begin_call(item)
         try:
-            values = await asyncio.wait_for(
-                _invoke_handler(item.handler, options),
-                timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
-            )
-            result = await asyncio.wait_for(
-                asyncio.to_thread(_collect_payloads, values),
-                timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
-            )
+            with self.execution(item.owner):
+                values = await asyncio.wait_for(
+                    _invoke_handler(item.handler, options),
+                    timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
+                )
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(_collect_payloads, values),
+                    timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
+                )
         except TimeoutError as exc:
             error = PluginApiError(
                 f"payload generator {qualified_id} timed out"
             )
             self.finish_call(item, started, error)
+            self.append_exception(item.owner, f"payload generator {qualified_id}", error)
             raise error from exc
         except Exception as exc:
             self.finish_call(item, started, exc)
+            self.append_exception(item.owner, f"payload generator {qualified_id}", exc)
             raise
         self.finish_call(item, started)
         return result
@@ -457,18 +553,21 @@ class ContributionRegistry:
         item = self._get("payload_processors", qualified_id)
         started = self.begin_call(item)
         try:
-            result = await asyncio.wait_for(
-                _invoke_handler(item.handler, value, context),
-                timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
-            )
+            with self.execution(item.owner):
+                result = await asyncio.wait_for(
+                    _invoke_handler(item.handler, value, context),
+                    timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
+                )
         except TimeoutError as exc:
             error = PluginApiError(
                 f"payload processor {qualified_id} timed out"
             )
             self.finish_call(item, started, error)
+            self.append_exception(item.owner, f"payload processor {qualified_id}", error)
             raise error from exc
         except Exception as exc:
             self.finish_call(item, started, exc)
+            self.append_exception(item.owner, f"payload processor {qualified_id}", exc)
             raise
         if not isinstance(result, str):
             error = PluginApiError("payload processor must return a string")
@@ -831,7 +930,28 @@ class PluginHost:
     def create_task(
         self, awaitable: Awaitable[Any], *, name: str | None
     ) -> Disposable:
-        task = asyncio.ensure_future(awaitable)
+        started = False
+
+        async def managed() -> Any:
+            nonlocal started
+            started = True
+            try:
+                with self.registry.execution(self.owner):
+                    return await awaitable
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.registry.append_exception(self.owner, "managed task", exc)
+                raise
+
+        task = asyncio.ensure_future(managed())
+        def close_unstarted(done: asyncio.Future[Any]) -> None:
+            if done.cancelled() and not started:
+                close = getattr(awaitable, "close", None)
+                if close is not None:
+                    close()
+
+        task.add_done_callback(close_unstarted)
         if isinstance(task, asyncio.Task):
             task.set_name(name or f"plugin-{self.owner}-task")
         return self.registry.track_task(self.owner, task)

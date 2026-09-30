@@ -109,6 +109,16 @@ are `contributions.list`, `actions.invoke`, `settings.get`, and
 `settings.patch`. The latter three require their matching manifest permission,
 and an iframe can invoke only an action owned by its own plugin.
 
+## Bundled reference package
+
+The Plugins onboarding screen offers a local, installable **Request Marker**
+sample. It is a complete `.lanius-plugin` package with an integrity manifest,
+trusted Python backend, SDK settings and actions, a mitmproxy request hook,
+plugin-owned logs, and a sandboxed statistics view. Installation copies the
+bundled files into the normal plugin directory and leaves the plugin disabled.
+Because no network access is involved, installation is allowed in Lockdown
+Mode; plugin execution remains suspended until Lockdown is left.
+
 ## Development mode
 
 Set `LANIUS_PLUGIN_DEV_MODE=1` before starting the engine. The Plugins screen
