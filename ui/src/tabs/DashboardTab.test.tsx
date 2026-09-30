@@ -1,10 +1,11 @@
 /** Dashboard tab rendered against a mocked engine. */
-import { cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from '../App';
 import { DashboardTab } from './DashboardTab';
+import { TAB_ORDER_STORAGE_KEY } from '../tabOrder';
 import { renderWithI18n as render, t } from '../test-utils';
 import type { Dashboard } from '../api/types';
 
@@ -68,9 +69,12 @@ const populated: Dashboard = {
 };
 
 let payload: Dashboard = empty;
+let scannerChecks = 0;
 
 beforeEach(() => {
   payload = empty;
+  scannerChecks = 0;
+  window.localStorage.clear();
   // Route by path: the title-bar test renders the whole app, so other tabs
   // fetch too and must not be handed the dashboard's shape.
   vi.stubGlobal(
@@ -94,6 +98,16 @@ beforeEach(() => {
           };
         }
         if (path.includes('/api/status')) return payload;
+        if (path.includes('/api/scanner')) {
+          return {
+            passive_enabled: true,
+            passive_checks: scannerChecks > 0
+              ? [{ id: 'headers', plugin: 'scanner', title: 'Headers', description: null, mode: 'passive' }]
+              : [],
+            active_checks: [],
+            jobs: [],
+          };
+        }
         return { items: [], count: 0 };
       },
     })) as unknown as typeof fetch,
@@ -280,6 +294,55 @@ describe('warnings', () => {
 });
 
 describe('title bar', () => {
+  it('only shows Issues when a scanner plugin contributes checks', async () => {
+    render(<App />);
+    await waitFor(() => expect(
+      vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/api/scanner')),
+    ).toBe(true));
+    expect(screen.queryByRole('button', { name: t('issues.title') })).toBeNull();
+
+    cleanup();
+    scannerChecks = 1;
+    render(<App />);
+    const issues = await screen.findByRole('button', { name: t('issues.title') });
+    const tabs = within(issues.closest('nav')!).getAllByRole('button');
+    expect(tabs.slice(0, 3).map((button) => button.textContent)).toEqual([
+      t('dash.title'),
+      t('issues.title'),
+      'Proxy',
+    ]);
+  });
+
+  it('lets the user drag tabs into a persistent order', async () => {
+    render(<App />);
+    const target = await screen.findByRole('button', { name: 'Target' });
+    const dashboard = screen.getByRole('button', { name: t('dash.title') });
+    const transfer = {
+      dropEffect: 'none',
+      effectAllowed: 'none',
+      setData: vi.fn(),
+      getData: vi.fn(),
+    } as unknown as DataTransfer;
+
+    fireEvent.dragStart(target, { dataTransfer: transfer });
+    await waitFor(() => expect(target.getAttribute('aria-grabbed')).toBe('true'));
+    fireEvent.dragOver(dashboard, { dataTransfer: transfer, clientX: 10 });
+    await waitFor(() => expect(dashboard.className).toContain('drop-after'));
+    fireEvent.drop(dashboard, { dataTransfer: transfer, clientX: 10 });
+
+    const tabs = within(dashboard.closest('nav')!).getAllByRole('button');
+    expect(tabs.slice(0, 3).map((button) => button.textContent)).toEqual([
+      t('dash.title'),
+      'Target',
+      'Proxy',
+    ]);
+    expect(JSON.parse(window.localStorage.getItem(TAB_ORDER_STORAGE_KEY)!).slice(0, 3)).toEqual([
+      'Dashboard',
+      'Target',
+      'Issues',
+    ]);
+  });
+
   it('opens the dashboard when the wordmark is clicked', async () => {
     payload = populated;
     render(<App />);

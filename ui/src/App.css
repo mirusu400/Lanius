@@ -450,14 +450,42 @@ pre.body,
 }
 
 .tab {
+  position: relative;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--muted);
   padding: 0.75em 0.9em;
-  cursor: pointer;
+  cursor: grab;
   white-space: nowrap;
   flex: none;
+}
+
+.tab:active {
+  cursor: grabbing;
+}
+
+.tab.dragging {
+  opacity: 0.45;
+}
+
+.tab.drop-before::before,
+.tab.drop-after::after {
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  content: '';
+}
+
+.tab.drop-before::before {
+  left: -2px;
+}
+
+.tab.drop-after::after {
+  right: -2px;
 }
 
 .tab:hover {

@@ -239,6 +239,7 @@ export type EngineEvent =
         error: string | null;
       };
     }
+  | { type: 'plugins.changed'; data: PluginInfo[] }
   | { type: 'scope.changed'; data: ScopeState }
   | { type: 'fuzzer.started' | 'fuzzer.finished'; data: RunSummary }
   | {

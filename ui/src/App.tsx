@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { captureWindowToClipboard, getLockdown, isDesktop, putWorkspace } from "./api/client";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { captureWindowToClipboard, getLockdown, getScannerState, isDesktop, putWorkspace } from "./api/client";
 import { LOCKDOWN_BLOCKED, LOCKDOWN_CHANGED } from "./lockdownEvents";
 import { connectStream } from "./api/stream";
 import { ProjectPicker } from "./ProjectPicker";
 import { closeProject, currentProject, type Project } from "./projects";
+import {
+  DEFAULT_TAB_ORDER,
+  loadTabOrder,
+  moveTab,
+  saveTabOrder,
+  type DropSide,
+  type Tab,
+} from "./tabOrder";
 
 import { DashboardTab } from "./tabs/DashboardTab";
 import { ProxyTab } from "./tabs/ProxyTab";
@@ -39,22 +47,7 @@ import { autoCheck, useUpdates } from "./updates";
 import "./App.css";
 import "./themePresets.css";
 
-const TABS = [
-  "Dashboard",
-  "Proxy",
-  "Target",
-  "Issues",
-  "Replay",
-  "Fuzzer",
-  "Decoder",
-  "Diff",
-  "Logger",
-  "Plugins",
-  "Settings",
-  "Docs",
-] as const;
-
-export type Tab = (typeof TABS)[number];
+export type { Tab } from "./tabOrder";
 
 export default function App() {
   const t = useT();
@@ -125,6 +118,10 @@ export default function App() {
 function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: () => Promise<void> }) {
   const t = useT();
   const [tab, setTab] = useState<Tab>("Dashboard");
+  const [tabOrder, setTabOrder] = useState<Tab[]>(loadTabOrder);
+  const [scannerAvailable, setScannerAvailable] = useState(false);
+  const [draggedTab, setDraggedTab] = useState<Tab | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ tab: Tab; side: DropSide } | null>(null);
   const [busy, setBusy] = useState(false);
   // Held back until the wait is long enough to notice, so a tab that
   // loads in a few frames does not flash a spinner.
@@ -139,8 +136,29 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   const [lockdownActive, setLockdownActive] = useState(false);
   const { showToast } = useToast();
 
+  const refreshScannerAvailability = useCallback(() => {
+    void getScannerState()
+      .then((state) => {
+        const available = state.passive_checks.length > 0 || state.active_checks.length > 0;
+        setScannerAvailable(available);
+        if (!available) setTab((current) => current === 'Issues' ? 'Dashboard' : current);
+      })
+      .catch(() => {
+        setScannerAvailable(false);
+        setTab((current) => current === 'Issues' ? 'Dashboard' : current);
+      });
+  }, []);
+
+  useEffect(() => {
+    refreshScannerAvailability();
+  }, [project?.id, refreshScannerAvailability]);
+
   useEffect(() => connectStream({
     onEvent: (event) => {
+      if (event.type === 'plugins.changed') {
+        refreshScannerAvailability();
+        return;
+      }
       if (event.type !== 'engine.scope_egress_blocked') return;
       const target = event.data.port === null
         ? event.data.host
@@ -150,7 +168,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
         tone: 'error',
       });
     },
-  }), [project?.id, showToast, t]);
+  }), [project?.id, refreshScannerAvailability, showToast, t]);
 
   useEffect(() => {
     let live = true;
@@ -182,13 +200,46 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
     setSettingsGroup("security");
     setTab("Settings");
   };
+  const visibleTabs = useMemo(
+    () => tabOrder.filter((name) => name !== 'Issues' || scannerAvailable),
+    [scannerAvailable, tabOrder],
+  );
   const navigationShortcuts = useMemo<Record<string, () => void>>(
     () => Object.fromEntries(
-      TABS.map((name) => [`app.${name.toLowerCase()}`, () => setTab(name)]),
+      DEFAULT_TAB_ORDER.map((name) => [`app.${name.toLowerCase()}`, () => setTab(name)]),
     ),
     [],
   );
   useShortcuts(navigationShortcuts, !switching);
+
+  const dragOverTab = (event: DragEvent<HTMLButtonElement>, target: Tab) => {
+    if (!draggedTab || draggedTab === target) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const side: DropSide = event.clientX < bounds.left + bounds.width / 2
+      ? 'before'
+      : 'after';
+    setDropTarget({ tab: target, side });
+  };
+
+  const dropTab = (event: DragEvent<HTMLButtonElement>, target: Tab) => {
+    event.preventDefault();
+    if (!draggedTab || draggedTab === target) return;
+    const side = dropTarget?.tab === target ? dropTarget.side : 'before';
+    setTabOrder((current) => {
+      const next = moveTab(current, draggedTab, target, side);
+      saveTabOrder(next);
+      return next;
+    });
+    setDraggedTab(null);
+    setDropTarget(null);
+  };
+
+  const finishDragging = () => {
+    setDraggedTab(null);
+    setDropTarget(null);
+  };
 
   const switchProject = async () => {
     if (switching) return;
@@ -234,10 +285,25 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
           <span className="brand-mark" aria-hidden="true" />
         </button>
         <nav className="tabs">
-          {TABS.map((name) => (
+          {visibleTabs.map((name) => (
             <button
               key={name}
-              className={name === tab ? "tab active" : "tab"}
+              className={[
+                'tab',
+                name === tab ? 'active' : '',
+                name === draggedTab ? 'dragging' : '',
+                dropTarget?.tab === name ? `drop-${dropTarget.side}` : '',
+              ].filter(Boolean).join(' ')}
+              draggable
+              aria-grabbed={name === draggedTab}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', name);
+                setDraggedTab(name);
+              }}
+              onDragOver={(event) => dragOverTab(event, name)}
+              onDrop={(event) => dropTab(event, name)}
+              onDragEnd={finishDragging}
               onClick={() => {
                 if (name === "Settings") setSettingsGroup(null);
                 setTab(name);
