@@ -225,7 +225,9 @@ jobs:
 
           # The onedir build starts without unpacking on every launch.
           engine=./engine/dist/lanius-engine/lanius-engine
-          [ -x "$engine" ] || engine=./engine/dist/lanius-engine/lanius-engine.exe
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            engine="${engine}.exe"
+          fi
 
           "$engine" --proxy-port 18080 --api-port 18081 &
           engine_pid=$!
