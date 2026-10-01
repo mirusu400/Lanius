@@ -118,6 +118,7 @@ export function RequestEditor({
         <textarea
           ref={editorRef}
           className={className}
+          wrap="soft"
           aria-label={label}
           spellCheck={false}
           value={value}
@@ -129,7 +130,7 @@ export function RequestEditor({
         />
       ) : (
         <div className="request-editor-view" onContextMenu={onContextMenu}>
-          <pre className={className}>{shown}</pre>
+          <pre className={className} data-view={view}>{shown}</pre>
           {truncated > 0 && (
             <p className="muted">
               {t('detail.hexTruncated', { count: String(truncated) })}

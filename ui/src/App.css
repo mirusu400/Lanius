@@ -2332,6 +2332,7 @@ pre.body {
   border-radius: 3px;
   color: var(--fg);
   flex: 1;
+  min-width: 0;
   padding: 5px 8px;
 }
 
@@ -2347,6 +2348,30 @@ pre.body {
 
 .replay-controls .send:disabled {
   background: var(--accent-dim);
+  cursor: default;
+}
+
+.replay-history-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.replay-history-controls button {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 1.1em;
+  line-height: 1;
+  padding: 5px 8px;
+}
+
+.replay-history-controls button:disabled {
+  opacity: 0.45;
   cursor: default;
 }
 
@@ -2376,7 +2401,13 @@ pre.body {
   border: none;
   outline: none;
   resize: none;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.request-editor-view pre.replay-editor[data-view='pretty'] {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .response-inspector {

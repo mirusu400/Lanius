@@ -21,6 +21,17 @@ export interface ReplayResponse {
   truncated?: number;
 }
 
+export interface ReplaySnapshot {
+  url: string;
+  text: string;
+  response: ReplayResponse | null;
+  error: Message | null;
+}
+
+export interface ReplayHistoryEntry extends ReplaySnapshot {
+  sentAt: number;
+}
+
 export interface ReplayTab {
   id: string;
   title: string;
@@ -31,6 +42,26 @@ export interface ReplayTab {
   // A message rather than a sentence: these tabs are saved to the project
   // and restored later, possibly in another language.
   error: Message | null;
+  /** Sent request/response pairs, stored with the project workspace. */
+  history?: ReplayHistoryEntry[];
+  /** Null means the editable draft is shown; a number selects a sent pair. */
+  historyIndex?: number | null;
+  /** Kept while browsing older pairs so unsent edits can be restored. */
+  draft?: ReplaySnapshot | null;
+}
+
+/** Bound autosave size: every entry can include a trimmed response body. */
+export const REPLAY_HISTORY_LIMIT = 50;
+
+export function replaySnapshot(tab: ReplayTab): ReplaySnapshot {
+  return { url: tab.url, text: tab.text, response: tab.response, error: tab.error };
+}
+
+export function canStepReplayHistory(tab: ReplayTab, step: -1 | 1): boolean {
+  const count = tab.history?.length ?? 0;
+  const position = tab.historyIndex ?? count;
+  const next = position + step;
+  return next >= 0 && (next < count || (next === count && tab.draft != null));
 }
 
 export interface SendPayload {
@@ -104,6 +135,9 @@ export function tabFromFlow(
     response: null,
     sending: false,
     error: null,
+    history: [],
+    historyIndex: null,
+    draft: null,
   };
 }
 
@@ -116,6 +150,9 @@ export function emptyTab(): ReplayTab {
     response: null,
     sending: false,
     error: null,
+    history: [],
+    historyIndex: null,
+    draft: null,
   };
 }
 

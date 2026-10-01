@@ -378,6 +378,10 @@ Open several tabs to compare different variations side by side. Send the active
 request with **⌘+Enter** on macOS or **Ctrl+Enter** on Linux and Windows. Change,
 disable, or restore shortcuts under **Settings > Shortcuts**. Replay also has
 shortcuts for creating, duplicating, closing, and moving between request tabs.
+The request editor wraps long lines without changing the bytes sent. After a
+send, the arrows beside **Send** browse that tab's request and response pairs.
+Editing an older request creates a draft, so browsing does not overwrite the
+saved exchange. The latest 50 sends per tab are saved with the project.
 
 ### Fuzzer
 

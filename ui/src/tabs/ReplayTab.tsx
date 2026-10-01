@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { sendReplayRequest } from '../api/client';
 import {
+  canStepReplayHistory,
   emptyTab,
   nextTabId,
   renderResponseText,
@@ -11,7 +12,10 @@ import {
 } from './replayModel';
 import {
   addTab,
+  editReplayTab,
+  finishReplaySend,
   removeTab,
+  stepReplayHistory,
   subscribe,
   updateTab,
 } from './replayStore';
@@ -55,7 +59,10 @@ export function ReplayTabView() {
   };
 
   const duplicateTab = (source: ReplayTab) => {
-    const next = addTab({ ...source, id: nextTabId(), sending: false, error: null });
+    const next = addTab({
+      ...source, id: nextTabId(), sending: false, error: null,
+      history: [], historyIndex: null, draft: null,
+    });
     setActiveId(next.id);
   };
 
@@ -125,7 +132,7 @@ export function ReplayTabView() {
         onSelect: (_selection, editor) => {
           if (!active) return;
           const next = formatMessageBody(editor.value, 'pretty');
-          if (next !== editor.value) updateTab(active.id, { text: next });
+          if (next !== editor.value) editReplayTab(active.id, { text: next });
         },
       },
       {
@@ -135,7 +142,7 @@ export function ReplayTabView() {
           const { head, separator, body } = splitMessage(editor.value);
           if (!separator) return;
           const next = `${head}${separator}${minify(body)}`;
-          if (next !== editor.value) updateTab(active.id, { text: next });
+          if (next !== editor.value) editReplayTab(active.id, { text: next });
         },
       },
     ],
@@ -148,14 +155,22 @@ export function ReplayTabView() {
   const send = async () => {
     if (!active || active.sending || sendingIds.current.has(active.id)) return;
     const requestId = active.id;
-    sendingIds.current.add(requestId);
-    updateTab(active.id, { sending: true, error: null });
+    const request = { url: active.url, text: active.text };
+    const startedIndex = active.historyIndex ?? null;
+    let payload;
     try {
-      const payload = toSendPayload(active.url, active.text);
-      const response = await sendReplayRequest(payload);
-      updateTab(requestId, { response: trimResponse(response), sending: false });
+      payload = toSendPayload(request.url, request.text);
     } catch (err) {
-      updateTab(requestId, { sending: false, error: errorMessage(err) });
+      updateTab(requestId, { error: errorMessage(err) });
+      return;
+    }
+    sendingIds.current.add(requestId);
+    updateTab(requestId, { sending: true, error: null });
+    try {
+      const response = await sendReplayRequest(payload);
+      finishReplaySend(requestId, request, startedIndex, trimResponse(response), null);
+    } catch (err) {
+      finishReplaySend(requestId, request, startedIndex, null, errorMessage(err));
     } finally {
       sendingIds.current.delete(requestId);
     }
@@ -242,9 +257,27 @@ export function ReplayTabView() {
             <input
               className="target"
               value={active.url}
-              onChange={(e) => updateTab(active.id, { url: e.target.value })}
+              onChange={(e) => editReplayTab(active.id, { url: e.target.value })}
               placeholder={t('replay.targetPlaceholder')}
             />
+            {(active.history?.length ?? 0) > 0 && (
+              <div className="replay-history-controls" role="group" aria-label={t('replay.history')}>
+                <button type="button" aria-label={t('replay.previousHistory')}
+                  disabled={!canStepReplayHistory(active, -1)}
+                  onClick={() => stepReplayHistory(active.id, -1)}>‹</button>
+                <span className="mono">
+                  {active.historyIndex == null
+                    ? t('replay.historyDraft')
+                    : t('replay.historyPosition', {
+                        current: active.historyIndex + 1,
+                        total: active.history?.length ?? 0,
+                      })}
+                </span>
+                <button type="button" aria-label={t('replay.nextHistory')}
+                  disabled={!canStepReplayHistory(active, 1)}
+                  onClick={() => stepReplayHistory(active.id, 1)}>›</button>
+              </div>
+            )}
             <button
               className="send"
               onClick={send}
@@ -274,7 +307,7 @@ export function ReplayTabView() {
               className="replay-editor mono"
               label={t('replay.request')}
               value={active.text}
-              onChange={(text) => updateTab(active.id, { text })}
+              onChange={(text) => editReplayTab(active.id, { text })}
               onContextMenu={editorMenu.open}
             />}
             second={<ResponseInspector

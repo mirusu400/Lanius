@@ -1,5 +1,5 @@
 /** Renders the real Replay tab against a mocked engine. */
-import {cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import type { Locale } from '../i18n';
 import userEvent from '@testing-library/user-event';
@@ -48,11 +48,11 @@ beforeEach(() => {
         status: 200,
         statusText: 'OK',
         json: async () => ({
-          id: 'r1',
+          id: `r${sent.length}`,
           status_code: 201,
           reason: 'Created',
           headers: [['X-Server', 'echo']],
-          body: 'pong',
+          body: `pong-${sent.length}`,
           size: 4,
           duration_ms: 9,
           error: null,
@@ -111,6 +111,90 @@ describe('ReplayTab', () => {
       body: 'a=1',
     });
     expect(screen.getByText(/201 · 4 B · 9 ms/)).toBeTruthy();
+  });
+
+  it('browses saved request and response pairs and restores an unsent edit', async () => {
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
+    await screen.findByText(/pong-1/);
+    fireEvent.change(editor(), { target: { value: 'GET /second HTTP/1.1\nHost: echo.test\n\n' } });
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
+    await screen.findByText(/pong-2/);
+
+    expect(getTabs()[0].history).toHaveLength(2);
+    expect(screen.getByText(t('replay.historyPosition', { current: 2, total: 2 }))).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('replay.previousHistory') }));
+    expect(editor().value).toContain('GET /hello');
+    expect(screen.getByText(/pong-1/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('replay.nextHistory') }));
+    expect(editor().value).toContain('GET /second');
+    expect(screen.getByText(/pong-2/)).toBeTruthy();
+
+    fireEvent.change(editor(), { target: { value: 'GET /draft HTTP/1.1\nHost: echo.test\n\n' } });
+    expect(screen.getByText(t('replay.historyDraft'))).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('replay.previousHistory') }));
+    expect(editor().value).toContain('GET /second');
+    await user.click(screen.getByRole('button', { name: t('replay.nextHistory') }));
+    expect(editor().value).toContain('GET /draft');
+
+    const saved = JSON.parse(JSON.stringify(getTabs()));
+    cleanup();
+    resetTabs();
+    setTabs(saved);
+    render(<ReplayTabView />);
+    await waitFor(() => expect(editor().value).toContain('GET /draft'));
+    await user.click(screen.getByRole('button', { name: t('replay.previousHistory') }));
+    expect(editor().value).toContain('GET /second');
+    expect(screen.getByText(/pong-2/)).toBeTruthy();
+  });
+
+  it('keeps the sent bytes in history when the editor changes before the response arrives', async () => {
+    let finish: (response: Response) => void = () => undefined;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (!String(input).includes('/api/replay/send')) {
+        return Promise.resolve({ ok: true, json: async () => ({ actions: [] }) } as Response);
+      }
+      return new Promise<Response>((resolve) => { finish = resolve; });
+    }));
+
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
+    fireEvent.change(editor(), { target: { value: 'GET /draft HTTP/1.1\nHost: echo.test\n\n' } });
+    finish({
+      ok: true, status: 200, json: async () => ({
+        id: 'late', status_code: 200, reason: 'OK', headers: [],
+        body: 'late response', size: 13, duration_ms: 1, error: null,
+      }),
+    } as Response);
+
+    await waitFor(() => expect(getTabs()[0].history).toHaveLength(1));
+    expect(editor().value).toContain('GET /draft');
+    await user.click(screen.getByRole('button', { name: t('replay.previousHistory') }));
+    expect(editor().value).toContain('GET /hello');
+    expect(screen.getByText(/late response/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('replay.nextHistory') }));
+    expect(editor().value).toContain('GET /draft');
+  });
+
+  it('makes a saved response from an older project the first history entry', async () => {
+    setTabs([{
+      id: 'old', title: 'old', url: 'http://echo.test',
+      text: 'GET /old HTTP/1.1\nHost: echo.test\n\n',
+      response: { id: 'old-response', status_code: 200, reason: 'OK',
+        headers: [], body: 'saved body', size: 10, duration_ms: 1, error: null },
+      sending: false, error: null,
+    }]);
+    render(<ReplayTabView />);
+    expect(await screen.findByText(/saved body/)).toBeTruthy();
+    expect(getTabs()[0].history).toHaveLength(1);
+    expect(screen.getByText(t('replay.historyPosition', { current: 1, total: 1 }))).toBeTruthy();
   });
 
   it('reports malformed requests without calling the engine', async () => {
