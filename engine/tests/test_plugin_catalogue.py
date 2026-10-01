@@ -24,6 +24,7 @@ from app.plugin_catalogue import (
     ensure_immutable,
 )
 from app.plugin_packages import PluginPackageError, PluginPackageManager, load_manifest
+from app.plugin_trust import OFFICIAL_CATALOGUE_SOURCE
 
 
 def free_port() -> int:
@@ -38,6 +39,22 @@ def public_key(private_key: Ed25519PrivateKey) -> str:
         format=serialization.PublicFormat.Raw,
     )
     return base64.b64encode(raw).decode()
+
+
+def test_official_source_is_default_until_sources_are_saved(tmp_path) -> None:
+    packages = PluginPackageManager(tmp_path / "plugins")
+    catalogue = PluginCatalogueManager(
+        tmp_path / "catalogues.json",
+        tmp_path / "cache",
+        tmp_path / "revocations.json",
+        packages,
+    )
+
+    assert [source.as_dict() for source in catalogue.sources()] == [
+        OFFICIAL_CATALOGUE_SOURCE
+    ]
+    assert catalogue.save_sources([]) == []
+    assert catalogue.sources() == []
 
 
 def signed_package(version: str, private_key: Ed25519PrivateKey) -> bytes:

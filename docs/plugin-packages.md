@@ -75,6 +75,10 @@ left unescaped. Trusted public keys are a JSON object at
 { "publisher-key-2026": "<base64 raw Ed25519 public key>" }
 ```
 
+The official Lanius package key is pinned in the application and is available
+even when this file does not exist. A local key file may add trust roots but
+cannot replace a built-in key ID with different key material.
+
 A signature from an unknown key is rejected. Local installation accepts an
 unsigned package and labels it `unsigned`; catalogue installation requires a
 trusted signature.

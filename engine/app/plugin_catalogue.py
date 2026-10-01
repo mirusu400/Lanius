@@ -25,6 +25,7 @@ from lanius_sdk import API_VERSION
 from . import __version__
 from .lockdown import LockdownBlocked
 from .plugin_packages import MAX_ARCHIVE_BYTES, PluginPackageError, PluginPackageManager
+from .plugin_trust import OFFICIAL_CATALOGUE_SOURCE
 
 CATALOGUE_SCHEMA = 1
 SOURCES_SCHEMA = 1
@@ -299,7 +300,7 @@ class PluginCatalogueManager:
         try:
             value = json.loads(self.sources_path.read_text(encoding="utf-8"))
         except FileNotFoundError:
-            return []
+            return [parse_source(OFFICIAL_CATALOGUE_SOURCE)]
         except (OSError, ValueError, UnicodeError) as exc:
             raise PluginCatalogueError(f"cannot read catalogue sources: {exc}") from exc
         if not isinstance(value, dict) or value.get("schema") != SOURCES_SCHEMA:

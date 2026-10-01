@@ -467,9 +467,9 @@ Scanner checks that fail five times consecutively are suspended until
 diagnostics are reset.
 Installable `.lanius-plugin` archives, signatures, and sandboxed UI are
 documented in [`docs/plugin-packages.md`](./docs/plugin-packages.md).
-The Plugins tab can browse user-configured signed catalogues, install compatible
-releases, update them with a retained backup, roll back, and reject revoked
-versions. The catalogue format is in
+The Plugins tab can browse the built-in official catalogue and user-configured
+signed catalogues, install compatible releases, update them with a retained
+backup, roll back, and reject revoked versions. The catalogue format is in
 [`docs/plugin-catalogues.md`](./docs/plugin-catalogues.md).
 Plugin supplied passive and active checks create deduplicated project findings
 in the **Issues** tab; limits and SDK contracts are documented in

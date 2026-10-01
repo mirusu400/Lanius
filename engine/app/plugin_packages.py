@@ -23,6 +23,7 @@ from packaging.version import InvalidVersion, Version
 from lanius_sdk import API_VERSION
 
 from . import __version__
+from .plugin_trust import OFFICIAL_PACKAGE_KEYS
 
 MANIFEST_NAME = "plugin.json"
 INSTALL_RECORD = ".lanius-install.json"
@@ -280,20 +281,29 @@ def _signature_payload(manifest: PluginManifest) -> bytes:
 
 
 def load_trusted_keys(path: Path | None) -> dict[str, bytes]:
+    keys: dict[str, bytes] = {
+        key_id: base64.b64decode(encoded, validate=True)
+        for key_id, encoded in OFFICIAL_PACKAGE_KEYS.items()
+    }
     if path is None or not path.exists():
-        return {}
+        return keys
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, UnicodeError) as exc:
         raise PluginPackageError(f"cannot read trusted keys: {exc}") from exc
     if not isinstance(value, dict):
         raise PluginPackageError("trusted keys must be a JSON object")
-    keys: dict[str, bytes] = {}
     for key_id, encoded in value.items():
         try:
-            keys[str(key_id)] = base64.b64decode(str(encoded), validate=True)
+            decoded = base64.b64decode(str(encoded), validate=True)
         except ValueError as exc:
             raise PluginPackageError(f"invalid public key {key_id!r}") from exc
+        name = str(key_id)
+        if name in keys and keys[name] != decoded:
+            raise PluginPackageError(
+                f"public key {name!r} conflicts with a built-in trust root"
+            )
+        keys[name] = decoded
     return keys
 
 

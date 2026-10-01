@@ -1,9 +1,12 @@
 # Signed plugin catalogues
 
-The Plugins tab can browse any catalogue whose URL and Ed25519 public key the
-user has added as a source. Catalogue access is explicit: opening the tab reads
-the last verified cache, while **Refresh catalogue** performs network requests.
-HTTPS is required except for loopback development servers.
+The Plugins tab includes the signed **Lanius Official Plugins** catalogue and
+can browse any additional catalogue whose URL and Ed25519 public key the user
+has added as a source. Catalogue access is explicit: opening the tab reads the
+last verified cache, while **Refresh catalogue** performs network requests.
+HTTPS is required except for loopback development servers. The official source
+is served from `https://mirusu400.github.io/Lanius-plugins/index.json`; its
+catalogue and package public keys are pinned in the application.
 
 Catalogue packages still use the manifest signature described in
 [plugin-packages.md](plugin-packages.md). The catalogue signature authenticates
@@ -30,6 +33,10 @@ the Lanius data directory:
   ]
 }
 ```
+
+When that file does not exist, Lanius exposes the built-in official source. A
+saved file, including one with an empty `sources` list, becomes authoritative,
+so users can disable or remove the official source without it being recreated.
 
 The public key is pinned locally. A catalogue cannot replace its own key.
 Changing a source key is an explicit local configuration change.

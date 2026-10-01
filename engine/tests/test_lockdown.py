@@ -205,7 +205,9 @@ def test_catalogue_refresh_is_refused(client) -> None:
     assert res.status_code == 423
     assert res.json() == {"detail": "LOCKDOWN_MODE_BLOCKED"}
     # The cached catalogue is local, so reading it stays allowed.
-    assert client.get("/api/plugin-catalogue").status_code == 200
+    local = client.get("/api/plugin-catalogue")
+    assert local.status_code == 200
+    assert [source["id"] for source in local.json()["sources"]] == ["official"]
 
 
 def test_catalogue_install_is_refused_before_anything_is_unloaded(client) -> None:

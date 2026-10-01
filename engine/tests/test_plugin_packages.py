@@ -19,7 +19,12 @@ from fastapi.testclient import TestClient
 from app.addons.plugins import PluginManager
 from app.api.server import create_app
 from app.config import Settings
-from app.plugin_packages import PluginPackageError, PluginPackageManager
+from app.plugin_packages import (
+    PluginPackageError,
+    PluginPackageManager,
+    load_trusted_keys,
+)
+from app.plugin_trust import OFFICIAL_PACKAGE_KEYS
 
 
 BACKEND = b"""
@@ -34,6 +39,17 @@ def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
+
+
+def test_official_package_key_is_pinned_and_cannot_be_overridden(tmp_path) -> None:
+    key_id, encoded = next(iter(OFFICIAL_PACKAGE_KEYS.items()))
+    expected = base64.b64decode(encoded, validate=True)
+    assert load_trusted_keys(tmp_path / "missing.json")[key_id] == expected
+
+    local = tmp_path / "trusted.json"
+    local.write_text(json.dumps({key_id: base64.b64encode(b"x" * 32).decode()}))
+    with pytest.raises(PluginPackageError, match="conflicts with a built-in"):
+        load_trusted_keys(local)
 
 
 def manifest_for(
