@@ -988,6 +988,18 @@ export interface ProcessInfo {
   system: boolean;
 }
 
+export function getTlsTrust(): Promise<import('./types').TlsTrustState> {
+  return request('/api/tls/trust');
+}
+
+export function setTlsTrust(caPem: string): Promise<import('./types').TlsTrustState> {
+  return request('/api/tls/trust', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ca_pem: caPem }),
+  });
+}
+
 export function listProcesses(visibleOnly = true): Promise<{
   items: ProcessInfo[];
   count: number;

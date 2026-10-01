@@ -55,6 +55,7 @@ from ..plugin_samples import bundled_sample_archive, bundled_samples
 from .. import codegen
 from ..build_info import build_info
 from ..lockdown import BLOCKED_DETAIL, LockdownBlocked, LockdownPolicy
+from ..tls_trust import TRUSTED_CA_SETTING
 from .. import updates
 from ..addons.scope import ScopeError, rule_from_url
 from .. import browser
@@ -656,7 +657,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         was_locked = lockdown.project_enabled
         was_scope_egress = lockdown.scope_egress_effective
+        trusted_ca = store.get_setting(TRUSTED_CA_SETTING)
         counts = await asyncio.to_thread(store.import_project, payload)
+        # An imported project must not silently authorize a new trust anchor.
+        if trusted_ca is None:
+            store.delete_setting(TRUSTED_CA_SETTING)
+        else:
+            store.set_setting(TRUSTED_CA_SETTING, trusted_ca)
         # Project exports carry this setting too. Apply an imported switch
         # before any pending product request can continue. A file can turn
         # Lockdown on but never off: only the user's own switch loosens it.
@@ -782,6 +789,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return await engine.set_tls_profile(profile, ciphers)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/api/tls/trust")
+    async def tls_trust_state() -> dict[str, Any]:
+        return engine.tls_trust_state()
+
+    @app.put("/api/tls/trust")
+    async def set_tls_trust(payload: dict[str, Any]) -> dict[str, Any]:
+        pem = payload.get("ca_pem")
+        if not isinstance(pem, str):
+            raise HTTPException(status_code=422, detail="ca_pem must be a string")
+        try:
+            return await engine.set_tls_trust(pem)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except (OSError, ProxyStartError) as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.get("/api/browser")
     async def browser_state() -> dict[str, Any]:

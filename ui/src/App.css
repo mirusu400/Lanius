@@ -4841,6 +4841,17 @@ pre.body {
   margin: 8px 0;
 }
 
+.tls-trust-pem {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.tls-trust-pem textarea {
+  width: 100%;
+  resize: vertical;
+}
+
 .tls-custom .row {
   display: flex;
   gap: 6px;

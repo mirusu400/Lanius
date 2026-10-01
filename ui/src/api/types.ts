@@ -722,3 +722,12 @@ export interface TlsState {
   ciphers: string | null;
   available: TlsProfileOption[];
 }
+
+export interface TlsTrustState {
+  certificates: {
+    subject: string;
+    expires_at: string;
+    sha256: string;
+    valid: boolean;
+  }[];
+}

@@ -30,6 +30,7 @@ import { ProjectSection } from "./settings/ProjectSection";
 import { ProjectCompactSection } from "./settings/ProjectCompactSection";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { TlsSection } from "./settings/TlsSection";
+import { TlsTrustSection } from "./settings/TlsTrustSection";
 import { UpdatesSection } from "./settings/UpdatesSection";
 import { UpstreamSection } from "./settings/UpstreamSection";
 
@@ -98,6 +99,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
           <>
             <ListenerSection />
             <UpstreamSection />
+            <TlsTrustSection />
             <BodyDisplaySection />
             <MatchReplaceSection />
             <EngineSection />

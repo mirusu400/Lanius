@@ -136,6 +136,16 @@ Chrome, Firefox or Safari, or forces TLS 1.2, and accepts a custom OpenSSL
 cipher string. This covers the cipher list and TLS version, not a full JA3 or
 JA4 match.
 
+**Settings > Proxy > Upstream CA certificates** lets a project trust a VPN or
+private CA when HTTPS fails with `unable to get local issuer certificate`.
+Choose a PEM file or paste its public CA certificates, then apply. The bundle
+extends the public CA list; server certificate verification stays enabled.
+Applying or removing it restarts proxy connections and cancels active
+Replay/Fuzzer requests. CA certificates are saved in the project database,
+but importing a project keeps the current CA trust: new trust anchors must be
+registered explicitly. Private keys, leaf certificates and expired CAs are
+rejected.
+
 ### Where the proxy listens
 
 Port 8080 is a popular default and another tool may already have it. Open

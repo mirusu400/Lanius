@@ -44,6 +44,7 @@ from .tls import (
     validate_ciphers,
 )
 from .upstream import UpstreamBridge
+from .tls_trust import TRUSTED_CA_SETTING, parse_ca_bundle, upstream_ca_file
 
 logger = logging.getLogger(__name__)
 
@@ -388,6 +389,9 @@ class ProxyEngine:
         profile = self.store.get_setting(self.TLS_PROFILE_SETTING) or DEFAULT_PROFILE
         custom = self.store.get_setting(self.TLS_CIPHERS_SETTING) or None
         master.options.update(**options_for(profile, custom))
+        master.options.update(ssl_verify_upstream_trusted_ca=upstream_ca_file(
+            self.settings.data_dir, self.store.get_setting(TRUSTED_CA_SETTING) or ""
+        ))
         # mitmproxy's errorcheck addon calls sys.exit() on startup errors, which
         # would tear down the host application. We surface errors ourselves.
         if (errorcheck := master.addons.get("errorcheck")) is not None:
@@ -606,6 +610,43 @@ class ProxyEngine:
         state = self.tls_state()
         logger.info("upstream TLS profile set to %s", profile)
         self.broker.publish("engine.tls_changed", state)
+        return state
+
+    def tls_trust_state(self) -> dict[str, Any]:
+        _, certificates = parse_ca_bundle(self.store.get_setting(TRUSTED_CA_SETTING) or "")
+        return {"certificates": certificates}
+
+    async def set_tls_trust(self, pem: str) -> dict[str, Any]:
+        normalized, _ = parse_ca_bundle(pem, check_dates=True)
+        previous = self.store.get_setting(TRUSTED_CA_SETTING) or ""
+        if normalized == previous:
+            return self.tls_trust_state()
+        # Prepare the file before changing any setting or active connection.
+        upstream_ca_file(self.settings.data_dir, normalized)
+        was_running = self.running
+        await self.fuzzer.stop_all()
+        await self.replay.cancel_active()
+        if was_running:
+            await self.stop()
+
+        def save(value: str) -> None:
+            if value:
+                self.store.set_setting(TRUSTED_CA_SETTING, value)
+            else:
+                self.store.delete_setting(TRUSTED_CA_SETTING)
+
+        try:
+            save(normalized)
+            if was_running:
+                await self.start()
+        except Exception:
+            save(previous)
+            if was_running:
+                with contextlib.suppress(Exception):
+                    await self.start()
+            raise
+        state = self.tls_trust_state()
+        self.broker.publish("engine.tls_trust_changed", state)
         return state
 
     def local_capture_spec(self) -> str | None:
