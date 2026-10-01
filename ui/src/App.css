@@ -284,6 +284,28 @@
   --shadow: rgba(24, 32, 27, 0.16);
 }
 
+/* Captured code follows the app palette in both dark and light themes. */
+:root {
+  --syntax-keyword: #c7a4ef;
+  --syntax-name: #88baf0;
+  --syntax-attribute: #efb882;
+  --syntax-string: #a3d7a5;
+  --syntax-number: #e1c487;
+  --syntax-comment: #929daa;
+  --syntax-meta: #96c6d6;
+}
+
+:root[data-theme='light'],
+:root[data-theme='paper'] {
+  --syntax-keyword: #793ba3;
+  --syntax-name: #175aa1;
+  --syntax-attribute: #9b4b14;
+  --syntax-string: #1c703d;
+  --syntax-number: #85500c;
+  --syntax-comment: #65707b;
+  --syntax-meta: #42677c;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -1664,6 +1686,68 @@ td.empty {
   overflow-y: auto;
   font-size: inherit;
   padding: 0;
+}
+
+pre.raw-view {
+  margin: 0;
+  font-size: var(--font-size-mono);
+}
+
+pre.raw-view:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.syntax-code {
+  color: var(--fg);
+  tab-size: 2;
+}
+
+.syntax-code code {
+  color: inherit;
+  font: inherit;
+}
+
+.syntax-code .hljs-keyword,
+.syntax-code .hljs-literal,
+.syntax-code .hljs-selector-tag {
+  color: var(--syntax-keyword);
+}
+
+.syntax-code .hljs-name,
+.syntax-code .hljs-title,
+.syntax-code .hljs-function,
+.syntax-code .hljs-built_in,
+.syntax-code .hljs-link {
+  color: var(--syntax-name);
+}
+
+.syntax-code .hljs-attr,
+.syntax-code .hljs-attribute,
+.syntax-code .hljs-selector-class,
+.syntax-code .hljs-selector-id {
+  color: var(--syntax-attribute);
+}
+
+.syntax-code .hljs-string,
+.syntax-code .hljs-regexp,
+.syntax-code .hljs-template-variable {
+  color: var(--syntax-string);
+}
+
+.syntax-code .hljs-number,
+.syntax-code .hljs-symbol {
+  color: var(--syntax-number);
+}
+
+.syntax-code .hljs-comment,
+.syntax-code .hljs-quote {
+  color: var(--syntax-comment);
+}
+
+.syntax-code .hljs-meta,
+.syntax-code .hljs-doctag {
+  color: var(--syntax-meta);
 }
 
 .response-preview {

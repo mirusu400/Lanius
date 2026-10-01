@@ -221,7 +221,10 @@ describe('ProxyTab', () => {
     await user.click(await screen.findByText('/seeded'));
 
     expect(await screen.findByText('<redacted>')).toBeTruthy();
-    expect(await screen.findByText('<h1>hello lanius</h1>')).toBeTruthy();
+    await waitFor(() => expect(
+      document.querySelectorAll('.detail-half pre.body')[1]?.textContent,
+    ).toBe('<h1>hello lanius</h1>'));
+    expect(document.querySelectorAll('.detail-half')[1]?.querySelector('pre.body .hljs-name')?.textContent).toBe('h1');
   });
 
   it('pauses live updates when requested', async () => {

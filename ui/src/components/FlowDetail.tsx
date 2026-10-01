@@ -19,6 +19,7 @@ import {
 import { useT } from '../i18n';
 import type { Translator } from '../i18n';
 import { ResponsePreview } from './ResponsePreview';
+import { HighlightedBody, HighlightedMessage } from './SyntaxCode';
 
 interface Props {
   flow: FlowSummary | null;
@@ -78,6 +79,9 @@ function Half({
   onContextMenu,
   views,
   previewFlowId,
+  fallbackMime,
+  responsePath,
+  http,
   t,
 }: {
   title: string;
@@ -99,6 +103,9 @@ function Half({
    * offering to parse it would only produce an empty table. */
   views: View[];
   previewFlowId?: string;
+  fallbackMime?: string | null;
+  responsePath?: string | null;
+  http: boolean;
   t: Translator;
 }) {
   const hex = view === 'hex' ? hexPreview(raw) : null;
@@ -166,20 +173,22 @@ function Half({
                 </button>
               )}
             </h4>
-            <pre className="body mono">
-              {formatBody(body, bodyView) || t('common.empty')}
-            </pre>
+            <HighlightedBody
+              text={formatBody(body, bodyView) || t('common.empty')}
+              headers={headers}
+              fallbackMime={fallbackMime}
+              responsePath={responsePath}
+            />
           </>
         )}
         {view === 'raw' && (
-          // Editable-looking but read only: this is a record of what was
-          // sent, and changing it here would change nothing.
-          <textarea
+          <HighlightedMessage
             className="raw-view mono"
-            readOnly
-            spellCheck={false}
-            wrap="soft"
-            value={raw || t('common.empty')}
+            text={raw || t('common.empty')}
+            headers={headers}
+            fallbackMime={fallbackMime}
+            responsePath={responsePath}
+            http={http}
           />
         )}
         {view === 'hex' && (
@@ -351,6 +360,7 @@ export function FlowDetailView({ flow, onSentToReplay, splitStorageKey = 'lanius
       requestStage={variants ? requestStage : undefined}
       onRequestStage={variants ? setRequestStage : undefined}
       onContextMenu={(event) => openMenu(event, 'request')}
+      http={!isTcp}
       t={t}
     />
   );
@@ -383,6 +393,9 @@ export function FlowDetailView({ flow, onSentToReplay, splitStorageKey = 'lanius
         detail?.response_decode_error,
       )}
       onContextMenu={(event) => openMenu(event, 'response')}
+      fallbackMime={flow.response_mime}
+      responsePath={flow.path}
+      http={!isTcp}
       t={t}
     />
   );

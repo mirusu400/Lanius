@@ -35,6 +35,7 @@ const httpFlow: FlowSummary = {
 
 /** A flow whose response body is JSON on one line. */
 const jsonFlow: FlowSummary = { ...httpFlow, id: 'j1' };
+const codeFlow: FlowSummary = { ...httpFlow, id: 'c1', method: 'POST' };
 const modifiedFlow: FlowSummary = {
   ...httpFlow,
   id: 'm1',
@@ -61,20 +62,25 @@ beforeEach(() => {
     vi.fn(async (input: RequestInfo | URL) => {
       const isTcp = String(input).includes('t1');
       const isJson = String(input).includes('j1');
+      const isCode = String(input).includes('c1');
       const isModified = String(input).includes('m1');
       return {
         ok: true,
         status: 200,
         statusText: 'OK',
         json: async () => ({
-          ...(isTcp ? tcpFlow : isModified ? modifiedFlow : httpFlow),
-          request_headers: isTcp ? [] : [['Host', 'api.test']],
-          request_body: isTcp ? 'HELLO\r\n' : '',
-          response_headers: isTcp ? null : [['Content-Type', 'text/plain']],
+          ...(isTcp ? tcpFlow : isModified ? modifiedFlow : isCode ? codeFlow : httpFlow),
+          request_headers: isTcp ? [] : isCode
+            ? [['Host', 'api.test'], ['Content-Type', 'text/html']]
+            : [['Host', 'api.test']],
+          request_body: isTcp ? 'HELLO\r\n' : isCode ? '<main class="card">Hi</main>' : '',
+          response_headers: isTcp ? null : [['Content-Type', isCode ? 'application/javascript' : 'text/plain']],
           response_body: isTcp
             ? '220 READY\r\n'
             : isJson
               ? '{"a":1,"b":2}'
+              : isCode
+                ? 'const answer = 42;'
               : 'ok',
           request_variants: isModified
             ? {
@@ -128,6 +134,9 @@ describe('toHex', () => {
 });
 
 describe('FlowDetailView', () => {
+  const half = (index: number) => document.querySelectorAll('.detail-half')[index];
+  const bodyText = (index: number) => half(index)?.querySelector('pre.body')?.textContent;
+
   it('shows request and response together, not one at a time', async () => {
     // Comparing what was sent with what came back is the usual reason to open a flow.
     render(<FlowDetailView flow={httpFlow} />);
@@ -146,18 +155,37 @@ describe('FlowDetailView', () => {
     render(<FlowDetailView flow={httpFlow} />);
     const tabs = await screen.findAllByRole('tab', { name: t('detail.view.raw') });
     await userEvent.click(tabs[0]);
-    const raw = screen.getAllByRole('textbox')[0] as HTMLTextAreaElement;
-    expect(raw.value).toContain('GET /x HTTP/1.1');
-    expect(raw.value).toContain('Host: api.test');
+    await waitFor(() => expect(half(0)?.querySelector('pre.raw-view')?.textContent).toContain('Host: api.test'));
+    const raw = half(0)?.querySelector('pre.raw-view');
+    expect(raw?.textContent).toContain('GET /x HTTP/1.1');
+    expect(raw?.querySelector('.hljs-keyword')?.textContent).toBe('GET');
   });
 
   it('the raw response carries the status line', async () => {
     render(<FlowDetailView flow={httpFlow} />);
     const tabs = await screen.findAllByRole('tab', { name: t('detail.view.raw') });
     await userEvent.click(tabs[1]);
-    const raw = screen.getAllByRole('textbox')[0] as HTMLTextAreaElement;
-    expect(raw.value).toContain('HTTP/1.1 200 OK');
-    expect(raw.value).toContain('ok');
+    await waitFor(() => expect(half(1)?.querySelector('pre.raw-view')?.textContent).toContain('HTTP/1.1 200 OK'));
+    const raw = half(1)?.querySelector('pre.raw-view');
+    expect(raw?.textContent).toContain('ok');
+  });
+
+  it('colours HTML requests and JavaScript responses in parsed and raw views', async () => {
+    render(<FlowDetailView flow={codeFlow} />);
+    await waitFor(() => expect(bodyText(0)).toBe('<main class="card">Hi</main>'));
+    expect(half(0)?.querySelector('pre.body .hljs-name')?.textContent).toBe('main');
+    expect(bodyText(1)).toBe('const answer = 42;');
+    expect(half(1)?.querySelector('pre.body .hljs-keyword')?.textContent).toBe('const');
+
+    const tabs = screen.getAllByRole('tab', { name: t('detail.view.raw') });
+    await userEvent.click(tabs[0]);
+    await userEvent.click(tabs[1]);
+    const request = half(0)?.querySelector('pre.raw-view');
+    const response = half(1)?.querySelector('pre.raw-view');
+    expect(request?.textContent).toBe('POST /x HTTP/1.1\r\nHost: api.test\r\nContent-Type: text/html\r\n\r\n<main class="card">Hi</main>');
+    expect(request?.querySelector('.hljs-name')?.textContent).toBe('main');
+    expect(response?.textContent).toBe('HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\n\r\nconst answer = 42;');
+    expect(response?.querySelector('.hljs-keyword')?.textContent).toBe('const');
   });
 
   it('offers a hex view of the same bytes', async () => {
@@ -229,15 +257,14 @@ describe('FlowDetailView', () => {
   it('lays out a JSON body, which arrives as one line', async () => {
     // Captured JSON is unreadable as it comes off the wire.
     render(<FlowDetailView flow={jsonFlow} />);
-    const body = await screen.findByText(/"a": 1/);
-    expect(body).toBeTruthy();
+    await waitFor(() => expect(bodyText(1)).toContain('"a": 1'));
   });
 
   it('offers the exact bytes when the body has been laid out', async () => {
     render(<FlowDetailView flow={jsonFlow} />);
     const toggle = await screen.findByRole('button', { name: t('body.showRaw') });
     await userEvent.click(toggle);
-    expect(await screen.findByText('{"a":1,"b":2}')).toBeTruthy();
+    expect(bodyText(1)).toBe('{"a":1,"b":2}');
   });
 
   it('goes back to the laid-out view', async () => {
@@ -248,7 +275,7 @@ describe('FlowDetailView', () => {
     await userEvent.click(
       await screen.findByRole('button', { name: t('body.showPretty') }),
     );
-    expect(await screen.findByText(/"a": 1/)).toBeTruthy();
+    expect(bodyText(1)).toContain('"a": 1');
   });
 
   it('does not offer the choice for a body it cannot lay out', async () => {
