@@ -3,6 +3,7 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithI18n as render, t } from '../test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Activity, useState } from 'react';
 
 import { FlowDetailView } from './FlowDetail';
 import { toHex } from './bodyFormat';
@@ -297,6 +298,28 @@ describe('FlowDetailView', () => {
       screen.getByRole('tab', { name: t('detail.autoModifiedRequest') }),
     );
     expect(await screen.findByText('automatic')).toBeTruthy();
+  });
+
+  it('keeps the chosen request snapshot when its tab is hidden and shown', async () => {
+    function Harness() {
+      const [visible, setVisible] = useState(true);
+      return <>
+        <button onClick={() => setVisible((current) => !current)}>switch tab</button>
+        <Activity mode={visible ? 'visible' : 'hidden'}>
+          <FlowDetailView flow={modifiedFlow} />
+        </Activity>
+      </>;
+    }
+
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(await screen.findByRole('tab', { name: t('detail.originalRequest') }));
+    expect(await screen.findByText('before')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'switch tab' }));
+    await user.click(screen.getByRole('button', { name: 'switch tab' }));
+
+    expect(await screen.findByText('before')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: t('detail.originalRequest') }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('prompts when nothing is selected', () => {

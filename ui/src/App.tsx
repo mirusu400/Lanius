@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { Activity, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { captureWindowToClipboard, getLockdown, getScannerState, isDesktop, putWorkspace } from "./api/client";
 import { LOCKDOWN_BLOCKED, LOCKDOWN_CHANGED } from "./lockdownEvents";
 import { connectStream } from "./api/stream";
@@ -337,10 +337,13 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
       </header>
       <main className="content">
         <BusyProvider onChange={onBusyChange}>
-          {tab === "Dashboard" ? (
-            <DashboardTab onOpenTab={(next) => setTab(next as Tab)} />
-          ) : tab === "Proxy" ? (
+          {/* Keep the history's filters, page, selection details and scroll position
+              when another workspace tab is opened. Hidden effects are paused. */}
+          <Activity mode={tab === "Proxy" ? "visible" : "hidden"}>
             <ProxyTab />
+          </Activity>
+          {tab === "Proxy" ? null : tab === "Dashboard" ? (
+            <DashboardTab onOpenTab={(next) => setTab(next as Tab)} />
           ) : tab === "Target" ? (
             <TargetTab />
           ) : tab === "Issues" ? (

@@ -319,6 +319,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const [requestBodyView, setRequestBodyView] = useState<BodyView>('pretty');
   const [responseBodyView, setResponseBodyView] = useState<BodyView>('pretty');
   const [requestStage, setRequestStage] = useState<RequestStage>('modified');
+  const previousFlowId = useRef<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const menu = useContextMenu<'request' | 'response'>();
   const codegen = useCodegenMenu();
@@ -336,12 +337,15 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const isResponseActive = useCallback(() => activeHalf.current === 'response', []);
 
   useEffect(() => {
+    if ((flow?.id ?? null) !== previousFlowId.current) {
+      previousFlowId.current = flow?.id ?? null;
+      setRequestStage('modified');
+    }
     if (!flow) {
       setDetail(null);
       return;
     }
     let cancelled = false;
-    setRequestStage('modified');
     getFlow(flow.id, reveal)
       .then((d) => {
         if (!cancelled) setDetail(d);

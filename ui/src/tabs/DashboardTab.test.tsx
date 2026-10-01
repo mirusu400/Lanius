@@ -355,6 +355,39 @@ describe('title bar', () => {
     expect(await screen.findByText(t('dash.subtitle'))).toBeTruthy();
   });
 
+  it('keeps the Proxy history as it was when switching workspace tabs', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Proxy' }));
+
+    const search = await screen.findByPlaceholderText(t('proxy.searchPlaceholder'));
+    await user.type(search, 'seeded');
+    await user.click(screen.getByRole('button', { name: t('filter.button') }));
+    await user.type(screen.getByRole('textbox', { name: t('filter.host') }), 'example.test');
+    await user.click(screen.getByRole('button', { name: t('filter.apply') }));
+
+    const page = screen.getByRole('spinbutton', { name: t('proxy.historyPageLabel') });
+    await user.clear(page);
+    await user.type(page, '3');
+    await user.click(screen.getByRole('button', { name: t('proxy.jumpToPage') }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) =>
+      String(url).includes('offset=400')
+    )).toBe(true));
+    const table = document.querySelector('.flow-table-wrap') as HTMLElement;
+    table.scrollTop = 40;
+
+    await user.click(screen.getByRole('button', { name: t('dash.title') }));
+    await user.click(screen.getByRole('button', { name: 'Proxy' }));
+
+    expect(screen.getByPlaceholderText(t('proxy.searchPlaceholder'))).toBe(search);
+    expect(search).toHaveProperty('value', 'seeded');
+    expect(screen.getByRole('spinbutton', { name: t('proxy.historyPageLabel') })).toHaveProperty('value', '3');
+    expect(document.querySelector('.flow-table-wrap')).toBe(table);
+    expect(table.scrollTop).toBe(40);
+    await user.click(screen.getByRole('button', { name: t('filter.buttonActive', { count: '1' }) }));
+    expect(screen.getByRole('textbox', { name: t('filter.host') })).toHaveProperty('value', 'example.test');
+  });
+
   it('starts on the dashboard', async () => {
     payload = populated;
     render(<App />);
