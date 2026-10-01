@@ -16,12 +16,16 @@ jobs:
   meta:
     name: Validate release tag
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     outputs:
       sha: ${{ steps.version.outputs.sha }}
       short_sha: ${{ steps.version.outputs.short_sha }}
       date: ${{ steps.version.outputs.date }}
       version: ${{ steps.version.outputs.version }}
       msi_version: ${{ steps.version.outputs.version }}
+      reuse_ci: ${{ steps.main_ci.outputs.reuse_ci }}
     steps:
       - uses: actions/checkout@v7
       - id: version
@@ -69,8 +73,51 @@ jobs:
               output.write(f"version={version}\n")
           PY
 
+      # A normal push to main already runs the full matrix. Reuse that CI
+      # result when it belongs to the exact commit tagged for this release.
+      - id: main_ci
+        name: Reuse CI from main when available
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 1800))
+          missing_deadline=$((SECONDS + 30))
+          while (( SECONDS < deadline )); do
+            record="$(gh api --method GET \
+              "repos/$REPO/actions/workflows/ci.yml/runs" \
+              -f head_sha="$SHA" -f branch=main -f event=push -f per_page=10 \
+              --jq '.workflow_runs[0] | if . then "\(.status)|\(.conclusion // "")|\(.html_url)" else "missing" end')"
+            IFS='|' read -r status conclusion run_url <<< "$record"
+            case "$status:$conclusion" in
+              completed:success)
+                echo "reuse_ci=true" >> "$GITHUB_OUTPUT"
+                echo "Reusing successful main CI: $run_url" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+                ;;
+              completed:*)
+                echo "Main CI for $SHA concluded $conclusion: $run_url" >&2
+                exit 1
+                ;;
+              missing:*)
+                if (( SECONDS >= missing_deadline )); then
+                  echo "reuse_ci=false" >> "$GITHUB_OUTPUT"
+                  echo "No main CI run for $SHA; running CI on the tag." >> "$GITHUB_STEP_SUMMARY"
+                  exit 0
+                fi
+                ;;
+            esac
+            sleep 15
+          done
+          echo "Timed out waiting for main CI on $SHA" >&2
+          exit 1
+
   verify:
     name: Run CI for the tag
+    needs: meta
+    if: needs.meta.outputs.reuse_ci != 'true'
     uses: ./.github/workflows/ci.yml
 
   build:
@@ -79,7 +126,8 @@ jobs:
     if: >-
       ${{ !cancelled()
           && needs.meta.result == 'success'
-          && needs.verify.result == 'success' }}
+          && (needs.meta.outputs.reuse_ci == 'true'
+              || needs.verify.result == 'success') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -385,7 +433,8 @@ jobs:
     if: >-
       ${{ !cancelled()
           && needs.meta.result == 'success'
-          && needs.verify.result == 'success'
+          && (needs.meta.outputs.reuse_ci == 'true'
+              || needs.verify.result == 'success')
           && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:

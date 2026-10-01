@@ -561,7 +561,8 @@ nightly builds check the rolling nightly release.
 
 To publish a stable version, update the engine, Tauri, shell package and lock
 file versions, write `docs/releases/vX.Y.Z.md` and update `CHANGELOG.md`, then
-push a matching `vX.Y.Z` tag. The stable workflow runs CI,
+push a matching `vX.Y.Z` tag. The stable workflow reuses successful `main` CI
+for the exact tagged commit, or runs CI on the tag when no main run exists. It
 builds all four desktop targets, requires signed updater bundles for each,
 and publishes the GitHub Release only when every job succeeds.
 

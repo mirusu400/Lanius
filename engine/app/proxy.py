@@ -19,6 +19,7 @@ from mitmproxy import options
 from mitmproxy.proxy.mode_specs import ProxyMode
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy_rs.local import LocalRedirector
+import psutil
 
 from .addons.capture import CaptureAddon
 from .addons.intercept import InterceptAddon
@@ -160,14 +161,22 @@ def _bindable_addresses() -> list[dict[str, str]]:
         {"host": ALL_INTERFACES, "label": "All interfaces"},
     ]
     seen = {entry["host"] for entry in found}
+    # Resolving the machine's hostname can spend tens of seconds in DNS on
+    # macOS runners and on networks that do not publish a host record. The
+    # interfaces themselves already contain the addresses we need.
     try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            host = str(info[4][0])
+        interfaces = psutil.net_if_addrs()
+    except (OSError, RuntimeError):  # pragma: no cover - depends on the host OS
+        logger.debug("could not enumerate local addresses", exc_info=True)
+        return found
+    for addresses in interfaces.values():
+        for address in addresses:
+            if address.family != socket.AF_INET:
+                continue
+            host = str(address.address)
             if host not in seen and not _is_loopback(host):
                 found.append({"host": host, "label": host})
                 seen.add(host)
-    except OSError:  # pragma: no cover - depends on the host's DNS
-        logger.debug("could not enumerate local addresses")
     return found
 
 

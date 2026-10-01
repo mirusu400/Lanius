@@ -26,3 +26,5 @@ tornado>=6.5.10
 # backports.zstd, which does not provide the zstandard import.
 zstandard>=0.25.0
 packaging>=26
+# Enumerate local interface addresses without hostname DNS lookups.
+psutil>=7.2.2

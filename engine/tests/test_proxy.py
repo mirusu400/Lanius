@@ -893,6 +893,23 @@ def test_binding_beyond_loopback_is_reported_as_exposed(tmp_path) -> None:
     assert "0.0.0.0" in addresses  # noqa: S104
 
 
+def test_listener_addresses_use_interfaces_without_dns(tmp_path) -> None:
+    proxy = engine(tmp_path, free_port())
+    interfaces = {
+        "en0": [
+            mock.Mock(family=socket.AF_INET, address="192.0.2.10"),
+            mock.Mock(family=socket.AF_INET6, address="2001:db8::10"),
+        ],
+        "en1": [mock.Mock(family=socket.AF_INET, address="192.0.2.10")],
+    }
+    with (
+        mock.patch("app.proxy.psutil.net_if_addrs", return_value=interfaces),
+        mock.patch("app.proxy.socket.getaddrinfo", side_effect=AssertionError("DNS lookup")),
+    ):
+        addresses = [entry["host"] for entry in proxy.listener_state()["addresses"]]
+    assert addresses == ["127.0.0.1", "0.0.0.0", "192.0.2.10"]  # noqa: S104
+
+
 async def test_stop_releases_the_listening_port(tmp_path) -> None:
     """Master.shutdown() does not close the servers, so a stopped proxy used
     to keep accepting connections on its old port."""
