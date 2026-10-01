@@ -9,6 +9,9 @@
 mitmproxy @ git+https://github.com/mitmproxy/mitmproxy.git@8bc3b89334acbfd7af71aed9000900b1c67f0f63
 fastapi>=0.141
 uvicorn[standard]>=0.52
+# uvloop 0.23 forwards eager_start to task factories on Python 3.13, but
+# asyncio.eager_task_factory (used by mitmproxy) only accepts it on 3.14+.
+uvloop>=0.22.1,<0.23; python_version < "3.14" and sys_platform != "win32" and platform_python_implementation == "CPython"
 mcp>=2.2
 cryptography>=50.0.1
 h2>=4.4.1

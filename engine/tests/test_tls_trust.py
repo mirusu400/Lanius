@@ -60,7 +60,13 @@ def test_bundle_extends_public_roots_and_uses_a_new_path_when_replaced(tmp_path)
     assert upstream_ca_file(tmp_path, "") is None
 
 
-@pytest.mark.parametrize("bad", ["bad PEM", "-----BEGIN PRIVATE KEY-----\nsecret", "x" * (128 * 1024 + 1)])
+@pytest.mark.parametrize("bad", [
+    pytest.param("bad PEM", id="invalid-pem"),
+    pytest.param("-----BEGIN PRIVATE KEY-----\nsecret", id="private-key"),
+    # pytest exports the full test ID in PYTEST_CURRENT_TEST. Windows limits
+    # each environment variable to 32767 characters, so keep the ID short.
+    pytest.param("x" * (128 * 1024 + 1), id="oversized"),
+])
 def test_rejects_invalid_or_private_data(bad):
     with pytest.raises(ValueError):
         parse_ca_bundle(bad, check_dates=True)
