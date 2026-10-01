@@ -560,7 +560,8 @@ for the in-app updater. Stable builds check the latest stable release;
 nightly builds check the rolling nightly release.
 
 To publish a stable version, update the engine, Tauri, shell package and lock
-file versions, then push a matching `vX.Y.Z` tag. The stable workflow runs CI,
+file versions, write `docs/releases/vX.Y.Z.md` and update `CHANGELOG.md`, then
+push a matching `vX.Y.Z` tag. The stable workflow runs CI,
 builds all four desktop targets, requires signed updater bundles for each,
 and publishes the GitHub Release only when every job succeeds.
 

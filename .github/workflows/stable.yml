@@ -391,6 +391,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+
       - uses: actions/download-artifact@v8
         with:
           path: dist
@@ -398,6 +402,11 @@ jobs:
 
       - name: List artifacts
         run: ls -la dist
+
+      - name: Check release notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: test -s "docs/releases/${TAG}.md"
 
       # Publish only when every platform has a signed updater bundle.
       - name: Write the update manifest
@@ -470,17 +479,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: Lanius ${{ needs.meta.outputs.version }}
-          body: |
-            Stable release ${{ needs.meta.outputs.version }} built from
-            `${{ needs.meta.outputs.short_sha }}` after all CI checks and
-            platform builds passed.
-
-            Builds are not code signed by Apple or Microsoft. On macOS,
-            run `xattr -dr com.apple.quarantine /Applications/Lanius.app`
-            after installing. On Windows, SmartScreen may require
-            **More info** then **Run anyway**.
-
-            Lanius is for security testing of systems you are authorised to test.
+          body_path: docs/releases/${{ github.ref_name }}.md
           prerelease: false
           make_latest: true
           files: dist/*
