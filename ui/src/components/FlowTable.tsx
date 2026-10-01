@@ -8,6 +8,7 @@ import {
   formatUrl,
   statusClass,
 } from '../tabs/proxyModel';
+import { MarkedText } from './MarkedText';
 
 interface Props {
   flows: FlowSummary[];
@@ -15,9 +16,10 @@ interface Props {
   onSelect: (id: string) => void;
   /** Right-click on a row, for the Proxy tab to build a menu from. */
   onContextMenu?: (event: React.MouseEvent, flow: FlowSummary) => void;
+  searchQuery?: string;
 }
 
-export function FlowTable({ flows, selectedId, onSelect, onContextMenu }: Props) {
+export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQuery = '' }: Props) {
   const t = useT();
   const columns = useResizableColumns('lanius.columns.history', [84, 70, 180, 260, 66, 82, 78, 84]);
   const headers = [
@@ -64,11 +66,10 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu }: Props)
               }}
             >
               <td className="mono">{formatTime(flow.started_at)}</td>
-              <td className="mono">{flow.method}</td>
-              <td>{flow.host}</td>
+              <td className="mono"><MarkedText text={flow.method || ''} query={searchQuery} /></td>
+              <td><MarkedText text={flow.host || ''} query={searchQuery} /></td>
               <td className="mono truncate" title={formatUrl(flow)}>
-                {flow.path}
-                {flow.query ? `?${flow.query}` : ''}
+                <MarkedText text={`${flow.path || ''}${flow.query ? `?${flow.query}` : ''}`} query={searchQuery} />
               </td>
               <td className={`mono ${statusClass(flow.status_code)}`}>
                 {flow.status_code ?? (flow.error ? 'ERR' : '…')}

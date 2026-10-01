@@ -1572,6 +1572,77 @@ td.empty {
   background: var(--bg-alt);
 }
 
+.detail-find-toggle,
+.detail-find-bar button {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.detail-find-toggle {
+  min-width: 27px;
+  height: 25px;
+  font-size: 20px;
+  line-height: 18px;
+}
+
+.detail-find-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.detail-find-bar input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.detail-find-bar input:focus-visible {
+  outline: 1px solid var(--accent);
+}
+
+.detail-find-count {
+  min-width: 40px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+.detail-find-bar button {
+  min-width: 24px;
+  height: 24px;
+}
+
+.detail-find-bar button:disabled {
+  color: var(--fg-disabled);
+  cursor: default;
+}
+
+.flow-table mark,
+.flow-detail mark,
+.response-preview mark {
+  border-radius: 2px;
+  background: #ffe36e;
+  color: #17212d;
+}
+
+.flow-detail mark.find-current,
+.response-preview mark.find-current {
+  background: #ff944d;
+  color: #17212d;
+  outline: 2px solid #b54400;
+}
+
 .request-variants {
   order: 2;
   flex: 0 0 100%;
@@ -1777,6 +1848,17 @@ pre.raw-view:focus-visible {
 .response-preview-html .response-preview-frame {
   flex: 1;
   min-height: 0;
+}
+
+.response-preview-find-snippet {
+  margin: 3px 0 6px;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .response-preview-pdf {

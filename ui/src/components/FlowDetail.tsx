@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { getFlow } from '../api/client';
 import type { FlowDetail, FlowSummary, RequestVariant } from '../api/types';
@@ -20,9 +20,12 @@ import { useT } from '../i18n';
 import type { Translator } from '../i18n';
 import { ResponsePreview } from './ResponsePreview';
 import { HighlightedBody, HighlightedMessage } from './SyntaxCode';
+import { matchCount } from './searchHighlight';
+import { MarkedText } from './MarkedText';
 
 interface Props {
   flow: FlowSummary | null;
+  searchQuery?: string;
   onSentToReplay?: () => void;
   splitStorageKey?: string;
   initialSplit?: number;
@@ -40,21 +43,30 @@ type RequestStage = 'original' | 'auto_modified' | 'modified';
 function HeaderList({
   headers,
   t,
+  query,
+  activeIndex,
 }: {
   headers: [string, string][] | null;
   t: Translator;
+  query: string;
+  activeIndex: number | null;
 }) {
   if (!headers || headers.length === 0)
     return <p className="muted">{t('common.none')}</p>;
+  const headerOffsets = headers.map((_, index) => headers.slice(0, index).reduce(
+    (sum, [name, value]) => sum + matchCount(name, query) + matchCount(value, query), 0,
+  ));
   return (
     <table className="headers">
       <tbody>
-        {headers.map(([name, value], i) => (
-          <tr key={`${name}-${i}`}>
-            <td className="hname">{name}</td>
-            <td className="hvalue mono">{value}</td>
-          </tr>
-        ))}
+        {headers.map(([name, value], i) => {
+          const nameOffset = headerOffsets[i];
+          const valueOffset = nameOffset + matchCount(name, query);
+          return <tr key={`${name}-${i}`}>
+            <td className="hname"><MarkedText text={name} query={query} offset={nameOffset} activeIndex={activeIndex} /></td>
+            <td className="hvalue mono"><MarkedText text={value} query={query} offset={valueOffset} activeIndex={activeIndex} /></td>
+          </tr>;
+        })}
       </tbody>
     </table>
   );
@@ -83,6 +95,9 @@ function Half({
   responsePath,
   http,
   t,
+  onActivate,
+  isActive,
+  searchQuery,
 }: {
   title: string;
   note?: string | null;
@@ -107,11 +122,80 @@ function Half({
   responsePath?: string | null;
   http: boolean;
   t: Translator;
+  onActivate: () => void;
+  isActive: () => boolean;
+  searchQuery: string;
 }) {
   const hex = view === 'hex' ? hexPreview(raw) : null;
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [previewMatches, setPreviewMatches] = useState(0);
+  const sectionRef = useRef<HTMLElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const query = findOpen ? findQuery : searchQuery;
+  const formattedBody = formatBody(body, bodyView) || t('common.empty');
+  const headerMatches = view === 'parsed'
+    ? (headers || []).reduce((count, [name, value]) => count + matchCount(name, query) + matchCount(value, query), 0)
+    : 0;
+  const matches = !query ? 0 : view === 'parsed' ? headerMatches + matchCount(formattedBody, query)
+    : view === 'raw' ? matchCount(raw || t('common.empty'), query)
+      : view === 'hex' ? matchCount(hex?.text || t('common.empty'), query)
+        : previewMatches;
+  const currentIndex = matches ? activeIndex % matches : 0;
+  const selectedIndex = findOpen && query && matches ? currentIndex : null;
+
+  const openFind = useCallback(() => {
+    onActivate();
+    if (!findOpen) {
+      setFindQuery(searchQuery);
+      setActiveIndex(0);
+      setFindOpen(true);
+    } else {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [onActivate, findOpen, searchQuery, setFindQuery, setActiveIndex, setFindOpen]);
+
+  useEffect(() => {
+    if (findOpen) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [findOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const inside = target instanceof Node && !!sectionRef.current?.contains(target);
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+        if (event.defaultPrevented || !isActive()) return;
+        if (!inside && target instanceof Element && target.closest('input, textarea, [contenteditable]:not([contenteditable="false"])')) return;
+        event.preventDefault();
+        openFind();
+      } else if (event.key === 'Escape' && findOpen && inside) {
+        event.preventDefault();
+        setFindOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [isActive, findOpen, openFind]);
+
+  useLayoutEffect(() => {
+    if (!findOpen || !query || !matches) return;
+    const mark = sectionRef.current?.querySelector<HTMLElement>(`.detail-half-body mark[data-find-index="${currentIndex}"]`);
+    mark?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [findOpen, query, currentIndex, matches, view]);
+
+  const move = (direction: number) => {
+    if (matches) setActiveIndex((currentIndex + direction + matches) % matches);
+  };
 
   return (
-    <section className="detail-half" onContextMenu={onContextMenu}>
+    <section className="detail-half" ref={sectionRef} onContextMenu={onContextMenu}
+      onPointerDownCapture={onActivate}
+      onFocusCapture={onActivate}>
       <div className="detail-half-bar">
         <span className="detail-half-title">{title}</span>
         {note && <span className="muted">{note}</span>}
@@ -146,19 +230,31 @@ function Half({
               role="tab"
               aria-selected={view === option}
               className={view === option ? 'active' : ''}
-              onClick={() => onView(option)}
+              onClick={() => { if (option === 'preview') setPreviewMatches(0); onView(option); }}
             >
               {t(`detail.view.${option}`)}
             </button>
           ))}
         </div>
+        <button type="button" className="detail-find-toggle" onClick={openFind} aria-label={t('detail.findIn', { pane: title })} title={t('detail.findShortcut')} aria-expanded={findOpen}>⌕</button>
       </div>
+      {findOpen && <div className="detail-find-bar">
+        <input ref={inputRef} type="search" aria-label={t('detail.findIn', { pane: title })} placeholder={t('detail.findPlaceholder')}
+          value={findQuery} onChange={(event) => { setFindQuery(event.target.value); setActiveIndex(0); }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') { event.preventDefault(); move(event.shiftKey ? -1 : 1); }
+          }} />
+        <span className="detail-find-count" aria-live="polite">{query ? `${matches ? currentIndex + 1 : 0}/${matches}` : '0/0'}</span>
+        <button type="button" onClick={() => move(-1)} disabled={!matches} aria-label={t('detail.findPrevious')}>↑</button>
+        <button type="button" onClick={() => move(1)} disabled={!matches} aria-label={t('detail.findNext')}>↓</button>
+        <button type="button" onClick={() => setFindOpen(false)} aria-label={t('detail.findClose')}>×</button>
+      </div>}
       <div className="detail-half-body">
         {decodeError && <div className="banner error">{decodeError}</div>}
         {view === 'parsed' && (
           <>
             <h4>{t('detail.headers')}</h4>
-            <HeaderList headers={headers} t={t} />
+            <HeaderList headers={headers} t={t} query={query} activeIndex={selectedIndex} />
             <h4>
               {t('detail.body')}
               {canReformat(body) && (
@@ -174,10 +270,13 @@ function Half({
               )}
             </h4>
             <HighlightedBody
-              text={formatBody(body, bodyView) || t('common.empty')}
+              text={formattedBody}
               headers={headers}
               fallbackMime={fallbackMime}
               responsePath={responsePath}
+              query={query}
+              activeIndex={selectedIndex}
+              offset={headerMatches}
             />
           </>
         )}
@@ -189,11 +288,13 @@ function Half({
             fallbackMime={fallbackMime}
             responsePath={responsePath}
             http={http}
+            query={query}
+            activeIndex={selectedIndex}
           />
         )}
         {view === 'hex' && (
           <>
-            <pre className="body mono">{hex?.text || t('common.empty')}</pre>
+            <pre className="body mono"><MarkedText text={hex?.text || t('common.empty')} query={query} activeIndex={selectedIndex} /></pre>
             {hex && hex.truncated > 0 && (
               <p className="muted">
                 {t('detail.hexTruncated', { count: String(hex.truncated) })}
@@ -201,13 +302,13 @@ function Half({
             )}
           </>
         )}
-        {view === 'preview' && previewFlowId && <ResponsePreview flowId={previewFlowId} />}
+        {view === 'preview' && previewFlowId && <ResponsePreview flowId={previewFlowId} query={query} activeIndex={selectedIndex} onMatchCount={setPreviewMatches} />}
       </div>
     </section>
   );
 }
 
-export function FlowDetailView({ flow, onSentToReplay, splitStorageKey = 'lanius.split.detail', initialSplit = 0.5 }: Props) {
+export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitStorageKey = 'lanius.split.detail', initialSplit = 0.5 }: Props) {
   const t = useT();
   const [detail, setDetail] = useState<FlowDetail | null>(null);
   const [reveal, setReveal] = useState(false);
@@ -228,6 +329,11 @@ export function FlowDetailView({ flow, onSentToReplay, splitStorageKey = 'lanius
   const target = useRef<{ flow: FlowSummary; detail: FlowDetail | null } | null>(
     null,
   );
+  const activeHalf = useRef<'request' | 'response'>('response');
+  const activateRequest = useCallback(() => { activeHalf.current = 'request'; }, []);
+  const activateResponse = useCallback(() => { activeHalf.current = 'response'; }, []);
+  const isRequestActive = useCallback(() => activeHalf.current === 'request', []);
+  const isResponseActive = useCallback(() => activeHalf.current === 'response', []);
 
   useEffect(() => {
     if (!flow) {
@@ -362,6 +468,9 @@ export function FlowDetailView({ flow, onSentToReplay, splitStorageKey = 'lanius
       onContextMenu={(event) => openMenu(event, 'request')}
       http={!isTcp}
       t={t}
+      onActivate={activateRequest}
+      isActive={isRequestActive}
+      searchQuery={searchQuery}
     />
   );
 
@@ -397,6 +506,9 @@ export function FlowDetailView({ flow, onSentToReplay, splitStorageKey = 'lanius
       responsePath={flow.path}
       http={!isTcp}
       t={t}
+      onActivate={activateResponse}
+      isActive={isResponseActive}
+      searchQuery={searchQuery}
     />
   );
 
@@ -407,7 +519,7 @@ export function FlowDetailView({ flow, onSentToReplay, splitStorageKey = 'lanius
             shrinks. Without this the reveal toggle is pushed off the
             edge of the pane and cannot be reached at all. */}
         <span className="detail-url-text" title={formatUrl(flow)}>
-          <strong>{flow.method}</strong> {formatUrl(flow)}
+          <strong><MarkedText text={flow.method || ''} query={searchQuery} /></strong> <MarkedText text={formatUrl(flow)} query={searchQuery} />
         </span>
         <label className="reveal">
           <input

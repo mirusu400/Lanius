@@ -380,12 +380,13 @@ export function ProxyTab() {
             first={
               <FlowTable
                 flows={flows}
+                searchQuery={filters.search || ''}
                 selectedId={selected}
                 onSelect={setSelectedFlow}
                 onContextMenu={menu.open}
               />
             }
-            second={<FlowDetailView flow={selectedFlow} />}
+            second={<FlowDetailView flow={selectedFlow} searchQuery={filters.search || ''} />}
           />
           <div className="history-pages">
             <button disabled={historyPage === 0 || historyLoading} onClick={() => {

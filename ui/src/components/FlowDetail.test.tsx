@@ -303,4 +303,55 @@ describe('FlowDetailView', () => {
     render(<FlowDetailView flow={null} />);
     expect(screen.getByText(t('detail.selectPrompt'))).toBeTruthy();
   });
+
+  it('highlights the history query in parsed headers and body', async () => {
+    render(<FlowDetailView flow={codeFlow} searchQuery="main" />);
+    await waitFor(() => expect(half(0)?.querySelector('pre.body')?.textContent).toContain('<main'));
+    expect(half(0)?.querySelector('pre.body mark')?.textContent).toBe('main');
+    expect(half(0)?.querySelector('pre.body .hljs-name')).toBeTruthy();
+  });
+
+  it('opens a scoped find with Ctrl+F, navigates matches, and restores history highlights on close', async () => {
+    const user = userEvent.setup();
+    render(<FlowDetailView flow={codeFlow} searchQuery="main" />);
+    await waitFor(() => expect(bodyText(0)).toContain('<main'));
+    fireEvent.pointerDown(half(0)!);
+    fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
+    const input = half(0)?.querySelector<HTMLInputElement>('input[type="search"]');
+    expect(input).toBeTruthy();
+    expect(half(1)?.querySelector('input[type="search"]')).toBeNull();
+    await user.clear(input!);
+    await user.type(input!, 'main');
+    expect(half(0)?.querySelector('.detail-find-count')?.textContent).toBe('1/2');
+    await user.click(half(0)!.querySelector<HTMLButtonElement>(`button[aria-label="${t('detail.findNext')}"]`)!);
+    expect(half(0)?.querySelector('.detail-find-count')?.textContent).toBe('2/2');
+    expect(half(0)?.querySelector('pre.body mark.find-current')?.textContent).toBe('main');
+    fireEvent.keyDown(input!, { key: 'Escape' });
+    expect(half(0)?.querySelector('input[type="search"]')).toBeNull();
+    expect(half(0)?.querySelectorAll('pre.body mark').length).toBeGreaterThan(0);
+  });
+
+  it('keeps Ctrl+F in a history filter input for the browser', async () => {
+    render(<><input aria-label="history filter" /><FlowDetailView flow={httpFlow} /></>);
+    await screen.findByText(t('detail.request'));
+    const filter = screen.getByRole('textbox', { name: 'history filter' });
+    filter.focus();
+    fireEvent.keyDown(filter, { key: 'f', ctrlKey: true });
+    expect(document.querySelector('.detail-find-bar')).toBeNull();
+  });
+
+  it('opens response find with Cmd+F and keeps the query when switching to raw', async () => {
+    const user = userEvent.setup();
+    render(<FlowDetailView flow={codeFlow} />);
+    await waitFor(() => expect(bodyText(1)).toContain('const answer'));
+    fireEvent.pointerDown(half(1)!);
+    fireEvent.keyDown(window, { key: 'f', metaKey: true });
+    const input = half(1)?.querySelector<HTMLInputElement>('input[type="search"]');
+    expect(input).toBeTruthy();
+    await user.type(input!, 'answer');
+    expect(half(1)?.querySelector('.detail-find-count')?.textContent).toBe('1/1');
+    await user.click(screen.getAllByRole('tab', { name: t('detail.view.raw') })[1]);
+    expect(half(1)?.querySelector('pre.raw-view mark.find-current')?.textContent).toBe('answer');
+    expect(half(1)?.querySelector('.detail-find-count')?.textContent).toBe('1/1');
+  });
 });

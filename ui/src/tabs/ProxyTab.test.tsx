@@ -162,6 +162,17 @@ describe('ProxyTab', () => {
     expect(screen.getByText('/seeded')).toBeTruthy();
   });
 
+  it('highlights the history search in table cells and selected details', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    const search = screen.getByPlaceholderText(t('proxy.searchPlaceholder'));
+    await user.type(search, 'seeded');
+    await waitFor(() => expect(document.querySelector('.flow-table td mark')?.textContent).toBe('seeded'));
+    await user.click(document.querySelector('.flow-table tbody tr')!);
+    await waitFor(() => expect(document.querySelector('.detail-half .headers mark')?.textContent).toBe('seeded'));
+  });
+
   it('pages into older history without holding every flow in the table', async () => {
     paginateHistory = true;
     const user = userEvent.setup();
