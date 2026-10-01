@@ -69,30 +69,31 @@ fi
 
 if [ "$target" = "all" ] || [ "$target" = "shell" ]; then
   echo "shell"
-  # tauri resolves bundle resources at compile time, so clippy cannot run
-  # without a frozen engine. A real PyInstaller directory is also unsuitable:
-  # tauri-build recursively emits rerun directives and can treat ordinary
-  # files inside that resource as directories. Temporarily replace either
-  # state with the same single-file placeholder CI uses.
+  # Tauri resolves bundle resources at compile time, so clippy needs the
+  # engine resource directory. Use the small placeholder directory from CI.
   engine_resource="engine/dist/lanius-engine"
   engine_resource_backup=""
   restore_engine_resource() {
     if [ -n "$engine_resource_backup" ]; then
-      unlink "$engine_resource"
+      rm "$engine_resource/lanius-engine"
+      rmdir "$engine_resource"
       mv "$engine_resource_backup/lanius-engine" "$engine_resource"
       rmdir "$engine_resource_backup"
       engine_resource_backup=""
-    elif [ "${placeholder:-0}" = "1" ] && [ -f "$engine_resource" ]; then
-      unlink "$engine_resource"
+    elif [ "${placeholder:-0}" = "1" ] && [ -d "$engine_resource" ]; then
+      rm "$engine_resource/lanius-engine"
+      rmdir "$engine_resource"
     fi
   }
   mkdir -p engine/dist
   if [ -d "$engine_resource" ]; then
     engine_resource_backup=$(mktemp -d /tmp/lanius-check-resource.XXXXXX)
     mv "$engine_resource" "$engine_resource_backup/lanius-engine"
-    : > "$engine_resource"
+    mkdir "$engine_resource"
+    : > "$engine_resource/lanius-engine"
   elif [ ! -e "$engine_resource" ]; then
-    : > "$engine_resource"
+    mkdir "$engine_resource"
+    : > "$engine_resource/lanius-engine"
     placeholder=1
   fi
   trap restore_engine_resource EXIT INT TERM

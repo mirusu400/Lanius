@@ -1,9 +1,9 @@
 """Is there a newer build than this one?
 
 The app ships two streams: a rolling `nightly` prerelease rebuilt on
-every commit that lands on main, and tagged releases. A version number
-cannot answer the question on its own - every nightly this month says
-0.1.0 - so a nightly is compared by commit and a release by version.
+every commit that lands on main, and tagged releases. A nightly is compared
+by commit and a stable release by version, so changes to the nightly can be
+detected even between version bumps.
 
 Nothing is downloaded or installed here. The answer is a fact and a
 link; what to do with it is the user's decision, which is the right

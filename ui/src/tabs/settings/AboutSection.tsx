@@ -1,7 +1,6 @@
 /** Which build this is.
  *
- * Every nightly this month reports version 0.1.0, so the version alone
- * does not tell anyone what they are running. The commit does, and so
+ * The version alone does not tell anyone what they are running. The commit does, and so
  * does knowing whether this came from a release or from somebody's
  * checkout. All of it is here to be pasted into a bug report.
  */

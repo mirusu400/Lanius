@@ -1,134 +1,89 @@
-name: Nightly
+name: Stable release
 
-# Runs after CI passes on main, not on a clock. A build a day meant the
-# newest download could be up to 24 hours behind main, and a day where
-# nothing was pushed still produced a release. Waiting on CI rather than
-# on the push itself means a failing commit is never published, and CI
-# is not run twice for the same commit.
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      publish:
-        description: 'Publish a prerelease instead of only uploading artifacts'
-        type: boolean
-        default: true
+  push:
+    tags:
+      - 'v*'
 
-# A newer commit supersedes an in-flight build: the release always
-# describes the tip of main, so finishing an older one is wasted work.
 concurrency:
-  group: nightly
-  cancel-in-progress: true
+  group: stable-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
   meta:
-    name: Resolve the commit
+    name: Validate release tag
     runs-on: ubuntu-latest
     outputs:
-      build: ${{ steps.check.outputs.build }}
-      publish: ${{ steps.check.outputs.publish }}
-      sha: ${{ steps.check.outputs.sha }}
-      short_sha: ${{ steps.check.outputs.short_sha }}
-      date: ${{ steps.check.outputs.date }}
-      version: ${{ steps.check.outputs.version }}
-      msi_version: ${{ steps.check.outputs.msi_version }}
+      sha: ${{ steps.version.outputs.sha }}
+      short_sha: ${{ steps.version.outputs.short_sha }}
+      date: ${{ steps.version.outputs.date }}
+      version: ${{ steps.version.outputs.version }}
+      msi_version: ${{ steps.version.outputs.version }}
     steps:
-      - id: check
+      - uses: actions/checkout@v7
+      - id: version
         env:
-          # For a workflow_run the commit under test is the one CI ran
-          # on, which is not necessarily the tip by the time this starts.
-          EVENT: ${{ github.event_name }}
-          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-          # `branches: [main]` matches the head branch, which for a pull
-          # request is the source branch. A fork's branch called main
-          # would otherwise publish itself over the real release.
-          CI_EVENT: ${{ github.event.workflow_run.event }}
-          PUBLISH: ${{ inputs.publish }}
-          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
-          FALLBACK_SHA: ${{ github.sha }}
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          sha="${RUN_SHA:-$FALLBACK_SHA}"
-          {
-            echo "sha=$sha"
-            echo "short_sha=${sha:0:7}"
-            echo "date=$(date -u +%Y%m%d)"
-            # The in-app updater compares versions, and every build so far
-            # called itself 0.1.0, which no comparison can separate. A
-            # minute-stamped prerelease sorts by the only thing that
-            # actually orders two nightlies: when they were built. It
-            # also sorts below the next stable release itself, so a tagged
-            # build still supersedes every nightly that preceded it.
-            echo "version=0.2.1-nightly.$(date -u +%Y%m%dT%H%M)"
-            # Windows installers take three numbers and nothing else, and
-            # the number has to grow for an upgrade to be an upgrade.
-            echo "msi_version=0.2.$GITHUB_RUN_NUMBER"
-          } >> "$GITHUB_OUTPUT"
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import tomllib
+          from datetime import datetime, timezone
+          from pathlib import Path
 
-          if [ "$EVENT" = "workflow_dispatch" ]; then
-            echo "manual run: building $sha, publish=$PUBLISH"
-            {
-              echo "build=true"
-              echo "publish=$PUBLISH"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          tag = os.environ["TAG"]
+          if not re.fullmatch(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", tag):
+              raise SystemExit(f"expected a stable version tag, got {tag!r}")
+          version = tag[1:]
+          engine_version = re.search(
+              r'^__version__ = "([^"]+)"$',
+              Path("engine/app/__init__.py").read_text(encoding="utf-8"),
+              re.MULTILINE,
+          )
+          versions = {
+              "engine/app/__init__.py": engine_version.group(1) if engine_version else None,
+              "shell/src-tauri/tauri.conf.json": json.loads(
+                  Path("shell/src-tauri/tauri.conf.json").read_text(encoding="utf-8")
+              )["version"],
+              "shell/src-tauri/Cargo.toml": tomllib.loads(
+                  Path("shell/src-tauri/Cargo.toml").read_text(encoding="utf-8")
+              )["package"]["version"],
+              "shell/package.json": json.loads(
+                  Path("shell/package.json").read_text(encoding="utf-8")
+              )["version"],
+          }
+          for filename, actual in versions.items():
+              if actual != version:
+                  raise SystemExit(f"{filename}: expected {version}, found {actual}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"sha={os.environ['SHA']}\n")
+              output.write(f"short_sha={os.environ['SHA'][:7]}\n")
+              output.write(f"date={datetime.now(timezone.utc):%Y%m%d}\n")
+              output.write(f"version={version}\n")
+          PY
 
-          # Never ship a commit whose tests did not pass, and only ship
-          # what was actually pushed to main.
-          echo "CI ran on: $CI_EVENT, concluded: $CONCLUSION"
-          # Decided here rather than in an `if:` expression, because a
-          # wrong expression silently skips the job and shows nothing,
-          # whereas this prints its reasoning and can be run locally.
-          if [ "$CONCLUSION" = "success" ] && [ "$CI_EVENT" = "push" ]; then
-            {
-              echo "build=true"
-              echo "publish=true"
-            } >> "$GITHUB_OUTPUT"
-          else
-            {
-              echo "build=false"
-              echo "publish=false"
-            } >> "$GITHUB_OUTPUT"
-            # A run that builds nothing still reports success, which
-            # reads as "the nightly is up to date" when it is not. Say
-            # on the run's own page why there is no new download.
-            {
-              echo "### No nightly published"
-              echo
-              echo "CI on \`${sha:0:7}\` was a **$CI_EVENT** that"
-              echo "concluded **$CONCLUSION**, so there is nothing to"
-              echo "release. Fix CI and the next commit publishes."
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-  # A workflow_run already waited for CI. A manual run has not, so it
-  # gets its own pass over the suite.
   verify:
-    if: github.event_name == 'workflow_dispatch'
+    name: Run CI for the tag
     uses: ./.github/workflows/ci.yml
 
   build:
     name: Build ${{ matrix.label }}
     needs: [meta, verify]
-    # `verify` is skipped for a workflow_run, and a skipped dependency
-    # would otherwise skip this too.
     if: >-
       ${{ !cancelled()
-          && needs.meta.outputs.build == 'true'
-          && needs.verify.result != 'failure' }}
+          && needs.meta.result == 'success'
+          && needs.verify.result == 'success' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
-      # Absent until the repository has a signing key, and a build
-      # without one still ships: it simply carries no updater, and the
-      # app falls back to linking the download.
+      # Stable releases require signed updater artifacts on every platform.
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       # Empty when the key carries no password, which is the case here.
       # It still has to be set: an unset one makes the signer stop and
@@ -151,6 +106,10 @@ jobs:
             label: windows-x86_64
             bundles: msi,nsis
     steps:
+      - name: Require updater signing key
+        if: env.TAURI_SIGNING_PRIVATE_KEY == ''
+        run: exit 1
+
       - uses: actions/checkout@v7
         with:
           # Not the tip of main: build exactly what CI approved.
@@ -210,7 +169,7 @@ jobs:
           # land on the same day, and a date alone stopped telling them
           # apart.
           LANIUS_BUILD_RELEASE: >-
-            nightly-${{ needs.meta.outputs.date }}-${{ needs.meta.outputs.short_sha }}
+            ${{ github.ref_name }}
           LANIUS_BUILD_DATE: ${{ needs.meta.outputs.date }}
         run: |
           python ../scripts/fetch_gost.py
@@ -283,7 +242,6 @@ jobs:
       # unsigned build, so an endpoint without a signature would be an
       # update nobody can install.
       - name: Configure the in-app updater
-        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
         working-directory: shell/src-tauri
         shell: bash
         env:
@@ -305,6 +263,9 @@ jobs:
               )
 
           config["version"] = os.environ["VERSION"]
+          config["plugins"]["updater"]["endpoints"] = [
+              "https://github.com/mirusu400/Lanius/releases/latest/download/latest.json"
+          ]
           config.setdefault("bundle", {}).setdefault("windows", {})["wix"] = {
               "version": os.environ["MSI_VERSION"]
           }
@@ -411,23 +372,18 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: lanius-nightly-${{ matrix.label }}
+          name: lanius-stable-${{ matrix.label }}
           path: dist/${{ matrix.label }}/*
           retention-days: 14
           if-no-files-found: error
 
   release:
-    name: Publish prerelease
-    needs: [meta, build]
-    # `!cancelled()` is load-bearing, and was what skipped this job on
-    # the first two per-commit runs. `verify` is skipped for a
-    # workflow_run; a skipped dependency skips `build`'s condition too
-    # unless it is guarded, and that skip then reaches here. Confirmed
-    # against this exact job graph: with the guard a skipped `verify`
-    # still releases, and a single failed platform still does not.
+    name: Publish stable release
+    needs: [meta, verify, build]
     if: >-
       ${{ !cancelled()
-          && needs.meta.outputs.publish == 'true'
+          && needs.meta.result == 'success'
+          && needs.verify.result == 'success'
           && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
@@ -441,17 +397,14 @@ jobs:
       - name: List artifacts
         run: ls -la dist
 
-      # What the in-app updater reads. It is a release asset like any
-      # other, at a URL that does not move, because the `nightly` tag
-      # does not move either. Written from what was actually built: a
-      # platform whose bundle is missing simply is not offered an
-      # update, which is better than offering one that 404s.
+      # Publish only when every platform has a signed updater bundle.
       - name: Write the update manifest
         env:
           VERSION: ${{ needs.meta.outputs.version }}
           SHA: ${{ needs.meta.outputs.sha }}
           SHORT_SHA: ${{ needs.meta.outputs.short_sha }}
           REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -486,16 +439,13 @@ jobs:
                       "signature": signature.read_text(encoding="utf-8").strip(),
                       "url": (
                           f"https://github.com/{repo}/releases/download/"
-                          f"nightly/{path.name}"
+                          f"{os.environ['TAG']}/{path.name}"
                       ),
                   }
                   break
 
-          if not platforms:
-              # No signing key in this repository yet: the app still says
-              # a newer build exists and links to it.
-              print("no signed bundles, so no update manifest")
-              raise SystemExit(0)
+          if len(platforms) != len(wanted):
+              raise SystemExit(f"missing signed updater bundles: {set(wanted) - set(platforms)}")
 
           manifest = {
               "version": os.environ["VERSION"],
@@ -514,71 +464,22 @@ jobs:
           print(json.dumps(manifest, indent=2))
           PY
 
-      # One rolling tag rather than one per day. Builds now happen per
-      # commit, so dated tags would pile up several a day, and
-      # /releases/latest/download/<file> only works if there is a single
-      # moving target. The action updates the release but leaves the tag
-      # where it was, so move it here.
-      - name: Point the nightly tag at this commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SHA: ${{ needs.meta.outputs.sha }}
-        run: |
-          set -euo pipefail
-          repo="${{ github.repository }}"
-          if gh api "repos/$repo/git/ref/tags/nightly" >/dev/null 2>&1; then
-            gh api --method PATCH "repos/$repo/git/refs/tags/nightly" \
-              -f sha="$SHA" -F force=true
-          else
-            gh api --method POST "repos/$repo/git/refs" \
-              -f ref=refs/tags/nightly -f sha="$SHA"
-          fi
-
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: nightly
-          target_commitish: ${{ needs.meta.outputs.sha }}
-          name: Nightly ${{ needs.meta.outputs.date }} (${{ needs.meta.outputs.short_sha }})
+          tag_name: ${{ github.ref_name }}
+          name: Lanius ${{ needs.meta.outputs.version }}
           body: |
-            Built from
-            [`${{ needs.meta.outputs.short_sha }}`](https://github.com/${{ github.repository }}/commit/${{ needs.meta.outputs.sha }})
-            after CI passed. This release is replaced by every commit that
-            lands on `main`, so it always matches the newest code.
+            Stable release ${{ needs.meta.outputs.version }} built from
+            `${{ needs.meta.outputs.short_sha }}` after all CI checks and
+            platform builds passed.
 
-            These builds are unsigned. On macOS remove the quarantine flag
-            before the first launch:
+            Builds are not code signed by Apple or Microsoft. On macOS,
+            run `xattr -dr com.apple.quarantine /Applications/Lanius.app`
+            after installing. On Windows, SmartScreen may require
+            **More info** then **Run anyway**.
 
-            ```bash
-            xattr -dr com.apple.quarantine /Applications/Lanius.app
-            ```
-
-            On Windows, SmartScreen warns about an unrecognised publisher:
-            choose **More info** then **Run anyway**.
-
-            Lanius is for security testing of systems you are authorised to
-            test. Verifying that authorisation is your responsibility.
-          prerelease: true
+            Lanius is for security testing of systems you are authorised to test.
+          prerelease: false
+          make_latest: true
           files: dist/*
           fail_on_unmatched_files: true
-
-      # Uploads replace files of the same name, so a bundle that changes
-      # name (a version bump, a dropped platform) would otherwise stay on
-      # the release forever, next to the current one, with nothing saying
-      # which is which. Done after the upload: a failed run leaves the
-      # previous build in place rather than an empty release.
-      - name: Drop assets left over from an older build
-        env:
-          GH_TOKEN: ${{ github.token }}
-          # gh works out the repository from the git remote, and this job
-          # never checks anything out.
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          current="$(cd dist && ls)"
-          gh release view nightly --json assets --jq '.assets[].name' \
-          | while read -r asset; do
-              if ! grep -qxF "$asset" <<< "$current"; then
-                echo "removing stale asset: $asset"
-                gh release delete-asset nightly "$asset" --yes
-              fi
-            done

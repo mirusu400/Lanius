@@ -9,9 +9,11 @@ ahead of the nightly, and a build whose commit nobody stamped in.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from unittest import mock
 
 import pytest
+from packaging.requirements import Requirement
 
 from app import updates
 
@@ -213,3 +215,14 @@ def test_offline_is_reported_as_itself() -> None:
     ), mock.patch.object(updates, "build_info", build):
         with pytest.raises(updates.UpdateError):
             asyncio.run(updates.check())
+
+
+def test_http_client_is_a_production_dependency() -> None:
+    """Frozen builds install requirements.txt without the dev requirements."""
+    requirements = Path(__file__).parents[1] / "requirements.txt"
+    entries = (
+        line.split("#", 1)[0].strip()
+        for line in requirements.read_text(encoding="utf-8").splitlines()
+    )
+    names = {Requirement(entry).name.lower() for entry in entries if entry}
+    assert "httpx" in names

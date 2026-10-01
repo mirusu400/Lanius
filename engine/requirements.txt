@@ -13,6 +13,12 @@ uvicorn[standard]>=0.52
 # asyncio.eager_task_factory (used by mitmproxy) only accepts it on 3.14+.
 uvloop>=0.22.1,<0.23; python_version < "3.14" and sys_platform != "win32" and platform_python_implementation == "CPython"
 mcp>=2.2
+# MCP accepts older PyJWT releases with a known vulnerability.
+PyJWT>=2.15.0
+# Runtime client for GitHub update checks and remote wordlist downloads.
+# Keep this in the production set: frozen desktop builds install this file
+# without requirements-dev.txt.
+httpx>=0.28
 cryptography>=50.0.1
 h2>=4.4.1
 tornado>=6.5.10

@@ -1,7 +1,6 @@
 /** Is there a newer build than this one?
  *
- * The version number cannot answer that: every nightly this month says
- * 0.1.0. Nightlies are compared by commit and releases by version, which
+ * Nightlies are compared by commit and releases by version, which
  * the engine does; this screen shows the answer, the link, and the
  * switch that stops it asking at all.
  */

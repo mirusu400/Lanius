@@ -1049,8 +1049,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def about() -> dict[str, Any]:
         """What build this is, for a bug report.
 
-        Every nightly this month reports version 0.1.0, so the version
-        alone does not say which build someone is running.
+        A version alone does not say which build someone is running.
         """
         return build_info()
 

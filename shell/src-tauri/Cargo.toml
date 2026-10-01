@@ -1,6 +1,6 @@
 [package]
 name = "lanius"
-version = "0.1.0"
+version = "0.2.0"
 description = "Lanius web security proxy"
 authors = ["Lanius"]
 license = ""

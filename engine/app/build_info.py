@@ -1,9 +1,8 @@
 """What build this is.
 
-A version number alone does not identify a build: every nightly this
-month says 0.1.0. When something looks wrong, the useful question is
-which commit it came from, and whether it is a release or something
-somebody built on their own machine.
+A version number alone does not identify a build. When something looks
+wrong, the useful question is which commit it came from, and whether it
+is a release or something somebody built on their own machine.
 
 The values are stamped in at build time, because a frozen binary has no
 repository to ask. In a checkout they are read from git instead, so a
@@ -20,7 +19,7 @@ from pathlib import Path
 
 from . import __version__
 
-# Written by the build. The nightly workflow sets them; a local build
+# Written by the build. The release workflows set them; a local build
 # leaves them empty and the values come from git.
 _COMMIT_ENV = "LANIUS_BUILD_COMMIT"
 _RELEASE_ENV = "LANIUS_BUILD_RELEASE"

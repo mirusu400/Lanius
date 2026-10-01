@@ -4,6 +4,7 @@
 
 [![CI](https://github.com/mirusu400/Lanius/actions/workflows/ci.yml/badge.svg)](https://github.com/mirusu400/Lanius/actions/workflows/ci.yml)
 [![Nightly](https://github.com/mirusu400/Lanius/actions/workflows/nightly.yml/badge.svg)](https://github.com/mirusu400/Lanius/actions/workflows/nightly.yml)
+[![Stable release](https://github.com/mirusu400/Lanius/actions/workflows/stable.yml/badge.svg)](https://github.com/mirusu400/Lanius/actions/workflows/stable.yml)
 
 **A desktop web security testing proxy, built on mitmproxy.**
 
@@ -24,13 +25,12 @@ fuzzing, encoding and decoding, diffs, plugins, and native MCP tools.
 
 ## Download
 
-Grab the latest build from the
-[Nightly release](https://github.com/mirusu400/Lanius/releases/tag/nightly).
-It is rebuilt from every commit that lands on `main` and passes CI, so the
-download always matches the current code. Settings, About says which commit
-a build came from, and checks whether a newer one has been published: a
-nightly is compared by commit and a tagged release by version, since every
-nightly this month reports the same version number. The desktop app can
+Grab the [latest stable release](https://github.com/mirusu400/Lanius/releases/latest)
+or the [nightly build](https://github.com/mirusu400/Lanius/releases/tag/nightly).
+The nightly is rebuilt from every commit that lands on `main` and passes CI.
+Settings, About says which commit a build came from and checks whether a newer
+one has been published. Nightlies are compared by commit and stable releases
+by version. The desktop app can
 install what it finds, in one press; nothing downloads on its own, and the
 check itself can be turned off for a network where nothing should leave
 the machine.
@@ -537,7 +537,7 @@ cd ui && npm run dev               # interface on :5173
 
 ### Releasing with the in-app updater
 
-Nightlies can install themselves: Settings, About offers **Install and
+Signed builds can install themselves: Settings, About offers **Install and
 restart**, which downloads the new bundle, verifies its signature, replaces
 the app (engine included) and comes back up. It is off until the repository
 has a signing key, and until then the app only links to the download.
@@ -555,9 +555,14 @@ Then paste the public half into `pubkey` in
 never leaves your machine and the secrets; anyone holding it can publish a
 build that every installation will accept, so treat it as the release key it
 is. Nightly builds then carry a version of the form
-`0.1.0-nightly.20260928T1009`, because an updater compares versions and every
-build calling itself 0.1.0 is not comparable, and the release grows a
-`latest.json` the app reads.
+`0.2.1-nightly.20261001T1009`, and each published channel has a `latest.json`
+for the in-app updater. Stable builds check the latest stable release;
+nightly builds check the rolling nightly release.
+
+To publish a stable version, update the engine, Tauri, shell package and lock
+file versions, then push a matching `vX.Y.Z` tag. The stable workflow runs CI,
+builds all four desktop targets, requires signed updater bundles for each,
+and publishes the GitHub Release only when every job succeeds.
 
 Debian packages cannot replace themselves, so `.deb` installs keep using the
 download link. macOS builds are still unsigned by Apple, so the first launch
