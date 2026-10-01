@@ -2,7 +2,7 @@ import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { renderWithI18n as render } from '../test-utils';
+import { renderWithI18n as render, t } from '../test-utils';
 import { usePluginActions } from './usePluginActions';
 
 let requests: Array<{ url: string; init?: RequestInit }> = [];
@@ -69,8 +69,6 @@ describe('usePluginActions', () => {
     const user = userEvent.setup();
     render(<Harness />);
     await user.click(await screen.findByText('Inspect flow · acme'));
-    expect((await screen.findByRole('status')).textContent).toContain(
-      'Active scan started. View progress in Issues.',
-    );
+    expect((await screen.findByRole('status')).textContent).toContain(t('issues.scanStarted'));
   });
 });
