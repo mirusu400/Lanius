@@ -191,8 +191,13 @@ class UserValueStore:
 class ContributionRegistry:
     """Central registry with deterministic owner cleanup."""
 
-    def __init__(self, store: Any | None, user_values_path: Path | None = None) -> None:
+    def __init__(
+        self, store: Any | None, user_values_path: Path | None = None,
+        *, scope_predicate: Callable[[str | None, str | None, int | None, str | None], bool] | None = None,
+    ) -> None:
         self.store = store
+        self.scope_predicate = scope_predicate
+        self.active_scan_start: Callable[..., Awaitable[Any]] | None = None
         self.user_values = UserValueStore(user_values_path)
         self._items: dict[ContributionKind, dict[str, Contribution]] = {
             "actions": {},
@@ -725,6 +730,58 @@ class PluginHost:
         self.owner = owner
         self.resource_root = resource_root
 
+    def page_flows(
+        self, *, limit: int, cursor: str | None, anchor: int | None,
+        in_scope_only: bool, body_limit: int,
+    ) -> Mapping[str, Any]:
+        if self.registry.store is None:
+            raise PluginApiError("project flow history is unavailable")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise PluginApiError("flow page limit must be between 1 and 100")
+        if isinstance(body_limit, bool) or not isinstance(body_limit, int) or not 0 <= body_limit <= 65536:
+            raise PluginApiError("flow body limit must be between 0 and 65536")
+        if anchor is not None and (isinstance(anchor, bool) or not isinstance(anchor, int) or anchor < 0):
+            raise PluginApiError("flow anchor must be a non-negative integer")
+        # The public SDK returns copies of bounded snapshots, never FlowRecord
+        # objects or direct access to the project's SQLite connection.
+        from .addons.scanner import request_snapshot
+
+        try:
+            page = self.registry.store.page_summaries(
+                limit=limit, cursor=cursor, anchor=anchor,
+                scope_predicate=(self.registry.scope_predicate if in_scope_only else None),
+            )
+        except ValueError as exc:
+            raise PluginApiError(str(exc)) from exc
+        items: list[dict[str, Any]] = []
+        for summary in page["items"]:
+            record = self.registry.store.get(summary["id"])
+            if record is None or record.type != "http":
+                continue
+            snapshot = request_snapshot(record)
+            snapshot["request_body"] = snapshot["request_body"][:body_limit]
+            snapshot["response_body"] = snapshot["response_body"][:body_limit]
+            items.append(snapshot)
+        return {**page, "items": items}
+
+    async def start_active_scan(
+        self, check_id: str, flow_id: str, *, concurrency: int,
+        requests_per_second: float,
+    ) -> Mapping[str, Any]:
+        qualified = f"{self.owner}.{check_id}"
+        checks = self.registry.scan_handlers("active_scanners")
+        if not any(check.id == qualified for check in checks):
+            raise PluginApiError(f"active check is not enabled: {qualified}")
+        if not isinstance(flow_id, str) or not flow_id:
+            raise PluginApiError("a captured flow id is required")
+        if self.registry.active_scan_start is None:
+            raise PluginApiError("active scanner is unavailable")
+        job = await self.registry.active_scan_start(
+            flow_id, check_ids=[qualified], concurrency=concurrency,
+            requests_per_second=requests_per_second,
+        )
+        return job.as_dict()
+
     def _resource_path(self, value: str, *, allow_empty: bool = False) -> Path:
         if not isinstance(value, str):
             raise PluginApiError("resource path must be a string")
@@ -788,7 +845,7 @@ class PluginHost:
         if not title.strip() or not callable(handler):
             raise PluginApiError("an action needs a title and callable handler")
         allowed = {
-            "global", "history", "flow", "request", "response", "replay", "fuzzer"
+            "global", "history", "flow", "request", "response", "replay", "fuzzer", "plugin"
         }
         if not locations or any(location not in allowed for location in locations):
             raise PluginApiError("action has an unsupported location")
@@ -993,6 +1050,7 @@ class PluginHost:
         ],
         *,
         description: str | None,
+        request_level: bool,
     ) -> Disposable:
         if not callable(handler):
             raise PluginApiError("active scanner check must be callable")
@@ -1000,6 +1058,6 @@ class PluginHost:
             self.owner,
             "active_scanners",
             check_id,
-            {"title": title, "description": description, "mode": "active"},
+            {"title": title, "description": description, "mode": "active", "request_level": request_level},
             handler,
         )

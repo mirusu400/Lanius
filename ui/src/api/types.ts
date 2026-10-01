@@ -515,7 +515,8 @@ export type PluginActionLocation =
   | 'request'
   | 'response'
   | 'replay'
-  | 'fuzzer';
+  | 'fuzzer'
+  | 'plugin';
 
 export interface PluginActionContribution {
   id: string;

@@ -1,4 +1,4 @@
-# Plugin SDK 1.1
+# Plugin SDK 1.2
 
 `lanius_sdk` is the stable boundary between a plugin and the engine. Engine
 modules under `app` are internal and can change without an SDK compatibility
@@ -45,7 +45,8 @@ other's IDs.
 ## Actions
 
 `context.actions.register` adds a command with one or more UI locations:
-`global`, `history`, `flow`, `request`, `response`, `replay`, or `fuzzer`.
+`global`, `history`, `flow`, `request`, `response`, `replay`, `fuzzer`, or
+`plugin`. The `plugin` location is for a sandboxed plugin view's own actions.
 Handlers receive a JSON compatible context mapping and may return a value or an
 awaitable. The contribution catalogue is available at
 `GET /api/plugin-contributions`; actions run through
@@ -137,6 +138,17 @@ are relative to `resources/`, cannot escape that directory, and a single read
 is capped at 10 MiB. Resource files remain covered by the package manifest's
 integrity map. Legacy loose-file plugins do not receive a resource directory.
 
+## Captured flows
+
+`context.flows.page(limit=50, cursor=None, anchor=None, in_scope_only=True,
+body_limit=32768)` reads a bounded page of captured HTTP snapshots. The host
+limits pages to 100 flows and each rendered request/response body to 65,536
+characters.
+Pages include `items`, `has_more`, `anchor`, and `next_cursor`; pass the first
+page's anchor and each next cursor to traverse a stable History snapshot. Scope
+rules are applied before items are returned by default. This is read-only and
+uses the project store without opening a network connection.
+
 ## Scanner checks and issues
 
 `context.scanner.register_passive` analyzes captured responses without sending
@@ -145,9 +157,16 @@ request sender. Checks return `ScanIssue` values, which the host validates,
 deduplicates, persists, and displays. The full scheduler contract is in
 [plugin-scanner.md](plugin-scanner.md).
 
+An active check registered with `request_level=True` runs once for a selected
+flow and can call `scan.send_with(kind, name, value)` to append a query,
+header, cookie, form, or top-level JSON input. Calling `scan.send_with()` sends
+the unchanged control request. All such requests share the active job's limits
+and Replay/scope egress path. `await context.scanner.start(check_id, flow_id)`
+starts the plugin's own check from an explicit UI action and returns job status.
+
 ## Compatibility
 
-`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.1`.
+`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.2`.
 Minor additions remain backward compatible. A future breaking API uses a new
 major version and package manifests declare which major versions they accept.
 

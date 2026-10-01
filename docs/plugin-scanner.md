@@ -46,6 +46,15 @@ through the existing Replay/mitmproxy path. TLS, upstream routing, traffic
 plugins, capture, and passive checks therefore behave the same as other Lanius
 requests.
 
+Request-level active checks register with `request_level=True` and run once per
+selected flow, even when the original request has no insertion points. They
+call `scan.send_with()` for an unchanged control request or
+`scan.send_with(kind, name, value)` to append a query, header, cookie, form,
+or top-level JSON input. The host validates names and values, forbids routing
+and connection headers, and keeps the original destination. A plugin action
+can call `await context.scanner.start(check_id, flow_id)` to start only one of
+its own active checks for a user-selected flow.
+
 The host enforces at most 10 concurrent requests, 50 requests per second, and
 1,000 requests per job. The user can choose lower values and cancel a running
 job. Active scanning never starts automatically.

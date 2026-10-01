@@ -12,16 +12,16 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-API_VERSION = "1.1"
+API_VERSION = "1.2"
 
 ActionLocation = Literal[
-    "global", "history", "flow", "request", "response", "replay", "fuzzer"
+    "global", "history", "flow", "request", "response", "replay", "fuzzer", "plugin"
 ]
 SettingScope = Literal["project", "user"]
 SettingKind = Literal["string", "boolean", "integer", "number", "enum"]
 IssueSeverity = Literal["info", "low", "medium", "high", "critical"]
 IssueConfidence = Literal["tentative", "firm", "certain"]
-InsertionPointKind = Literal["query", "header", "path", "form", "json", "body"]
+InsertionPointKind = Literal["query", "header", "path", "form", "json", "body", "request"]
 
 
 class PluginApiError(ValueError):
@@ -88,20 +88,37 @@ class InsertionPoint:
 
 
 class ActiveScanContext:
-    """A rate-limited request sender scoped to one insertion point."""
+    """A rate-limited request sender for an explicitly started scan job."""
 
     def __init__(
         self,
         request: Mapping[str, Any],
         insertion_point: InsertionPoint,
         send: Callable[[str], Awaitable[Mapping[str, Any]]],
+        send_with: Callable[[str | None, str, str], Awaitable[Mapping[str, Any]]] | None = None,
     ) -> None:
         self.request = request
         self.insertion_point = insertion_point
         self._send = send
+        self._send_with = send_with
 
     async def send(self, payload: str) -> Mapping[str, Any]:
         return await self._send(payload)
+
+    async def send_with(
+        self, kind: Literal["query", "header", "cookie", "form", "json"] | None = None,
+        name: str = "",
+        value: str = "",
+    ) -> Mapping[str, Any]:
+        """Replay the original request, optionally adding one named input.
+
+        Only request-level active checks receive this sender. ``kind=None``
+        sends an unmodified control request. The host applies the same job
+        limits and Replay scope policy as :meth:`send`.
+        """
+        if self._send_with is None:
+            raise PluginApiError("send_with requires a request-level active check")
+        return await self._send_with(kind, name, value)
 
 
 class _Host(Protocol):
@@ -176,7 +193,18 @@ class _Host(Protocol):
         ],
         *,
         description: str | None,
+        request_level: bool,
     ) -> Disposable: ...
+
+    def page_flows(
+        self, *, limit: int, cursor: str | None, anchor: int | None,
+        in_scope_only: bool, body_limit: int,
+    ) -> Mapping[str, Any]: ...
+
+    async def start_active_scan(
+        self, check_id: str, flow_id: str, *, concurrency: int,
+        requests_per_second: float,
+    ) -> Mapping[str, Any]: ...
 
 
 class Actions:
@@ -334,9 +362,38 @@ class Scanner:
         ],
         *,
         description: str | None = None,
+        request_level: bool = False,
     ) -> Disposable:
         return self._host.register_active_scan(
-            check_id, title, handler, description=description
+            check_id, title, handler, description=description,
+            request_level=request_level,
+        )
+
+    async def start(
+        self, check_id: str, flow_id: str, *, concurrency: int = 2,
+        requests_per_second: float = 5.0,
+    ) -> Mapping[str, Any]:
+        """Start only this plugin's active check on a selected captured flow."""
+        return await self._host.start_active_scan(
+            check_id, flow_id, concurrency=concurrency,
+            requests_per_second=requests_per_second,
+        )
+
+
+class Flows:
+    """Bounded, read-only access to captured project HTTP flows."""
+
+    def __init__(self, host: _Host) -> None:
+        self._host = host
+
+    def page(
+        self, *, limit: int = 50, cursor: str | None = None,
+        anchor: int | None = None, in_scope_only: bool = True,
+        body_limit: int = 32 * 1024,
+    ) -> Mapping[str, Any]:
+        return self._host.page_flows(
+            limit=limit, cursor=cursor, anchor=anchor,
+            in_scope_only=in_scope_only, body_limit=body_limit,
         )
 
 
@@ -354,6 +411,7 @@ class PluginContext:
         self.resources = PluginResources(host)
         self.tasks = PluginTasks(host)
         self.scanner = Scanner(host)
+        self.flows = Flows(host)
         self.log = logging.getLogger(f"lanius.plugin.{plugin_id}")
 
 

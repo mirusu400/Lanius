@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import socket
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from fastapi.testclient import TestClient
 from mitmproxy.test import tflow, tutils
 
 from app.addons.capture import flow_to_record
-from app.addons.scanner import ScannerAddon, insertion_points
+from app.addons.scanner import ScannerAddon, ScannerError, _added_request, insertion_points
 from app.api.server import create_app
 from app.config import Settings
 from app.db.store import FlowRecord, FlowStore
@@ -195,6 +196,64 @@ def test_builds_insertion_points_for_request_parts() -> None:
         ("path", "2"),
         ("form", "name"),
     }
+
+
+def test_added_request_keeps_target_and_rejects_unsafe_headers() -> None:
+    record = captured_record()
+    query = _added_request(record, "query", "debug", "probe")
+    assert query["url"] == "https://example.test/users/7?page=1&debug=probe"
+    assert query["body"] == "name=a"
+    cookie = _added_request(record, "cookie", "mode", "test")
+    assert ["Cookie", "mode=test"] in cookie["headers"]
+    form = _added_request(record, "form", "preview", "1")
+    assert form["body"] == "name=a&preview=1"
+    record.query = "signature=%2f&space=a+b"
+    assert _added_request(record, "query", "__debug", "1")["url"].endswith(
+        "?signature=%2f&space=a+b&__debug=1"
+    )
+    record.request_headers = [("Content-Type", "application/json")]
+    record.request_body = b'{ "existing": 1 }'
+    json_request = _added_request(record, "json", "preview", "yes")
+    assert json_request["body"].startswith('{ "existing": 1 ')
+    assert json.loads(json_request["body"]) == {"existing": 1, "preview": "yes"}
+    with pytest.raises(ScannerError, match="cannot be added"):
+        _added_request(record, "header", "Host", "other.test")
+    with pytest.raises(ScannerError, match="invalid added input value"):
+        _added_request(record, "header", "X-Debug", "yes\r\nHost: other.test")
+
+
+@pytest.mark.asyncio
+async def test_request_level_check_can_probe_new_inputs(tmp_path) -> None:
+    store = FlowStore(tmp_path / "project.sqlite")
+    record = captured_record()
+    record.query = ""
+    record.request_headers = []
+    record.request_body = b""
+    record.path = "/"
+    store.upsert(record)
+    registry = ContributionRegistry(store)
+
+    async def check(scan):
+        assert scan.insertion_point.kind == "request"
+        await scan.send_with()
+        await scan.send_with("query", "debug", "probe")
+        return None
+
+    registry.context("checks").scanner.register_active(
+        "new-input", "New input", check, request_level=True,
+    )
+    replay = FakeReplay()
+    scanner = ScannerAddon(registry, store, EventBroker(), replay)
+    registry.active_scan_start = scanner.start_active
+    job = await scanner.start_active("flow-1")
+    await scanner._job_tasks[job.id]
+
+    assert job.status == "completed"
+    assert job.total == 1
+    assert job.requests == 2
+    assert replay.sent[0].request.pretty_url == "https://example.test/"
+    assert replay.sent[1].request.pretty_url == "https://example.test/?debug=probe"
+    store.close()
 
 
 @pytest.mark.asyncio

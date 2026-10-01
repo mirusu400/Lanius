@@ -12,7 +12,7 @@ from app.addons import codecs
 from app.addons.plugins import PluginError, PluginManager
 from app.api.server import create_app
 from app.config import Settings
-from app.db.store import FlowStore
+from app.db.store import FlowRecord, FlowStore
 from app.plugin_registry import ContributionRegistry
 from fastapi.testclient import TestClient
 from lanius_sdk import PluginApiError
@@ -96,7 +96,7 @@ async def test_sdk_plugin_registers_and_invokes_contributions(sdk_manager) -> No
 
     assert plugin.loaded is True
     assert plugin.objects == []
-    assert plugin.as_dict()["sdk_api_version"] == "1.1"
+    assert plugin.as_dict()["sdk_api_version"] == "1.2"
     assert plugin.as_dict()["contributions"] == {
         "actions": 1,
         "codecs": 1,
@@ -170,6 +170,31 @@ def test_sdk_resources_are_read_only_and_path_bounded(tmp_path) -> None:
     with pytest.raises(PluginApiError, match="stay inside"):
         context.resources.read_text("../secret")
     registry.dispose_owner("sdk")
+
+
+def test_sdk_flow_pages_are_bounded_and_apply_project_scope(tmp_path) -> None:
+    store = FlowStore(tmp_path / "project.sqlite")
+    store.upsert(FlowRecord(
+        id="inside", scheme="https", host="inside.test", port=443,
+        path="/account", query="token=abc", request_body=b"request-body",
+        response_body=b"response-body", status_code=200,
+    ))
+    store.upsert(FlowRecord(
+        id="outside", scheme="https", host="outside.test", port=443,
+        path="/", status_code=200,
+    ))
+    registry = ContributionRegistry(
+        store, scope_predicate=lambda _scheme, host, _port, _path: host == "inside.test",
+    )
+    context = registry.context("reader")
+
+    page = context.flows.page(body_limit=4)
+    assert [item["flow_id"] for item in page["items"]] == ["inside"]
+    assert page["items"][0]["request_body"] == "requ"
+    assert len(context.flows.page(in_scope_only=False)["items"]) == 2
+    with pytest.raises(PluginApiError, match="page limit"):
+        context.flows.page(limit=101)
+    store.close()
 
 
 def test_failed_activation_rolls_back_partial_contributions(tmp_path) -> None:

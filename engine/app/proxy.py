@@ -282,6 +282,7 @@ class ProxyEngine:
             packages=self.plugin_packages,
             safe_mode=settings.disable_plugins,
             lockdown_enabled=lambda: self.lockdown.enabled,
+            scope_predicate=self.scope.contains,
         )
         self.scanner = ScannerAddon(
             self.plugins.registry,
@@ -290,6 +291,7 @@ class ProxyEngine:
             self.replay,
             self.scope,
         )
+        self.plugins.registry.active_scan_start = self.scanner.start_active
         self._task: asyncio.Task[None] | None = None
         # Why the proxy is not listening, when it failed to start. The API
         # stays up so the user can fix the listener from the app itself.

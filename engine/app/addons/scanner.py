@@ -6,12 +6,13 @@ import asyncio
 import hashlib
 import inspect
 import json
+import re
 import time
 import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
-from urllib.parse import parse_qsl, quote, urlencode
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from mitmproxy import http
 
@@ -103,6 +104,7 @@ def request_snapshot(record: FlowRecord) -> dict[str, Any]:
     detail = limited.detail(auto_decompress=True)
     return {
         "flow_id": record.id,
+        "source": record.source,
         "url": _url(record),
         "method": record.method or "GET",
         "scheme": record.scheme,
@@ -184,6 +186,8 @@ def _mutated_request(
         parsed = json.loads(body)
         parsed[locator] = payload
         body = json.dumps(parsed, ensure_ascii=False)
+    elif kind == "request":
+        pass
     else:
         body = payload
     scheme = record.scheme or "http"
@@ -201,6 +205,75 @@ def _mutated_request(
         "body": body,
         "http_version": record.http_version or "HTTP/1.1",
     }
+
+
+_ADDED_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]{0,99}$")
+_ADDED_HEADER = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,99}$")
+_BLOCKED_HEADERS = {
+    "host", "content-length", "transfer-encoding", "connection", "cookie",
+    "authorization", "proxy-authorization", "proxy-connection", "upgrade",
+}
+
+
+def _added_request(
+    record: FlowRecord, kind: str | None, name: str, value: str,
+) -> dict[str, Any]:
+    """Add one input without letting a plugin redirect the scanner target."""
+    request = _mutated_request(
+        record, InsertionPoint("request:0", "request", "request", ""), ""
+    )
+    if kind is None:
+        return request
+    if kind not in {"query", "header", "cookie", "form", "json"}:
+        raise ScannerError("unsupported added input kind")
+    pattern = _ADDED_HEADER if kind == "header" else _ADDED_NAME
+    if not isinstance(name, str) or not pattern.fullmatch(name):
+        raise ScannerError("invalid added input name")
+    if not isinstance(value, str) or len(value) > 1024 or "\r" in value or "\n" in value:
+        raise ScannerError("invalid added input value")
+    headers = request["headers"]
+    if kind == "header":
+        if name.lower() in _BLOCKED_HEADERS or name.lower().startswith("proxy-"):
+            raise ScannerError("the selected header cannot be added")
+        headers.append([name, value])
+    elif kind == "cookie":
+        if ";" in value or "=" in name:
+            raise ScannerError("invalid added cookie")
+        for header in headers:
+            if header[0].lower() == "cookie":
+                header[1] += ("; " if header[1] else "") + f"{name}={value}"
+                break
+        else:
+            headers.append(["Cookie", f"{name}={value}"])
+    elif kind == "query":
+        url = urlsplit(request["url"])
+        addition = urlencode([(name, value)])
+        query = url.query + ("&" if url.query else "") + addition
+        request["url"] = urlunsplit((url.scheme, url.netloc, url.path, query, url.fragment))
+    else:
+        content_type = next(
+            (header[1].lower() for header in headers if header[0].lower() == "content-type"),
+            "",
+        )
+        if kind == "form":
+            if "application/x-www-form-urlencoded" not in content_type:
+                raise ScannerError("form input requires a form request")
+            addition = urlencode([(name, value)])
+            request["body"] += ("&" if request["body"] else "") + addition
+        else:
+            if "json" not in content_type:
+                raise ScannerError("JSON input requires a JSON request")
+            try:
+                parsed = json.loads(request["body"])
+            except ValueError as exc:
+                raise ScannerError("request body is not valid JSON") from exc
+            if not isinstance(parsed, dict):
+                raise ScannerError("JSON input requires a top-level object")
+            body = request["body"]
+            closing = body.rfind("}")
+            addition = ("," if parsed else "") + json.dumps(name) + ":" + json.dumps(value)
+            request["body"] = body[:closing] + addition + body[closing:]
+    return request
 
 
 def _issues(value: Any) -> list[ScanIssue]:
@@ -408,15 +481,16 @@ class ScannerAddon:
         if not selected:
             raise ScannerError("no active scanner checks are enabled")
         points = insertion_points(record)
-        if not points:
+        if not points and not any(item.metadata.get("request_level") for item in selected):
             raise ScannerError("request has no insertion points")
+        total = sum(1 if item.metadata.get("request_level") else len(points) for item in selected)
         job = ScanJob(
             id=uuid.uuid4().hex[:12],
             flow_id=flow_id,
             check_ids=[item.id for item in selected],
             concurrency=concurrency,
             requests_per_second=requests_per_second,
-            total=len(selected) * len(points),
+            total=total,
         )
         self.jobs[job.id] = job
         task = asyncio.create_task(
@@ -439,7 +513,7 @@ class ScannerAddon:
         budget_lock = asyncio.Lock()
         snapshot = request_snapshot(record)
 
-        async def send(point: InsertionPoint, payload: str) -> Mapping[str, Any]:
+        async def send(request: Mapping[str, Any]) -> Mapping[str, Any]:
             async with budget_lock:
                 if job.requests >= MAX_ACTIVE_REQUESTS:
                     raise ScannerError(
@@ -448,7 +522,6 @@ class ScannerAddon:
                 job.requests += 1
             await limiter.wait()
             async with request_semaphore:
-                request = _mutated_request(record, point, payload)
                 flow = build_flow(**request, encode_content_body=self.replay.auto_decompress)
                 response = await self.replay.send(flow)
                 return request_snapshot(response)
@@ -457,7 +530,11 @@ class ScannerAddon:
             asyncio.Queue()
         )
         for check in checks:
-            for point in points:
+            check_points = (
+                [InsertionPoint("request:0", "request", "request", "")]
+                if check.metadata.get("request_level") else points
+            )
+            for point in check_points:
                 queue.put_nowait((check, point))
         for _ in range(job.concurrency):
             queue.put_nowait(None)
@@ -473,12 +550,20 @@ class ScannerAddon:
                     async def send_point(
                         payload: str, current: InsertionPoint = point
                     ) -> Mapping[str, Any]:
-                        return await send(current, payload)
+                        if current.kind == "request":
+                            raise ScannerError("request-level checks must use send_with")
+                        return await send(_mutated_request(record, current, payload))
+
+                    async def send_with(
+                        kind: str | None, name: str, value: str
+                    ) -> Mapping[str, Any]:
+                        return await send(_added_request(record, kind, name, value))
 
                     context = ActiveScanContext(
                         snapshot,
                         point,
                         send_point,
+                        send_with if point.kind == "request" else None,
                     )
                     started = self.registry.begin_call(check)
                     try:

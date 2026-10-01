@@ -11,8 +11,8 @@ used to choose the implementation order.
 |---|---|
 | Runtime | Legacy mitmproxy addons and SDK plugins; deterministic ordering; complete hot-load lifecycle; transactional rollback; package module cleanup; manual reload; optional file watching; startup safe mode |
 | Discovery | Metadata and hook discovery without importing disabled loose-file plugins; package manifests expose metadata and compatibility before activation |
-| SDK | Versioned `lanius_sdk` 1.1 with owner-scoped disposable registrations |
-| Contributions | Context actions, codecs, Fuzzer payload generators and processors, typed settings, user/project storage, managed tasks, logging, passive scanner checks, and active scanner checks |
+| SDK | Versioned `lanius_sdk` 1.2 with owner-scoped disposable registrations |
+| Contributions | Context actions, codecs, Fuzzer payload generators and processors, typed settings, user/project storage, managed tasks, logging, bounded read-only flow pages, passive scanner checks, and active scanner checks with request-level input probes |
 | Product surfaces | Plugin actions in Proxy history, Target, request/response details, Replay, Fuzzer, and the global Plugins toolbar |
 | Package data | Read-only, path-confined `resources/` access with per-read size limits |
 | Distribution | `.lanius-plugin` archives, integrity maps, SHA-256 verification, Ed25519 signatures, atomic install, uninstall, and development symlinks |
@@ -44,7 +44,7 @@ limits, but ordinary mitmproxy hooks remain synchronous in-process callbacks.
 | Phase | Status | Notes |
 |---|---|---|
 | P0 loader hardening | Complete for lifecycle, rollback, ordering, metadata, reload, and safe mode | Raw traffic-hook timing and process containment remain future runtime work |
-| P1 stable SDK | Complete for the v1.1 contribution set | Typed HTTP, scope, site-map, and tool facades are not exposed yet |
+| P1 stable SDK | Complete for the v1.2 contribution set | Bounded read-only History pages are available; general HTTP send, scope, site-map, and tool facades are not exposed yet |
 | P2 packages and UI | Complete for signed local packages, resources, sandboxed views, and action RPC | Custom message editors, columns, hotkeys, and richer host widgets are not available |
 | P3 scanner and issues | Complete for bounded passive/active checks and persisted findings | Out-of-band testing and external scanner adapters are not included |
 | P4 catalogue | Complete for signed-source lifecycle and recovery | There is no hosted public registry, review service, rating, or automatic update policy |
@@ -77,7 +77,7 @@ Expose stable SDK services instead of requiring imports from application
 internals:
 
 - HTTP send/replay with timing and cancellation
-- project flow queries and annotations
+- richer project flow queries and annotations
 - scope reads and updates
 - site-map and endpoint reads/writes
 - Replay send/open operations

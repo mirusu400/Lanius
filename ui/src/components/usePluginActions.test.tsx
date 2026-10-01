@@ -53,4 +53,24 @@ describe('usePluginActions', () => {
       context: { flow_id: 'flow-1', location: 'history' },
     });
   });
+
+  it('confirms when a plugin action starts an active scan', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/api/plugin-contributions')) {
+        return { ok: true, json: async () => ({ actions: [{
+          id: 'acme.inspect', plugin: 'acme', title: 'Inspect flow',
+          description: null, locations: ['history'],
+        }] }) } as Response;
+      }
+      return { ok: true, json: async () => ({ result: {
+        id: 'job-1', check_ids: ['acme.check'], status: 'pending',
+      } }) } as Response;
+    }));
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(await screen.findByText('Inspect flow · acme'));
+    expect((await screen.findByRole('status')).textContent).toContain(
+      'Active scan started. View progress in Issues.',
+    );
+  });
 });

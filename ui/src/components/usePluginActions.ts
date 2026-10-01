@@ -7,6 +7,7 @@ import type {
 } from '../api/types';
 import { useT } from '../i18n';
 import type { MenuItem } from './ContextMenu';
+import { useToast } from './Toast';
 
 /** Makes SDK actions visible at the UI locations declared by their plugin. */
 export function usePluginActions(
@@ -14,6 +15,7 @@ export function usePluginActions(
   onInvoked?: (result: unknown) => void,
 ) {
   const t = useT();
+  const { showToast } = useToast();
   const [actions, setActions] = useState<PluginActionContribution[]>([]);
 
   const refresh = useCallback(async () => {
@@ -41,11 +43,17 @@ export function usePluginActions(
       try {
         const response = await invokePluginAction(action.id, context);
         onInvoked?.(response.result);
+        const result = response.result;
+        if (result && typeof result === 'object' &&
+          'check_ids' in result && Array.isArray(result.check_ids) &&
+          'id' in result && typeof result.id === 'string') {
+          showToast({ message: t('issues.scanStarted'), tone: 'success' });
+        }
       } catch (error) {
         onError?.((error as Error).message);
       }
     },
-    [onError, onInvoked],
+    [onError, onInvoked, showToast, t],
   );
 
   const buildMenu = useCallback(

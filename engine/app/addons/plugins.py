@@ -290,6 +290,7 @@ class PluginManager:
         *,
         safe_mode: bool = False,
         lockdown_enabled: Callable[[], bool] | None = None,
+        scope_predicate: Callable[[str | None, str | None, int | None, str | None], bool] | None = None,
     ) -> None:
         self.directory = Path(directory)
         self.store = store
@@ -298,7 +299,9 @@ class PluginManager:
         self.on_chain_changed = on_chain_changed
         self.safe_mode = safe_mode
         self.lockdown_enabled = lockdown_enabled or (lambda: False)
-        self.registry = registry or ContributionRegistry(store, user_values_path)
+        self.registry = registry or ContributionRegistry(
+            store, user_values_path, scope_predicate=scope_predicate,
+        )
         install_output_routers()
         self.packages = packages
         self.runtime_started = False
