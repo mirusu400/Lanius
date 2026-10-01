@@ -136,10 +136,17 @@ Chrome, Firefox or Safari, or forces TLS 1.2, and accepts a custom OpenSSL
 cipher string. This covers the cipher list and TLS version, not a full JA3 or
 JA4 match.
 
-**Settings > Proxy > Upstream CA certificates** lets a project trust a VPN or
-private CA when HTTPS fails with `unable to get local issuer certificate`.
-Choose a PEM file or paste its public CA certificates, then apply. The bundle
-extends the public CA list; server certificate verification stays enabled.
+On macOS, HTTPS server certificates are verified automatically using Keychain
+trust settings, including trusted VPN and private CAs. A CA already trusted
+for SSL in Keychain does not need to be registered again in Lanius. Installing
+a certificate alone does not make it trusted. Hostname and leaf validity checks
+remain enabled, and verification does not download intermediates or revocation
+responses. New connections use the current Keychain trust settings.
+
+**Settings > Proxy > Upstream CA certificates** lets a project add other VPN or
+private CAs when needed. Choose a PEM file or paste its public CA certificates,
+then apply. These supplement macOS trust; other platforms extend the default
+public CA list. Server certificate verification stays enabled.
 Applying or removing it restarts proxy connections and cancels active
 Replay/Fuzzer requests. CA certificates are saved in the project database,
 but importing a project keeps the current CA trust: new trust anchors must be

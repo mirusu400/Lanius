@@ -9,11 +9,13 @@ const CA = { subject: 'CN=Private CA', expires_at: '2036-01-01T00:00:00+00:00', 
 let posted: unknown[];
 let fail: boolean;
 let configured: boolean;
+let systemTrust: string;
 
 beforeEach(() => {
   posted = [];
   fail = false;
   configured = false;
+  systemTrust = 'certifi';
   vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
     if (init?.method === 'PUT') {
       const body = JSON.parse(String(init.body));
@@ -21,12 +23,19 @@ beforeEach(() => {
       if (fail) return { ok: false, status: 422, json: async () => ({ detail: 'certificate is not a CA' }) } as Response;
       configured = Boolean(body.ca_pem);
     }
-    return { ok: true, status: 200, json: async () => ({ certificates: configured ? [CA] : [] }) } as Response;
+    return { ok: true, status: 200, json: async () => ({ certificates: configured ? [CA] : [], system_trust: systemTrust }) } as Response;
   }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('Upstream CA trust', () => {
+  it('shows that macOS Keychain trust needs no separate import', async () => {
+    systemTrust = 'macos';
+    render(<TlsTrustSection />);
+    expect(await screen.findByText(t('tlsTrust.macos'))).toBeTruthy();
+    expect(posted).toEqual([]);
+  });
+
   it('applies pasted CA certificates and shows the saved identity', async () => {
     render(<TlsTrustSection />);
     await screen.findByText(t('tlsTrust.default'));

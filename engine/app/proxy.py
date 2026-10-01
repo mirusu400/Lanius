@@ -32,6 +32,7 @@ from .plugin_packages import PluginPackageManager
 from .plugin_catalogue import PluginCatalogueManager
 from .addons.scope import ScopeManager
 from .addons.scope_egress import ScopeEgressEarlyAddon, ScopeEgressGuardAddon
+from .addons.system_trust import MacOSSystemTrustAddon
 from .config import Settings
 from .lockdown import LockdownPolicy
 from .db.store import FlowStore
@@ -392,6 +393,10 @@ class ProxyEngine:
         master.options.update(ssl_verify_upstream_trusted_ca=upstream_ca_file(
             self.settings.data_dir, self.store.get_setting(TRUSTED_CA_SETTING) or ""
         ))
+        if sys.platform == "darwin":
+            master.addons.add(MacOSSystemTrustAddon(
+                self.store.get_setting(TRUSTED_CA_SETTING) or ""
+            ))
         # mitmproxy's errorcheck addon calls sys.exit() on startup errors, which
         # would tear down the host application. We surface errors ourselves.
         if (errorcheck := master.addons.get("errorcheck")) is not None:
@@ -614,7 +619,10 @@ class ProxyEngine:
 
     def tls_trust_state(self) -> dict[str, Any]:
         _, certificates = parse_ca_bundle(self.store.get_setting(TRUSTED_CA_SETTING) or "")
-        return {"certificates": certificates}
+        return {
+            "certificates": certificates,
+            "system_trust": "macos" if sys.platform == "darwin" else "certifi",
+        }
 
     async def set_tls_trust(self, pem: str) -> dict[str, Any]:
         normalized, _ = parse_ca_bundle(pem, check_dates=True)

@@ -55,6 +55,7 @@ export function TlsTrustSection() {
     <section>
       <h3>{t('tlsTrust.section')}</h3>
       <p className="muted">{t('tlsTrust.help')}</p>
+      {saved?.system_trust === 'macos' && <p className="muted">{t('tlsTrust.macos')}</p>}
       {saved && (saved.certificates.length ? saved.certificates.map((cert) => (
         <dl className="settings-grid" key={cert.sha256}>
           <dt>{t('tlsTrust.subject')}</dt><dd>{cert.subject}</dd>

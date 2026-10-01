@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import ssl
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
@@ -14,7 +15,7 @@ import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.x509.oid import NameOID
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from fastapi.testclient import TestClient
 
 from app.api.server import create_app
@@ -32,6 +33,12 @@ def certificate(*, ca: bool = True, expired: bool = False, issuer=None):
             .not_valid_before(now - timedelta(days=2))
             .not_valid_after(now + timedelta(days=-1 if expired else 30))
             .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
+            .add_extension(x509.KeyUsage(
+                digital_signature=True, content_commitment=False, key_encipherment=not ca,
+                data_encipherment=False, key_agreement=False, key_cert_sign=ca,
+                crl_sign=ca, encipher_only=None, decipher_only=None,
+            ), critical=True)
+            .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
             .add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost")]), critical=False)
             .sign(issuer[1] if issuer else key, hashes.SHA256()))
     return cert, key
@@ -71,7 +78,9 @@ def test_api_persists_and_applies_trust_and_rejects_bad_updates(tmp_path):
     app = create_app(eng.settings)
     ca = pem(certificate()[0])
     with TestClient(app) as client:
-        assert client.get("/api/tls/trust").json() == {"certificates": []}
+        assert client.get("/api/tls/trust").json() == {
+            "certificates": [], "system_trust": "macos" if sys.platform == "darwin" else "certifi",
+        }
         before = app.state.engine.master
         response = client.put("/api/tls/trust", json={"ca_pem": ca})
         assert response.status_code == 200
@@ -96,7 +105,7 @@ def test_api_persists_and_applies_trust_and_rejects_bad_updates(tmp_path):
         assert client.app.state.engine.master.options.ssl_verify_upstream_trusted_ca is None
         assert client.app.state.store.get_setting(TRUSTED_CA_SETTING) is None
         assert client.post("/api/project/import", json=payload).status_code == 200
-        assert client.get("/api/tls/trust").json() == {"certificates": []}
+        assert client.get("/api/tls/trust").json()["certificates"] == []
 
 
 @pytest.mark.asyncio
@@ -122,7 +131,10 @@ async def test_restart_failure_restores_previous_trust(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_https_accepts_only_trusted_ca_and_correct_hostname(tmp_path):
+@pytest.mark.parametrize("platform", ["native", "certifi"])
+async def test_https_accepts_only_trusted_ca_and_correct_hostname(tmp_path, platform, monkeypatch):
+    if platform == "certifi":
+        monkeypatch.setattr("app.proxy.sys.platform", "linux")
     ca = certificate()
     leaf, key = certificate(ca=False, issuer=ca)
     cert_path, key_path = tmp_path / "server.pem", tmp_path / "key.pem"
