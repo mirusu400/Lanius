@@ -19,6 +19,8 @@ PyJWT>=2.15.0
 # Keep this in the production set: frozen desktop builds install this file
 # without requirements-dev.txt.
 httpx>=0.28
+# Frozen builds need a bundled public CA store for urllib catalogue downloads.
+certifi
 cryptography>=50.0.1
 h2>=4.4.1
 tornado>=6.5.10

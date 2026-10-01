@@ -40,6 +40,10 @@ def certificate(*, ca: bool = True, expired: bool = False, issuer=None):
             ), critical=True)
             .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
             .add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost")]), critical=False)
+            .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+            .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(
+                issuer[1].public_key() if issuer else key.public_key()
+            ), critical=False)
             .sign(issuer[1] if issuer else key, hashes.SHA256()))
     return cert, key
 

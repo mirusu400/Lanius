@@ -8,6 +8,7 @@ import ipaddress
 import json
 import os
 import re
+import ssl
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Any, Callable
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
+import certifi
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -245,7 +247,11 @@ def _default_fetch(url: str, limit: int) -> bytes:
     _validate_url(url, "download URL")
     request = Request(url, headers={"User-Agent": "Lanius-Plugin-Catalogue/1"})
     try:
-        with urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
+        # A frozen Python may not have the build machine's OpenSSL CA path.
+        # Keep any available system roots and add the bundle shipped with us.
+        tls = ssl.create_default_context()
+        tls.load_verify_locations(cafile=certifi.where())
+        with urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS, context=tls) as response:
             _validate_url(response.geturl(), "redirected download URL")
             declared = response.headers.get("Content-Length")
             if declared is not None and int(declared) > limit:

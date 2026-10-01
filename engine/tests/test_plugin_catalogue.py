@@ -7,7 +7,10 @@ import hashlib
 import io
 import json
 import socket
+import ssl
+import threading
 import zipfile
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -21,10 +24,12 @@ from app.config import Settings
 from app.plugin_catalogue import (
     PluginCatalogueError,
     PluginCatalogueManager,
+    _default_fetch,
     ensure_immutable,
 )
 from app.plugin_packages import PluginPackageError, PluginPackageManager, load_manifest
 from app.plugin_trust import OFFICIAL_CATALOGUE_SOURCE
+from .test_tls_trust import certificate, pem
 
 
 def free_port() -> int:
@@ -55,6 +60,52 @@ def test_official_source_is_default_until_sources_are_saved(tmp_path) -> None:
     ]
     assert catalogue.save_sources([]) == []
     assert catalogue.sources() == []
+
+
+def test_download_uses_bundled_ca_and_still_checks_hostnames(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1")
+    monkeypatch.setenv("no_proxy", "localhost,127.0.0.1")
+    ca = certificate()
+    leaf, key = certificate(ca=False, issuer=ca)
+    ca_path = tmp_path / "ca.pem"
+    cert_path = tmp_path / "server.pem"
+    key_path = tmp_path / "server-key.pem"
+    ca_path.write_text(pem(ca[0]))
+    cert_path.write_text(pem(leaf))
+    key_path.write_bytes(key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ))
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, *args) -> None:
+            pass
+
+    server = HTTPServer(("localhost", 0), Handler)
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.load_cert_chain(cert_path, key_path)
+    server.socket = tls.wrap_socket(server.socket, server_side=True)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        url = f"https://localhost:{server.server_port}/index.json"
+        with pytest.raises(PluginCatalogueError, match="certificate verify failed"):
+            _default_fetch(url, 10)
+        monkeypatch.setattr("app.plugin_catalogue.certifi.where", lambda: str(ca_path))
+        assert _default_fetch(url, 10) == b"ok"
+        with pytest.raises(PluginCatalogueError, match="certificate verify failed"):
+            _default_fetch(f"https://127.0.0.1:{server.server_port}/index.json", 10)
+    finally:
+        server.shutdown()
+        worker.join(timeout=5)
+        server.server_close()
 
 
 def signed_package(version: str, private_key: Ed25519PrivateKey) -> bytes:
