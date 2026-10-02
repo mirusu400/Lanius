@@ -126,16 +126,22 @@ export function ResizableHeader({
   columns,
   className,
   resizeLabel,
+  onSort,
+  sortDirection,
 }: {
   label: string;
   index: number;
   columns: ResizableColumns;
   className?: string;
   resizeLabel: string;
+  onSort?: () => void;
+  sortDirection?: 'ascending' | 'descending';
 }) {
   return (
-    <th className={className} scope="col">
-      {label}
+    <th className={className} scope="col" aria-sort={sortDirection}>
+      {onSort ? <button type="button" className="column-sort" onClick={onSort}>
+        {label}{sortDirection && <span aria-hidden="true">{sortDirection === 'ascending' ? ' ▲' : ' ▼'}</span>}
+      </button> : label}
       <span
         className={columns.dragging === index ? 'column-resize-handle dragging' : 'column-resize-handle'}
         role="separator"

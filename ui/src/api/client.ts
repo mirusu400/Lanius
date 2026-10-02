@@ -7,6 +7,7 @@ import type {
   FlowEdits,
   FlowFilters,
   FlowSummary,
+  HistorySortKey,
   ResponsePreview,
   InterceptRules,
   MatchReplaceRule,
@@ -155,9 +156,15 @@ export async function listFlows(
 
 export async function listFlowPage(
   filters: FlowFilters = {}, offset = 0, limit = 200, anchor?: number, cursor?: string,
+  sortBy: HistorySortKey = 'started_at', sortDesc = true,
 ): Promise<{ items: FlowSummary[]; has_more: boolean; anchor?: number; next_cursor?: string | null }> {
+  const params = new URLSearchParams(buildFlowQuery(filters, limit, offset, anchor, cursor));
+  if (sortBy !== 'started_at' || !sortDesc) {
+    params.set('sort_by', sortBy);
+    params.set('sort_desc', String(sortDesc));
+  }
   const data = await request<{ items: FlowSummary[]; has_more?: boolean; anchor?: number; next_cursor?: string | null }>(
-    `/api/flows?${buildFlowQuery(filters, limit, offset, anchor, cursor)}`,
+    `/api/flows?${params}`,
   );
   return { items: data?.items ?? [], has_more: data?.has_more ?? false,
     anchor: data?.anchor, next_cursor: data?.next_cursor };

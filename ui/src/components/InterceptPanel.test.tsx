@@ -171,6 +171,26 @@ describe('InterceptPanel', () => {
     await waitFor(() => expect(editorEl().value).toContain('500'));
   });
 
+  it('moves through the queue with arrow keys and highlights editable HTTP', async () => {
+    const user = userEvent.setup();
+    render(<InterceptPanel rules={rules}
+      paused={[pausedFlow, { ...pausedFlow, id: 'p2', method: 'POST', path: '/next',
+        request_headers: [['Content-Type', 'application/json']], request_body: '{"ok":true}' }]}
+      onToggle={() => {}} onResolved={() => {}} />);
+    const queue = screen.getByLabelText(t('intercept.queueLabel'));
+    const buttons = within(queue).getAllByRole('button');
+    buttons[0].focus();
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(buttons[1]);
+    await waitFor(() => expect(editorEl().value).toContain('/next'));
+    expect(editorEl().getAttribute('wrap')).toBe('soft');
+    expect(document.querySelector('.highlight-editor-overlay .hljs-keyword')?.textContent).toBe('POST');
+    expect(document.querySelector('.highlight-editor-overlay .hljs-attr')?.textContent).toBe('Content-Type');
+    expect(document.querySelector('.highlight-editor-overlay')?.textContent).toBe(editorEl().value);
+    await user.keyboard('{ArrowUp}');
+    await waitFor(() => expect(editorEl().value).toContain('/original'));
+  });
+
   it('acts on the request being shown, not just the first', async () => {
     // Forwarding the wrong flow would be worse than not offering the list.
     const user = userEvent.setup();

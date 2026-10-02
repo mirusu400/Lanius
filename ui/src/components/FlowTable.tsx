@@ -1,4 +1,5 @@
-import type { FlowSummary } from '../api/types';
+import { useRef } from 'react';
+import type { FlowSummary, HistorySortKey } from '../api/types';
 import { useT } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
 import {
@@ -17,17 +18,39 @@ interface Props {
   /** Right-click on a row, for the Proxy tab to build a menu from. */
   onContextMenu?: (event: React.MouseEvent, flow: FlowSummary) => void;
   searchQuery?: string;
+  sortBy?: HistorySortKey;
+  sortDesc?: boolean;
+  onSort?: (key: HistorySortKey) => void;
 }
 
-export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQuery = '' }: Props) {
+const SORT_KEYS: HistorySortKey[] = [
+  'started_at', 'method', 'host', 'url', 'status_code', 'modified', 'response_size', 'duration_ms',
+];
+
+export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQuery = '', sortBy, sortDesc, onSort }: Props) {
   const t = useT();
+  const rows = useRef(new Map<string, HTMLTableRowElement>());
+  const selectAdjacent = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    if (event.target !== event.currentTarget && !(event.target instanceof HTMLTableRowElement)) return;
+    if (!flows.length) return;
+    event.preventDefault();
+    const index = flows.findIndex((flow) => flow.id === selectedId);
+    const next = index < 0
+      ? (event.key === 'ArrowDown' ? 0 : flows.length - 1)
+      : Math.max(0, Math.min(flows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)));
+    const id = flows[next].id;
+    onSelect(id);
+    rows.current.get(id)?.focus();
+    rows.current.get(id)?.scrollIntoView?.({ block: 'nearest' });
+  };
   const columns = useResizableColumns('lanius.columns.history', [84, 70, 180, 260, 66, 82, 78, 84]);
   const headers = [
     t('flow.time'), t('flow.method'), t('flow.host'), t('flow.url'),
     t('flow.status'), t('flow.modified'), t('flow.size'), t('flow.time'),
   ];
   return (
-    <div className="flow-table-wrap">
+    <div className="flow-table-wrap" tabIndex={0} onKeyDown={selectAdjacent}>
       <ResizableTable columns={columns} className="flow-table">
         <thead>
           <tr>
@@ -39,6 +62,8 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
                 columns={columns}
                 className={index === 5 ? 'modified-header' : undefined}
                 resizeLabel={t('table.resizeColumn', { column: label })}
+                onSort={onSort ? () => onSort(SORT_KEYS[index]) : undefined}
+                sortDirection={sortBy === SORT_KEYS[index] ? (sortDesc ? 'descending' : 'ascending') : undefined}
               />
             ))}
             <ResizableFillHeader />
@@ -56,8 +81,10 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
           {flows.map((flow) => (
             <tr
               key={flow.id}
+              ref={(element) => { if (element) rows.current.set(flow.id, element); else rows.current.delete(flow.id); }}
+              tabIndex={flow.id === selectedId ? 0 : -1}
               className={flow.id === selectedId ? 'selected' : undefined}
-              onClick={() => onSelect(flow.id)}
+              onClick={(event) => { onSelect(flow.id); event.currentTarget.focus(); }}
               onContextMenu={(event) => {
                 // Right-clicking a row should act on that row, not on
                 // whatever happened to be selected.

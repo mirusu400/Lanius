@@ -15,6 +15,7 @@ import type {
   FlowDetail,
   FlowFilters,
   FlowSummary,
+  HistorySortKey,
   InterceptRules,
   PausedFlow,
 } from '../api/types';
@@ -62,6 +63,9 @@ export function ProxyTab() {
   const [historyPageInput, setHistoryPageInput] = useState('1');
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historySort, setHistorySort] = useState<{ key: HistorySortKey; desc: boolean }>({ key: 'started_at', desc: true });
+  const historySortRef = useRef(historySort);
+  historySortRef.current = historySort;
   // Outside the component: switching tabs unmounts this one, and a
   // selection kept here would be gone when you came back to it.
   const [selected, setSelected] = useState<string | null>(getSelectedFlow);
@@ -100,7 +104,10 @@ export function ProxyTab() {
     try {
       const page = await listFlowPage(
         filtersRef.current, historyPageRef.current * 200, 200,
-        historyAnchor.current, historyCursors.current[historyPageRef.current],
+        historyAnchor.current,
+        historySortRef.current.key === 'started_at' && historySortRef.current.desc
+          ? historyCursors.current[historyPageRef.current] : undefined,
+        historySortRef.current.key, historySortRef.current.desc,
       );
       if (generation !== requestGeneration.current) return;
       historyAnchor.current = page.anchor;
@@ -118,7 +125,18 @@ export function ProxyTab() {
         setHistoryLoading(false);
       }
     }
-  }, []);
+  }, [historySort]);
+
+  const onSortHistory = (key: HistorySortKey) => {
+    setHistorySort((current) => ({
+      key,
+      desc: current.key === key ? !current.desc : key === 'started_at',
+    }));
+    historyAnchor.current = undefined;
+    historyCursors.current = {};
+    setNextHistoryCursor(null);
+    setHistoryPage(0);
+  };
 
   useEffect(() => {
     const searchChanged = filters.search !== previousSearch.current;
@@ -207,6 +225,12 @@ export function ProxyTab() {
             case 'flow.error': {
               if (pausedRef.current) return;
               const flow = event.data;
+              if (historySortRef.current.key !== 'started_at' || !historySortRef.current.desc) {
+                if (historyPageRef.current === 0) historyAnchor.current = undefined;
+                if (scopeReloadTimer.current !== null) window.clearTimeout(scopeReloadTimer.current);
+                scopeReloadTimer.current = window.setTimeout(() => void reload(), 500);
+                return;
+              }
               if (historyPageRef.current === 0) {
                 historyAnchor.current = undefined;
                 historyCursors.current = {};
@@ -384,6 +408,9 @@ export function ProxyTab() {
                 selectedId={selected}
                 onSelect={setSelectedFlow}
                 onContextMenu={menu.open}
+                sortBy={historySort.key}
+                sortDesc={historySort.desc}
+                onSort={onSortHistory}
               />
             }
             second={<FlowDetailView flow={selectedFlow} searchQuery={filters.search || ''} />}

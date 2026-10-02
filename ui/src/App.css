@@ -1390,6 +1390,29 @@ pre.body,
   z-index: 1;
 }
 
+.flow-table .column-sort {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.flow-table .column-sort:hover,
+.flow-table .column-sort:focus-visible {
+  color: var(--fg);
+}
+
+.flow-table-wrap:focus-visible,
+.flow-table tbody tr:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .resizable-table {
   table-layout: fixed;
 }
@@ -2256,16 +2279,59 @@ pre.body {
 
 .intercept-editor {
   flex: 1;
-  background: var(--bg-sunken);
+  background: transparent;
   border: none;
   border-top: 1px solid var(--border);
-  color: var(--fg);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--fg);
   padding: 10px;
   resize: none;
   outline: none;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   overflow: auto;
 }
+
+.highlight-editor {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-sunken);
+}
+
+.highlight-editor .intercept-editor {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  line-height: 1.4;
+  tab-size: 2;
+}
+
+.highlight-editor-overlay {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+  overflow: auto;
+  scrollbar-color: transparent transparent;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.highlight-editor:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.highlight-editor-overlay::-webkit-scrollbar-thumb { background: transparent; }
 
 .intercept-idle {
   padding: 40px;

@@ -162,6 +162,41 @@ describe('ProxyTab', () => {
     expect(screen.getByText('/seeded')).toBeTruthy();
   });
 
+  it('requests a full-history sort when a column header is clicked', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    const host = screen.getByRole('button', { name: t('flow.host') });
+    await user.click(host);
+    await waitFor(() => expect(calls.some((call) => {
+      const url = new URL(call.url);
+      return url.searchParams.get('sort_by') === 'host'
+        && url.searchParams.get('sort_desc') === 'false';
+    })).toBe(true));
+    expect(host.closest('th')?.getAttribute('aria-sort')).toBe('ascending');
+    await user.click(host);
+    await waitFor(() => expect(calls.some((call) => {
+      const url = new URL(call.url);
+      return url.searchParams.get('sort_by') === 'host'
+        && url.searchParams.get('sort_desc') === 'true';
+    })).toBe(true));
+  });
+
+  it('selects adjacent history rows with arrow keys', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    MockSocket.instances[0].emit('flow.request', live);
+    const table = document.querySelector('.flow-table-wrap') as HTMLDivElement;
+    table.focus();
+    await user.keyboard('{ArrowDown}');
+    expect(document.querySelector('.flow-table tbody tr.selected')?.textContent).toContain('live.test');
+    await user.keyboard('{ArrowDown}');
+    expect(document.querySelector('.flow-table tbody tr.selected')?.textContent).toContain('seeded.test');
+    await user.keyboard('{ArrowUp}');
+    expect(document.querySelector('.flow-table tbody tr.selected')?.textContent).toContain('live.test');
+  });
+
   it('highlights the history search in table cells and selected details', async () => {
     const user = userEvent.setup();
     render(<ProxyTab />);

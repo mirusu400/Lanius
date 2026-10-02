@@ -974,6 +974,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         offset: int = Query(0, ge=0),
         anchor: int | None = Query(None, ge=0),
         cursor: str | None = None,
+        sort_by: str = "started_at",
+        sort_desc: bool = True,
         host: str | None = None,
         method: str | None = None,
         status_code: int | None = None,
@@ -993,6 +995,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 offset=offset,
                 anchor=anchor,
                 cursor=cursor,
+                sort_by=sort_by,
+                sort_desc=sort_desc,
                 scope_predicate=(engine.scope.contains if in_scope_only and any(
                     rule.enabled for rule in engine.scope.scope.rules
                 ) else None),

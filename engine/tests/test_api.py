@@ -76,6 +76,27 @@ def test_list_and_filter_flows(client) -> None:
     assert client.get("/api/flows?host=a.com").json()["count"] == 1
 
 
+def test_history_sort_applies_before_pagination(client) -> None:
+    seed(client, "c", host="c.test", started_at=1, response_size=30)
+    seed(client, "a", host="a.test", started_at=2, response_size=10)
+    seed(client, "b", host="b.test", started_at=3, response_size=20)
+    first = client.get("/api/flows?sort_by=host&sort_desc=false&limit=2").json()
+    assert [item["id"] for item in first["items"]] == ["a", "b"]
+    assert first["has_more"] is True
+    assert first["next_cursor"] is None
+    second = client.get(
+        f"/api/flows?sort_by=host&sort_desc=false&limit=2&offset=2&anchor={first['anchor']}"
+    ).json()
+    assert [item["id"] for item in second["items"]] == ["c"]
+    assert [item["id"] for item in client.get(
+        "/api/flows?sort_by=response_size&sort_desc=true"
+    ).json()["items"]] == ["c", "b", "a"]
+    for column in ("started_at", "method", "host", "url", "status_code",
+                   "modified", "response_size", "duration_ms"):
+        assert client.get(f"/api/flows?sort_by={column}&sort_desc=false").status_code == 200
+    assert client.get("/api/flows?sort_by=unknown").status_code == 422
+
+
 def test_full_text_search_anchor_and_raw_body_endpoint(client) -> None:
     seed(client, "old", started_at=1, path="/other", request_body=b"\xffneedle-tail")
     seed(client, "next", started_at=2, path="/other", response_headers=[("X-Trace", "search-header")])

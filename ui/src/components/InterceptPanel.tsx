@@ -6,6 +6,7 @@ import { editsFromText, renderPaused } from '../tabs/interceptModel';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
 import { OpenBrowserButton } from './OpenBrowserButton';
 import { MatchReplaceButton } from './MatchReplaceDialog';
+import { HighlightedEditor } from './SyntaxCode';
 
 interface Props {
   rules: InterceptRules;
@@ -64,6 +65,18 @@ export function InterceptPanel({
     }
   };
 
+  const moveInQueue = (event: React.KeyboardEvent<HTMLUListElement>) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    const button = (event.target as HTMLElement).closest('button');
+    if (!button || !event.currentTarget.contains(button)) return;
+    const index = paused.findIndex((flow) => flow.id === current?.id);
+    const next = Math.max(0, Math.min(paused.length - 1,
+      index + (event.key === 'ArrowDown' ? 1 : -1)));
+    event.preventDefault();
+    setSelectedId(paused[next].id);
+    event.currentTarget.querySelectorAll('button')[next]?.focus();
+  };
+
   return (
     <div className="intercept-panel">
       <div className="intercept-controls">
@@ -118,12 +131,13 @@ export function InterceptPanel({
       </div>
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
       {paused.length > 1 && (
-        <ul className="intercept-queue" aria-label={t('intercept.queueLabel')}>
+        <ul className="intercept-queue" aria-label={t('intercept.queueLabel')} onKeyDown={moveInQueue}>
           {paused.map((flow) => (
             <li key={flow.id}>
               <button
                 type="button"
                 className={flow.id === current?.id ? 'active' : undefined}
+                aria-current={flow.id === current?.id ? 'true' : undefined}
                 onClick={() => setSelectedId(flow.id)}
               >
                 <span className={`phase phase-${flow.phase}`}>
@@ -155,11 +169,12 @@ export function InterceptPanel({
             {current.scheme}://{current.host}
             {current.path}
           </div>
-          <textarea
+          <HighlightedEditor
             className="intercept-editor mono"
-            value={text}
-            spellCheck={false}
-            onChange={(e) => setText(e.target.value)}
+            text={text}
+            onChange={setText}
+            headers={current.phase === 'request' ? current.request_headers : current.response_headers ?? []}
+            responsePath={current.path}
           />
         </>
       ) : (

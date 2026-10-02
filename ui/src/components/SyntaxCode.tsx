@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 
 import hljs from 'highlight.js/lib/core';
 import css from 'highlight.js/lib/languages/css';
@@ -59,6 +59,41 @@ function messageHeadHtml(text: string): string {
   }).join('');
 }
 
+function messageHtml(text: string, headers: SyntaxHeaders, responsePath?: string | null, fallbackMime?: string | null): string {
+  const { head, separator, body } = splitMessage(text);
+  if (!separator) return messageHeadHtml(text);
+  const language = bodyLanguage(headers, body, fallbackMime, responsePath);
+  return messageHeadHtml(head) + escapeHtml(separator) + highlightedHtml(body, language);
+}
+
+/** An editable raw message with inert syntax colours behind the textarea. */
+export function HighlightedEditor({ text, onChange, headers, responsePath, className }: {
+  text: string;
+  onChange: (text: string) => void;
+  headers: SyntaxHeaders;
+  responsePath?: string | null;
+  className: string;
+}) {
+  const highlight = useMemo(() => messageHtml(text, headers, responsePath), [text, headers, responsePath]);
+  const overlay = useRef<HTMLPreElement>(null);
+  return <div className="highlight-editor">
+    <pre ref={overlay} className="highlight-editor-overlay mono syntax-code" aria-hidden="true"><code dangerouslySetInnerHTML={{ __html: highlight }} /></pre>
+    <textarea
+      className={className}
+      value={text}
+      wrap="soft"
+      spellCheck={false}
+      onChange={(event) => onChange(event.target.value)}
+      onScroll={(event) => {
+        if (overlay.current) {
+          overlay.current.scrollTop = event.currentTarget.scrollTop;
+          overlay.current.scrollLeft = event.currentTarget.scrollLeft;
+        }
+      }}
+    />
+  </div>;
+}
+
 export function HighlightedBody({
   text,
   headers,
@@ -101,14 +136,13 @@ export function HighlightedMessage({
   query?: string;
   activeIndex?: number | null;
 }) {
-  const { head, separator, body } = useMemo(() => splitMessage(text), [text]);
-  const language = bodyLanguage(headers, body, fallbackMime, responsePath);
+  const { separator } = useMemo(() => splitMessage(text), [text]);
   const html = useMemo(() => {
     const source = http && separator
-      ? messageHeadHtml(head) + escapeHtml(separator) + highlightedHtml(body, language)
+      ? messageHtml(text, headers, responsePath, fallbackMime)
       : escapeHtml(text);
     return markHighlightedHtml(source, query, activeIndex);
-  }, [text, head, separator, body, http, language, query, activeIndex]);
+  }, [text, separator, http, headers, responsePath, fallbackMime, query, activeIndex]);
   const selectAll = (event: React.KeyboardEvent<HTMLPreElement>) => {
     if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'a') return;
     const selection = window.getSelection();

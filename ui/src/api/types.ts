@@ -28,6 +28,9 @@ export interface FlowSummary {
   auto_modified?: boolean;
 }
 
+export type HistorySortKey = 'started_at' | 'method' | 'host' | 'url' |
+  'status_code' | 'modified' | 'response_size' | 'duration_ms';
+
 export interface RequestVariant {
   method: string;
   scheme: string;

@@ -714,6 +714,7 @@ class FlowStore:
         self, *, limit: int = 200, offset: int = 0,
         anchor: int | None = None,
         cursor: str | None = None,
+        sort_by: str = "started_at", sort_desc: bool = True,
         scope_predicate: Callable[[str | None, str | None, int | None, str | None], bool] | None = None,
         host: str | None = None, method: str | None = None,
         status_code: int | None = None, search: str | None = None,
@@ -729,6 +730,19 @@ class FlowStore:
         """
         if cursor is not None and offset:
             raise ValueError("cursor and offset cannot be combined")
+        sort_columns = {
+            "started_at": "started_at", "method": "method", "host": "host",
+            "url": "path || COALESCE('?' || query, '')", "status_code": "status_code",
+            "modified": "modified", "response_size": "response_size",
+            "duration_ms": "duration_ms",
+        }
+        if sort_by not in sort_columns:
+            raise ValueError("invalid history sort column")
+        default_sort = sort_by == "started_at" and sort_desc
+        if cursor is not None and not default_sort:
+            raise ValueError("cursor is only available for newest-first history")
+        direction = "DESC" if sort_desc else "ASC"
+        order = f"{sort_columns[sort_by]} {direction}, rowid {direction}"
         where, params = self._flow_filters(
             host=host, method=method, status_code=status_code, search=search,
             methods=methods, status_classes=status_classes,
@@ -752,7 +766,7 @@ class FlowStore:
             # not materialize every matching FTS rowid. If the slice does
             # not prove has_more, the complete index query below decides.
             needed = offset + limit + 1
-            if search and scope_predicate is None and needed <= 1000:
+            if default_sort and search and scope_predicate is None and needed <= 1000:
                 base_where, base_params = self._flow_filters(
                     host=host, method=method, status_code=status_code,
                     methods=methods, status_classes=status_classes,
@@ -787,17 +801,18 @@ class FlowStore:
             if scope_predicate is None:
                 rows = self._read_conn.execute(
                     f"SELECT {_SUMMARY_COLUMNS} FROM flows {where}"
-                    " ORDER BY started_at DESC, rowid DESC LIMIT ? OFFSET ?",
+                    f" ORDER BY {order} LIMIT ? OFFSET ?",
                     (*params, limit + 1, offset),
                 ).fetchall()
                 return {"items": [_summary_row(row) for row in rows[:limit]],
                         "has_more": len(rows) > limit, "anchor": anchor,
-                        "next_cursor": _history_cursor(rows[limit - 1])
-                        if len(rows) >= limit else (_history_cursor(rows[-1]) if rows else None)}
+                        "next_cursor": (_history_cursor(rows[limit - 1])
+                        if len(rows) >= limit else (_history_cursor(rows[-1]) if rows else None))
+                        if default_sort else None}
             last_cursor: str | None = None
             rows_cursor = self._read_conn.execute(
                 f"SELECT {_SUMMARY_COLUMNS} FROM flows {where}"
-                " ORDER BY started_at DESC, rowid DESC", params,
+                f" ORDER BY {order}", params,
             )
             for row in rows_cursor:
                 if not scope_predicate(row["scheme"], row["host"], row["port"], row["path"]):
@@ -809,7 +824,7 @@ class FlowStore:
                     return {"items": items, "has_more": True, "anchor": anchor,
                             "next_cursor": last_cursor}
                 items.append(_summary_row(row))
-                last_cursor = _history_cursor(row)
+                last_cursor = _history_cursor(row) if default_sort else None
         return {"items": items, "has_more": False, "anchor": anchor,
                 "next_cursor": last_cursor}
 
