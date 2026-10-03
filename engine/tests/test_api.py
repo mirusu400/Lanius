@@ -76,6 +76,48 @@ def test_list_and_filter_flows(client) -> None:
     assert client.get("/api/flows?host=a.com").json()["count"] == 1
 
 
+def test_history_annotations_survive_capture_and_project_roundtrip(client) -> None:
+    seed(client, "marked", started_at=2)
+    seed(client, "plain", started_at=1)
+    response = client.patch(
+        "/api/flows/marked/annotation",
+        json={"bookmarked": True, "annotation_color": "blue"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"id": "marked", "bookmarked": True, "annotation_color": "blue"}
+    assert [flow["id"] for flow in client.get(
+        "/api/flows?bookmarked_only=true&annotation_color=blue"
+    ).json()["items"]] == ["marked"]
+
+    # A late response writes the capture row again; it must leave user marks intact.
+    seed(client, "marked", started_at=2, status_code=404)
+    marked = client.get("/api/flows/marked").json()
+    assert (marked["bookmarked"], marked["annotation_color"], marked["status_code"]) == (
+        True, "blue", 404
+    )
+    exported = client.get("/api/project/export").json()
+    assert next(flow for flow in exported["flows"] if flow["id"] == "marked")["annotation_color"] == "blue"
+
+    assert client.post("/api/project/import", json=exported).status_code == 200
+    assert client.get("/api/flows?bookmarked_only=true").json()["items"][0]["id"] == "marked"
+    assert client.patch("/api/flows/marked/annotation", json={"annotation_color": None}).json() == {
+        "id": "marked", "bookmarked": True, "annotation_color": None
+    }
+    assert client.patch("/api/flows/marked/annotation", json={"bookmarked": False}).status_code == 200
+    assert client.get("/api/flows?bookmarked_only=true").json()["items"] == []
+    assert client.app.state.store.all_annotations() == {}
+
+
+def test_history_annotation_validation_and_delete_cleanup(client) -> None:
+    seed(client, "marked")
+    for payload in ({"bookmarked": "yes"}, {"annotation_color": "pink"}, {}, {"unknown": 1}):
+        assert client.patch("/api/flows/marked/annotation", json=payload).status_code == 422
+    assert client.patch("/api/flows/missing/annotation", json={"bookmarked": True}).status_code == 404
+    assert client.patch("/api/flows/marked/annotation", json={"bookmarked": True}).status_code == 200
+    client.app.state.store.delete(["marked"])
+    assert client.app.state.store.all_annotations() == {}
+
+
 def test_history_sort_applies_before_pagination(client) -> None:
     seed(client, "c", host="c.test", started_at=1, response_size=30)
     seed(client, "a", host="a.test", started_at=2, response_size=10)

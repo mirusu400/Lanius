@@ -30,6 +30,8 @@ from ..content_encoding import body_for_display
 
 logger = logging.getLogger(__name__)
 
+ANNOTATION_COLORS = frozenset({"red", "orange", "yellow", "green", "blue", "purple"})
+
 from .schema import migrate
 from typing import TYPE_CHECKING
 
@@ -288,7 +290,9 @@ _SUMMARY_COLUMNS = (
     "id, type, client_addr, server_addr, scheme, method, host, port, path, query,"
     " http_version, request_size, started_at, status_code, reason, response_size,"
     " response_mime, completed_at, duration_ms, error, source, comment,"
-    " auto_modified, modified, flows.rowid AS history_rowid"
+    " auto_modified, modified, flows.rowid AS history_rowid,"
+    " COALESCE((SELECT bookmarked FROM flow_annotations WHERE flow_id = flows.id), 0) AS bookmarked,"
+    " (SELECT color FROM flow_annotations WHERE flow_id = flows.id) AS annotation_color"
 )
 
 
@@ -308,6 +312,7 @@ def _summary_row(row: sqlite3.Row) -> dict[str, Any]:
     data["source"] = data["source"] or "proxy"
     data["auto_modified"] = bool(data["auto_modified"])
     data["modified"] = bool(data["modified"])
+    data["bookmarked"] = bool(data["bookmarked"])
     return data
 
 
@@ -455,6 +460,50 @@ class FlowStore:
         with self._lock:
             self._conn.execute("DELETE FROM flows")
             self._conn.commit()
+
+    def get_annotation(self, flow_id: str) -> dict[str, Any] | None:
+        with self._read_lock:
+            exists = self._read_conn.execute("SELECT 1 FROM flows WHERE id = ?", (flow_id,)).fetchone()
+            if exists is None:
+                return None
+            row = self._read_conn.execute(
+                "SELECT bookmarked, color FROM flow_annotations WHERE flow_id = ?", (flow_id,)
+            ).fetchone()
+        return {"id": flow_id, "bookmarked": bool(row["bookmarked"]) if row else False,
+                "annotation_color": row["color"] if row else None}
+
+    def patch_annotation(self, flow_id: str, changes: dict[str, Any]) -> dict[str, Any] | None:
+        """Keep user marks independent from later request/response capture upserts."""
+        if "bookmarked" in changes and not isinstance(changes["bookmarked"], bool):
+            raise ValueError("bookmarked must be a boolean")
+        if "annotation_color" in changes:
+            color = changes["annotation_color"]
+            if color is not None and (not isinstance(color, str) or color not in ANNOTATION_COLORS):
+                raise ValueError("invalid annotation color")
+        with self._lock:
+            if self._conn.execute("SELECT 1 FROM flows WHERE id = ?", (flow_id,)).fetchone() is None:
+                return None
+            row = self._conn.execute(
+                "SELECT bookmarked, color FROM flow_annotations WHERE flow_id = ?", (flow_id,)
+            ).fetchone()
+            bookmarked = changes.get("bookmarked", bool(row["bookmarked"]) if row else False)
+            color = changes.get("annotation_color", row["color"] if row else None)
+            if bookmarked or color:
+                self._conn.execute(
+                    "INSERT INTO flow_annotations (flow_id, bookmarked, color) VALUES (?, ?, ?)"
+                    " ON CONFLICT(flow_id) DO UPDATE SET bookmarked = excluded.bookmarked, color = excluded.color",
+                    (flow_id, int(bookmarked), color),
+                )
+            else:
+                self._conn.execute("DELETE FROM flow_annotations WHERE flow_id = ?", (flow_id,))
+            self._conn.commit()
+        return {"id": flow_id, "bookmarked": bookmarked, "annotation_color": color}
+
+    def all_annotations(self) -> dict[str, dict[str, Any]]:
+        with self._read_lock:
+            rows = self._read_conn.execute("SELECT flow_id, bookmarked, color FROM flow_annotations").fetchall()
+        return {row["flow_id"]: {"bookmarked": bool(row["bookmarked"]),
+                                  "annotation_color": row["color"]} for row in rows}
 
     def delete(self, flow_ids: Sequence[str]) -> int:
         """Remove flows by id. Returns how many rows went."""
@@ -666,6 +715,7 @@ class FlowStore:
         status_classes: Sequence[int] | None = None,
         extensions: Sequence[str] | None = None,
         exclude_extensions: Sequence[str] | None = None,
+        bookmarked_only: bool = False, annotation_color: str | None = None,
     ) -> tuple[str, List[Any]]:
         clauses: list[str] = []
         params: list[Any] = []
@@ -707,6 +757,11 @@ class FlowStore:
         if search:
             clauses.append("rowid IN (SELECT rowid FROM flow_search WHERE text GLOB ?)")
             params.append(f"*{_glob_literal(search.casefold())}*")
+        if bookmarked_only:
+            clauses.append("EXISTS (SELECT 1 FROM flow_annotations WHERE flow_id = flows.id AND bookmarked = 1)")
+        if annotation_color:
+            clauses.append("EXISTS (SELECT 1 FROM flow_annotations WHERE flow_id = flows.id AND color = ?)")
+            params.append(annotation_color)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         return where, params
 
@@ -722,6 +777,7 @@ class FlowStore:
         status_classes: Sequence[int] | None = None,
         extensions: Sequence[str] | None = None,
         exclude_extensions: Sequence[str] | None = None,
+        bookmarked_only: bool = False, annotation_color: str | None = None,
     ) -> dict[str, Any]:
         """A bounded page over all matching flows, without loading body BLOBs.
 
@@ -730,6 +786,8 @@ class FlowStore:
         """
         if cursor is not None and offset:
             raise ValueError("cursor and offset cannot be combined")
+        if annotation_color is not None and annotation_color not in ANNOTATION_COLORS:
+            raise ValueError("invalid annotation color")
         sort_columns = {
             "started_at": "started_at", "method": "method", "host": "host",
             "url": "path || COALESCE('?' || query, '')", "status_code": "status_code",
@@ -747,6 +805,7 @@ class FlowStore:
             host=host, method=method, status_code=status_code, search=search,
             methods=methods, status_classes=status_classes,
             extensions=extensions, exclude_extensions=exclude_extensions,
+            bookmarked_only=bookmarked_only, annotation_color=annotation_color,
         )
         items: list[dict[str, Any]] = []
         matched = 0
@@ -772,6 +831,7 @@ class FlowStore:
                     methods=methods, status_classes=status_classes,
                     extensions=extensions,
                     exclude_extensions=exclude_extensions,
+                    bookmarked_only=bookmarked_only, annotation_color=annotation_color,
                 )
                 base_where = (
                     f"{base_where} {'AND' if base_where else 'WHERE'} rowid <= ?"
@@ -1085,6 +1145,15 @@ class FlowStore:
                 for flow in flows:
                     try:
                         self._upsert_uncommitted(_record_from_export(flow))
+                        bookmarked = flow.get("bookmarked", False)
+                        color = flow.get("annotation_color")
+                        if isinstance(bookmarked, bool) and color in (
+                            None, "red", "orange", "yellow", "green", "blue", "purple"
+                        ) and (bookmarked or color):
+                            self._conn.execute(
+                                "INSERT OR REPLACE INTO flow_annotations (flow_id, bookmarked, color) VALUES (?, ?, ?)",
+                                (flow["id"], int(bookmarked), color),
+                            )
                         imported_flows += 1
                     except Exception:
                         # One malformed flow must not abandon the rest.

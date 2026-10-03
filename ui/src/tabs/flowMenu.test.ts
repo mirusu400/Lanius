@@ -73,4 +73,15 @@ describe('flowMenuItems', () => {
     expect(labels).not.toContain(t('menu.copyAs'));
     expect(labels).toContain(t('menu.sendToReplay'));
   });
+
+  it('offers independent bookmark and color actions', () => {
+    const toggleBookmark = vi.fn();
+    const setColor = vi.fn();
+    const items = flowMenuItems(flow, t, { ...actions, toggleBookmark, setColor });
+    items.find((item) => item.label === t('history.addBookmark'))?.onSelect?.();
+    const colors = items.find((item) => item.label === t('history.highlight'))?.items;
+    colors?.find((item) => item.label === t('history.color.blue'))?.onSelect?.();
+    expect(toggleBookmark).toHaveBeenCalledWith(flow);
+    expect(setColor).toHaveBeenCalledWith(flow, 'blue');
+  });
 });

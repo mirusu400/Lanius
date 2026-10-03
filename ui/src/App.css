@@ -1483,6 +1483,38 @@ table.resizable-table th {
   background: var(--accent-dim);
 }
 
+.flow-table tbody tr.annotation-red { --history-mark: #e56b73; }
+.flow-table tbody tr.annotation-orange { --history-mark: #ef9b56; }
+.flow-table tbody tr.annotation-yellow { --history-mark: #e1c45c; }
+.flow-table tbody tr.annotation-green { --history-mark: #78c990; }
+.flow-table tbody tr.annotation-blue { --history-mark: #6baef0; }
+.flow-table tbody tr.annotation-purple { --history-mark: #ae8de4; }
+.flow-table tbody tr[class*="annotation-"] {
+  background: color-mix(in srgb, var(--history-mark) 16%, var(--bg-row));
+}
+.flow-table tbody tr[class*="annotation-"]:hover {
+  background: color-mix(in srgb, var(--history-mark) 24%, var(--bg-hover));
+}
+.flow-table tbody tr[class*="annotation-"].selected {
+  background: color-mix(in srgb, var(--history-mark) 24%, var(--accent-dim));
+}
+.flow-table tbody tr[class*="annotation-"] td:first-child {
+  box-shadow: inset 4px 0 var(--history-mark);
+}
+.flow-table .history-bookmark-cell,
+.flow-table .history-bookmark-header { text-align: center; }
+.history-bookmark {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+.history-bookmark.active { color: #e4b84b; }
+.history-bookmark:focus-visible { outline: 2px solid var(--accent); }
+
 .col-time {
   width: 84px;
 }

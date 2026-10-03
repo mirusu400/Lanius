@@ -23,10 +23,14 @@ export interface FlowSummary {
   error: string | null;
   source: string;
   comment: string | null;
+  bookmarked?: boolean;
+  annotation_color?: HistoryColor | null;
   /** True when Match & Replace, Intercept, or a plugin changed the request. */
   modified?: boolean;
   auto_modified?: boolean;
 }
+
+export type HistoryColor = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
 
 export type HistorySortKey = 'started_at' | 'method' | 'host' | 'url' |
   'status_code' | 'modified' | 'response_size' | 'duration_ms';
@@ -226,6 +230,7 @@ export interface LocalCaptureState {
 export type EngineEvent =
   | { type: 'hello'; data: { version: string } }
   | { type: 'flow.request' | 'flow.response' | 'flow.error'; data: FlowSummary }
+  | { type: 'flow.annotation'; data: { id: string; bookmarked: boolean; annotation_color: HistoryColor | null } }
   | { type: 'flows.cleared'; data: Record<string, never> }
   | { type: 'intercept.paused'; data: PausedFlow }
   | { type: 'intercept.resolved'; data: { id: string; action: string } }
@@ -278,6 +283,8 @@ export interface FlowFilters {
   extensions?: string[];
   excludeExtensions?: string[];
   inScopeOnly?: boolean;
+  bookmarkedOnly?: boolean;
+  annotationColor?: HistoryColor;
 }
 
 // --- target / scope (M4) --------------------------------------------------

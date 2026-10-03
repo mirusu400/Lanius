@@ -103,6 +103,7 @@ def test_flow_detail_marks_redaction_state() -> None:
 
 def test_flow_detail_builds_a_url() -> None:
     assert flow_detail(record())["url"] == "https://api.test/users/1?page=1"
+    assert flow_detail(record(port=8443))["url"] == "https://api.test:8443/users/1?page=1"
 
 
 def test_flow_detail_truncates_huge_bodies() -> None:
@@ -121,6 +122,7 @@ async def test_list_tools_exposes_the_expected_surface(store) -> None:
     assert {
         "list_flows",
         "get_flow",
+        "bookmark_flow",
         "list_sites",
         "list_endpoints",
         "get_scope",
@@ -153,6 +155,26 @@ async def test_list_flows_filters(store) -> None:
     assert (await call(server, "list_flows", host="two.test"))["count"] == 1
     assert (await call(server, "list_flows", method="POST"))["count"] == 1
     assert (await call(server, "list_flows", search="users"))["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_bookmark_flow_tool_and_filtered_lookup(store) -> None:
+    store.upsert(record("poc"))
+    store.upsert(record("other"))
+    server = build_server(store)
+    assert await call(server, "bookmark_flow", flow_id="poc", color="red") == {
+        "id": "poc", "bookmarked": True, "annotation_color": "red"
+    }
+    assert (await call(server, "get_flow", flow_id="poc"))["bookmarked"] is True
+    result = await call(server, "list_flows", bookmarked_only=True, annotation_color="red")
+    assert [flow["id"] for flow in result["flows"]] == ["poc"]
+    assert result["flows"][0]["annotation_color"] == "red"
+    assert (await call(server, "bookmark_flow", flow_id="poc", bookmarked=False)) == {
+        "id": "poc", "bookmarked": False, "annotation_color": "red"
+    }
+    assert (await call(server, "list_flows", bookmarked_only=True))["flows"] == []
+    assert "error" in await call(server, "bookmark_flow", flow_id="ghost")
+    assert "error" in await call(server, "bookmark_flow", flow_id="poc", color="pink")
 
 
 @pytest.mark.asyncio
@@ -255,6 +277,20 @@ async def test_scope_tools_against_a_live_engine(live) -> None:
     scope = await call(server, "get_scope")
     assert scope["rules"][0]["host"] == "target.test"
     assert engine.scope.contains("https", "target.test", 443, "/app/x") is True
+
+
+@pytest.mark.asyncio
+async def test_bookmark_flow_updates_live_history(live) -> None:
+    client, server, engine = live
+    client.app.state.store.upsert(record("poc"))
+    queue = engine.broker.subscribe()
+    try:
+        annotation = await call(server, "bookmark_flow", flow_id="poc", color="purple")
+        assert queue.get_nowait() == {"type": "flow.annotation", "data": annotation}
+        item = client.get("/api/flows?bookmarked_only=true").json()["items"][0]
+        assert item["id"] == "poc" and item["annotation_color"] == "purple"
+    finally:
+        engine.broker.unsubscribe(queue)
 
 
 @pytest.mark.asyncio

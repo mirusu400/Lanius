@@ -8,7 +8,7 @@ from .metrics import MIGRATION as METRICS_MIGRATION
 from .endpoint_index import MIGRATION as ENDPOINT_MIGRATION, register_functions
 from .search_index import MIGRATION as SEARCH_MIGRATION, register_functions as register_search_functions
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -159,6 +159,18 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         "CREATE INDEX IF NOT EXISTS idx_issues_status_severity ON issues(status, severity)",
         "CREATE INDEX IF NOT EXISTS idx_issues_host ON issues(host)",
         "CREATE INDEX IF NOT EXISTS idx_issues_last_seen ON issues(last_seen DESC)",
+    ),
+    10: (
+        """CREATE TABLE flow_annotations (
+            flow_id TEXT PRIMARY KEY,
+            bookmarked INTEGER NOT NULL DEFAULT 0 CHECK (bookmarked IN (0, 1)),
+            color TEXT CHECK (color IN ('red', 'orange', 'yellow', 'green', 'blue', 'purple'))
+        )""",
+        "CREATE INDEX idx_flow_annotations_bookmarked ON flow_annotations(bookmarked) WHERE bookmarked = 1",
+        "CREATE INDEX idx_flow_annotations_color ON flow_annotations(color) WHERE color IS NOT NULL",
+        """CREATE TRIGGER flow_annotations_cleanup AFTER DELETE ON flows BEGIN
+            DELETE FROM flow_annotations WHERE flow_id = old.id;
+        END""",
     ),
 }
 

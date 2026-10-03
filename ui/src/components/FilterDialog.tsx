@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from 'react';
 
-import type { FlowFilters } from '../api/types';
+import type { FlowFilters, HistoryColor } from '../api/types';
 import { Dialog } from './Dialog';
 import { useT } from '../i18n';
 
@@ -21,6 +21,7 @@ const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
 /** By class, because 2xx is the useful unit rather than 200 against 201. */
 const STATUS_CLASSES = [2, 3, 4, 5];
+const HISTORY_COLORS: HistoryColor[] = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'];
 
 /** What a capture is mostly made of, and what people mute first. */
 const COMMON_EXTENSIONS = [
@@ -141,6 +142,22 @@ export function FilterDialog({
       }
     >
       <div className="filter-grid">
+        <section>
+          <h5>{t('history.marks')}</h5>
+          <label className="filter-toggle">
+            <input type="checkbox" checked={draft.bookmarkedOnly ?? false}
+              onChange={(event) => set({ bookmarkedOnly: event.target.checked })} />
+            {t('history.bookmarkedOnly')}
+          </label>
+          <label className="filter-toggle">
+            {t('history.highlight')}
+            <select value={draft.annotationColor ?? ''}
+              onChange={(event) => set({ annotationColor: (event.target.value || undefined) as HistoryColor | undefined })}>
+              <option value="">{t('history.anyColor')}</option>
+              {HISTORY_COLORS.map((color) => <option key={color} value={color}>{t(`history.color.${color}`)}</option>)}
+            </select>
+          </label>
+        </section>
         <section>
           <h5>{t('filter.methods')}</h5>
           <div className="filter-checks">
@@ -264,5 +281,7 @@ export function countActive(filters: FlowFilters): number {
     (filters.excludeExtensions?.length ? 1 : 0) +
     (filters.host ? 1 : 0) +
     (filters.inScopeOnly ? 1 : 0)
+    + (filters.bookmarkedOnly ? 1 : 0)
+    + (filters.annotationColor ? 1 : 0)
   );
 }

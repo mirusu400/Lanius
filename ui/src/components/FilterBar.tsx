@@ -48,6 +48,11 @@ export function FilterBar({
           ? t('filter.buttonActive', { count: String(active) })
           : t('filter.button')}
       </button>
+      <button
+        className={filters.bookmarkedOnly ? 'active' : undefined}
+        aria-pressed={Boolean(filters.bookmarkedOnly)}
+        onClick={() => onChange({ ...filters, bookmarkedOnly: !filters.bookmarkedOnly })}
+      >★ {t('history.bookmarkedOnly')}</button>
       <button onClick={onTogglePause}>{paused ? t('common.resume') : t('common.pause')}</button>
       <button onClick={onReload}>{t('common.refresh')}</button>
       <button className="danger" onClick={onClear}>
