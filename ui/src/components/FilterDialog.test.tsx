@@ -51,6 +51,15 @@ describe('FilterDialog', () => {
     expect(onApply.mock.calls[0][0].methods).toEqual(['POST']);
   });
 
+  it('shows a selected method outside the usual list', async () => {
+    const { onApply } = open({ methods: ['PROPFIND'] });
+    const method = within(group(t('filter.methods'))).getByLabelText('PROPFIND');
+    expect(method).toHaveProperty('checked', true);
+    await userEvent.click(method);
+    await userEvent.click(apply());
+    expect(onApply.mock.calls[0][0].methods).toEqual([]);
+  });
+
   it('picks status classes', async () => {
     // 2xx is the useful unit, not 200 against 201.
     const { onApply } = open();

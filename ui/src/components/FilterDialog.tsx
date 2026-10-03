@@ -91,6 +91,7 @@ export function FilterDialog({
   }, [open, filters]);
 
   const methods = draft.methods ?? [];
+  const methodOptions = [...METHODS, ...methods.filter((method) => !METHODS.includes(method))];
   const classes = draft.statusClasses ?? [];
   const setInclude = (boxes: string[], text: string) => {
     setTicked(boxes);
@@ -143,7 +144,7 @@ export function FilterDialog({
         <section>
           <h5>{t('filter.methods')}</h5>
           <div className="filter-checks">
-            {METHODS.map((method) => (
+            {methodOptions.map((method) => (
               <label key={method}>
                 <input
                   type="checkbox"

@@ -195,6 +195,15 @@ describe('DashboardTab', () => {
     expect(onOpenTab).toHaveBeenCalledWith('Target');
   });
 
+  it('opens the selected method from its dashboard button', async () => {
+    payload = populated;
+    const onOpenMethod = vi.fn();
+    render(<DashboardTab onOpenMethod={onOpenMethod} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'POST 7' }));
+    expect(onOpenMethod).toHaveBeenCalledWith('POST');
+  });
+
   it('survives an engine that is not up yet', async () => {
     vi.stubGlobal(
       'fetch',
@@ -386,6 +395,48 @@ describe('title bar', () => {
     expect(table.scrollTop).toBe(40);
     await user.click(screen.getByRole('button', { name: t('filter.buttonActive', { count: '1' }) }));
     expect(screen.getByRole('textbox', { name: t('filter.host') })).toHaveProperty('value', 'example.test');
+  });
+
+  it('opens HTTP History filtered to a dashboard method', async () => {
+    payload = populated;
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Proxy' }));
+
+    const search = await screen.findByPlaceholderText(t('proxy.searchPlaceholder'));
+    await user.type(search, 'old');
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) =>
+      String(url).includes('search=old')
+    )).toBe(true));
+    const page = screen.getByRole('spinbutton', { name: t('proxy.historyPageLabel') });
+    await user.clear(page);
+    await user.type(page, '3');
+    await user.click(screen.getByRole('button', { name: t('proxy.jumpToPage') }));
+    await user.click(screen.getByRole('button', { name: t('proxy.intercept') }));
+    await user.click(screen.getByRole('button', { name: t('dash.title') }));
+
+    await user.click(await screen.findByRole('button', { name: 'POST 7' }));
+    expect(screen.getByRole('button', { name: t('proxy.history') }).className).toBe('active');
+    expect(screen.getByPlaceholderText(t('proxy.searchPlaceholder'))).toHaveProperty('value', '');
+    expect(screen.getByRole('spinbutton', { name: t('proxy.historyPageLabel') })).toHaveProperty('value', '1');
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => {
+      const parsed = new URL(String(url));
+      return parsed.pathname === '/api/flows'
+        && parsed.searchParams.get('methods') === 'POST'
+        && !parsed.searchParams.has('offset')
+        && !parsed.searchParams.has('cursor')
+        && !parsed.searchParams.has('search');
+    })).toBe(true));
+    await user.click(screen.getByRole('button', { name: t('filter.buttonActive', { count: '1' }) }));
+    expect(screen.getByLabelText('POST')).toHaveProperty('checked', true);
+    await user.click(screen.getByRole('button', { name: t('filter.apply') }));
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'new');
+    await user.click(screen.getByRole('button', { name: t('dash.title') }));
+    await user.click(screen.getByRole('button', { name: 'Proxy' }));
+    expect(screen.getByPlaceholderText(t('proxy.searchPlaceholder'))).toHaveProperty('value', 'new');
+    await user.click(screen.getByRole('button', { name: t('dash.title') }));
+    await user.click(await screen.findByRole('button', { name: 'POST 7' }));
+    expect(screen.getByPlaceholderText(t('proxy.searchPlaceholder'))).toHaveProperty('value', '');
   });
 
   it('starts on the dashboard', async () => {

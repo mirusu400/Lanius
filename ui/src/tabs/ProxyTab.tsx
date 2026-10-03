@@ -53,7 +53,7 @@ const DEFAULT_RULES: InterceptRules = {
 
 type View = 'intercept' | 'history' | 'websockets';
 
-export function ProxyTab() {
+export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { method: string } | null }) {
   const t = useT();
   const [view, setView] = useState<View>('history');
   const [flows, setFlows] = useState<FlowSummary[]>([]);
@@ -71,6 +71,7 @@ export function ProxyTab() {
   const [selected, setSelected] = useState<string | null>(getSelectedFlow);
   useEffect(() => subscribeSelection(setSelected), []);
   const [filters, setFilters] = useState<FlowFilters>({});
+  const appliedMethodRequest = useRef<typeof methodFilterRequest>(null);
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const codegen = useCodegenMenu();
   const [filterOpen, setFilterOpen] = useState(false);
@@ -153,6 +154,23 @@ export function ProxyTab() {
     const timer = window.setTimeout(() => void reload(), 300);
     return () => window.clearTimeout(timer);
   }, [filters, historyPage, reload]);
+
+  useEffect(() => {
+    if (!methodFilterRequest || methodFilterRequest === appliedMethodRequest.current) return;
+    appliedMethodRequest.current = methodFilterRequest;
+    const nextFilters = { methods: [methodFilterRequest.method] };
+    requestGeneration.current += 1;
+    filtersRef.current = nextFilters;
+    historyAnchor.current = undefined;
+    historyCursors.current = {};
+    setNextHistoryCursor(null);
+    setHistoryPage(0);
+    setHistoryPageInput('1');
+    setFlows([]);
+    setFilters(nextFilters);
+    setFilterOpen(false);
+    setView('history');
+  }, [methodFilterRequest]);
 
   useEffect(() => setHistoryPageInput(String(historyPage + 1)), [historyPage]);
 

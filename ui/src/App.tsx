@@ -118,6 +118,7 @@ export default function App() {
 function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: () => Promise<void> }) {
   const t = useT();
   const [tab, setTab] = useState<Tab>("Dashboard");
+  const [historyMethodRequest, setHistoryMethodRequest] = useState<{ method: string } | null>(null);
   const [tabOrder, setTabOrder] = useState<Tab[]>(loadTabOrder);
   const [scannerAvailable, setScannerAvailable] = useState(false);
   const [draggedTab, setDraggedTab] = useState<Tab | null>(null);
@@ -340,10 +341,16 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
           {/* Keep the history's filters, page, selection details and scroll position
               when another workspace tab is opened. Hidden effects are paused. */}
           <Activity mode={tab === "Proxy" ? "visible" : "hidden"}>
-            <ProxyTab />
+            <ProxyTab methodFilterRequest={historyMethodRequest} />
           </Activity>
           {tab === "Proxy" ? null : tab === "Dashboard" ? (
-            <DashboardTab onOpenTab={(next) => setTab(next as Tab)} />
+            <DashboardTab
+              onOpenTab={(next) => setTab(next as Tab)}
+              onOpenMethod={(method) => {
+                setHistoryMethodRequest({ method });
+                setTab('Proxy');
+              }}
+            />
           ) : tab === "Target" ? (
             <TargetTab />
           ) : tab === "Issues" ? (

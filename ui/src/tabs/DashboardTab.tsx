@@ -17,7 +17,13 @@ import {
 /** Live traffic keeps arriving, so refreshes are coalesced into one call. */
 const REFRESH_MS = 1000;
 
-export function DashboardTab({ onOpenTab }: { onOpenTab?: (tab: string) => void }) {
+export function DashboardTab({
+  onOpenTab,
+  onOpenMethod,
+}: {
+  onOpenTab?: (tab: string) => void;
+  onOpenMethod?: (method: string) => void;
+}) {
   const t = useT();
   const [data, setData] = useState<Dashboard | null>(null);
   const pending = useRef(false);
@@ -201,8 +207,15 @@ export function DashboardTab({ onOpenTab }: { onOpenTab?: (tab: string) => void 
               <ul className="dash-chips">
                 {data.methods.map((m) => (
                   <li key={m.method}>
-                    <span className="dash-chip-name">{m.method}</span>
-                    <span className="dash-chip-count">{m.count}</span>
+                    <button
+                      type="button"
+                      className="dash-chip"
+                      aria-label={`${m.method} ${m.count}`}
+                      onClick={() => onOpenMethod?.(m.method)}
+                    >
+                      <span className="dash-chip-name">{m.method}</span>
+                      <span className="dash-chip-count">{m.count}</span>
+                    </button>
                   </li>
                 ))}
               </ul>
