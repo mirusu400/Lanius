@@ -116,3 +116,28 @@ export function editsFromText(
 export function renderPaused(flow: PausedFlow): string {
   return flow.phase === 'request' ? renderRequest(flow) : renderResponse(flow);
 }
+
+export function renderPausedVariant(
+  flow: PausedFlow, stage: 'original' | 'auto_modified',
+): string {
+  if (flow.phase === 'request') {
+    const variant = flow.request_variants?.[stage];
+    return variant ? renderRequest({
+      ...flow,
+      method: variant.method,
+      path: variant.path,
+      http_version: variant.http_version,
+      request_headers: variant.headers,
+      request_body: variant.body,
+    }) : renderPaused(flow);
+  }
+  const variant = flow.response_variants?.[stage];
+  return variant ? renderResponse({
+    ...flow,
+    http_version: variant.http_version,
+    status_code: variant.status_code,
+    reason: variant.reason,
+    response_headers: variant.headers,
+    response_body: variant.body,
+  }) : renderPaused(flow);
+}

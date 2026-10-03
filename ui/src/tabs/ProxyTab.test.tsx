@@ -2,7 +2,7 @@
  * Renders the real ProxyTab against a mocked engine (fetch + WebSocket) and
  * asserts the live history table and detail pane behave as expected.
  */
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import { useI18n, type Locale } from '../i18n';
 import userEvent from '@testing-library/user-event';
@@ -160,6 +160,29 @@ describe('ProxyTab', () => {
     render(<ProxyTab />);
     expect(await screen.findByText('seeded.test')).toBeTruthy();
     expect(screen.getByText('/seeded')).toBeTruthy();
+  });
+
+  it('keeps an intercept draft when switching between Proxy subtabs', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    MockSocket.instances[0].emit('intercept.paused', {
+      id: 'held-1', phase: 'request', method: 'GET', scheme: 'http',
+      host: 'example.com', port: 80, path: '/before', http_version: 'HTTP/1.1',
+      request_headers: [['Host', 'example.com']], request_body: '',
+    });
+    MockSocket.instances[0].emit('intercept.paused', {
+      id: 'held-2', phase: 'request', method: 'GET', scheme: 'http',
+      host: 'example.com', port: 80, path: '/second', http_version: 'HTTP/1.1',
+      request_headers: [['Host', 'example.com']], request_body: '',
+    });
+    await user.click(screen.getByRole('button', { name: new RegExp(t('proxy.intercept')) }));
+    await user.click(within(screen.getByLabelText(t('intercept.queueLabel'))).getByRole('button', { name: /second/ }));
+    const editor = document.querySelector('textarea.intercept-editor') as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: 'POST /after HTTP/1.1\r\nHost: example.com\r\n\r\n' } });
+    await user.click(screen.getByRole('button', { name: t('proxy.history') }));
+    await user.click(screen.getByRole('button', { name: new RegExp(t('proxy.intercept')) }));
+    expect((document.querySelector('textarea.intercept-editor') as HTMLTextAreaElement).value).toContain('/after');
   });
 
   it('requests a full-history sort when a column header is clicked', async () => {

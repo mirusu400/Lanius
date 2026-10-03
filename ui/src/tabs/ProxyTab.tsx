@@ -79,6 +79,10 @@ export function ProxyTab() {
   const [error, setError] = useState<Message | null>(null);
   const [rules, setRules] = useState<InterceptRules>(DEFAULT_RULES);
   const [queue, setQueue] = useState<PausedFlow[]>([]);
+  // The Intercept panel unmounts when switching Proxy subtabs; keep edits
+  // here so returning to a held message does not discard its draft.
+  const [interceptDrafts, setInterceptDrafts] = useState<Record<string, string>>({});
+  const [interceptSelectedId, setInterceptSelectedId] = useState<string | null>(null);
 
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
@@ -219,6 +223,9 @@ export function ProxyTab() {
               return;
             case 'intercept.resolved':
               setQueue((prev) => prev.filter((p) => p.id !== event.data.id));
+              setInterceptDrafts((prev) => Object.fromEntries(
+                Object.entries(prev).filter(([key]) => !key.startsWith(`${event.data.id}:`)),
+              ));
               return;
             case 'flow.request':
             case 'flow.response':
@@ -372,6 +379,10 @@ export function ProxyTab() {
           paused={queue}
           onToggle={onToggleIntercept}
           onResolved={onResolved}
+          drafts={interceptDrafts}
+          onDraftsChange={setInterceptDrafts}
+          selectedId={interceptSelectedId}
+          onSelectedChange={setInterceptSelectedId}
         />
       ) : view === 'websockets' ? (
         <WebSocketPanel />

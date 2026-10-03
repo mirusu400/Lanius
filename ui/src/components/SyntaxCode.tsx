@@ -67,12 +67,14 @@ function messageHtml(text: string, headers: SyntaxHeaders, responsePath?: string
 }
 
 /** An editable raw message with inert syntax colours behind the textarea. */
-export function HighlightedEditor({ text, onChange, headers, responsePath, className }: {
+export function HighlightedEditor({ text, onChange, headers, responsePath, className, readOnly = false, label }: {
   text: string;
   onChange: (text: string) => void;
   headers: SyntaxHeaders;
   responsePath?: string | null;
   className: string;
+  readOnly?: boolean;
+  label?: string;
 }) {
   const highlight = useMemo(() => messageHtml(text, headers, responsePath), [text, headers, responsePath]);
   const overlay = useRef<HTMLPreElement>(null);
@@ -81,6 +83,8 @@ export function HighlightedEditor({ text, onChange, headers, responsePath, class
     <textarea
       className={className}
       value={text}
+      aria-label={label}
+      readOnly={readOnly}
       wrap="soft"
       spellCheck={false}
       onChange={(event) => onChange(event.target.value)}

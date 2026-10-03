@@ -14,8 +14,18 @@ from mitmproxy import http
 
 from .. import charset
 from ..content_encoding import auto_decompress_enabled, body_for_display
-from ..db.store import FlowStore
+from ..db.store import FlowStore, RequestSnapshot
 from ..events import EventBroker
+from ..request_history import (
+    AUTO_MODIFIED as REQUEST_AUTO_MODIFIED,
+    ORIGINAL as REQUEST_ORIGINAL,
+    snapshot as request_snapshot,
+)
+from ..response_history import (
+    AUTO_MODIFIED as RESPONSE_AUTO_MODIFIED,
+    ORIGINAL as RESPONSE_ORIGINAL,
+    snapshot as response_snapshot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +89,23 @@ def paused_payload(
             req.headers.get("content-type"), request_body
         ),
     }
+    if phase == "request":
+        original = flow.metadata.get(REQUEST_ORIGINAL)
+        automatic = flow.metadata.get(REQUEST_AUTO_MODIFIED)
+        current = request_snapshot(req)
+        if not isinstance(original, dict):
+            original = current
+        if not isinstance(automatic, dict):
+            automatic = current
+        if original != current or automatic != current:
+            payload["request_variants"] = {
+                "original": RequestSnapshot.from_mapping(original).detail(
+                    auto_decompress=auto_decompress
+                ),
+                "auto_modified": RequestSnapshot.from_mapping(automatic).detail(
+                    auto_decompress=auto_decompress
+                ),
+            }
     if flow.response is not None:
         resp = flow.response
         response_body, _, _, _ = body_for_display(
@@ -97,7 +124,37 @@ def paused_payload(
                 resp.headers.get("content-type"), response_body
             ),
         )
+        if phase == "response":
+            original = flow.metadata.get(RESPONSE_ORIGINAL)
+            automatic = flow.metadata.get(RESPONSE_AUTO_MODIFIED)
+            current = response_snapshot(resp)
+            if not isinstance(original, dict):
+                original = current
+            if not isinstance(automatic, dict):
+                automatic = current
+            if original != current or automatic != current:
+                payload["response_variants"] = {
+                    "original": _response_variant(original, auto_decompress),
+                    "auto_modified": _response_variant(automatic, auto_decompress),
+                }
     return payload
+
+
+def _response_variant(value: dict[str, Any], auto_decompress: bool) -> dict[str, Any]:
+    headers = [tuple(item) for item in value.get("headers", [])]
+    shown, _, _, _ = body_for_display(
+        headers, bytes(value.get("body") or b""), enabled=auto_decompress
+    )
+    content_type = next(
+        (entry for name, entry in headers if name.lower() == "content-type"), None
+    )
+    return {
+        "http_version": str(value.get("http_version") or "HTTP/1.1"),
+        "status_code": int(value.get("status_code") or 0),
+        "reason": str(value.get("reason") or ""),
+        "headers": headers,
+        "body": charset.decode_body(content_type, shown),
+    }
 
 
 class InterceptAddon:

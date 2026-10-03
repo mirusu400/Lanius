@@ -2293,6 +2293,29 @@ pre.body {
   overflow: auto;
 }
 
+.intercept-versions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 5px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.intercept-versions button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.intercept-versions button.active {
+  background: var(--accent-dim);
+  color: var(--fg);
+}
+
+.intercept-dirty { color: var(--accent); }
+
 .highlight-editor {
   position: relative;
   display: flex;

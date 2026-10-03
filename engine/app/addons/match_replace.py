@@ -16,6 +16,12 @@ from .. import charset
 from ..db.store import FlowStore
 from ..events import EventBroker
 from ..request_history import remember_auto_modified, remember_original
+from ..response_history import (
+    AUTO_MODIFIED as RESPONSE_AUTO_MODIFIED,
+    ORIGINAL as RESPONSE_ORIGINAL,
+    remember_auto_modified as remember_response_auto_modified,
+    remember_original as remember_response_original,
+)
 
 Phase = Literal["request", "response"]
 Target = Literal["url", "headers", "body", "message"]
@@ -128,7 +134,20 @@ class MatchReplaceAddon:
             remember_auto_modified(flow)
 
     def response(self, flow: http.HTTPFlow) -> None:
-        self._apply(flow, "response")
+        if flow.response is None or not any(
+            rule.enabled and rule.phase == "response" for rule in self.rules
+        ):
+            self._apply(flow, "response")
+            return
+        remember_response_original(flow)
+        try:
+            self._apply(flow, "response")
+        finally:
+            remember_response_auto_modified(flow)
+            if flow.metadata.get(RESPONSE_ORIGINAL) == flow.metadata.get(RESPONSE_AUTO_MODIFIED):
+                # Most responses do not match a rule. Keep their bodies once.
+                flow.metadata.pop(RESPONSE_ORIGINAL, None)
+                flow.metadata.pop(RESPONSE_AUTO_MODIFIED, None)
 
     def _apply(self, flow: http.HTTPFlow, phase: Phase) -> None:
         apply_rules(flow, phase, self.rules)

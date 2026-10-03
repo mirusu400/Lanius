@@ -8,6 +8,7 @@ from mitmproxy.test import tflow, tutils
 from app.addons.match_replace import MatchReplaceAddon, MatchReplaceError, preview
 from app.db.store import FlowStore
 from app.events import EventBroker
+from app.response_history import AUTO_MODIFIED as RESPONSE_AUTO_MODIFIED, ORIGINAL as RESPONSE_ORIGINAL
 
 
 @pytest.fixture()
@@ -39,6 +40,8 @@ def test_response_regex_can_be_case_insensitive(addon) -> None:
     flow = tflow.tflow(resp=tutils.tresp(content=b"token-123"))
     addon.response(flow)
     assert flow.response.content == b"redacted"
+    assert flow.metadata[RESPONSE_ORIGINAL]["body"] == b"token-123"
+    assert flow.metadata[RESPONSE_AUTO_MODIFIED]["body"] == b"redacted"
 
 
 def test_rules_persist(addon) -> None:

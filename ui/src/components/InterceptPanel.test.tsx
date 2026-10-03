@@ -1,5 +1,5 @@
 /** Renders the real InterceptPanel and asserts the edit/forward/drop flow. */
-import {cleanup, screen, waitFor, within } from '@testing-library/react';
+import {cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -169,6 +169,108 @@ describe('InterceptPanel', () => {
     // Responses are in the queue too, and marked as such.
     await user.click(within(queue).getByRole('button', { name: /third/ }));
     await waitFor(() => expect(editorEl().value).toContain('500'));
+  });
+
+  it('keeps a separate edited draft for each held message', async () => {
+    const user = userEvent.setup();
+    const second: PausedFlow = { ...pausedFlow, id: 'p2', path: '/second' };
+    render(<InterceptPanel rules={rules} paused={[pausedFlow, second]}
+      onToggle={() => {}} onResolved={() => {}} />);
+    fireEvent.change(editorEl(), { target: { value: 'POST /first HTTP/1.1\r\nHost: example.com\r\n\r\nfirst' } });
+    const queue = screen.getByLabelText(t('intercept.queueLabel'));
+    await user.click(within(queue).getByRole('button', { name: /second/ }));
+    fireEvent.change(editorEl(), { target: { value: 'POST /second HTTP/1.1\r\nHost: example.com\r\n\r\nsecond' } });
+    await user.click(within(queue).getByRole('button', { name: /original/ }));
+    expect(editorEl().value).toContain('/first');
+    await user.click(within(queue).getByRole('button', { name: /second/ }));
+    expect(editorEl().value).toContain('second');
+  });
+
+  it('shows original and automatic versions read-only while forwarding the edited draft', async () => {
+    const user = userEvent.setup();
+    const flow: PausedFlow = {
+      ...pausedFlow, path: '/automatic',
+      request_variants: {
+        original: { method: 'GET', scheme: 'http', host: 'example.com', port: 80,
+          path: '/original', http_version: 'HTTP/1.1', headers: [['Host', 'example.com']],
+          body: '', charset: 'utf-8', content_encoding: null, body_decoded: false, decode_error: null },
+        auto_modified: { method: 'GET', scheme: 'http', host: 'example.com', port: 80,
+          path: '/automatic', http_version: 'HTTP/1.1', headers: [['Host', 'example.com']],
+          body: '', charset: 'utf-8', content_encoding: null, body_decoded: false, decode_error: null },
+      },
+    };
+    render(<InterceptPanel rules={rules} paused={[flow]}
+      onToggle={() => {}} onResolved={() => {}} />);
+    expect(editorEl().value).toContain('/automatic');
+    fireEvent.change(editorEl(), { target: { value: 'POST /manual HTTP/1.1\r\nHost: example.com\r\n\r\n' } });
+    await user.click(screen.getByRole('tab', { name: t('intercept.view.original') }));
+    expect(editorEl().value).toContain('/original');
+    expect(editorEl().readOnly).toBe(true);
+    await user.click(screen.getByRole('tab', { name: t('intercept.view.auto_modified') }));
+    expect(editorEl().value).toContain('/automatic');
+    expect(editorEl().readOnly).toBe(true);
+    await user.click(screen.getByRole('tab', { name: /Modified|수정본/ }));
+    expect(editorEl().value).toContain('/manual');
+    expect(editorEl().readOnly).toBe(false);
+    await user.click(screen.getByRole('tab', { name: t('intercept.view.original') }));
+    await user.click(screen.getByRole('button', { name: t('intercept.forward') }));
+    await waitFor(() => expect(calls.some((call) => call.url.endsWith('/p1/forward'))).toBe(true));
+    const body = JSON.parse(String(calls.find((call) => call.url.endsWith('/p1/forward'))?.init?.body));
+    expect(body.method).toBe('POST');
+    expect(body.path).toBe('/manual');
+  });
+
+  it('shows response versions before and after automatic changes', async () => {
+    const user = userEvent.setup();
+    const flow: PausedFlow = {
+      ...pausedFlow, phase: 'response', status_code: 418, reason: 'Teapot',
+      response_headers: [['Content-Type', 'text/plain']], response_body: 'automatic',
+      response_variants: {
+        original: { http_version: 'HTTP/1.1', status_code: 200, reason: 'OK',
+          headers: [['Content-Type', 'text/plain']], body: 'original' },
+        auto_modified: { http_version: 'HTTP/1.1', status_code: 418, reason: 'Teapot',
+          headers: [['Content-Type', 'text/plain']], body: 'automatic' },
+      },
+    };
+    render(<InterceptPanel rules={rules} paused={[flow]}
+      onToggle={() => {}} onResolved={() => {}} />);
+    await user.click(screen.getByRole('tab', { name: t('intercept.view.original') }));
+    expect(editorEl().value).toContain('200 OK');
+    expect(editorEl().value).toContain('original');
+    await user.click(screen.getByRole('tab', { name: t('intercept.view.auto_modified') }));
+    expect(editorEl().value).toContain('418 Teapot');
+    expect(editorEl().value).toContain('automatic');
+  });
+
+  it('forwards a draft before turning interception off', async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    render(<InterceptPanel rules={rules} paused={[pausedFlow]}
+      onToggle={onToggle} onResolved={() => {}} />);
+    fireEvent.change(editorEl(), { target: { value: 'POST /edited HTTP/1.1\r\nHost: example.com\r\n\r\n' } });
+    await user.click(screen.getByRole('button', { name: t('intercept.on') }));
+    await waitFor(() => expect(onToggle).toHaveBeenCalledWith({ enabled: false }));
+    expect(JSON.parse(String(calls.find((call) => call.url.endsWith('/p1/forward'))?.init?.body)).path).toBe('/edited');
+  });
+
+  it('forwards every held draft and validates all drafts before releasing any', async () => {
+    const user = userEvent.setup();
+    const second: PausedFlow = { ...pausedFlow, id: 'p2', path: '/second' };
+    render(<InterceptPanel rules={rules} paused={[pausedFlow, second]}
+      onToggle={() => {}} onResolved={() => {}} />);
+    const queue = screen.getByLabelText(t('intercept.queueLabel'));
+    fireEvent.change(editorEl(), { target: { value: 'POST /first HTTP/1.1\r\nHost: example.com\r\n\r\n' } });
+    await user.click(within(queue).getByRole('button', { name: /second/ }));
+    fireEvent.change(editorEl(), { target: { value: 'INVALID' } });
+    await user.click(screen.getByRole('button', { name: t('intercept.forwardAll') }));
+    expect(await screen.findByText(t('parse.badRequestLine'))).toBeTruthy();
+    expect(calls.some((call) => call.url.includes('/forward'))).toBe(false);
+    fireEvent.change(editorEl(), { target: { value: 'POST /second HTTP/1.1\r\nHost: example.com\r\n\r\n' } });
+    await user.click(screen.getByRole('button', { name: t('intercept.forwardAll') }));
+    await waitFor(() => expect(calls.filter((call) => call.url.endsWith('/forward'))).toHaveLength(2));
+    expect(calls.some((call) => call.url.endsWith('/forward-all'))).toBe(false);
+    expect(JSON.parse(String(calls.find((call) => call.url.endsWith('/p1/forward'))?.init?.body)).path).toBe('/first');
+    expect(JSON.parse(String(calls.find((call) => call.url.endsWith('/p2/forward'))?.init?.body)).path).toBe('/second');
   });
 
   it('moves through the queue with arrow keys and highlights editable HTTP', async () => {

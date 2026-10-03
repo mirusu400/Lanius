@@ -105,6 +105,22 @@ export interface PausedFlow {
   reason?: string;
   response_headers?: [string, string][];
   response_body?: string;
+  request_variants?: {
+    original: RequestVariant;
+    auto_modified: RequestVariant;
+  };
+  response_variants?: {
+    original: PausedResponseVariant;
+    auto_modified: PausedResponseVariant;
+  };
+}
+
+export interface PausedResponseVariant {
+  http_version: string;
+  status_code: number;
+  reason: string;
+  headers: [string, string][];
+  body: string;
 }
 
 export interface FlowEdits {

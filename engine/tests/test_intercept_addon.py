@@ -12,6 +12,11 @@ from app.addons.intercept import (
     apply_edits,
 )
 from app.events import EventBroker
+from app.request_history import remember_auto_modified, remember_original
+from app.response_history import (
+    remember_auto_modified as remember_response_auto_modified,
+    remember_original as remember_response_original,
+)
 
 
 def make_flow(host: str = "example.com", with_response: bool = False):
@@ -39,6 +44,35 @@ def test_enabled_pauses_request() -> None:
     a.request(flow)
     assert flow.intercepted
     assert flow.id in a.paused
+
+
+def test_paused_request_includes_original_and_automatic_versions() -> None:
+    flow = make_flow()
+    remember_original(flow)
+    flow.request.path = "/automatic"
+    remember_auto_modified(flow)
+    a = addon(enabled=True)
+    a.request(flow)
+    variants = a.list_paused()[0]["request_variants"]
+    assert variants["original"]["path"] == "/a"
+    assert variants["auto_modified"]["path"] == "/automatic"
+    assert a.list_paused()[0]["path"] == "/automatic"
+
+
+def test_paused_response_includes_original_and_automatic_versions() -> None:
+    flow = make_flow(with_response=True)
+    remember_response_original(flow)
+    assert flow.response is not None
+    flow.response.status_code = 418
+    flow.response.content = b"automatic"
+    remember_response_auto_modified(flow)
+    a = addon(enabled=True, intercept_requests=False, intercept_responses=True)
+    a.response(flow)
+    variants = a.list_paused()[0]["response_variants"]
+    assert variants["original"]["body"] == "orig"
+    assert variants["auto_modified"]["body"] == "automatic"
+    assert variants["original"]["status_code"] != 418
+    assert variants["auto_modified"]["status_code"] == 418
 
 
 def test_host_filter_limits_pausing() -> None:
