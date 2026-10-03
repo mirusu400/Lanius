@@ -61,7 +61,7 @@ from ..addons.scope import ScopeError, rule_from_url
 from .. import browser
 from ..config import Settings
 from ..content_encoding import AUTO_DECOMPRESS_SETTING, auto_decompress_enabled
-from ..db.store import FlowStore
+from ..db.store import ANNOTATION_COLORS, FlowStore
 from ..events import EventBroker
 from ..processes import list_processes
 from ..proxy import ProxyEngine, ProxyStartError, local_capture_state
@@ -627,7 +627,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         }
         if include_flows:
             flows = await asyncio.to_thread(lambda: store.list(limit=100000))
-            data["flows"] = [flow.detail() for flow in flows]
+            annotations = await asyncio.to_thread(store.all_annotations)
+            data["flows"] = [
+                {**flow.detail(), **annotations.get(flow.id, {})} for flow in flows
+            ]
         return data
 
     @app.get("/api/project/backup")
@@ -987,6 +990,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         extensions: list[str] | None = Query(None),
         exclude_extensions: list[str] | None = Query(None),
         in_scope_only: bool = False,
+        bookmarked_only: bool = False,
+        annotation_color: str | None = None,
     ) -> dict[str, Any]:
         try:
             page = await asyncio.to_thread(
@@ -1008,6 +1013,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_classes=status_classes,
                 extensions=extensions,
                 exclude_extensions=exclude_extensions,
+                bookmarked_only=bookmarked_only,
+                annotation_color=annotation_color,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -1019,6 +1026,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if record is None:
             raise HTTPException(status_code=404, detail="flow not found")
         data = record.detail(auto_decompress=auto_decompress_enabled(store))
+        annotation = await asyncio.to_thread(store.get_annotation, flow_id)
+        data.update(annotation or {})
         data["request_headers"] = redact_headers(
             record.request_headers, reveal=reveal
         )
@@ -1033,6 +1042,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         variant.get("headers"), reveal=reveal
                     )
         return data
+
+    @app.patch("/api/flows/{flow_id}/annotation")
+    async def patch_flow_annotation(flow_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        allowed = {"bookmarked", "annotation_color"}
+        if not payload or payload.keys() - allowed:
+            raise HTTPException(status_code=422, detail="provide bookmarked or annotation_color")
+        if "bookmarked" in payload and not isinstance(payload["bookmarked"], bool):
+            raise HTTPException(status_code=422, detail="bookmarked must be a boolean")
+        if "annotation_color" in payload:
+            color = payload["annotation_color"]
+            if color is not None and (not isinstance(color, str) or color not in ANNOTATION_COLORS):
+                raise HTTPException(status_code=422, detail="invalid annotation color")
+        annotation = await asyncio.to_thread(store.patch_annotation, flow_id, payload)
+        if annotation is None:
+            raise HTTPException(status_code=404, detail="flow not found")
+        broker.publish("flow.annotation", annotation)
+        return annotation
 
     @app.get("/api/flows/{flow_id}/body/{side}")
     async def get_flow_body(flow_id: str, side: str) -> Response:

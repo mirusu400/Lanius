@@ -26,6 +26,16 @@ function group(heading: string): HTMLElement {
 }
 
 describe('FilterDialog', () => {
+  it('applies bookmark and highlight filters together', async () => {
+    const { onApply } = open();
+    const marks = group(t('history.marks'));
+    await userEvent.click(within(marks).getByLabelText(t('history.bookmarkedOnly')));
+    await userEvent.selectOptions(within(marks).getByLabelText(t('history.highlight')), 'green');
+    await userEvent.click(apply());
+    expect(onApply.mock.calls[0][0]).toMatchObject({
+      bookmarkedOnly: true, annotationColor: 'green',
+    });
+  });
   it('opens as a dialog', () => {
     open();
     expect(screen.getByRole('dialog')).toBeTruthy();

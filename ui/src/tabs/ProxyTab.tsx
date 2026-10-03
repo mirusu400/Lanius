@@ -7,6 +7,7 @@ import {
   getInterceptState,
   getStatus,
   listFlowPage,
+  patchFlowAnnotation,
   patchInterceptRules,
 } from '../api/client';
 import { connectStream, type ConnectionState } from '../api/stream';
@@ -15,6 +16,7 @@ import type {
   FlowDetail,
   FlowFilters,
   FlowSummary,
+  HistoryColor,
   HistorySortKey,
   InterceptRules,
   PausedFlow,
@@ -245,6 +247,11 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                 Object.entries(prev).filter(([key]) => !key.startsWith(`${event.data.id}:`)),
               ));
               return;
+            case 'flow.annotation':
+              setFlows((prev) => prev.map((item) => item.id === event.data.id
+                ? { ...item, ...event.data } : item));
+              if (filtersRef.current.bookmarkedOnly || filtersRef.current.annotationColor) void reload();
+              return;
             case 'flow.request':
             case 'flow.response':
             case 'flow.error': {
@@ -266,20 +273,22 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                 scopeReloadTimer.current = window.setTimeout(() => void reload(), 500);
                 return;
               }
+              const existing = flowsRef.current.find((item) => item.id === flow.id);
+              const current = existing ? { ...existing, ...flow } : flow;
               if (historyPageRef.current === 0
-                && matchesFilters(flow, filtersRef.current)
+                && matchesFilters(current, filtersRef.current)
                 && flowsRef.current.length >= 200
                 && !flowsRef.current.some((item) => item.id === flow.id)) {
                 setHasMoreHistory(true);
               }
               setFlows((prev) => {
-                if (!matchesFilters(flow, filtersRef.current)) {
+                if (!matchesFilters(current, filtersRef.current)) {
                   return prev.filter((item) => item.id !== flow.id);
                 }
                 if (historyPageRef.current > 0 && !prev.some((item) => item.id === flow.id)) {
                   return prev;
                 }
-                return mergeFlow(prev, flow, 200);
+                return mergeFlow(prev, current, 200);
               });
               return;
             }
@@ -329,6 +338,18 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
     },
     [],
   );
+
+  const updateAnnotation = useCallback(async (
+    flow: FlowSummary, changes: { bookmarked?: boolean; annotation_color?: HistoryColor | null },
+  ) => {
+    try {
+      const annotation = await patchFlowAnnotation(flow.id, changes);
+      setFlows((prev) => prev.map((item) => item.id === flow.id ? { ...item, ...annotation } : item));
+      if (filtersRef.current.bookmarkedOnly || filtersRef.current.annotationColor) void reload();
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    }
+  }, [reload]);
 
   const onClear = useCallback(async () => {
     await clearFlows();
@@ -440,6 +461,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                 sortBy={historySort.key}
                 sortDesc={historySort.desc}
                 onSort={onSortHistory}
+                onToggleBookmark={(flow) => void updateAnnotation(flow, { bookmarked: !flow.bookmarked })}
               />
             }
             second={<FlowDetailView flow={selectedFlow} searchQuery={filters.search || ''} />}
@@ -503,6 +525,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                       void navigator.clipboard?.writeText(text);
                     },
                     deleteFlow: (flow) => setPendingDelete(flow),
+                    toggleBookmark: (flow) => void updateAnnotation(flow, { bookmarked: !flow.bookmarked }),
+                    setColor: (flow, color) => void updateAnnotation(flow, { annotation_color: color }),
                   },
                   // A stored flow is rendered from its id, so the engine
                   // uses the headers and body it actually captured.

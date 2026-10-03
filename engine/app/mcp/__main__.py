@@ -1,7 +1,8 @@
 """Run the Lanius MCP server over stdio.
 
-Read-only by default: it reads the project database directly, so it can run
-alongside (or without) the GUI engine.
+It opens the project database directly, so it can run alongside (or without)
+the GUI engine. The embedded HTTP MCP endpoint publishes live History updates;
+stdio clients can refresh History after changing a bookmark.
 
     python -m app.mcp            # stdio server for an MCP client
 """

@@ -489,7 +489,7 @@ trust.
 
 Lanius speaks [MCP](https://modelcontextprotocol.io/), so a coding agent can
 browse your captured traffic, manage scope, hold and edit intercepted
-requests, and replay them.
+requests, replay them, and bookmark useful PoC flows.
 
 ```jsonc
 {
@@ -507,6 +507,12 @@ While the app is running you can also connect over HTTP, which additionally
 exposes the interception and replay tools. **Settings > AI agents** shows the
 endpoint, lists every tool with whether it only reads or actually acts, and
 has a configuration you can copy straight into your client.
+
+For a PoC workflow, call `send_request` or `replay_flow`, then pass its returned
+`id` to `bookmark_flow` (optionally with `color: "red"`). Requests sent by a
+different client through the proxy can be found with `list_flows` first. The
+tool updates HTTP History immediately over the built-in HTTP MCP connection;
+`list_flows` can also filter with `bookmarked_only` and `annotation_color`.
 
 Secrets are redacted in every response unless the agent explicitly asks for
 them, so tokens do not leak into a transcript by accident.

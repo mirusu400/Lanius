@@ -5,7 +5,7 @@
  */
 
 import type { MenuItem } from '../components/ContextMenu';
-import type { FlowSummary } from '../api/types';
+import type { FlowSummary, HistoryColor } from '../api/types';
 import type { Translator } from '../i18n';
 
 export interface FlowMenuActions {
@@ -15,6 +15,8 @@ export interface FlowMenuActions {
   copy: (text: string) => void;
   /** Optional so a menu without deletion still renders. */
   deleteFlow?: (flow: FlowSummary) => void;
+  toggleBookmark?: (flow: FlowSummary) => void;
+  setColor?: (flow: FlowSummary, color: HistoryColor | null) => void;
 }
 
 /** The full URL as it was requested. */
@@ -41,8 +43,23 @@ export function flowMenuItems(
   pluginActions?: MenuItem,
 ): MenuItem[] {
   return [
+    ...(actions.toggleBookmark ? [{
+      label: t(flow.bookmarked ? 'history.removeBookmark' : 'history.addBookmark'),
+      onSelect: () => actions.toggleBookmark?.(flow),
+    }] : []),
+    ...(actions.setColor ? [{
+      label: t('history.highlight'),
+      items: ([
+        { label: t('history.noColor'), onSelect: () => actions.setColor?.(flow, null) },
+        ...(['red', 'orange', 'yellow', 'green', 'blue', 'purple'] as HistoryColor[]).map((color) => ({
+          label: `${flow.annotation_color === color ? '✓ ' : ''}${t(`history.color.${color}`)}`,
+          onSelect: () => actions.setColor?.(flow, color),
+        })),
+      ]),
+    }] : []),
     {
       label: t('menu.sendToReplay'),
+      separator: Boolean(actions.toggleBookmark || actions.setColor),
       onSelect: () => actions.sendToReplay(flow),
     },
     {

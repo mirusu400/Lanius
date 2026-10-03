@@ -158,7 +158,7 @@ const en: DocPage[] = [
           },
           {
             kind: 'text',
-            body: 'Acting: send_request puts a new request through the proxy, replay_flow repeats a captured one with edits, add_scope_rule changes the scope, set_intercept turns interception on and off, and forward_intercepted and drop_intercepted decide what happens to a held request.',
+            body: 'Acting: send_request puts a new request through the proxy, replay_flow repeats a captured one with edits, and bookmark_flow marks the returned flow ID (optionally with a highlight color). add_scope_rule changes the scope, set_intercept turns interception on and off, and forward_intercepted and drop_intercepted decide what happens to a held request.',
           },
           {
             kind: 'note',
@@ -179,7 +179,7 @@ const en: DocPage[] = [
           },
           {
             kind: 'text',
-            body: 'A client that only speaks stdio can run the server directly against the project database, which works without the desktop app open, though only the reading tools are available that way:',
+            body: 'A client that only speaks stdio can run the server directly against the project database, even without the desktop app open. Reading tools and bookmark_flow work there; refresh HTTP History to see marks made by a separate stdio process. Traffic and Intercept tools need the running engine:',
           },
           {
             kind: 'code',
@@ -602,7 +602,7 @@ const ko: DocPage[] = [
           },
           {
             kind: 'text',
-            body: '실행: send_request는 새 요청을 프록시로 보내고, replay_flow는 캡처한 요청을 수정해 다시 보냅니다. add_scope_rule은 스코프를 바꾸고, set_intercept는 가로채기를 켜고 끄며, forward_intercepted와 drop_intercepted는 멈춰 둔 요청을 내보내거나 버립니다.',
+            body: '실행: send_request는 새 요청을 프록시로 보내고, replay_flow는 캡처한 요청을 수정해 다시 보냅니다. 반환된 flow ID를 bookmark_flow에 전달하면 북마크와 강조 색상을 지정할 수 있습니다. add_scope_rule은 스코프를 바꾸고, set_intercept는 가로채기를 켜고 끄며, forward_intercepted와 drop_intercepted는 멈춰 둔 요청을 내보내거나 버립니다.',
           },
           {
             kind: 'note',
@@ -623,7 +623,7 @@ const ko: DocPage[] = [
           },
           {
             kind: 'text',
-            body: 'stdio만 지원하는 클라이언트는 프로젝트 데이터베이스를 직접 읽는 서버를 실행할 수 있습니다. 데스크톱 앱이 꺼져 있어도 되지만, 이 방식에서는 읽기 도구만 쓸 수 있습니다:',
+            body: 'stdio만 지원하는 클라이언트는 데스크톱 앱 없이도 프로젝트 데이터베이스를 직접 여는 서버를 실행할 수 있습니다. 읽기 도구와 bookmark_flow를 쓸 수 있고, 별도 stdio 프로세스에서 변경한 표시는 HTTP History를 새로고침하면 보입니다. 트래픽 전송과 Intercept에는 실행 중인 엔진이 필요합니다:',
           },
           {
             kind: 'code',

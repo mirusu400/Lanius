@@ -69,6 +69,12 @@ describe('mergeFlow', () => {
 });
 
 describe('matchesFilters', () => {
+  it('filters by bookmark and highlight independently', () => {
+    const marked = flow({ bookmarked: true, annotation_color: 'blue' });
+    expect(matchesFilters(marked, { bookmarkedOnly: true, annotationColor: 'blue' })).toBe(true);
+    expect(matchesFilters(marked, { bookmarkedOnly: true, annotationColor: 'red' })).toBe(false);
+    expect(matchesFilters(flow({ annotation_color: 'blue' }), { bookmarkedOnly: true })).toBe(false);
+  });
   it('accepts everything with empty filters', () => {
     expect(matchesFilters(flow(), {})).toBe(true);
   });

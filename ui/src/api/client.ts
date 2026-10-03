@@ -134,6 +134,8 @@ export function buildFlowQuery(filters: FlowFilters, limit = 200, offset = 0, an
     params.append('exclude_extensions', ext);
   }
   if (filters.inScopeOnly) params.set('in_scope_only', 'true');
+  if (filters.bookmarkedOnly) params.set('bookmarked_only', 'true');
+  if (filters.annotationColor) params.set('annotation_color', filters.annotationColor);
   return params.toString();
 }
 
@@ -172,6 +174,16 @@ export async function listFlowPage(
 
 export function getFlow(id: string, reveal = false): Promise<FlowDetail> {
   return request<FlowDetail>(`/api/flows/${id}${reveal ? '?reveal=true' : ''}`);
+}
+
+export function patchFlowAnnotation(
+  id: string, changes: { bookmarked?: boolean; annotation_color?: import('./types').HistoryColor | null },
+): Promise<{ id: string; bookmarked: boolean; annotation_color: import('./types').HistoryColor | null }> {
+  return request(`/api/flows/${encodeURIComponent(id)}/annotation`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(changes),
+  });
 }
 
 export function getResponsePreview(id: string): Promise<ResponsePreview> {

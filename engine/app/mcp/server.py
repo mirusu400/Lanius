@@ -13,7 +13,7 @@ from typing import Any, Sequence
 from ..addons.intercept import InterceptError
 from ..addons.replay import ReplayError, build_flow
 from ..addons.scope import ScopeError
-from ..db.store import FlowRecord, FlowStore
+from ..db.store import ANNOTATION_COLORS, FlowRecord, FlowStore
 
 from ..codegen import SECRET_HEADERS, is_secret_header
 
@@ -47,24 +47,32 @@ def truncate(text: str | None, limit: int = MAX_BODY_CHARS) -> str:
 
 
 def flow_summary(record: FlowRecord | dict[str, Any]) -> dict[str, Any]:
-    get = record.get if isinstance(record, dict) else lambda key: getattr(record, key)
+    get = record.get if isinstance(record, dict) else lambda key: getattr(record, key, None)
+    scheme, port = get("scheme"), get("port")
+    port_suffix = "" if port is None or (scheme, port) in {("http", 80), ("https", 443)} else f":{port}"
     return {
         "id": get("id"),
         "type": get("type"),
         "method": get("method"),
-        "url": f"{get('scheme')}://{get('host')}{get('path') or ''}"
+        "url": f"{scheme}://{get('host')}{port_suffix}{get('path') or ''}"
         + (f"?{get('query')}" if get("query") else ""),
         "status": get("status_code"),
         "size": get("response_size"),
         "duration_ms": get("duration_ms"),
         "source": get("source"),
         "error": get("error"),
+        "bookmarked": bool(get("bookmarked")),
+        "annotation_color": get("annotation_color"),
     }
 
 
-def flow_detail(record: FlowRecord, *, reveal: bool = False) -> dict[str, Any]:
+def flow_detail(
+    record: FlowRecord, *, reveal: bool = False,
+    annotation: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         **flow_summary(record),
+        **(annotation or {}),
         "host": record.host,
         "port": record.port,
         "scheme": record.scheme,
@@ -92,6 +100,8 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
         instructions=(
             "Lanius web security proxy. Inspect captured HTTP traffic, manage "
             "scope, hold and edit intercepted requests, and replay requests. "
+            "Bookmark a captured PoC with bookmark_flow using the flow ID "
+            "returned by send_request or replay_flow. "
             "Sensitive headers are redacted unless reveal_secrets=true."
         ),
     )
@@ -106,18 +116,25 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
         method: str | None = None,
         status_code: int | None = None,
         search: str | None = None,
+        bookmarked_only: bool = False,
+        annotation_color: str | None = None,
     ) -> dict[str, Any]:
-        page = await asyncio.to_thread(
-            store.page_summaries,
-            limit=max(1, min(limit, 500)),
-            offset=max(0, offset),
-            anchor=max(0, anchor) if anchor is not None else None,
-            cursor=cursor,
-            host=host,
-            method=method,
-            status_code=status_code,
-            search=search,
-        )
+        try:
+            page = await asyncio.to_thread(
+                store.page_summaries,
+                limit=max(1, min(limit, 500)),
+                offset=max(0, offset),
+                anchor=max(0, anchor) if anchor is not None else None,
+                cursor=cursor,
+                host=host,
+                method=method,
+                status_code=status_code,
+                search=search,
+                bookmarked_only=bookmarked_only,
+                annotation_color=annotation_color,
+            )
+        except ValueError as exc:
+            return {"error": str(exc)}
         return {"count": len(page["items"]), "has_more": page["has_more"],
                 "anchor": page["anchor"],
                 "next_cursor": page["next_cursor"],
@@ -133,7 +150,31 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
         record = await asyncio.to_thread(store.get, flow_id)
         if record is None:
             return {"error": f"flow {flow_id} not found"}
-        return flow_detail(record, reveal=reveal_secrets)
+        annotation = await asyncio.to_thread(store.get_annotation, flow_id)
+        return flow_detail(record, reveal=reveal_secrets, annotation=annotation)
+
+    @server.tool(
+        description=(
+            "Bookmark or unbookmark a captured flow by ID. Use the ID returned "
+            "by send_request/replay_flow, or find a proxied PoC with list_flows. "
+            "Optionally set a red, orange, yellow, green, blue or purple highlight. "
+            "Omit color to preserve the current highlight."
+        )
+    )
+    async def bookmark_flow(
+        flow_id: str, bookmarked: bool = True, color: str | None = None,
+    ) -> dict[str, Any]:
+        if color is not None and color not in ANNOTATION_COLORS:
+            return {"error": "invalid annotation color"}
+        changes: dict[str, Any] = {"bookmarked": bookmarked}
+        if color is not None:
+            changes["annotation_color"] = color
+        annotation = await asyncio.to_thread(store.patch_annotation, flow_id, changes)
+        if annotation is None:
+            return {"error": f"flow {flow_id} not found"}
+        if engine is not None:
+            engine.broker.publish("flow.annotation", annotation)
+        return annotation
 
     @server.tool(description="Summarise captured sites and their flow counts.")
     async def list_sites() -> dict[str, Any]:
@@ -319,6 +360,7 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
 WRITING_TOOLS = frozenset(
     {
         "add_scope_rule",
+        "bookmark_flow",
         "drop_intercepted",
         "forward_intercepted",
         "replay_flow",

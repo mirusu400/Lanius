@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildFlowQuery, getStatus, setApiToken } from './client';
+import { buildFlowQuery, getStatus, patchFlowAnnotation, setApiToken } from './client';
 
 afterEach(() => {
   setApiToken('');
@@ -8,6 +8,18 @@ afterEach(() => {
 });
 
 describe('desktop API authentication', () => {
+  it('sends annotation edits as JSON to the engine', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      id: 'flow-1', bookmarked: false, annotation_color: 'purple',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    await patchFlowAnnotation('flow-1', { annotation_color: 'purple' });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain('/api/flows/flow-1/annotation');
+    expect(init.method).toBe('PATCH');
+    expect(new Headers(init.headers).get('Content-Type')).toBe('application/json');
+    expect(JSON.parse(init.body as string)).toEqual({ annotation_color: 'purple' });
+  });
   it('adds the session token to REST requests', async () => {
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
@@ -63,6 +75,11 @@ describe('buildFlowQuery', () => {
 });
 
 describe('buildFlowQuery with the new filters', () => {
+  it('sends bookmark and highlight filters', () => {
+    const query = new URLSearchParams(buildFlowQuery({ bookmarkedOnly: true, annotationColor: 'blue' }));
+    expect(query.get('bookmarked_only')).toBe('true');
+    expect(query.get('annotation_color')).toBe('blue');
+  });
   it('repeats a key for each method', () => {
     // The engine reads a list. Joining them would ask for one method
     // literally named "GET,POST".

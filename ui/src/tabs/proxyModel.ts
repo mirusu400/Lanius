@@ -24,6 +24,8 @@ export function matchesFilters(
   filters: FlowFilters,
 ): boolean {
   if (filters.host && !(flow.host ?? '').toLowerCase().includes(filters.host.toLowerCase())) return false;
+  if (filters.bookmarkedOnly && !flow.bookmarked) return false;
+  if (filters.annotationColor && flow.annotation_color !== filters.annotationColor) return false;
   if (filters.method && flow.method !== filters.method.toUpperCase()) {
     return false;
   }
