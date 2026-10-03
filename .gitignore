@@ -36,6 +36,10 @@ build/
 # Vite
 ui/dist/
 
+# VitePress
+website/.vitepress/cache/
+website/.vitepress/dist/
+
 # Rust / Tauri
 shell/src-tauri/target/
 shell/src-tauri/gen/
