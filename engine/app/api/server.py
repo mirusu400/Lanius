@@ -1026,7 +1026,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if record is None:
             raise HTTPException(status_code=404, detail="flow not found")
         data = record.detail(auto_decompress=auto_decompress_enabled(store))
-        data.update(await asyncio.to_thread(store.get_annotation, flow_id) or {})
+        annotation = await asyncio.to_thread(store.get_annotation, flow_id)
+        data.update(annotation or {})
         data["request_headers"] = redact_headers(
             record.request_headers, reveal=reveal
         )

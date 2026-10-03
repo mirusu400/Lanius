@@ -79,6 +79,10 @@ def test_list_and_filter_flows(client) -> None:
 def test_history_annotations_survive_capture_and_project_roundtrip(client) -> None:
     seed(client, "marked", started_at=2)
     seed(client, "plain", started_at=1)
+    plain = client.get("/api/flows/plain")
+    assert plain.status_code == 200
+    assert plain.json()["bookmarked"] is False
+    assert plain.json()["annotation_color"] is None
     response = client.patch(
         "/api/flows/marked/annotation",
         json={"bookmarked": True, "annotation_color": "blue"},
