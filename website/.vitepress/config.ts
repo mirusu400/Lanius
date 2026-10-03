@@ -9,16 +9,13 @@ const vueServerRenderer = fileURLToPath(import.meta.resolve('vue/server-renderer
 const repo = 'https://github.com/mirusu400/Lanius'
 
 export default defineConfig({
-  // GitHub Pages project site: mirusu400.github.io/Lanius/. Remove this
-  // when a custom domain (e.g. lanius.dev) is attached to Pages.
-  base: '/Lanius/',
   title: 'Lanius',
   description: 'A desktop web security testing proxy, built on mitmproxy.',
   head: [
     ['link', { rel: 'icon', href: '/app_icon.png' }],
     ['meta', { property: 'og:title', content: 'Lanius' }],
     ['meta', { property: 'og:description', content: 'A desktop web security testing proxy, built on mitmproxy.' }],
-    ['meta', { property: 'og:image', content: '/lanius_social_preview.png' }],
+    ['meta', { property: 'og:image', content: 'https://lanius.mir.sh/lanius_social_preview.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
   ],
   // The wiki is the existing docs/ directory; this website is presentation only.
