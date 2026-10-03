@@ -209,7 +209,9 @@ describe('InterceptPanel', () => {
     await user.click(screen.getByRole('tab', { name: t('intercept.view.auto_modified') }));
     expect(editorEl().value).toContain('/automatic');
     expect(editorEl().readOnly).toBe(true);
-    await user.click(screen.getByRole('tab', { name: /Modified|수정본/ }));
+    await user.click(screen.getByRole('tab', {
+      name: (name) => name.startsWith(t('intercept.view.modified')),
+    }));
     expect(editorEl().value).toContain('/manual');
     expect(editorEl().readOnly).toBe(false);
     await user.click(screen.getByRole('tab', { name: t('intercept.view.original') }));
