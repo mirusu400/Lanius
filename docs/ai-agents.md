@@ -21,6 +21,25 @@ exposes the interception and replay tools. **Settings > AI agents** shows the
 endpoint, lists every tool with whether it only reads or actually acts, and
 has a configuration you can copy straight into your client.
 
+## Choosing MCP or SQLite
+
+When an agent connects, Lanius tells it the database path for that MCP server
+and the core `flows` columns. Use `list_flows` and `get_flow` for ordinary
+capture lookup, and MCP tools for Replay, Intercept, scope changes and
+bookmarks. For large aggregations or time ranges that those tools cannot
+express, an agent running on the same machine can query the project SQLite
+file directly. Open it read-only, for example:
+
+```bash
+sqlite3 -readonly -header -column '/path/to/project.sqlite' \
+  'SELECT host, COUNT(*) AS flows FROM flows GROUP BY host ORDER BY flows DESC LIMIT 20'
+```
+
+Direct SQL returns raw headers and bodies, without MCP's header redaction.
+It also remains possible for a filesystem-capable agent when MCP connections
+are disabled. Do not edit the live database directly; use Lanius or its MCP
+tools for changes. The in-memory test database has no file to query.
+
 ## Secrets and safety
 
 Secrets are redacted in every response unless the agent explicitly asks for

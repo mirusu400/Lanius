@@ -13,6 +13,7 @@ from app.api.server import create_app
 from app.config import Settings
 from app.db.store import FlowRecord, FlowStore
 from app.mcp import build_server, flow_detail, redact_headers
+from app.mcp.server import storage_instructions
 
 
 def free_port() -> int:
@@ -89,6 +90,23 @@ def test_redact_covers_api_key_headers() -> None:
         (k, v) for k, v in redact_headers([("X-API-Key", "abc"), ("X-Auth-Token", "t")])
     )
     assert set(redacted.values()) == {"<redacted>"}
+
+
+def test_storage_instructions_identify_the_active_db_and_read_only_boundary(store) -> None:
+    guide = storage_instructions(store)
+    assert str(store.path) in guide
+    assert "sqlite3 -readonly" in guide
+    assert "started_at (Unix seconds)" in guide
+    assert "bypasses MCP redaction" in guide
+    assert guide in build_server(store).instructions
+
+
+def test_storage_instructions_do_not_offer_an_in_memory_db_as_a_file() -> None:
+    store = FlowStore(":memory:")
+    try:
+        assert "direct SQLite access is unavailable" in storage_instructions(store)
+    finally:
+        store.close()
 
 
 def test_redact_handles_empty_headers() -> None:
@@ -395,3 +413,4 @@ def test_mcp_http_endpoint_initializes(live) -> None:
     )
     assert res.status_code == 200
     assert "lanius" in res.text
+    assert "sqlite3 -readonly" in res.text

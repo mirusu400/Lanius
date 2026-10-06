@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Any, Sequence
 
 from ..addons.intercept import InterceptError
@@ -91,6 +92,22 @@ def flow_detail(
     }
 
 
+def storage_instructions(store: FlowStore) -> str:
+    """Tell a local agent when a direct read-only query is useful."""
+    if store.path == ":memory:":
+        return "This server uses an in-memory database; direct SQLite access is unavailable."
+    return (
+        f"This server's capture SQLite database is at {Path(store.path).resolve()}. "
+        "For ordinary flow lookup use list_flows/get_flow, and use MCP tools for "
+        "Lanius actions. If you have access to the same filesystem and need "
+        "bulk aggregation or time-range analysis, query SQLite read-only "
+        "(sqlite3 -readonly). The flows table has id, started_at (Unix seconds), "
+        "scheme, host, port, method, path, query, status_code, response_size, "
+        "and duration_ms. Query only needed columns and never modify the DB. "
+        "Direct SQL exposes raw headers and bodies and bypasses MCP redaction."
+    )
+
+
 def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> Any:
     """Create the MCP server. ``engine`` is optional for read-only use."""
     from mcp.server.mcpserver import MCPServer
@@ -102,7 +119,8 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
             "scope, hold and edit intercepted requests, and replay requests. "
             "Bookmark a captured PoC with bookmark_flow using the flow ID "
             "returned by send_request or replay_flow. "
-            "Sensitive headers are redacted unless reveal_secrets=true."
+            "Sensitive headers are redacted unless reveal_secrets=true. "
+            + storage_instructions(store)
         ),
     )
 
