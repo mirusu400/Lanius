@@ -1,11 +1,12 @@
 /** Docs tab. */
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import App from '../App';
 import { DocsTab, resetDocsPage } from './DocsTab';
 import { docPages } from '../docs/pages';
+import { wikiGroups } from '../docs/wiki';
 import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import { LOCALES } from '../i18n';
 
@@ -19,8 +20,7 @@ async function openPage(englishTitle: string, koreanTitle: string) {
   // The nav button's accessible name is the title followed by the summary,
   // so match on the start of the text rather than building a regex out of
   // a title that may contain regex characters.
-  const button = screen
-    .getAllByRole('button')
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>('.docs-nav > button'))
     .find((node) => (node.textContent ?? '').startsWith(title));
   if (!button) throw new Error(`no docs page named ${title}`);
   await userEvent.click(button);
@@ -35,11 +35,21 @@ async function openCapturePage() {
 }
 
 describe('DocsTab', () => {
-  it('opens on the first page', async () => {
+  it('opens the bundled wiki index and follows its article links', async () => {
     render(<DocsTab />);
-    const first = docPages(TEST_LOCALE)[0];
-    expect(await screen.findByRole('heading', { level: 2 })).toBeTruthy();
-    expect(screen.getByText(first.sections[0].heading)).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Features' })).toBeTruthy();
+    expect(screen.getByText(t('docs.wikiEnglish'))).toBeTruthy();
+    await userEvent.click(screen.getByRole('link', { name: 'Proxy History' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Proxy History' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('link', { name: 'Replay' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Replay' })).toBeTruthy();
+  });
+
+  it('renders wiki tables from the Markdown source', async () => {
+    render(<DocsTab />);
+    await userEvent.click(screen.getByRole('button', { name: 'Fuzzer' }));
+    expect(screen.getByRole('table')).toBeTruthy();
+    expect(screen.getByRole('cell', { name: 'Cartesian product' })).toBeTruthy();
   });
 
   it('switches pages', async () => {
@@ -48,7 +58,7 @@ describe('DocsTab', () => {
     const tls = pages.find((p) => p.id === 'tls')!;
 
     await userEvent.click(screen.getByRole('button', { name: new RegExp(tls.title) }));
-    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(tls.title);
+    expect(within(document.querySelector('.docs-body')!).getByRole('heading', { level: 2 }).textContent).toBe(tls.title);
   });
 
   it('renders code samples verbatim', async () => {
@@ -71,10 +81,11 @@ describe('DocsTab', () => {
     expect(body).toContain('Mitmproxy Redirector');
   });
 
-  it('says appearance settings stay on this machine', () => {
+  it('says appearance settings stay on this machine', async () => {
     // A user who exports a project and finds their theme did not travel
     // should be able to find out why. The appearance page opens the docs.
     render(<DocsTab />);
+    await openPage('Appearance', '모양');
     const body = document.querySelector('.docs-body')!.textContent ?? '';
     const claim = TEST_LOCALE === 'ko' ? '내보내기에 포함되지 않' : 'not part of an export';
     expect(body).toContain(claim);
@@ -95,7 +106,7 @@ describe('DocsTab', () => {
   it('documents what an agent can actually do, including acting', async () => {
     // Must name the tools and be honest that some act rather than look.
     render(<DocsTab />);
-    await openPage('AI agents \(MCP\)', 'AI 에이전트 \(MCP\)');
+    await openPage('AI agents (MCP)', 'AI 에이전트 (MCP)');
     const body = document.querySelector('.docs-body')!.textContent ?? '';
     expect(body).toContain('list_flows');
     expect(body).toContain('send_request');
@@ -137,15 +148,13 @@ describe('reading position', () => {
     const target = pages[pages.length - 1];
 
     const view = render(<DocsTab />);
-    await userEvent.click(
-      screen.getByRole('button', { name: new RegExp(target.title) }),
-    );
-    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(target.title);
+    await openPage(target.title, target.title);
+    expect(within(document.querySelector('.docs-body')!).getByRole('heading', { level: 2 }).textContent).toBe(target.title);
 
     view.unmount();
     render(<DocsTab />);
 
-    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(target.title);
+    expect(within(document.querySelector('.docs-body')!).getByRole('heading', { level: 2 }).textContent).toBe(target.title);
   });
 });
 
@@ -192,16 +201,20 @@ describe('tab wiring', () => {
   it('is reachable from the title bar', async () => {
     render(<App />);
     await userEvent.click(screen.getByRole('button', { name: t('docs.title') }));
-    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(
-      docPages(TEST_LOCALE)[0].title,
-    );
+    expect(screen.getByRole('heading', { level: 1, name: 'Features' })).toBeTruthy();
   });
 
   it('follows the interface language', async () => {
     render(<DocsTab />, { locale: 'ko' });
-    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(
-      docPages('ko')[0].title,
-    );
+    expect(screen.getByRole('heading', { level: 1, name: 'Features' })).toBeTruthy();
+    expect(screen.getByText(tk('ko')('docs.wikiEnglish'))).toBeTruthy();
     expect(tk('ko')('docs.title')).toBe('문서');
+  });
+
+  it('includes every page linked from the website feature index', () => {
+    const wikiIds = wikiGroups.flatMap((group) => group.pages.map((page) => page.id));
+    expect(wikiIds).toContain('features');
+    expect(wikiIds).toContain('plugins-sdk');
+    expect(wikiIds).toContain('ai-agents');
   });
 });
