@@ -60,6 +60,51 @@ function replacePlugin(items: PluginInfo[], updated: PluginInfo): PluginInfo[] {
   return items.map((item) => item.name === updated.name ? updated : item);
 }
 
+function CatalogueCard({ item, busy, onInstall, onRollback }: {
+  item: PluginCatalogueItem;
+  busy: boolean;
+  onInstall: (item: PluginCatalogueItem, version?: string) => void;
+  onRollback: (item: PluginCatalogueItem) => void;
+}) {
+  const t = useT();
+  const [failedIcon, setFailedIcon] = useState<string | null>(null);
+
+  return (
+    <article className="plugin-catalogue-card">
+      <header className="plugin-catalogue-card-header">
+        <span className="plugin-catalogue-icon" aria-hidden="true">
+          {item.icon && item.icon !== failedIcon ? <img src={item.icon} alt="" onError={() => setFailedIcon(item.icon ?? null)} /> : (
+            <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M12 5h8v6h6v16H6V11h6V5Zm0 12H6m20 0h-6v10" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><circle cx="16" cy="16" r="2" fill="currentColor" /></svg>
+          )}
+        </span>
+        <div><strong>{item.name}</strong><span className="muted mono">{item.id}</span></div>
+      </header>
+      <p>{item.description ?? t('plugins.noDescription')}</p>
+      <div className="plugin-catalogue-meta"><span>{item.source_title}</span>{item.author && <span>{item.author}</span>}{item.categories?.map((category) => <span key={category} className="param">{category}</span>)}</div>
+      <div className="plugin-catalogue-actions">
+        <span className="mono">{item.installed_version ? `${t('plugins.installed')} ${item.installed_version}` : t('plugins.notInstalled')}{item.latest_version && ` · ${t('plugins.latest')} ${item.latest_version}`}</span>
+        {item.latest_version && (!item.installed_version || item.update_available) && <button disabled={busy} onClick={() => onInstall(item, item.latest_version ?? undefined)}>{item.installed_version ? t('plugins.update') : t('plugins.installFromCatalogue')}</button>}
+        {item.rollback_versions.length > 0 && <button disabled={busy} onClick={() => onRollback(item)}>{t('plugins.rollback')} {item.rollback_versions[0]}</button>}
+      </div>
+      {item.releases.some((release) => release.revoked) && <small className="status-5xx">{t('plugins.revokedRelease')}</small>}
+      <details className="plugin-catalogue-more">
+        <summary>{t('plugins.more')}</summary>
+        <div className="plugin-catalogue-more-content">
+          {item.details && <p>{item.details}</p>}
+          {item.homepage && <a href={item.homepage} target="_blank" rel="noopener noreferrer">{t('plugins.homepage')}</a>}
+          <h4>{t('plugins.releases')}</h4>
+          <ul>{item.releases.map((release) => <li key={release.version}>
+            <strong>v{release.version}</strong>
+            {release.published_at && <span className="muted">{release.published_at.slice(0, 10)}</span>}
+            {release.revoked ? <span className="status-5xx">{t('plugins.releaseRevoked')}{release.revocation_reason && `: ${release.revocation_reason}`}</span> : release.yanked ? <span className="muted">{t('plugins.releaseYanked')}</span> : !release.compatible && <span className="muted">{t('plugins.releaseIncompatible')}</span>}
+            <small className="muted">Lanius {release.compatibility.lanius} · SDK {release.compatibility.sdk}</small>
+          </li>)}</ul>
+        </div>
+      </details>
+    </article>
+  );
+}
+
 export function PluginsTab() {
   const t = useT();
   const [surface, setSurface] = useState<Surface>('installed');
@@ -645,7 +690,7 @@ export function PluginsTab() {
               </div>
             </div>
           </div> : visibleCatalogue.length === 0 ? <div className="plugin-catalogue-no-match">{t('plugins.catalogueNone')}</div> : <div className="plugin-catalogue-grid">
-            {visibleCatalogue.map((item) => <article key={`${item.source}:${item.id}`} className="plugin-catalogue-card"><div><strong>{item.name}</strong><span className="muted mono"> {item.id}</span></div><p>{item.description}</p><div className="plugin-catalogue-meta"><span>{item.source_title}</span>{item.author && <span>{item.author}</span>}{item.categories?.map((category) => <span key={category} className="param">{category}</span>)}</div><div className="plugin-catalogue-actions"><span className="mono">{item.installed_version ? `${t('plugins.installed')} ${item.installed_version}` : t('plugins.notInstalled')}{item.latest_version && ` · ${t('plugins.latest')} ${item.latest_version}`}</span>{item.latest_version && (!item.installed_version || item.update_available) && <button disabled={catalogueBusy !== null} onClick={() => void installFromCatalogue(item, item.latest_version ?? undefined)}>{item.installed_version ? t('plugins.update') : t('plugins.installFromCatalogue')}</button>}{item.rollback_versions.length > 0 && <button disabled={catalogueBusy !== null} onClick={() => void rollbackFromCatalogue(item)}>{t('plugins.rollback')} {item.rollback_versions[0]}</button>}</div>{item.releases.some((release) => release.revoked) && <small className="status-5xx">{t('plugins.revokedRelease')}</small>}</article>)}
+            {visibleCatalogue.map((item) => <CatalogueCard key={`${item.source}:${item.id}`} item={item} busy={catalogueBusy !== null} onInstall={(plugin, version) => void installFromCatalogue(plugin, version)} onRollback={(plugin) => void rollbackFromCatalogue(plugin)} />)}
           </div>}
           <details ref={sourcesPanel} className="plugin-catalogue-sources">
             <summary>{t('plugins.catalogueSources')} ({catalogue.sources.length})</summary>

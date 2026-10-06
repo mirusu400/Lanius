@@ -3237,6 +3237,7 @@ pre.body {
 }
 
 .plugin-catalogue-grid {
+  align-items: start;
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -3255,6 +3256,87 @@ pre.body {
 
 .plugin-catalogue-card p {
   margin: 0;
+}
+
+.plugin-catalogue-card-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.plugin-catalogue-card-header > div {
+  display: grid;
+  min-width: 0;
+}
+
+.plugin-catalogue-card-header .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plugin-catalogue-icon {
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  display: inline-flex;
+  flex: none;
+  height: 44px;
+  justify-content: center;
+  overflow: hidden;
+  width: 44px;
+}
+
+.plugin-catalogue-icon img,
+.plugin-catalogue-icon svg {
+  height: 32px;
+  object-fit: contain;
+  width: 32px;
+}
+
+.plugin-catalogue-more {
+  border-top: 1px solid var(--border);
+  padding-top: 7px;
+}
+
+.plugin-catalogue-more summary {
+  color: var(--accent);
+  cursor: pointer;
+  width: fit-content;
+}
+
+.plugin-catalogue-more-content {
+  display: grid;
+  gap: 8px;
+  padding-top: 9px;
+}
+
+.plugin-catalogue-more-content p {
+  white-space: pre-wrap;
+}
+
+.plugin-catalogue-more-content h4 {
+  margin: 4px 0 0;
+}
+
+.plugin-catalogue-more-content ul {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.plugin-catalogue-more-content li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.plugin-catalogue-more-content li small {
+  flex-basis: 100%;
 }
 
 .plugin-catalogue-meta {

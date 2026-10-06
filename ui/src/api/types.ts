@@ -434,6 +434,8 @@ export interface PluginCatalogueItem {
   id: string;
   name: string;
   description?: string;
+  details?: string;
+  icon?: string;
   author?: string;
   homepage?: string;
   categories?: string[];

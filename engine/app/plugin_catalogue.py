@@ -37,6 +37,8 @@ NETWORK_TIMEOUT_SECONDS = 15.0
 _SOURCE_ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 _PLUGIN_ID = _SOURCE_ID
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_ICON = re.compile(r"^data:image/(png|webp);base64,([A-Za-z0-9+/]+={0,2})$")
+MAX_ICON_BYTES = 64 * 1024
 
 
 class PluginCatalogueError(ValueError):
@@ -170,6 +172,26 @@ def verify_catalogue(value: Any, source: CatalogueSource) -> dict[str, Any]:
             raise PluginCatalogueError(f"invalid or duplicate plugin id: {plugin_id!r}")
         plugin_ids.add(plugin_id)
         _string(plugin.get("name"), "catalogue plugin name")
+        if "details" in plugin:
+            details = _string(plugin["details"], "catalogue plugin details")
+            if len(details) > 8000:
+                raise PluginCatalogueError("catalogue plugin details are too long")
+        if "homepage" in plugin:
+            _validate_url(plugin["homepage"], "catalogue plugin homepage")
+        if "icon" in plugin:
+            icon = _string(plugin["icon"], "catalogue plugin icon")
+            match = _ICON.fullmatch(icon)
+            if match is None:
+                raise PluginCatalogueError("catalogue plugin icon must be a PNG or WebP data URL")
+            try:
+                image = base64.b64decode(match.group(2), validate=True)
+            except ValueError as exc:
+                raise PluginCatalogueError("catalogue plugin icon is invalid") from exc
+            if len(image) > MAX_ICON_BYTES or not (
+                image.startswith(b"\x89PNG\r\n\x1a\n") if match.group(1) == "png"
+                else image.startswith(b"RIFF") and image[8:12] == b"WEBP"
+            ):
+                raise PluginCatalogueError("catalogue plugin icon is invalid or too large")
         releases = plugin.get("releases")
         if not isinstance(releases, list) or not releases:
             raise PluginCatalogueError(f"plugin {plugin_id} must contain releases")

@@ -143,6 +143,7 @@ def signed_catalogue(
     *,
     revoked: list[dict[str, str]] | None = None,
     v1_url: str = "https://catalogue.test/demo-1.0.0.lanius-plugin",
+    plugin_metadata: dict[str, Any] | None = None,
 ) -> bytes:
     value: dict[str, Any] = {
         "schema": 1,
@@ -154,6 +155,7 @@ def signed_catalogue(
                 "description": "Installed from a signed catalogue.",
                 "author": "Acme",
                 "categories": ["scanner"],
+                **(plugin_metadata or {}),
                 "releases": [
                     {
                         "version": "1.0.0",
@@ -257,6 +259,46 @@ def test_catalogue_installs_updates_and_rolls_back(tmp_path) -> None:
     result = packages.rollback("acme.catalogue-demo")
     assert result["version"] == "1.0.0"
     assert result["rollback_versions"] == ["2.0.0"]
+
+
+def test_catalogue_preserves_signed_card_metadata(tmp_path) -> None:
+    catalogue, _packages, responses, archives, key = setup_manager(tmp_path)
+    icon = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\nexample").decode()
+    responses["https://catalogue.test/index.json"] = signed_catalogue(
+        key, archives, plugin_metadata={
+            "details": "A longer explanation of the plugin.",
+            "icon": icon,
+            "homepage": "https://catalogue.test/demo",
+        },
+    )
+
+    item = catalogue.catalogue(refresh=True)["items"][0]
+    assert item["details"] == "A longer explanation of the plugin."
+    assert item["icon"] == icon
+    assert item["homepage"] == "https://catalogue.test/demo"
+
+
+@pytest.mark.parametrize("icon", [
+    "https://catalogue.test/icon.png",
+    "data:image/svg+xml;base64,PHN2Zy8+",
+    "data:image/png;base64,Zm9v",
+])
+def test_catalogue_rejects_unsafe_or_invalid_icons(tmp_path, icon) -> None:
+    catalogue, _packages, responses, archives, key = setup_manager(tmp_path)
+    responses["https://catalogue.test/index.json"] = signed_catalogue(
+        key, archives, plugin_metadata={"icon": icon},
+    )
+
+    assert "icon" in catalogue.refresh()["official"]
+
+
+def test_catalogue_rejects_unsafe_homepage(tmp_path) -> None:
+    catalogue, _packages, responses, archives, key = setup_manager(tmp_path)
+    responses["https://catalogue.test/index.json"] = signed_catalogue(
+        key, archives, plugin_metadata={"homepage": "javascript:alert(1)"},
+    )
+
+    assert "homepage" in catalogue.refresh()["official"]
 
 
 def test_catalogue_rejects_changed_published_release(tmp_path) -> None:

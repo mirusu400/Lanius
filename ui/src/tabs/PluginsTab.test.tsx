@@ -1,5 +1,5 @@
 /** Plugin management workspace rendered against a mocked engine. */
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -282,18 +282,29 @@ describe('PluginsTab', () => {
     catalogue = {
       sources: [{ id: 'official', title: 'Official', url: 'https://example.test/catalog.json', public_key: 'key', key_id: 'release', enabled: true }],
       items: [{
-        id: 'acme.scanner', name: 'Acme scanner', description: 'Checks headers', author: 'Acme', categories: ['scanner'], source: 'official', source_title: 'Official',
+        id: 'acme.scanner', name: 'Acme scanner', description: 'Checks headers', details: 'Explains which headers are missing.', icon: 'data:image/png;base64,iVBORw0KGgo=', homepage: 'https://example.test/scanner', author: 'Acme', categories: ['scanner'], source: 'official', source_title: 'Official',
         releases: [{ version: '1.0.0', url: 'https://example.test/acme.lanius-plugin', sha256: 'a'.repeat(64), package_key_id: 'release', compatibility: { lanius: '>=0.1,<1', sdk: '>=1,<2' }, compatible: true, revoked: false, revocation_reason: null }],
         latest_version: '1.0.0', installed_version: null, update_available: false, rollback_versions: [],
       }],
       errors: {},
       refreshed: false,
     };
+    catalogue.items.push({ ...catalogue.items[0], id: 'acme.no-icon', name: 'No icon', icon: undefined });
     const user = userEvent.setup();
     render(<PluginsTab />);
     await user.click((await screen.findAllByText(t('plugins.catalogue')))[0]);
     expect(await screen.findByText('Acme scanner')).toBeTruthy();
-    await user.click(screen.getByText(t('plugins.installFromCatalogue')));
+    const card = screen.getByText('Acme scanner').closest('article')!;
+    expect(screen.getByText('No icon').closest('article')!.querySelector('.plugin-catalogue-icon svg')).toBeTruthy();
+    const icon = card.querySelector('.plugin-catalogue-icon img')!;
+    expect(icon.getAttribute('src')).toBe(catalogue.items[0].icon);
+    await user.click(within(card).getByText(t('plugins.more')));
+    expect(within(card).getByText('Explains which headers are missing.')).toBeTruthy();
+    expect(within(card).getByRole('link', { name: t('plugins.homepage') }).getAttribute('href')).toBe('https://example.test/scanner');
+    expect(within(card).getByText('v1.0.0')).toBeTruthy();
+    fireEvent.error(icon);
+    expect(card.querySelector('.plugin-catalogue-icon svg')).toBeTruthy();
+    await user.click(within(card).getByText(t('plugins.installFromCatalogue')));
     await waitFor(() => expect(calls.some((call) => call.endsWith('/api/plugin-catalogue/install'))).toBe(true));
   });
 

@@ -52,7 +52,10 @@ Changing a source key is an explicit local configuration change.
       "id": "publisher.plugin-name",
       "name": "Plugin name",
       "description": "One line summary",
+      "details": "Longer plain-text description shown under More (optional)",
+      "icon": "data:image/png;base64,<base64 PNG bytes (optional)>",
       "author": "Publisher",
+      "homepage": "https://plugins.example/plugin-name",
       "categories": ["scanner"],
       "releases": [
         {
@@ -87,6 +90,12 @@ Changing a source key is an explicit local configuration change.
 The signed bytes are canonical UTF-8 JSON of the catalogue with `signature`
 removed: keys sorted, no insignificant whitespace, and non-ASCII text left
 unescaped. Every plugin ID and version is unique within the catalogue.
+`details` is optional plain text, limited to 8,000 characters. `icon` is
+optional and must be a PNG or WebP data URL with at most 64 KiB of decoded
+image data. Embedding the icon in the signed index lets Lanius show cached
+cards without starting another connection, including in Lockdown Mode. Cards
+without an icon use the built-in default icon. `homepage`, if provided, must
+use HTTPS (or loopback HTTP for development) and opens only when clicked.
 
 ## Release guarantees
 
