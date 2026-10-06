@@ -306,6 +306,27 @@ def test_search_index_tracks_updates_deletes_and_literal_metacharacters() -> Non
     store.close()
 
 
+def test_oversized_body_is_stored_without_unbounded_search_indexing() -> None:
+    import gzip
+
+    from app.db.search_index import MAX_INDEX_BODY_BYTES, _body_text
+
+    store = FlowStore()
+    body = b"oversized-body-marker" + b"x" * MAX_INDEX_BODY_BYTES
+    store.upsert(make_record(
+        "large", path="/large-response", response_body=body,
+        response_headers=[("Content-Type", "text/html; charset=UTF-8")],
+    ))
+
+    assert store.get_body_bytes("large", "response") == body
+    assert store.page_summaries(search="oversized-body-marker")["items"] == []
+    assert store.page_summaries(search="large-response")["items"][0]["id"] == "large"
+    assert _body_text(
+        gzip.compress(body), [("Content-Encoding", "gzip")]
+    ) == ""
+    store.close()
+
+
 def test_history_anchor_remains_stable_while_new_flows_arrive() -> None:
     store = FlowStore()
     for i in range(4):
@@ -364,6 +385,49 @@ def test_clear_and_count() -> None:
     assert store.count() == 2
     store.clear()
     assert store.count() == 0
+    store.close()
+
+
+def test_clear_rebuilds_search_index_without_losing_other_project_data(tmp_path) -> None:
+    path = tmp_path / "clear.sqlite"
+    store = FlowStore(path)
+    store.upsert(make_record(
+        "large", request_body=b"body-needle" + b"x" * (1024 * 1024),
+    ))
+    store.set_setting("keep-me", "yes")
+
+    store.clear()
+
+    assert store.count() == 0
+    assert store._conn.execute("SELECT count(*) FROM flow_search").fetchone()[0] == 0
+    assert store.get_setting("keep-me") == "yes"
+    store.upsert(make_record("after", request_body=b"new-search-marker"))
+    assert [item["id"] for item in store.page_summaries(search="new-search-marker")["items"]] == ["after"]
+    assert store.page_summaries(search="body-needle")["items"] == []
+    store.close()
+
+    reopened = FlowStore(path)
+    assert [item["id"] for item in reopened.page_summaries(search="new-search-marker")["items"]] == ["after"]
+    reopened.close()
+
+
+def test_failed_clear_restores_history_and_search(tmp_path) -> None:
+    store = FlowStore(tmp_path / "clear-failure.sqlite")
+    store.upsert(make_record("keep", request_body=b"still-searchable"))
+
+    def deny_recreate(action: int, _arg1: str | None, _arg2: str | None,
+                      _db: str | None, _trigger: str | None) -> int:
+        return sqlite3.SQLITE_DENY if action == sqlite3.SQLITE_CREATE_VTABLE else sqlite3.SQLITE_OK
+
+    store._conn.set_authorizer(deny_recreate)
+    try:
+        with pytest.raises(sqlite3.DatabaseError):
+            store.clear()
+    finally:
+        store._conn.set_authorizer(None)
+
+    assert store.count() == 1
+    assert store.page_summaries(search="still-searchable")["items"][0]["id"] == "keep"
     store.close()
 
 

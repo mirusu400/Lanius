@@ -9,6 +9,10 @@ import sqlite3
 from .. import charset
 from ..content_encoding import body_for_display
 
+# Full bodies remain in flows. The trigram index is only for search, and
+# indexing a very large response can monopolize SQLite for minutes.
+MAX_INDEX_BODY_BYTES = 8 * 1024 * 1024
+
 
 def _headers(raw: str | None) -> list[tuple[str, str]]:
     try:
@@ -18,13 +22,15 @@ def _headers(raw: str | None) -> list[tuple[str, str]]:
 
 
 def _body_text(raw: bytes | None, headers: list[tuple[str, str]]) -> str:
-    if not raw:
+    if not raw or len(raw) > MAX_INDEX_BODY_BYTES:
         return ""
     try:
         shown, _, _, _ = body_for_display(headers, raw, enabled=True)
     except Exception:
         # A malformed content coding must never make capture persistence fail.
         shown = raw
+    if not shown or len(shown) > MAX_INDEX_BODY_BYTES:
+        return ""
     content_type = next((value for name, value in headers if name.lower() == "content-type"), None)
     return charset.decode_body(content_type, shown)
 

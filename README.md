@@ -241,6 +241,7 @@ preview shows request counts and the confirmation names what will be deleted.
 Existing projects build summary and full text indexes once when first opened
 after upgrading; a large project can take minutes on that first launch and
 requires additional disk space.
+Bodies larger than 8 MiB remain in the capture but are not text-indexed.
 
 ## Features
 

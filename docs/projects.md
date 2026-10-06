@@ -29,6 +29,8 @@ names what will be deleted.
 Existing projects build summary and full text indexes once when first opened
 after upgrading; a large project can take minutes on that first launch and
 requires additional disk space.
+Request and response bodies larger than 8 MiB remain available in the capture
+but are left out of the text search index to keep capture responsive.
 
 ## Settings that travel with a project
 

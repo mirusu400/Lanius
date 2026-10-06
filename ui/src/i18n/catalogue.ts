@@ -49,6 +49,11 @@ const en = {
   'proxy.connState': '○ {state}',
   'proxy.engineUnreachable': 'Cannot reach the engine: {message}',
   'proxy.interceptToggleFailed': 'Failed to change intercept settings: {message}',
+  'proxy.clearConfirmTitle': 'Clear captured history?',
+  'proxy.clearConfirmMessage': 'Permanently delete all captured traffic in this project? This cannot be undone. Scope rules and saved tabs remain.',
+  'proxy.clearing': 'Clearing...',
+  'proxy.cleared': 'Captured history cleared.',
+  'proxy.clearFailed': 'Could not clear captured history: {message}',
   'proxy.emptyTable':
     'No traffic captured yet. Point your client at the proxy at 127.0.0.1:8080.',
 
@@ -1031,6 +1036,11 @@ const ko: Catalogue = {
   'proxy.connState': '○ {state}',
   'proxy.engineUnreachable': '엔진에 연결할 수 없습니다: {message}',
   'proxy.interceptToggleFailed': '인터셉트 설정 실패: {message}',
+  'proxy.clearConfirmTitle': '수집 기록을 초기화할까요?',
+  'proxy.clearConfirmMessage': '이 프로젝트의 모든 수집 기록을 삭제합니다. 되돌릴 수 없습니다. 범위 규칙과 저장된 탭은 유지됩니다.',
+  'proxy.clearing': '초기화 중...',
+  'proxy.cleared': '수집 기록을 초기화했습니다.',
+  'proxy.clearFailed': '수집 기록을 초기화하지 못했습니다: {message}',
   'proxy.emptyTable':
     '아직 캡처된 트래픽이 없습니다. 클라이언트 프록시를 127.0.0.1:8080 으로 설정하세요.',
 

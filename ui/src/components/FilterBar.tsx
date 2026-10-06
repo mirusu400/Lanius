@@ -9,6 +9,7 @@ interface Props {
   paused: boolean;
   onTogglePause: () => void;
   onClear: () => void;
+  clearBusy: boolean;
   onReload: () => void;
   connection: ConnectionState;
   status: EngineStatus | null;
@@ -22,6 +23,7 @@ export function FilterBar({
   paused,
   onTogglePause,
   onClear,
+  clearBusy,
   onReload,
   connection,
   status,
@@ -55,8 +57,8 @@ export function FilterBar({
       >★ {t('history.bookmarkedOnly')}</button>
       <button onClick={onTogglePause}>{paused ? t('common.resume') : t('common.pause')}</button>
       <button onClick={onReload}>{t('common.refresh')}</button>
-      <button className="danger" onClick={onClear}>
-        {t('common.clear')}
+      <button className="danger" onClick={onClear} disabled={clearBusy} aria-busy={clearBusy}>
+        {clearBusy ? t('proxy.clearing') : t('common.clear')}
       </button>
       <span className="spacer" />
       <span className="count">{t('proxy.flowCount', { count })}</span>

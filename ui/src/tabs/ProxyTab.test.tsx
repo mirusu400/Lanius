@@ -69,6 +69,8 @@ class MockSocket {
 
 // Set by the locale test to make the next flow listing fail.
 let failListFlows = false;
+let failClearFlows = false;
+let clearResponse: Promise<Response> | null = null;
 let paginateHistory = false;
 let calls: { url: string; method: string; body?: unknown }[] = [];
 
@@ -78,6 +80,8 @@ beforeEach(() => {
   // switch, which also means it survives between tests.
   clearSelection();
   failListFlows = false;
+  failClearFlows = false;
+  clearResponse = null;
   paginateHistory = false;
   MockSocket.instances = [];
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
@@ -94,6 +98,11 @@ beforeEach(() => {
       // answer a delete with a flow.
       if (url.endsWith('/api/flows/delete')) {
         return jsonResponse({ deleted: 1 });
+      }
+      if (url.endsWith('/api/flows') && init?.method === 'DELETE') {
+        if (failClearFlows) throw new Error('clear failed');
+        if (clearResponse) return clearResponse;
+        return jsonResponse({ ok: true });
       }
       if (url.includes('/api/status')) {
         return jsonResponse({
@@ -410,8 +419,58 @@ describe('selection across tabs', () => {
     await screen.findByText('<redacted>');
 
     await user.click(screen.getByRole('button', { name: t('common.clear') }));
+    const dialog = screen.getByRole('dialog', { name: t('proxy.clearConfirmTitle') });
+    expect(calls.some((call) => call.method === 'DELETE' && call.url.endsWith('/api/flows'))).toBe(false);
+    await user.click(within(dialog).getByRole('button', { name: t('common.clear') }));
 
     expect(await screen.findByText(t('detail.selectPrompt'))).toBeTruthy();
+    expect(await screen.findByText(t('proxy.cleared'))).toBeTruthy();
+    expect(calls.filter((call) => call.method === 'DELETE' && call.url.endsWith('/api/flows'))).toHaveLength(1);
+  });
+
+  it('keeps history when the clear confirmation is cancelled', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('/seeded');
+
+    await user.click(screen.getByRole('button', { name: t('common.clear') }));
+    const dialog = screen.getByRole('dialog', { name: t('proxy.clearConfirmTitle') });
+    expect(within(dialog).getByText(t('proxy.clearConfirmMessage'))).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: t('common.cancel') }));
+
+    expect(screen.getByText('/seeded')).toBeTruthy();
+    expect(calls.some((call) => call.method === 'DELETE' && call.url.endsWith('/api/flows'))).toBe(false);
+  });
+
+  it('keeps history and reports an error when clear fails', async () => {
+    failClearFlows = true;
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('/seeded');
+
+    await user.click(screen.getByRole('button', { name: t('common.clear') }));
+    await user.click(within(screen.getByRole('dialog', { name: t('proxy.clearConfirmTitle') }))
+      .getByRole('button', { name: t('common.clear') }));
+
+    expect(await screen.findByText(t('proxy.clearFailed', { message: 'clear failed' }))).toBeTruthy();
+    expect(screen.getByText('/seeded')).toBeTruthy();
+  });
+
+  it('shows progress and waits for the clear response before the success toast', async () => {
+    let finishClear: (response: Response) => void = () => {};
+    clearResponse = new Promise<Response>((resolve) => { finishClear = resolve; });
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('/seeded');
+
+    await user.click(screen.getByRole('button', { name: t('common.clear') }));
+    await user.click(within(screen.getByRole('dialog', { name: t('proxy.clearConfirmTitle') }))
+      .getByRole('button', { name: t('common.clear') }));
+
+    expect(screen.getByRole('button', { name: t('proxy.clearing') }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByText(t('proxy.cleared'))).toBeNull();
+    finishClear(jsonResponse({ ok: true }));
+    expect(await screen.findByText(t('proxy.cleared'))).toBeTruthy();
   });
 });
 

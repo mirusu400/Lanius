@@ -45,6 +45,7 @@ import { WebSocketPanel } from '../components/WebSocketPanel';
 import { matchesFilters, mergeFlow } from './proxyModel';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { useReportBusy } from '../components/busy';
+import { useToast } from '../components/Toast';
 
 const DEFAULT_RULES: InterceptRules = {
   enabled: false,
@@ -57,6 +58,7 @@ type View = 'intercept' | 'history' | 'websockets';
 
 export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { method: string } | null }) {
   const t = useT();
+  const { showToast } = useToast();
   const [view, setView] = useState<View>('history');
   const [flows, setFlows] = useState<FlowSummary[]>([]);
   const flowsRef = useRef(flows);
@@ -77,6 +79,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const codegen = useCodegenMenu();
   const [filterOpen, setFilterOpen] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [paused, setPaused] = useState(false);
   const [error, setError] = useState<Message | null>(null);
@@ -352,14 +356,30 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   }, [reload]);
 
   const onClear = useCallback(async () => {
-    await clearFlows();
-    historyAnchor.current = undefined;
-    historyCursors.current = {};
-    setNextHistoryCursor(null);
-    setFlows([]);
-    setHasMoreHistory(false);
-    clearSelection();
-  }, []);
+    setConfirmClear(false);
+    setClearing(true);
+    try {
+      await clearFlows();
+      requestGeneration.current += 1;
+      historyAnchor.current = undefined;
+      historyCursors.current = {};
+      setNextHistoryCursor(null);
+      setHistoryPage(0);
+      setHistoryPageInput('1');
+      setFlows([]);
+      setHasMoreHistory(false);
+      clearSelection();
+      setError(null);
+      showToast({ message: t('proxy.cleared'), tone: 'success' });
+    } catch (err) {
+      showToast({
+        message: t('proxy.clearFailed', { message: (err as Error).message }),
+        tone: 'error',
+      });
+    } finally {
+      setClearing(false);
+    }
+  }, [showToast, t]);
 
   const menu = useContextMenu<FlowSummary>();
   const pluginActions = usePluginActions(
@@ -432,7 +452,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
             onChange={(next) => { historyAnchor.current = undefined; historyCursors.current = {}; setNextHistoryCursor(null); setHistoryPage(0); setHistoryPageInput('1'); setFilters(next); }}
             paused={paused}
             onTogglePause={() => setPaused((p) => !p)}
-            onClear={onClear}
+            onClear={() => setConfirmClear(true)}
+            clearBusy={clearing}
             onReload={reload}
             connection={connection}
             status={status}
@@ -487,6 +508,14 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
               setHistoryPage((page) => page + 1);
             }}>{t('proxy.olderHistory')}</button>
           </div>
+          <ConfirmDialog
+            open={confirmClear}
+            title={t('proxy.clearConfirmTitle')}
+            message={t('proxy.clearConfirmMessage')}
+            confirmLabel={t('common.clear')}
+            onCancel={() => setConfirmClear(false)}
+            onConfirm={() => void onClear()}
+          />
           <ConfirmDialog
             open={pendingDelete !== null}
             title={t('menu.deleteFlow')}

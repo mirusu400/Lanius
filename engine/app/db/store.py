@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 ANNOTATION_COLORS = frozenset({"red", "orange", "yellow", "green", "blue", "purple"})
 
 from .schema import migrate
+from .search_index import MIGRATION as SEARCH_MIGRATION
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -458,8 +459,21 @@ class FlowStore:
 
     def clear(self) -> None:
         with self._lock:
-            self._conn.execute("DELETE FROM flows")
-            self._conn.commit()
+            # Deleting rows through the FTS trigger re-tokenizes each old body.
+            # A few large captures can keep Clear busy for minutes. Drop the
+            # entire search index first, then rebuild it empty in the same
+            # transaction so a failed clear restores both history and search.
+            # sqlite3's context manager does not begin a transaction for DDL.
+            self._conn.execute("BEGIN IMMEDIATE")
+            with self._conn:
+                for trigger in (
+                    "flow_search_insert", "flow_search_delete", "flow_search_update"
+                ):
+                    self._conn.execute(f"DROP TRIGGER {trigger}")
+                self._conn.execute("DROP TABLE flow_search")
+                self._conn.execute("DELETE FROM flows")
+                for statement in (SEARCH_MIGRATION[0], *SEARCH_MIGRATION[2:]):
+                    self._conn.execute(statement)
 
     def get_annotation(self, flow_id: str) -> dict[str, Any] | None:
         with self._read_lock:
