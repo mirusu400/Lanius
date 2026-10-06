@@ -297,6 +297,36 @@ describe('PluginsTab', () => {
     await waitFor(() => expect(calls.some((call) => call.endsWith('/api/plugin-catalogue/install'))).toBe(true));
   });
 
+  it('presents an unloaded catalogue as an intentional first step', async () => {
+    catalogue = {
+      sources: [{ id: 'official', title: 'Official', url: 'https://example.test/catalog.json', public_key: 'key', key_id: 'release', enabled: true }],
+      items: [],
+      errors: { official: 'catalogue has not been refreshed: official' },
+      refreshed: false,
+    };
+    const user = userEvent.setup();
+    render(<PluginsTab />);
+    await user.click((await screen.findAllByText(t('plugins.catalogue')))[0]);
+    expect(await screen.findByText(t('plugins.catalogueFirstTitle'))).toBeTruthy();
+    expect(screen.getByText(t('plugins.catalogueFirstHelp'))).toBeTruthy();
+    expect(screen.queryByText(/catalogue has not been refreshed: official/)).toBeNull();
+    expect(screen.queryByLabelText(t('plugins.catalogueSearch'))).toBeNull();
+    expect(calls.some((call) => call.includes('/api/plugin-catalogue?refresh=true'))).toBe(false);
+
+    await user.click(screen.getByRole('button', { name: t('plugins.catalogueRefresh') }));
+    await waitFor(() => expect(calls.some((call) => call.includes('/api/plugin-catalogue?refresh=true'))).toBe(true));
+  });
+
+  it('opens source management from the empty catalogue', async () => {
+    const user = userEvent.setup();
+    render(<PluginsTab />);
+    await user.click((await screen.findAllByText(t('plugins.catalogue')))[0]);
+    expect(await screen.findByText(t('plugins.catalogueNoSourcesTitle'))).toBeTruthy();
+    expect(screen.queryByRole('button', { name: t('plugins.catalogueRefresh') })).toBeNull();
+    await user.click(screen.getByRole('button', { name: t('plugins.catalogueManageSources') }));
+    expect((document.querySelector('.plugin-catalogue-sources') as HTMLDetailsElement).open).toBe(true);
+  });
+
   it('lists a packaged plugin view and opens it only when loaded', async () => {
     plugins = [{ ...installedSample(), enabled: true, loaded: true }];
     const user = userEvent.setup();

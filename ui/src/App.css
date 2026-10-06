@@ -3091,9 +3091,16 @@ pre.body {
 
 .plugin-marketplace {
   border-bottom: 1px solid var(--border);
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   gap: 10px;
   padding: 12px;
+}
+
+.plugin-marketplace-heading {
+  flex-wrap: wrap;
+  justify-content: space-between;
 }
 
 .plugin-marketplace-heading,
@@ -3108,6 +3115,95 @@ pre.body {
 .plugin-marketplace-heading input {
   flex: 1;
   min-width: 180px;
+}
+
+.plugin-marketplace-tools {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.plugin-catalogue-empty {
+  align-items: flex-start;
+  background: linear-gradient(135deg, var(--accent-wash-strong), var(--bg-alt) 58%);
+  border: 1px solid var(--accent-dim);
+  border-radius: 10px;
+  display: flex;
+  gap: 24px;
+  margin: auto;
+  max-width: 780px;
+  padding: clamp(24px, 4vw, 40px);
+  width: 100%;
+}
+
+.plugin-catalogue-empty-icon {
+  align-items: center;
+  background: var(--accent-wash-strong);
+  border: 1px solid var(--accent-dim);
+  border-radius: 14px;
+  color: var(--accent);
+  display: flex;
+  flex: none;
+  height: 68px;
+  justify-content: center;
+  width: 68px;
+}
+
+.plugin-catalogue-empty-icon svg {
+  width: 38px;
+  height: 38px;
+}
+
+.plugin-catalogue-empty-copy h3 {
+  font-size: 1.4em;
+  margin: 7px 0 10px;
+}
+
+.plugin-catalogue-empty-copy p {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+  max-width: 56ch;
+}
+
+.plugin-catalogue-kicker {
+  color: var(--accent);
+  font-size: 0.8em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.plugin-catalogue-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.plugin-catalogue-empty-actions .primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+
+.plugin-catalogue-empty-actions .primary:hover:not(:disabled) {
+  background: var(--accent2);
+  border-color: var(--accent2);
+}
+
+.plugin-catalogue-loading,
+.plugin-catalogue-no-match {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  margin: auto;
+  max-width: 780px;
+  padding: 32px;
+  text-align: center;
+  width: 100%;
 }
 
 .plugin-catalogue-sources {
@@ -3993,6 +4089,18 @@ pre.body {
   .plugin-marketplace-heading {
     align-items: stretch;
     flex-wrap: wrap;
+  }
+
+  .plugin-marketplace-tools {
+    width: 100%;
+  }
+
+  .plugin-marketplace-tools input {
+    max-width: none;
+  }
+
+  .plugin-catalogue-empty {
+    flex-direction: column;
   }
 }
 
