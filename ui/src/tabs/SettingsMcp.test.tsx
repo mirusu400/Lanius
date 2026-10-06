@@ -187,10 +187,31 @@ describe('MCP settings', () => {
 
     // Pasteable as-is, and pointing at the port actually in use.
     const config = JSON.parse(copied[0]) as {
-      mcpServers: { lanius: { url: string } };
+      mcpServers: { lanius: { type: string; url: string } };
     };
+    expect(config.mcpServers.lanius.type).toBe('http');
     expect(config.mcpServers.lanius.url).toBe('http://127.0.0.1:12954/mcp/mcp');
     expect(await screen.findByText(t('mcp.copied'))).toBeTruthy();
+  });
+
+  it('shows and copies Codex and Claude Code commands for the active endpoint', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (text: string) => { copied.push(text); } },
+    });
+    render(<McpSection />);
+    await waitFor(() => expect(screen.getByText(t('mcp.section'))).toBeTruthy());
+
+    const codex = 'codex mcp add lanius --url http://127.0.0.1:12954/mcp/mcp';
+    const claude = 'claude mcp add --transport http --scope user lanius http://127.0.0.1:12954/mcp/mcp';
+    expect(mcpSection().getByText(codex)).toBeTruthy();
+    expect(mcpSection().getByText(claude)).toBeTruthy();
+
+    await user.click(mcpSection().getByRole('button', { name: t('mcp.copyCommand', { client: 'Codex' }) }));
+    await user.click(mcpSection().getByRole('button', { name: t('mcp.copyCommand', { client: 'Claude Code' }) }));
+    expect(copied).toEqual([codex, claude]);
+    expect(await screen.findByText(t('mcp.commandCopied'))).toBeTruthy();
   });
 
   it('says so when the MCP server did not start', async () => {
@@ -221,6 +242,8 @@ describe('MCP settings', () => {
     await user.click(screen.getByRole('button', { name: t('mcp.applyPort') }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('set_api_port', { port: 13001 }));
     expect(await screen.findByText('http://127.0.0.1:13001/mcp/mcp')).toBeTruthy();
+    expect(screen.getByText('codex mcp add lanius --url http://127.0.0.1:13001/mcp/mcp')).toBeTruthy();
+    expect(screen.getByText('claude mcp add --transport http --scope user lanius http://127.0.0.1:13001/mcp/mcp')).toBeTruthy();
     expect((field as HTMLInputElement).value).toBe('13001');
     expect(vi.mocked(fetch)).toHaveBeenCalledWith('http://127.0.0.1:13001/api/mcp', undefined);
   });

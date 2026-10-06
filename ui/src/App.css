@@ -4388,6 +4388,40 @@ pre.body {
   vertical-align: -2px;
 }
 
+/* MCP client setup commands stay readable when the settings pane narrows. */
+.mcp-client-commands {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 16px;
+}
+
+.mcp-client-command {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 100px minmax(0, 1fr) auto;
+}
+
+.mcp-client-command code {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: block;
+  overflow-x: auto;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .mcp-client-command {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .mcp-client-command strong {
+    grid-column: 1 / -1;
+  }
+}
+
 /* MCP tool list: a name, what it does, and whether it only looks. */
 .mcp-tools {
   list-style: none;

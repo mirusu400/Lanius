@@ -74,15 +74,24 @@ export function McpSection() {
   // What a user pastes into their agent's config. Written out here rather
   // than in the docs so it carries the port this engine is actually on.
   const clientConfig = JSON.stringify(
-    { mcpServers: { lanius: { url: state.url } } },
+    { mcpServers: { lanius: { type: 'http', url: state.url } } },
     null,
     2,
   );
 
-  const copyConfig = async () => {
+  const clientCommands = [
+    { name: 'Codex', command: `codex mcp add lanius --url ${state.url}` },
+    {
+      name: 'Claude Code',
+      command: `claude mcp add --transport http --scope user lanius ${state.url}`,
+    },
+  ];
+
+  const copy = async (value: string, success: Message) => {
     try {
-      await navigator.clipboard.writeText(clientConfig);
-      setNote(msg('mcp.copied'));
+      await navigator.clipboard.writeText(value);
+      setNote(success);
+      setError(null);
     } catch (err) {
       setError(rawMsg((err as Error).message));
     }
@@ -144,8 +153,27 @@ export function McpSection() {
             </div>
           )}
 
+          <h4>{t('mcp.setupHeading')}</h4>
+          <p className="muted">{t('mcp.setupHelp')}</p>
+          <div className="mcp-client-commands">
+            {clientCommands.map(({ name, command }) => (
+              <div className="mcp-client-command" key={name}>
+                <strong>{name}</strong>
+                <code>{command}</code>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void copy(command, msg('mcp.commandCopied'))}
+                  aria-label={t('mcp.copyCommand', { client: name })}
+                >
+                  {t('mcp.copyButton')}
+                </button>
+              </div>
+            ))}
+          </div>
+
           <div className="settings-row">
-            <button type="button" disabled={busy} onClick={() => void copyConfig()}>
+            <button type="button" disabled={busy} onClick={() => void copy(clientConfig, msg('mcp.copied'))}>
               {t('mcp.copy')}
             </button>
           </div>

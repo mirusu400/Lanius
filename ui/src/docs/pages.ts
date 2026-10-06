@@ -171,11 +171,11 @@ const en: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Copy the configuration from Settings and paste it into your agent. For a client that speaks HTTP it looks like this:',
+            body: 'Settings shows one-line commands for Codex and Claude Code using the current MCP port. Run one in a terminal on this machine. For other HTTP clients, copy the configuration from Settings:',
           },
           {
             kind: 'code',
-            body: '{\n  "mcpServers": {\n    "lanius": {\n      "url": "http://127.0.0.1:12954/mcp/mcp"\n    }\n  }\n}',
+            body: '{\n  "mcpServers": {\n    "lanius": {\n      "type": "http",\n      "url": "http://127.0.0.1:12954/mcp/mcp"\n    }\n  }\n}',
           },
           {
             kind: 'text',
@@ -615,11 +615,11 @@ const ko: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: '설정에서 구성을 복사해 에이전트에 붙여넣으세요. HTTP를 쓰는 클라이언트라면 이런 모양입니다:',
+            body: '설정에는 현재 MCP 포트에 맞춘 Codex와 Claude Code 원라인 명령어가 있습니다. 이 컴퓨터의 터미널에서 실행하세요. 다른 HTTP 클라이언트에는 설정에서 구성을 복사해 사용하세요:',
           },
           {
             kind: 'code',
-            body: '{\n  "mcpServers": {\n    "lanius": {\n      "url": "http://127.0.0.1:12954/mcp/mcp"\n    }\n  }\n}',
+            body: '{\n  "mcpServers": {\n    "lanius": {\n      "type": "http",\n      "url": "http://127.0.0.1:12954/mcp/mcp"\n    }\n  }\n}',
           },
           {
             kind: 'text',
