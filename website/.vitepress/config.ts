@@ -25,6 +25,9 @@ export default defineConfig({
     'releases/v0.2.0.md': 'releases/v0-2-0.md',
   },
   cleanUrls: true,
+  sitemap: {
+    hostname: 'https://lanius.mir.sh',
+  },
   vite: {
     // docs/ lives outside the website root, so bare imports from markdown
     // modules cannot walk up to website/node_modules. Pin vue to this
@@ -46,15 +49,45 @@ export default defineConfig({
     logo: '/lanius_mascot_transparent.png',
     siteTitle: 'Lanius',
     nav: [
-      { text: 'Wiki', link: '/lockdown-mode' },
+      { text: 'Wiki', link: '/features' },
       { text: 'Plugins', link: '/plugins-sdk' },
       { text: 'Releases', link: `${repo}/releases` },
     ],
     sidebar: {
       '/': [
         {
+          text: 'Overview',
+          items: [{ text: 'Features', link: '/features' }],
+        },
+        {
           text: 'Proxy',
-          items: [{ text: 'Lockdown Mode', link: '/lockdown-mode' }],
+          items: [
+            { text: 'Dashboard', link: '/dashboard' },
+            { text: 'Proxy History', link: '/proxy' },
+            { text: 'Intercept', link: '/intercept' },
+            { text: 'WebSockets', link: '/websockets' },
+            { text: 'Target', link: '/target' },
+            { text: 'Raw TCP', link: '/raw-tcp' },
+            { text: 'Logger', link: '/logger' },
+            { text: 'Lockdown Mode', link: '/lockdown-mode' },
+          ],
+        },
+        {
+          text: 'Testing',
+          items: [
+            { text: 'Replay', link: '/replay' },
+            { text: 'Fuzzer', link: '/fuzzer' },
+            { text: 'Decoder and Diff', link: '/decoder-diff' },
+            { text: 'Issues', link: '/issues' },
+          ],
+        },
+        {
+          text: 'Platform',
+          items: [
+            { text: 'Projects', link: '/projects' },
+            { text: 'AI Agents', link: '/ai-agents' },
+            { text: 'Settings', link: '/settings' },
+          ],
         },
         {
           text: 'Plugins',
