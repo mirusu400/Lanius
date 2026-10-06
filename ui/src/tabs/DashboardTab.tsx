@@ -6,6 +6,7 @@ import { connectStream } from '../api/stream';
 import { useT } from '../i18n';
 import { OpenBrowserButton } from '../components/OpenBrowserButton';
 import { useReportBusy } from '../components/busy';
+import { DoctorPanel } from './DoctorPanel';
 import {
   formatBytes,
   formatDuration,
@@ -20,12 +21,16 @@ const REFRESH_MS = 1000;
 export function DashboardTab({
   onOpenTab,
   onOpenMethod,
+  onOpenSettings,
 }: {
   onOpenTab?: (tab: string) => void;
   onOpenMethod?: (method: string) => void;
+  onOpenSettings?: (group: 'proxy' | 'browser') => void;
 }) {
   const t = useT();
   const [data, setData] = useState<Dashboard | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [doctorOpen, setDoctorOpen] = useState(false);
   const pending = useRef(false);
 
   const [loading, setLoading] = useState(true);
@@ -36,8 +41,9 @@ export function DashboardTab({
     pending.current = true;
     try {
       setData(await getDashboard());
-    } catch {
-      // The engine may still be starting; the next tick retries.
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       pending.current = false;
       setLoading(false);
@@ -53,6 +59,7 @@ export function DashboardTab({
   useEffect(() => {
     let timer: number | undefined;
     const dispose = connectStream({
+      onState: (state) => { if (state === 'open') void refresh(); },
       onEvent: () => {
         if (timer !== undefined) return;
         timer = window.setTimeout(() => {
@@ -67,7 +74,18 @@ export function DashboardTab({
     };
   }, [refresh]);
 
-  if (!data) return <div className="dash" />;
+  if (!data) return <div className="dash">
+    <header className="dash-head">
+      <div><h2>{t('dash.title')}</h2><p className="dash-sub">{t('dash.subtitle')}</p></div>
+      <button type="button" onClick={() => setDoctorOpen((open) => !open)} aria-expanded={doctorOpen}>{t('doctor.title')}</button>
+    </header>
+    {error && <div className="banner error" role="alert">
+      <p>{t('doctor.engineError', { message: error })}</p>
+      <button type="button" onClick={() => void refresh()}>{t('common.refresh')}</button>
+    </div>}
+    {loading && <p className="muted">{t('doctor.checking')}</p>}
+    {doctorOpen && <DoctorPanel onOpenSettings={onOpenSettings} />}
+  </div>;
 
   const address = `${data.proxy.host}:${data.proxy.port}`;
   const totalStatus = Object.values(data.status_groups).reduce((a, b) => a + b, 0);
@@ -86,7 +104,12 @@ export function DashboardTab({
         <div>
           <h2>{t('dash.title')}</h2>
           <p className="dash-sub">{t('dash.subtitle')}</p>
-          <OpenBrowserButton />
+          <div className="dash-actions">
+            <OpenBrowserButton />
+            <button type="button" onClick={() => setDoctorOpen((open) => !open)} aria-expanded={doctorOpen}>
+              {t('doctor.title')}
+            </button>
+          </div>
         </div>
         <div className="dash-engine">
           <span className={data.proxy.running ? 'pill ok' : 'pill bad'}>
@@ -104,6 +127,12 @@ export function DashboardTab({
           )}
         </div>
       </header>
+
+      {error && <div className="banner error" role="alert">
+        <p>{t('doctor.dashboardStale', { message: error })}</p>
+        <button type="button" onClick={() => void refresh()}>{t('common.refresh')}</button>
+      </div>}
+      {doctorOpen && <DoctorPanel onOpenSettings={onOpenSettings} />}
 
       {(downModes.length > 0 || captureBlocked) && (
         <section className="dash-alerts">

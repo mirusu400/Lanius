@@ -346,6 +346,10 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
           {tab === "Proxy" ? null : tab === "Dashboard" ? (
             <DashboardTab
               onOpenTab={(next) => setTab(next as Tab)}
+              onOpenSettings={(group) => {
+                setSettingsGroup(group);
+                setTab('Settings');
+              }}
               onOpenMethod={(method) => {
                 setHistoryMethodRequest({ method });
                 setTab('Proxy');

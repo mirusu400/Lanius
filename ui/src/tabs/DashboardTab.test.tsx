@@ -98,6 +98,13 @@ beforeEach(() => {
           };
         }
         if (path.includes('/api/status')) return payload;
+        if (path.includes('/api/browser')) return {
+          available: true, name: 'Chromium', profile: '/tmp/lanius-browser', ca_trusted: true,
+        };
+        if (path.includes('/api/ca')) return {
+          confdir: '/tmp/lanius-ca', available: { pem: true },
+          install_url: 'http://mitm.it', proxy: '127.0.0.1:8080',
+        };
         if (path.includes('/api/scanner')) {
           return {
             passive_enabled: true,
@@ -214,6 +221,59 @@ describe('DashboardTab', () => {
     // Must not throw: the tab is the landing screen, so it renders before
     // the engine has finished starting.
     expect(() => render(<DashboardTab />)).not.toThrow();
+    expect((await screen.findByRole('alert')).textContent).toContain(t('doctor.engineError', { message: 'connection refused' }));
+    expect(screen.getByRole('button', { name: t('common.refresh') })).toBeTruthy();
+  });
+
+  it('checks local readiness and points to the relevant settings', async () => {
+    const onOpenSettings = vi.fn();
+    render(<DashboardTab onOpenSettings={onOpenSettings} />);
+    await screen.findByText(t('dash.empty'));
+    await userEvent.click(screen.getByRole('button', { name: t('doctor.title') }));
+
+    expect(await screen.findByText(t('doctor.engineOk'))).toBeTruthy();
+    expect(screen.getByText(t('doctor.listenerOk', { address: '127.0.0.1:8080' }))).toBeTruthy();
+    expect(screen.getByText(t('doctor.caReady'))).toBeTruthy();
+    expect(screen.getByText(t('doctor.systemCaptureOff'))).toBeTruthy();
+    expect(screen.getByText(t('doctor.trafficEmpty'))).toBeTruthy();
+    await userEvent.click(screen.getAllByRole('button', { name: t('doctor.proxySettings') })[0]);
+    expect(onOpenSettings).toHaveBeenCalledWith('proxy');
+  });
+
+  it('rechecks when the engine recovers', async () => {
+    let online = false;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (!online && String(url).includes('/api/dashboard')) throw new Error('connection refused');
+      return { ok: true, status: 200, json: async () => empty };
+    }) as unknown as typeof fetch);
+    render(<DashboardTab />);
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    online = true;
+    await userEvent.click(screen.getByRole('button', { name: t('common.refresh') }));
+    expect(await screen.findByText(t('dash.empty'))).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows a browser launch failure in the Doctor panel', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes('/api/browser') && init?.method === 'POST') {
+        return { ok: false, status: 409, statusText: 'Conflict', json: async () => ({ detail: 'profile locked' }) };
+      }
+      const path = String(url);
+      const value = path.includes('/api/browser')
+        ? { available: true, name: 'Chromium', profile: '/tmp/profile', ca_trusted: true }
+        : path.includes('/api/ca')
+          ? { confdir: '/tmp/ca', available: { pem: true }, install_url: 'http://mitm.it', proxy: '127.0.0.1:8080' }
+          : empty;
+      return { ok: true, status: 200, json: async () => value };
+    }) as unknown as typeof fetch);
+    render(<DashboardTab />);
+    await screen.findByText(t('dash.empty'));
+    await userEvent.click(screen.getByRole('button', { name: t('doctor.title') }));
+    const doctor = await screen.findByRole('region', { name: t('doctor.title') });
+    await screen.findByText(t('doctor.browserOk', { name: 'Chromium' }));
+    await userEvent.click(within(doctor).getByRole('button', { name: t('browser.open') }));
+    expect(await within(doctor).findByRole('alert')).toHaveProperty('textContent', t('browser.failed', { message: 'profile locked' }));
   });
 });
 

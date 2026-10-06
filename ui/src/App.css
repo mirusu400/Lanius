@@ -4689,6 +4689,99 @@ pre.body {
   color: var(--muted);
 }
 
+.dash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.open-browser-action {
+  display: grid;
+  gap: 4px;
+}
+
+.doctor {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-alt);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.doctor-head,
+.doctor-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.doctor-head {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.doctor-head h3 {
+  margin: 0;
+}
+
+.doctor-head .muted {
+  margin: 4px 0 0;
+  max-width: 70ch;
+}
+
+.doctor-checks {
+  display: grid;
+  gap: 1px;
+  background: var(--border-soft);
+}
+
+.doctor-check {
+  align-items: center;
+  background: var(--bg-alt);
+  padding: 10px 4px;
+}
+
+.doctor-check > div:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+
+.doctor-check p {
+  color: var(--muted);
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.doctor-state {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.doctor-state.ok { background: var(--ok); }
+.doctor-state.warn { background: var(--warn); }
+.doctor-state.bad { background: var(--danger); }
+
+.doctor-label {
+  margin-left: 6px;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+
+.doctor-label.ok { color: var(--ok); }
+.doctor-label.warn { color: var(--warn); }
+.doctor-label.bad { color: var(--danger); }
+
+.doctor-action { flex: none; }
+
+@media (max-width: 680px) {
+  .doctor-check { flex-wrap: wrap; }
+  .doctor-action { margin-left: 21px; }
+}
+
 .dash-engine {
   display: flex;
   flex-wrap: wrap;

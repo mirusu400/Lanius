@@ -64,7 +64,7 @@ export function OpenBrowserButton() {
   };
 
   return (
-    <>
+    <div className="open-browser-action">
       <button
         type="button"
         disabled={busy || unavailable}
@@ -80,6 +80,7 @@ export function OpenBrowserButton() {
         <GlobeIcon />
         {busy ? t('browser.opening') : t('browser.open')}
       </button>
-    </>
+      {error && <span className="field-error" role="alert">{t('browser.failed', { message: error })}</span>}
+    </div>
   );
 }
