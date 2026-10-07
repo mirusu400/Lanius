@@ -23,6 +23,7 @@ export default defineConfig({
   srcExclude: ['research/**', 'plugin-platform-status.md'],
   rewrites: {
     'releases/v0.2.0.md': 'releases/v0-2-0.md',
+    'releases/v0.3.0.md': 'releases/v0-3-0.md',
   },
   cleanUrls: true,
   sitemap: {
@@ -102,6 +103,7 @@ export default defineConfig({
           text: 'Notes',
           items: [
             { text: 'Theme Palette Sources', link: '/theme-sources' },
+            { text: 'Release 0.3.0', link: '/releases/v0-3-0' },
             { text: 'Release 0.2.0', link: '/releases/v0-2-0' },
           ],
         },

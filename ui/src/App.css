@@ -1507,7 +1507,7 @@ table.resizable-table th {
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 16px;
+  font-size: 1.23em;
   line-height: 1;
   padding: 0;
   cursor: pointer;
@@ -1638,9 +1638,9 @@ td.empty {
 
 .detail-find-toggle {
   min-width: 27px;
-  height: 25px;
-  font-size: 20px;
-  line-height: 18px;
+  min-height: 25px;
+  font-size: 1.54em;
+  line-height: 1;
 }
 
 .detail-find-bar {
