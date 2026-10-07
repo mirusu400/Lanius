@@ -5,8 +5,8 @@ import { addScopeFromUrl } from '../api/client';
 import type { FlowFilters, FlowSummary, InterceptRules, PausedFlow } from '../api/types';
 import { editsFromText, parseRequest, renderPaused, renderPausedVariant, renderRequest } from '../tabs/interceptModel';
 import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n';
-import { addTab } from '../tabs/replayStore';
-import { emptyTab, originOf } from '../tabs/replayModel';
+import { sendTextToReplay } from '../tabs/replayStore';
+import { originOf } from '../tabs/replayModel';
 import { sendTextToFuzzer } from '../tabs/fuzzerStore';
 import { flowMenuItems, flowUrl } from '../tabs/flowMenu';
 import { OpenBrowserButton } from './OpenBrowserButton';
@@ -263,12 +263,7 @@ export function InterceptPanel({
   const menuText = menu.target?.requestText ?? '';
 
   const sendHeldToReplay = (flow: FlowSummary, text: string) => {
-    addTab({
-      ...emptyTab(),
-      title: `${flow.method} ${flow.path ?? '/'}`,
-      url: originOf(flow),
-      text,
-    });
+    sendTextToReplay(originOf(flow), text, `${flow.method} ${flow.path ?? '/'}`);
   };
   const currentRequest = current ? {
     paused: shownMenuFlow ?? current,

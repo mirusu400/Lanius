@@ -83,6 +83,7 @@ describe('ReplayTab', () => {
     const unsubscribe = subscribeTarget((target) => { sentTarget.current = target; });
     fireShortcut('request.sendToFuzzer', editor());
     expect(sentTarget.current).toMatchObject({ url: 'http://echo.test', template: draft });
+    expect(screen.getByText(t('toast.requestTransferred', { tool: 'Fuzzer' }))).toBeTruthy();
 
     fireEvent.contextMenu(editor());
     expect(screen.getByRole('menuitem', { name: t('editor.sendToFuzzer') })).toBeTruthy();

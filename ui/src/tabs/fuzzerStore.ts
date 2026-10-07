@@ -2,6 +2,7 @@
 
 import type { FlowDetail, FlowSummary } from '../api/types';
 import { templateFromFlow } from './fuzzerModel';
+import { notifyRequestTransferred } from '../requestTransfers';
 
 export interface FuzzerTarget {
   url: string;
@@ -31,6 +32,7 @@ export function sendTextToFuzzer(url: string, template: string): FuzzerTarget {
   seq += 1;
   current = { url, template, seq };
   for (const listener of listeners) listener(current);
+  notifyRequestTransferred('Fuzzer');
   return current;
 }
 
@@ -38,11 +40,8 @@ export function sendToFuzzer(
   flow: FlowSummary,
   detail?: FlowDetail | null,
 ): FuzzerTarget {
-  seq += 1;
   const { url, template } = templateFromFlow(flow, detail);
-  current = { url, template, seq };
-  for (const listener of listeners) listener(current);
-  return current;
+  return sendTextToFuzzer(url, template);
 }
 
 export function resetTarget(): void {

@@ -148,12 +148,33 @@ describe('FlowDetailView', () => {
     expect(getTabs()[0].text).toContain('Content-Type: text/html');
     expect(getTabs()[0].text).toContain('<main class="card">Hi</main>');
     expect(onSentToReplay).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(t('toast.requestTransferred', { tool: 'Replay' }))).toBeTruthy();
     const sent: { target: FuzzerTarget | null } = { target: null };
     const unsubscribe = subscribeTarget((target) => { sent.target = target; });
     fireShortcut('request.sendToFuzzer');
     unsubscribe();
     expect(sent.target?.template).toBe(getTabs()[0].text.replace(/\r\n/g, '\n'));
     expect(sent.target?.url).toBe('https://api.test');
+    expect(screen.getByText(t('toast.requestTransferred', { tool: 'Fuzzer' }))).toBeTruthy();
+  });
+
+  it('shows the success toast only after the request finishes transferring', async () => {
+    let complete!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => { complete = resolve; });
+    vi.stubGlobal('fetch', vi.fn(() => pending));
+    render(<FlowDetailView flow={httpFlow} />);
+    fireShortcut('request.sendToReplay');
+    expect(screen.queryByText(t('toast.requestTransferred', { tool: 'Replay' }))).toBeNull();
+    expect(getTabs()).toHaveLength(0);
+    complete({
+      ok: true, status: 200, statusText: 'OK',
+      json: async () => ({
+        ...httpFlow, request_headers: [['Host', 'api.test']], request_body: '',
+        response_headers: [], response_body: '',
+      }),
+    } as Response);
+    expect(await screen.findByText(t('toast.requestTransferred', { tool: 'Replay' }))).toBeTruthy();
+    expect(getTabs()).toHaveLength(1);
   });
 
   it('fetches the newly selected request instead of sending stale detail', async () => {

@@ -503,6 +503,7 @@ describe('sending a flow onward', () => {
     await waitFor(() => expect(getTabs()).toHaveLength(1));
     expect(getTabs()[0].text).toContain('Host: seeded.test');
     expect(getTabs()[0].text).toContain('Cookie:');
+    expect(screen.getByText(t('toast.requestTransferred', { tool: 'Replay' }))).toBeTruthy();
   });
 
   it('carries the headers and body, not just the request line', async () => {
@@ -522,6 +523,7 @@ describe('sending a flow onward', () => {
     const text = getTabs()[0].text;
     expect(text).toContain('Cookie:');
     expect(text).toContain('Host: seeded.test');
+    expect(screen.getByText(t('toast.requestTransferred', { tool: 'Replay' }))).toBeTruthy();
   });
 });
 

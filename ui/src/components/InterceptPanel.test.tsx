@@ -66,11 +66,13 @@ describe('InterceptPanel', () => {
     fireEvent.change(editorEl(), { target: { value: draft } });
     fireShortcut('request.sendToReplay', editorEl());
     expect(getTabs()[0]).toMatchObject({ url: 'http://example.com', text: draft });
+    expect(screen.getByText(t('toast.requestTransferred', { tool: 'Replay' }))).toBeTruthy();
     const sent: { target: FuzzerTarget | null } = { target: null };
     const unsubscribe = subscribeTarget((target) => { sent.target = target; });
     fireShortcut('request.sendToFuzzer', editorEl());
     unsubscribe();
     expect(sent.target).toMatchObject({ url: 'http://example.com', template: draft });
+    expect(screen.getByText(t('toast.requestTransferred', { tool: 'Fuzzer' }))).toBeTruthy();
     expect(calls.some(({ url }) => url.includes('/forward'))).toBe(false);
   });
 

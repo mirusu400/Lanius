@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useT } from '../i18n';
+import { subscribeRequestTransfers } from '../requestTransfers';
 import './Toast.css';
 
 export type ToastTone = 'info' | 'success' | 'error';
@@ -17,6 +19,7 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const t = useT();
   const [toast, setToast] = useState<ToastOptions | null>(null);
   const timer = useRef<number | null>(null);
 
@@ -36,6 +39,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       }, options.durationMs ?? 4000);
     }
   }, []);
+
+  useEffect(() => subscribeRequestTransfers((tool) => {
+    showToast({ message: t('toast.requestTransferred', { tool }), tone: 'success' });
+  }), [showToast, t]);
 
   useEffect(() => () => {
     if (timer.current !== null) window.clearTimeout(timer.current);

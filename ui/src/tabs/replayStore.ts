@@ -4,6 +4,7 @@ import type { FlowDetail, FlowSummary } from '../api/types';
 import {
   REPLAY_HISTORY_LIMIT,
   canStepReplayHistory,
+  emptyTab,
   replaySnapshot,
   tabFromFlow,
   trimResponse,
@@ -13,6 +14,7 @@ import {
   type ReplayTab,
 } from './replayModel';
 import { asMessage, type Message } from '../i18n/message';
+import { notifyRequestTransferred } from '../requestTransfers';
 
 type Listener = (tabs: ReplayTab[]) => void;
 
@@ -146,7 +148,16 @@ export function sendToReplay(
   flow: FlowSummary,
   detail?: FlowDetail | null,
 ): ReplayTab {
-  return addTab(tabFromFlow(flow, detail));
+  const tab = addTab(tabFromFlow(flow, detail));
+  notifyRequestTransferred('Replay');
+  return tab;
+}
+
+/** Carry an edited request into Replay without losing its raw draft. */
+export function sendTextToReplay(url: string, text: string, title: string): ReplayTab {
+  const tab = addTab({ ...emptyTab(), url, text, title });
+  notifyRequestTransferred('Replay');
+  return tab;
 }
 
 /** Test helper. */
