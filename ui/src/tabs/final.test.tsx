@@ -191,6 +191,17 @@ describe('SettingsTab', () => {
     expect(project.className).toContain('active');
   });
 
+  it('keeps a project filter when switching Settings groups', async () => {
+    const user = userEvent.setup();
+    render(<SettingsTab />);
+    await user.click(screen.getByRole('button', { name: t('settings.group.project') }));
+    const filter = screen.getByRole('textbox', { name: t('compact.search') });
+    await user.type(filter, 'noise.test');
+    await user.click(screen.getByRole('button', { name: t('settings.group.proxy') }));
+    await user.click(screen.getByRole('button', { name: t('settings.group.project') }));
+    expect(screen.getByRole('textbox', { name: t('compact.search') })).toHaveProperty('value', 'noise.test');
+  });
+
   it('shows one group at a time', async () => {
     // The whole point: eleven sections on one page meant scrolling past
     // everything else to reach any one of them.

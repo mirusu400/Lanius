@@ -9,7 +9,7 @@
  * list of sections and nothing has to be threaded through here.
  */
 
-import { useEffect, useState } from "react";
+import { Activity, useEffect, useState } from "react";
 
 import { useT } from "../i18n";
 import type { Project } from "../projects";
@@ -71,16 +71,21 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
   const [group, setGroup] = useState<Group>(() =>
     GROUPS.includes(openGroup as Group) ? (openGroup as Group) : initialGroup(),
   );
+  const [visitedGroups, setVisitedGroups] = useState<Set<Group>>(() => new Set([
+    GROUPS.includes(openGroup as Group) ? (openGroup as Group) : initialGroup(),
+  ]));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!GROUPS.includes(openGroup as Group)) return;
     setGroup(openGroup as Group);
+    setVisitedGroups((current) => new Set([...current, openGroup as Group]));
     onGroupOpened?.();
   }, [openGroup, onGroupOpened]);
 
   const choose = (next: Group) => {
     setGroup(next);
+    setVisitedGroups((current) => new Set([...current, next]));
     window.localStorage?.setItem(STORAGE_KEY, next);
   };
 
@@ -102,7 +107,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
 
       <div className="settings-body">
         {/* Everything about getting traffic into Lanius. */}
-        {group === "proxy" && (
+        {visitedGroups.has("proxy") && <Activity mode={group === "proxy" ? "visible" : "hidden"}>
           <>
             <ListenerSection />
             <UpstreamSection />
@@ -113,31 +118,31 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
             <CaptureSection />
             <TlsSection />
           </>
-        )}
+        </Activity>}
 
         {/* Everything about pointing a browser at it. */}
-        {group === "browser" && (
+        {visitedGroups.has("browser") && <Activity mode={group === "browser" ? "visible" : "hidden"}>
           <>
             <BrowserSection />
             <CaSection onError={setError} />
             <BrowserHelpSection />
           </>
-        )}
+        </Activity>}
 
-        {group === "shortcuts" && <ShortcutsSection />}
+        {visitedGroups.has("shortcuts") && <Activity mode={group === "shortcuts" ? "visible" : "hidden"}><ShortcutsSection /></Activity>}
 
-        {group === "appearance" && (
+        {visitedGroups.has("appearance") && <Activity mode={group === "appearance" ? "visible" : "hidden"}>
           <>
             <AppearanceSection />
             <LanguageSection />
           </>
-        )}
+        </Activity>}
 
-        {group === "integrations" && <McpSection />}
+        {visitedGroups.has("integrations") && <Activity mode={group === "integrations" ? "visible" : "hidden"}><McpSection /></Activity>}
 
-        {group === "security" && <LockdownSection />}
+        {visitedGroups.has("security") && <Activity mode={group === "security" ? "visible" : "hidden"}><LockdownSection /></Activity>}
 
-        {group === "project" && (
+        {visitedGroups.has("project") && <Activity mode={group === "project" ? "visible" : "hidden"}>
           <>
             <ProjectSection
               project={project}
@@ -147,14 +152,14 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
             />
             <ProjectCompactSection />
           </>
-        )}
+        </Activity>}
 
-        {group === "about" && (
+        {visitedGroups.has("about") && <Activity mode={group === "about" ? "visible" : "hidden"}>
           <>
             <AboutSection />
             <UpdatesSection />
           </>
-        )}
+        </Activity>}
       </div>
     </div>
   );

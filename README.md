@@ -244,6 +244,8 @@ of requests. The same screen shows
 which captured targets use space. Select targets to remove their requests and
 compact the database, or compact only to reclaim pages freed earlier. The
 preview shows request counts and the confirmation names what will be deleted.
+Cleanup shows the current step and elapsed time, plus request progress while
+selected targets are being deleted.
 Existing projects build summary and full text indexes once when first opened
 after upgrading; a large project can take minutes on that first launch and
 requires additional disk space.

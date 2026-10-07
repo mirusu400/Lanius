@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import socket
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +14,7 @@ from fastapi.testclient import TestClient
 from app.api.server import create_app
 from app.config import Settings
 from app.db.store import FlowRecord
+from app.db import store as store_module
 
 
 def free_port() -> int:
@@ -113,3 +117,62 @@ def test_compact_only_keeps_remaining_requests(client: TestClient) -> None:
     assert result["after_bytes"] <= result["before_bytes"]
     assert client.get("/api/flows/keep").status_code == 200
     assert before["total_flows"] == 1
+
+
+def test_single_large_target_reports_each_delete_batch(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for flow_id in ("first", "second", "third"):
+        seed(client, flow_id, "noise.test")
+    monkeypatch.setattr(store_module, "COMPACT_DELETE_BATCH_SIZE", 2)
+    reported: list[tuple[int, int]] = []
+
+    deleted = client.app.state.store.delete_sites(
+        [("https", "noise.test", 443, 3)],
+        lambda processed, total: reported.append((processed, total)),
+    )
+
+    assert deleted == 3
+    assert reported == [(2, 3), (3, 3)]
+    assert client.app.state.store.compact_overview()["total_flows"] == 0
+
+
+def test_progress_is_visible_during_compaction_and_rejects_overlap(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed(client, "remove", "noise.test")
+    preview = client.get("/api/project/compact").json()
+    operation_id = str(uuid4())
+    entered = threading.Event()
+    release = threading.Event()
+    store = client.app.state.store
+    original_reclaim = store.reclaim_space
+
+    def slow_reclaim(on_phase):
+        on_phase("vacuuming")
+        entered.set()
+        assert release.wait(timeout=10)
+        original_reclaim(on_phase)
+
+    monkeypatch.setattr(store, "reclaim_space", slow_reclaim)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                client.post,
+                "/api/project/compact",
+                json={"operation_id": operation_id, "sites": [site(preview, "noise.test")]},
+            )
+            assert entered.wait(timeout=10)
+            progress = client.get(f"/api/project/compact/progress/{operation_id}")
+            assert progress.status_code == 200
+            assert progress.json()["phase"] == "vacuuming"
+            assert progress.json()["processed_flows"] == 1
+            assert progress.json()["total_flows"] == 1
+            assert client.post("/api/project/compact", json={"sites": []}).status_code == 409
+            release.set()
+            assert future.result(timeout=10).status_code == 200
+    finally:
+        release.set()
+
+    assert client.get(f"/api/project/compact/progress/{operation_id}").json()["phase"] == "done"
+    assert client.get(f"/api/project/compact/progress/{uuid4()}").status_code == 404

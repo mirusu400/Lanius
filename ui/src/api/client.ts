@@ -1094,18 +1094,30 @@ export interface CompactResult {
   reclaim_error: string | null;
 }
 
+export interface CompactProgress {
+  operation_id: string;
+  phase: 'preparing' | 'deleting' | 'optimizing' | 'vacuuming' | 'checkpointing' | 'refreshing' | 'done' | 'failed';
+  processed_flows: number;
+  total_flows: number;
+}
+
 export function getCompactOverview(): Promise<CompactOverview> {
   return request('/api/project/compact');
 }
 
-export function compactProject(sites: CompactSite[]): Promise<CompactResult> {
+export function compactProject(sites: CompactSite[], operationId: string): Promise<CompactResult> {
   return request('/api/project/compact', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify({
+      operation_id: operationId,
       sites: sites.map(({ scheme, host, port, flows }) => ({ scheme, host, port, flows })),
     }),
   });
+}
+
+export function getCompactProgress(operationId: string): Promise<CompactProgress> {
+  return request(`/api/project/compact/progress/${encodeURIComponent(operationId)}`);
 }
 
 /** What the copy-as menus can offer, including plugin formats. */
