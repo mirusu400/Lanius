@@ -31,6 +31,7 @@ from ..content_encoding import body_for_display
 logger = logging.getLogger(__name__)
 
 ANNOTATION_COLORS = frozenset({"red", "orange", "yellow", "green", "blue", "purple"})
+COMPACT_DELETE_BATCH_SIZE = 250
 
 from .schema import migrate
 from .search_index import MIGRATION as SEARCH_MIGRATION
@@ -598,7 +599,7 @@ class FlowStore:
                     deleted += cursor.rowcount
         return deleted
 
-    def reclaim_space(self) -> None:
+    def reclaim_space(self, on_phase: Callable[[str], None] | None = None) -> None:
         """Hand freed pages back to the filesystem.
 
         Deleting rows only marks pages reusable, so the file does not
@@ -612,9 +613,15 @@ class FlowStore:
         with self._lock:
             # FTS5 keeps deleted document text in old index segments until
             # they are merged. VACUUM alone cannot reclaim those pages.
+            if on_phase:
+                on_phase("optimizing")
             self._conn.execute("INSERT INTO flow_search(flow_search) VALUES ('optimize')")
             self._conn.commit()
+            if on_phase:
+                on_phase("vacuuming")
             self._conn.execute("VACUUM")
+            if on_phase:
+                on_phase("checkpointing")
             self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     def compact_overview(self) -> dict[str, Any]:
@@ -657,11 +664,14 @@ class FlowStore:
         }
 
     def delete_sites(
-        self, sites: Sequence[tuple[str | None, str | None, int | None, int]]
+        self,
+        sites: Sequence[tuple[str | None, str | None, int | None, int]],
+        on_progress: Callable[[int, int], None] | None = None,
     ) -> int:
         """Delete exact sites only if their previewed counts still match."""
         if not sites:
             return 0
+        total = sum(site[3] for site in sites)
         with self._lock:
             deleted = 0
             with self._conn:
@@ -674,11 +684,23 @@ class FlowStore:
                     if count != expected:
                         raise ValueError("capture changed; refresh the cleanup preview")
                 for scheme, host, port, _ in sites:
-                    cursor = self._conn.execute(
-                        "DELETE FROM flows WHERE scheme IS ? AND host IS ? AND port IS ?",
-                        (scheme, host, port),
-                    )
-                    deleted += cursor.rowcount
+                    while True:
+                        rows = self._conn.execute(
+                            "SELECT rowid FROM flows"
+                            " WHERE scheme IS ? AND host IS ? AND port IS ?"
+                            " LIMIT ?",
+                            (scheme, host, port, COMPACT_DELETE_BATCH_SIZE),
+                        ).fetchall()
+                        if not rows:
+                            break
+                        placeholders = ",".join("?" for _ in rows)
+                        cursor = self._conn.execute(
+                            f"DELETE FROM flows WHERE rowid IN ({placeholders})",
+                            [row[0] for row in rows],
+                        )
+                        deleted += cursor.rowcount
+                        if on_progress:
+                            on_progress(deleted, total)
             return deleted
 
     # --- reads ------------------------------------------------------------

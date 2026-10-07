@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   compactProject,
+  getCompactProgress,
   getCompactOverview,
   type CompactOverview,
+  type CompactProgress,
   type CompactSite,
 } from '../../api/client';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -21,6 +23,10 @@ export function ProjectCompactSection() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
   const [busy, setBusy] = useState(false);
+  const [operationId, setOperationId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<CompactProgress | null>(null);
+  const [startedAt, setStartedAt] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -33,6 +39,28 @@ export function ProjectCompactSection() {
     void refresh().catch((err: unknown) => setError(String(err)));
   }, [refresh]);
 
+  useEffect(() => {
+    if (!operationId) return;
+    let active = true;
+    let pending = false;
+    const poll = async () => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+      if (pending) return;
+      pending = true;
+      try {
+        const snapshot = await getCompactProgress(operationId);
+        if (active) setProgress(snapshot);
+      } catch {
+        // The POST may not have registered yet; its own response reports errors.
+      } finally {
+        pending = false;
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 700);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [operationId, startedAt]);
+
   const selectedSites = useMemo(
     () => overview?.sites.filter((site) => selected.has(siteKey(site))) ?? [],
     [overview, selected],
@@ -44,12 +72,17 @@ export function ProjectCompactSection() {
   ) ?? [];
 
   const run = async (sites: CompactSite[]) => {
+    const id = crypto.randomUUID();
     setConfirmDelete(false);
     setBusy(true);
+    setStartedAt(Date.now());
+    setElapsedSeconds(0);
+    setProgress(null);
+    setOperationId(id);
     setError(null);
     setResult(null);
     try {
-      const data = await compactProject(sites);
+      const data = await compactProject(sites, id);
       setResult(t(sites.length ? 'compact.deleted' : 'compact.compacted', {
         deleted: data.deleted,
         bytes: formatBytes(data.reclaimed_bytes),
@@ -62,9 +95,14 @@ export function ProjectCompactSection() {
     } catch (err) {
       setError(t('compact.failed', { message: String(err) }));
     } finally {
+      setOperationId(null);
       setBusy(false);
     }
   };
+
+  const deletionPercent = progress?.phase === 'deleting' && progress.total_flows > 0
+    ? Math.min(100, Math.round(progress.processed_flows / progress.total_flows * 100))
+    : null;
 
   const toggle = (key: string) => {
     setSelected((current) => {
@@ -154,6 +192,27 @@ export function ProjectCompactSection() {
           {busy ? t('compact.working') : t('compact.delete')}
         </button>
       </div>
+
+      {busy && (
+        <div className="compact-progress" role="status" aria-live="polite">
+          <strong>{t(`compact.phase.${progress?.phase ?? 'preparing'}`)}</strong>
+          {deletionPercent !== null && (
+            <>
+              <progress value={progress?.processed_flows ?? 0} max={progress?.total_flows ?? 1} />
+              <span>{t('compact.deletionProgress', {
+                percent: deletionPercent,
+                processed: progress?.processed_flows ?? 0,
+                total: progress?.total_flows ?? 0,
+              })}</span>
+            </>
+          )}
+          {deletionPercent === null && <progress aria-label={t('compact.working')} />}
+          {progress && ['optimizing', 'vacuuming', 'checkpointing'].includes(progress.phase) && (
+            <span className="muted">{t('compact.longStep')}</span>
+          )}
+          <span className="muted" aria-live="off">{t('compact.elapsed', { seconds: elapsedSeconds })}</span>
+        </div>
+      )}
 
       {result && <p className="muted" role="status">{result}</p>}
       {error && <div className="banner error" role="alert">{error}</div>}

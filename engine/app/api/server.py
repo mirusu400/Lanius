@@ -9,10 +9,12 @@ import logging
 import re
 import secrets
 import sqlite3
+import threading
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -187,6 +189,49 @@ class CompactSite(BaseModel):
 
 class CompactProjectBody(BaseModel):
     sites: list[CompactSite] = Field(default_factory=list)
+    operation_id: UUID | None = None
+
+
+class CompactProgress:
+    """One active cleanup per project; snapshots never wait for the database."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._snapshot: dict[str, Any] | None = None
+        self._active = False
+
+    def start(self, operation_id: str, total_flows: int) -> bool:
+        with self._lock:
+            if self._active:
+                return False
+            self._active = True
+            self._snapshot = {
+                "operation_id": operation_id,
+                "phase": "preparing",
+                "processed_flows": 0,
+                "total_flows": total_flows,
+            }
+            return True
+
+    def update(self, phase: str, processed_flows: int | None = None) -> None:
+        with self._lock:
+            if self._snapshot is None:
+                return
+            self._snapshot["phase"] = phase
+            if processed_flows is not None:
+                self._snapshot["processed_flows"] = processed_flows
+
+    def finish(self, succeeded: bool) -> None:
+        with self._lock:
+            if self._snapshot is not None:
+                self._snapshot["phase"] = "done" if succeeded else "failed"
+            self._active = False
+
+    def get(self, operation_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            if self._snapshot is None or self._snapshot["operation_id"] != operation_id:
+                return None
+            return self._snapshot.copy()
 
 
 class ScopeRuleBody(BaseModel):
@@ -341,6 +386,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.ensure_dirs()
     store = FlowStore(settings.db_path)
+    compact_progress = CompactProgress()
     lockdown = LockdownPolicy.from_env(store)
 
     # Notable (non per-flow) events are persisted for the Logger tab.
@@ -712,41 +758,61 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """
         if len(payload.sites) > 5000:
             raise HTTPException(status_code=422, detail="too many sites selected")
-        before = await asyncio.to_thread(store.compact_overview)
-        available = {
-            (site["scheme"], site["host"], site["port"]): site["flows"]
-            for site in before["sites"]
-        }
         selected = {
             (site.scheme, site.host, site.port): site.flows for site in payload.sites
         }
-        if not selected.keys() <= available.keys():
-            raise HTTPException(status_code=422, detail="a selected site no longer exists")
+        if len(selected) != len(payload.sites):
+            raise HTTPException(status_code=422, detail="duplicate sites selected")
+        operation_id = str(payload.operation_id or uuid4())
+        if not compact_progress.start(operation_id, sum(selected.values())):
+            raise HTTPException(status_code=409, detail="project compaction already running")
+        succeeded = False
         try:
-            deleted = await asyncio.to_thread(
-                store.delete_sites,
-                [(*key, count) for key, count in selected.items()],
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        reclaim_error = None
-        try:
-            await asyncio.to_thread(store.reclaim_space)
-        except (sqlite3.Error, OSError) as exc:
-            # Deletion has committed. Report that accurately so the UI does
-            # not suggest retrying a destructive action that already ran.
-            reclaim_error = str(exc)
-            logger.exception("could not compact project database")
-        if deleted:
-            broker.publish("flows.deleted", {"count": deleted})
-        after = await asyncio.to_thread(store.compact_overview)
-        return {
-            "deleted": deleted,
-            "before_bytes": before["db_bytes"],
-            "after_bytes": after["db_bytes"],
-            "reclaimed_bytes": max(0, before["db_bytes"] - after["db_bytes"]),
-            "reclaim_error": reclaim_error,
-        }
+            before = await asyncio.to_thread(store.compact_overview)
+            available = {
+                (site["scheme"], site["host"], site["port"]): site["flows"]
+                for site in before["sites"]
+            }
+            if not selected.keys() <= available.keys():
+                raise HTTPException(status_code=422, detail="a selected site no longer exists")
+            compact_progress.update("deleting" if selected else "optimizing")
+            try:
+                deleted = await asyncio.to_thread(
+                    store.delete_sites,
+                    [(*key, count) for key, count in selected.items()],
+                    lambda done, _total: compact_progress.update("deleting", done),
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            reclaim_error = None
+            try:
+                await asyncio.to_thread(store.reclaim_space, compact_progress.update)
+            except (sqlite3.Error, OSError) as exc:
+                # Deletion has committed. Report that accurately so the UI does
+                # not suggest retrying a destructive action that already ran.
+                reclaim_error = str(exc)
+                logger.exception("could not compact project database")
+            if deleted:
+                broker.publish("flows.deleted", {"count": deleted})
+            compact_progress.update("refreshing")
+            after = await asyncio.to_thread(store.compact_overview)
+            succeeded = True
+            return {
+                "deleted": deleted,
+                "before_bytes": before["db_bytes"],
+                "after_bytes": after["db_bytes"],
+                "reclaimed_bytes": max(0, before["db_bytes"] - after["db_bytes"]),
+                "reclaim_error": reclaim_error,
+            }
+        finally:
+            compact_progress.finish(succeeded)
+
+    @app.get("/api/project/compact/progress/{operation_id}")
+    async def compact_project_progress(operation_id: UUID) -> dict[str, Any]:
+        snapshot = compact_progress.get(str(operation_id))
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="compaction not found")
+        return snapshot
 
     @app.get("/api/processes")
     async def processes(visible_only: bool = True) -> dict[str, Any]:

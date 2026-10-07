@@ -50,6 +50,12 @@ scope.
 | Linux | `Lanius_*_amd64.AppImage` or `Lanius_*_amd64.deb` |
 | Windows | `Lanius_*_x64_en-US.msi` or `Lanius_*_x64-setup.exe` |
 
+On VMware Linux guests with WebKitGTK 2.50, Lanius automatically avoids the
+DMABUF renderer that can leave the process running without a window. If a
+different Linux graphics setup has the same symptom, try launching with
+`WEBKIT_DISABLE_DMABUF_RENDERER=1 lanius`. An explicit environment setting
+always takes precedence over Lanius's automatic workaround.
+
 Builds are not code signed yet. On macOS, clear the quarantine flag once after
 installing:
 
@@ -238,6 +244,8 @@ of requests. The same screen shows
 which captured targets use space. Select targets to remove their requests and
 compact the database, or compact only to reclaim pages freed earlier. The
 preview shows request counts and the confirmation names what will be deleted.
+Cleanup shows the current step and elapsed time, plus request progress while
+selected targets are being deleted.
 Existing projects build summary and full text indexes once when first opened
 after upgrading; a large project can take minutes on that first launch and
 requires additional disk space.

@@ -1,8 +1,7 @@
 /** Decoder tab store.
  *
- * Tabs live outside the component for the same reason Replay's do:
- * React unmounts a tab when you switch away, so component state would
- * throw away every payload the moment you looked at the Proxy history.
+ * Tabs live outside the component for workspace autosave and for actions
+ * that send a value here from another tab.
  */
 
 import { emptyDecoderTab, type DecoderTabState } from './decoderModel';

@@ -1,4 +1,5 @@
 /** Renders the real Fuzzer tab against a mocked engine. */
+import { Activity, useState } from 'react';
 import {cleanup, screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
@@ -141,6 +142,24 @@ const templateBox = () =>
   screen.getByRole('textbox', { name: t('fuzzer.templateLabel') }) as HTMLTextAreaElement;
 
 describe('FuzzerTab', () => {
+  it('keeps an edited target when its hidden tab is shown again', async () => {
+    sendToFuzzer(flow);
+    function Harness() {
+      const [visible, setVisible] = useState(true);
+      return <>
+        <button onClick={() => setVisible((current) => !current)}>switch tab</button>
+        <Activity mode={visible ? 'visible' : 'hidden'}><FuzzerTab /></Activity>
+      </>;
+    }
+    render(<Harness />);
+    await waitFor(() => expect(templateBox().value).toContain('/login'));
+    fireEvent.change(templateBox(), { target: { value: 'GET /edited HTTP/1.1\nHost: app.test\n\n' } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'switch tab' }));
+    await userEvent.click(screen.getByRole('button', { name: 'switch tab' }));
+    expect(templateBox().value).toContain('/edited');
+  });
+
   it('shows the position and request estimate', () => {
     render(<FuzzerTab />);
     expect(screen.getByText(t('fuzzer.positions', { count: 1, requests: 3 }))).toBeTruthy();

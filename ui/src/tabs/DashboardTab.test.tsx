@@ -115,6 +115,13 @@ beforeEach(() => {
             jobs: [],
           };
         }
+        if (path.includes('/api/sitemap')) return {
+          sites: [
+            { scheme: 'https', host: 'api.test', port: 443, flows: 1, paths: 1, last_seen: 1, in_scope: true },
+            { scheme: 'http', host: 'cdn.test', port: 80, flows: 1, paths: 1, last_seen: 1, in_scope: false },
+          ].filter((site) => !path.includes('in_scope_only=true') || site.in_scope),
+        };
+        if (path.endsWith('/api/scope')) return { rules: [], restrict_capture: false };
         return { items: [], count: 0 };
       },
     })) as unknown as typeof fetch,
@@ -418,10 +425,34 @@ describe('title bar', () => {
 
     // Navigate away first, so returning is a real state change.
     await userEvent.click(screen.getByRole('button', { name: 'Proxy' }));
-    await waitFor(() => expect(screen.queryByText(t('dash.subtitle'))).toBeNull());
+    expect(screen.getByRole('button', { name: 'Proxy' }).className).toContain('active');
 
     await userEvent.click(screen.getByRole('button', { name: t('dash.home') }));
-    expect(await screen.findByText(t('dash.subtitle'))).toBeTruthy();
+    expect(screen.getByRole('button', { name: t('dash.title') }).className).toContain('active');
+  });
+
+  it('keeps Target and Logger filters when switching workspace tabs', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Target' }));
+    const scopeOnly = await screen.findByLabelText(t('target.inScopeOnly')) as HTMLInputElement;
+    await user.click(scopeOnly);
+    await waitFor(() => expect(scopeOnly.checked).toBe(true));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) =>
+      String(url).includes('/api/sitemap') && String(url).includes('in_scope_only=true')
+    )).toBe(true));
+
+    await user.click(screen.getByRole('button', { name: 'Logger' }));
+    const filter = await screen.findByRole('textbox', { name: t('logger.filter') });
+    await user.type(filter, 'diagnostic');
+    await user.click(screen.getByRole('button', { name: 'Proxy' }));
+    await user.click(screen.getByRole('button', { name: 'Target' }));
+    expect(screen.getByLabelText(t('target.inScopeOnly'))).toBe(scopeOnly);
+    expect(scopeOnly.checked).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Logger' }));
+    expect(screen.getByRole('textbox', { name: t('logger.filter') })).toBe(filter);
+    expect(filter).toHaveProperty('value', 'diagnostic');
   });
 
   it('keeps the Proxy history as it was when switching workspace tabs', async () => {

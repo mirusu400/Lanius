@@ -50,6 +50,38 @@ it('selects out-of-scope traffic and sends only that target after confirmation',
   await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: t('compact.delete') }));
   await waitFor(() => expect(calls).toHaveLength(1));
   expect(calls[0].body).toEqual({
+    operation_id: expect.any(String),
     sites: [{ scheme: 'https', host: 'noise.test', port: 443, flows: 3 }],
   });
+});
+
+it('shows real deletion progress and the current phase while compaction is pending', async () => {
+  let finishPost!: (value: Response) => void;
+  const post = new Promise<Response>((resolve) => { finishPost = resolve; });
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (init?.method === 'POST') return post;
+    const body = path.includes('/progress/')
+      ? { operation_id: path.split('/').at(-1), phase: 'deleting', processed_flows: 2, total_flows: 3 }
+      : { db_bytes: 4096, reclaimable_bytes: 0, total_flows: 5, sites: targets };
+    return { ok: true, json: async () => body } as Response;
+  }));
+
+  const user = userEvent.setup();
+  render(<ProjectCompactSection />);
+  await screen.findByText('noise.test', { exact: false });
+  await user.click(screen.getByRole('button', { name: t('compact.selectOut') }));
+  await user.click(screen.getByRole('button', { name: t('compact.delete') }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: t('compact.delete') }));
+
+  expect(await screen.findByText(t('compact.phase.deleting'))).toBeTruthy();
+  expect(screen.getByRole('progressbar')).toHaveProperty('value', 2);
+  expect(screen.getByText(t('compact.deletionProgress', { percent: 67, processed: 2, total: 3 }))).toBeTruthy();
+  expect(screen.getByText(t('compact.elapsed', { seconds: 0 }))).toBeTruthy();
+
+  finishPost({
+    ok: true,
+    json: async () => ({ deleted: 3, before_bytes: 4096, after_bytes: 2048, reclaimed_bytes: 2048, reclaim_error: null }),
+  } as Response);
+  await screen.findByText(t('compact.deleted', { deleted: 3, bytes: '2.0 KB' }));
 });

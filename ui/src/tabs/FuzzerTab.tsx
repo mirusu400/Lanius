@@ -52,11 +52,16 @@ export function FuzzerTab() {
   const [error, setError] = useState<Message | null>(null);
 
   const runIdRef = useRef<string | null>(null);
+  const lastTargetSeq = useRef(0);
 
   useEffect(
     () =>
       subscribeTarget((target) => {
-        if (!target) return;
+        // Activity reconnects this subscription when the tab is shown again.
+        // The store replays its last target then; keep this tab's current draft
+        // and results unless another request was actually sent to Fuzzer.
+        if (!target || target.seq === lastTargetSeq.current) return;
+        lastTargetSeq.current = target.seq;
         setUrl(target.url);
         setTemplate(target.template);
         setRun(null);
