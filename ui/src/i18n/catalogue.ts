@@ -65,6 +65,8 @@ const en = {
   'flow.status': 'Status',
   'flow.size': 'Size',
   'flow.modified': 'Modified',
+  'flow.localSourceIp': 'Local source IP',
+  'flow.localSourceIpHint': 'The address on Lanius’s upstream socket. NAT, VPN, or an upstream proxy may make the target see a different IP.',
 
   // --- flow detail ---
   'detail.selectPrompt': 'Select a flow to see its details.',
@@ -575,6 +577,8 @@ const en = {
   'editor.sendToFuzzer': 'Send to Fuzzer',
   'editor.sendToReplay': 'Send to Replay',
   'appearance.section': 'Appearance',
+  'appearance.showLocalSourceIp': 'Show local source IP in HTTP history',
+  'appearance.showLocalSourceIpHelp': 'Saved from the actual upstream socket without an external lookup. Hidden by default. This is not necessarily the public IP seen by the target.',
   'appearance.help':
     'How Lanius looks. Changes apply immediately and are remembered for next time.',
   'appearance.theme': 'Theme',
@@ -1051,6 +1055,8 @@ const ko: Catalogue = {
   'flow.status': '상태',
   'flow.size': '크기',
   'flow.modified': 'Modified',
+  'flow.localSourceIp': '로컬 출발 IP',
+  'flow.localSourceIpHint': 'Lanius의 외부 연결 소켓에 할당된 주소입니다. NAT·VPN·상위 프록시를 지나면 대상 서버가 보는 IP는 다를 수 있습니다.',
 
   'detail.selectPrompt': 'flow를 선택하면 상세 내용이 표시됩니다.',
   'detail.request': 'Request',
@@ -1553,6 +1559,8 @@ const ko: Catalogue = {
   'editor.sendToFuzzer': 'Fuzzer로 보내기',
   'editor.sendToReplay': 'Replay로 보내기',
   'appearance.section': '모양',
+  'appearance.showLocalSourceIp': 'HTTP 히스토리에 로컬 출발 IP 표시',
+  'appearance.showLocalSourceIpHelp': '외부 조회 없이 실제 연결 소켓에서 확인해 저장합니다. 컬럼은 기본으로 숨깁니다. 대상 서버가 보는 공인 IP와 다를 수 있습니다.',
   'appearance.help':
     'Lanius의 모양입니다. 바꾸면 바로 적용되고 다음 실행에도 유지됩니다.',
   'appearance.theme': '테마',

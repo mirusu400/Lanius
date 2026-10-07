@@ -166,11 +166,12 @@ def test_endpoint_index_backfills_existing_v6_history(tmp_path) -> None:
 
 def test_upsert_and_get_roundtrip() -> None:
     store = FlowStore()
-    store.upsert(make_record("a"))
+    store.upsert(make_record("a", local_source_ip="192.0.2.12"))
     got = store.get("a")
     assert got is not None
     assert got.method == "GET"
     assert got.host == "example.com"
+    assert got.local_source_ip == "192.0.2.12"
     assert got.response_body == b'{"ok":true}'
     assert ("Authorization", "Bearer x") in got.request_headers
     store.close()

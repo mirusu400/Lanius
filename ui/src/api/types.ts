@@ -5,6 +5,7 @@ export interface FlowSummary {
   type: string;
   client_addr: string | null;
   server_addr: string | null;
+  local_source_ip?: string | null;
   scheme: string | null;
   method: string | null;
   host: string | null;

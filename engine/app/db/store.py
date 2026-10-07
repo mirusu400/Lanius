@@ -95,6 +95,7 @@ class FlowRecord:
     type: str = "http"
     client_addr: str | None = None
     server_addr: str | None = None
+    local_source_ip: str | None = None
     scheme: str | None = None
     method: str | None = None
     host: str | None = None
@@ -280,7 +281,7 @@ def _load_snapshot(raw: str | None) -> RequestSnapshot | None:
 
 
 _COLUMNS = (
-    "id, type, client_addr, server_addr, scheme, method, host, port, path, query,"
+    "id, type, client_addr, server_addr, local_source_ip, scheme, method, host, port, path, query,"
     " http_version, request_headers, request_body, request_size, started_at,"
     " status_code, reason, response_headers, response_body, response_size,"
     " response_mime, completed_at, duration_ms, error, source, comment,"
@@ -288,7 +289,7 @@ _COLUMNS = (
 )
 
 _SUMMARY_COLUMNS = (
-    "id, type, client_addr, server_addr, scheme, method, host, port, path, query,"
+    "id, type, client_addr, server_addr, local_source_ip, scheme, method, host, port, path, query,"
     " http_version, request_size, started_at, status_code, reason, response_size,"
     " response_mime, completed_at, duration_ms, error, source, comment,"
     " auto_modified, modified, flows.rowid AS history_rowid,"
@@ -411,6 +412,7 @@ class FlowStore:
             record.type,
             record.client_addr,
             record.server_addr,
+            record.local_source_ip,
             record.scheme,
             record.method,
             record.host,
@@ -440,7 +442,9 @@ class FlowStore:
         )
         placeholders = ", ".join(["?"] * len(values))
         updates = ", ".join(
-            f"{column.strip()} = excluded.{column.strip()}"
+            (f"{column.strip()} = COALESCE(excluded.{column.strip()}, flows.{column.strip()})"
+             if column.strip() == "local_source_ip"
+             else f"{column.strip()} = excluded.{column.strip()}")
             for column in _COLUMNS.split(",") if column.strip() != "id"
         )
         self._conn.execute(
@@ -1902,6 +1906,7 @@ def _row_to_record(row: sqlite3.Row) -> FlowRecord:
         type=row["type"],
         client_addr=row["client_addr"],
         server_addr=row["server_addr"],
+        local_source_ip=row["local_source_ip"],
         scheme=row["scheme"],
         method=row["method"],
         host=row["host"],

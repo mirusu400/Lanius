@@ -30,6 +30,13 @@ def test_flow_to_record_maps_request_and_response() -> None:
     assert record.type == "http"
 
 
+def test_flow_to_record_captures_connected_socket_source_only() -> None:
+    flow = make_flow()
+    assert flow_to_record(flow).local_source_ip is None
+    flow.server_conn.sockname = ("192.0.2.12", 41321)
+    assert flow_to_record(flow).local_source_ip == "192.0.2.12"
+
+
 def test_flow_to_record_without_query() -> None:
     record = flow_to_record(make_flow(path="/plain"))
     assert record.path == "/plain"

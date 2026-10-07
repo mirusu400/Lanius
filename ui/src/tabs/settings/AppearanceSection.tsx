@@ -24,12 +24,14 @@ import {
   useI18n,
 } from '../../i18n';
 import { SizeField } from '../../components/SizeField';
+import { setShowLocalSourceIpColumn, useLocalSourceIpColumn } from '../../historySourceColumn';
 
 /** Turns OS-level capture on and off. Kept separate because it owns its
  *  own request state and does not share anything with the rest of the tab. */
 export function AppearanceSection() {
   const { t } = useI18n();
   const [settings, setSettings] = useState<Appearance>(() => loadAppearance());
+  const showSourceIp = useLocalSourceIpColumn();
 
   const update = (patch: Partial<Appearance>) => {
     const next = normaliseAppearance({ ...settings, ...patch });
@@ -58,6 +60,13 @@ export function AppearanceSection() {
     <section>
       <h3>{t('appearance.section')}</h3>
       <p className="muted">{t('appearance.help')}</p>
+
+      <div className="settings-row">
+        <label><input type="checkbox" checked={showSourceIp}
+          onChange={(event) => setShowLocalSourceIpColumn(event.target.checked)} />{' '}
+          {t('appearance.showLocalSourceIp')}</label>
+      </div>
+      <p className="muted">{t('appearance.showLocalSourceIpHelp')}</p>
 
       <div className="settings-row">
         <label htmlFor="theme-select">{t('appearance.theme')}</label>

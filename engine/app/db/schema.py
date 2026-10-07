@@ -8,7 +8,7 @@ from .metrics import MIGRATION as METRICS_MIGRATION
 from .endpoint_index import MIGRATION as ENDPOINT_MIGRATION, register_functions
 from .search_index import MIGRATION as SEARCH_MIGRATION, register_functions as register_search_functions
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -171,6 +171,11 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         """CREATE TRIGGER flow_annotations_cleanup AFTER DELETE ON flows BEGIN
             DELETE FROM flow_annotations WHERE flow_id = old.id;
         END""",
+    ),
+    11: (
+        # Address on the actual upstream socket, before any NAT or VPN
+        # translation. Existing captures cannot be reconstructed.
+        "ALTER TABLE flows ADD COLUMN local_source_ip TEXT",
     ),
 }
 

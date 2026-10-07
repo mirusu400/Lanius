@@ -709,6 +709,15 @@ def test_export_describes_itself(client) -> None:
     assert "scope" in data and "workspace" in data
 
 
+def test_local_source_ip_survives_project_export_and_import(client) -> None:
+    seed(client, "source-audit", local_source_ip="192.0.2.12")
+    exported = client.get("/api/project/export").json()
+    assert exported["flows"][0]["local_source_ip"] == "192.0.2.12"
+    client.delete("/api/flows")
+    assert client.post("/api/project/import", json=exported).status_code == 200
+    assert client.get("/api/flows/source-audit").json()["local_source_ip"] == "192.0.2.12"
+
+
 def test_sqlite_backup_contains_raw_history_and_websockets(client, tmp_path) -> None:
     seed(client, "raw", request_body=b"\xff\x00whole-body")
     client.app.state.store.append_websocket_message({

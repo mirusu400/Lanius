@@ -7,6 +7,7 @@ thread so the mitmproxy event loop is never blocked (see codex.md §5, §9).
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 from typing import Any
 
@@ -28,6 +29,15 @@ def _addr(value: Any) -> str | None:
     return str(value)
 
 
+def _socket_ip(value: Any) -> str | None:
+    if isinstance(value, (tuple, list)) and value:
+        try:
+            return str(ipaddress.ip_address(value[0]))
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
 def flow_to_record(flow: http.HTTPFlow) -> FlowRecord:
     """Convert a mitmproxy HTTP flow into a persistable record."""
     req = flow.request
@@ -36,6 +46,7 @@ def flow_to_record(flow: http.HTTPFlow) -> FlowRecord:
         type="http",
         client_addr=_addr(getattr(flow.client_conn, "peername", None)),
         server_addr=_addr(getattr(flow.server_conn, "peername", None)),
+        local_source_ip=_socket_ip(getattr(flow.server_conn, "sockname", None)),
         scheme=req.scheme,
         method=req.method,
         host=req.pretty_host,
@@ -107,6 +118,7 @@ def tcp_flow_to_record(flow: tcp.TCPFlow) -> FlowRecord:
         type="tcp",
         client_addr=_addr(getattr(flow.client_conn, "peername", None)),
         server_addr=_addr(getattr(flow.server_conn, "peername", None)),
+        local_source_ip=_socket_ip(getattr(flow.server_conn, "sockname", None)),
         scheme="tcp",
         method="TCP",
         host=host,

@@ -143,6 +143,7 @@ def test_sent_request_is_recorded_in_history(client, echo_server) -> None:
     assert stored["source"] == "replay"
     assert stored["path"] == "/recorded"
     assert stored["status_code"] == 200
+    assert stored["local_source_ip"] == "127.0.0.1"
 
 
 def test_send_rejects_invalid_url(client) -> None:

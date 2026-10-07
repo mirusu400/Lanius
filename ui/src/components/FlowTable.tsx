@@ -10,6 +10,7 @@ import {
   statusClass,
 } from '../tabs/proxyModel';
 import { MarkedText } from './MarkedText';
+import { useLocalSourceIpColumn } from '../historySourceColumn';
 
 interface Props {
   flows: FlowSummary[];
@@ -30,6 +31,7 @@ const SORT_KEYS: HistorySortKey[] = [
 
 export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQuery = '', sortBy, sortDesc, onSort, onToggleBookmark }: Props) {
   const t = useT();
+  const showSourceIp = useLocalSourceIpColumn();
   const rows = useRef(new Map<string, HTMLTableRowElement>());
   const selectAdjacent = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
@@ -45,7 +47,9 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
     rows.current.get(id)?.focus();
     rows.current.get(id)?.scrollIntoView?.({ block: 'nearest' });
   };
-  const columns = useResizableColumns('lanius.columns.history', [48, 84, 70, 180, 260, 66, 82, 78, 84]);
+  const baseColumns = useResizableColumns('lanius.columns.history', [48, 84, 70, 180, 260, 66, 82, 78, 84]);
+  const sourceColumns = useResizableColumns('lanius.columns.history.source', [48, 84, 70, 180, 260, 66, 82, 78, 84, 135]);
+  const columns = showSourceIp ? sourceColumns : baseColumns;
   const headers = [
     t('flow.time'), t('flow.method'), t('flow.host'), t('flow.url'),
     t('flow.status'), t('flow.modified'), t('flow.size'), t('flow.time'),
@@ -74,13 +78,15 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
                 sortDirection={sortBy === SORT_KEYS[index] ? (sortDesc ? 'descending' : 'ascending') : undefined}
               />
             ))}
+            {showSourceIp && <ResizableHeader label={t('flow.localSourceIp')} index={9} columns={columns}
+              resizeLabel={t('table.resizeColumn', { column: t('flow.localSourceIp') })} />}
             <ResizableFillHeader />
           </tr>
         </thead>
         <tbody>
           {flows.length === 0 && (
             <tr>
-              <td colSpan={9} className="empty">
+              <td colSpan={showSourceIp ? 10 : 9} className="empty">
                 {t('proxy.emptyTable')}
               </td>
               <ResizableFillCell />
@@ -130,6 +136,9 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
               </td>
               <td className="mono num">{formatBytes(flow.response_size)}</td>
               <td className="mono num">{formatDuration(flow.duration_ms)}</td>
+              {showSourceIp && <td className="mono" title={t('flow.localSourceIpHint')}>
+                {flow.local_source_ip || '—'}
+              </td>}
               <ResizableFillCell />
             </tr>
           ))}
