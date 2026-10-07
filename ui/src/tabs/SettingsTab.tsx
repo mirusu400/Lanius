@@ -9,7 +9,7 @@
  * list of sections and nothing has to be threaded through here.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useT } from "../i18n";
 import type { Project } from "../projects";
@@ -60,17 +60,24 @@ interface SettingsTabProps {
   /** Which group to open on, when something else sent you here: the
    *  update badge in the title bar means the About screen. */
   openGroup?: string | null;
+  onGroupOpened?: () => void;
   onSwitchProject?: () => Promise<void>;
   switchingProject?: boolean;
   switchError?: string | null;
 }
 
-export function SettingsTab({ project, onSwitchProject, switchingProject = false, switchError, openGroup }: SettingsTabProps = {}) {
+export function SettingsTab({ project, onSwitchProject, switchingProject = false, switchError, openGroup, onGroupOpened }: SettingsTabProps = {}) {
   const t = useT();
   const [group, setGroup] = useState<Group>(() =>
     GROUPS.includes(openGroup as Group) ? (openGroup as Group) : initialGroup(),
   );
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!GROUPS.includes(openGroup as Group)) return;
+    setGroup(openGroup as Group);
+    onGroupOpened?.();
+  }, [openGroup, onGroupOpened]);
 
   const choose = (next: Group) => {
     setGroup(next);

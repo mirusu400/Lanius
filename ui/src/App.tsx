@@ -1,4 +1,4 @@
-import { Activity, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { Activity, useCallback, useEffect, useMemo, useReducer, useRef, useState, type DragEvent } from "react";
 import { captureWindowToClipboard, getLockdown, getScannerState, isDesktop, putWorkspace } from "./api/client";
 import { LOCKDOWN_BLOCKED, LOCKDOWN_CHANGED } from "./lockdownEvents";
 import { connectStream } from "./api/stream";
@@ -117,7 +117,17 @@ export default function App() {
 
 function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: () => Promise<void> }) {
   const t = useT();
-  const [tab, setTab] = useState<Tab>("Dashboard");
+  // Mount a workspace tab on its first visit, then hide it with Activity.
+  // React keeps its filters, drafts, selections and scroll position while
+  // pausing subscriptions and polling for tabs that are out of view.
+  const [{ tab, visited }, setTab] = useReducer(
+    (current: { tab: Tab; visited: Set<Tab> }, update: Tab | ((tab: Tab) => Tab)) => {
+      const next = typeof update === 'function' ? update(current.tab) : update;
+      if (next === current.tab) return current;
+      return { tab: next, visited: new Set([...current.visited, next]) };
+    },
+    { tab: 'Dashboard' as Tab, visited: new Set<Tab>(['Dashboard', 'Proxy']) },
+  );
   const [historyMethodRequest, setHistoryMethodRequest] = useState<{ method: string } | null>(null);
   const [tabOrder, setTabOrder] = useState<Tab[]>(loadTabOrder);
   const [scannerAvailable, setScannerAvailable] = useState(false);
@@ -132,6 +142,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   const [switching, setSwitching] = useState(false);
   // Which Settings screen to land on when something sends you there.
   const [settingsGroup, setSettingsGroup] = useState<string | null>(null);
+  const consumeSettingsGroup = useCallback(() => setSettingsGroup(null), []);
   const { result: updates } = useUpdates();
   const updateAvailable = updates?.update_available ?? false;
   const [lockdownActive, setLockdownActive] = useState(false);
@@ -338,12 +349,10 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
       </header>
       <main className="content">
         <BusyProvider onChange={onBusyChange}>
-          {/* Keep the history's filters, page, selection details and scroll position
-              when another workspace tab is opened. Hidden effects are paused. */}
           <Activity mode={tab === "Proxy" ? "visible" : "hidden"}>
             <ProxyTab methodFilterRequest={historyMethodRequest} />
           </Activity>
-          {tab === "Proxy" ? null : tab === "Dashboard" ? (
+          <Activity mode={tab === "Dashboard" ? "visible" : "hidden"}>
             <DashboardTab
               onOpenTab={(next) => setTab(next as Tab)}
               onOpenSettings={(group) => {
@@ -355,33 +364,28 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
                 setTab('Proxy');
               }}
             />
-          ) : tab === "Target" ? (
-            <TargetTab />
-          ) : tab === "Issues" ? (
-            <IssuesTab />
-          ) : tab === "Replay" ? (
-            <ReplayTabView />
-          ) : tab === "Fuzzer" ? (
-            <FuzzerTab />
-          ) : tab === "Decoder" ? (
-            <DecoderTab />
-          ) : tab === "Diff" ? (
-            <DiffTab />
-          ) : tab === "Plugins" ? (
-            <PluginsTab />
-          ) : tab === "Logger" ? (
-            <LoggerTab />
-          ) : tab === "Settings" ? (
-            <SettingsTab
-              openGroup={settingsGroup}
-              project={project}
-              onSwitchProject={switchProject}
-              switchingProject={switching}
-              switchError={switchError}
-            />
-          ) : tab === "Docs" ? (
-            <DocsTab />
-          ) : null}
+          </Activity>
+          {visited.has('Target') && <Activity mode={tab === 'Target' ? 'visible' : 'hidden'}><TargetTab /></Activity>}
+          {visited.has('Issues') && <Activity mode={tab === 'Issues' ? 'visible' : 'hidden'}><IssuesTab /></Activity>}
+          {visited.has('Replay') && <Activity mode={tab === 'Replay' ? 'visible' : 'hidden'}><ReplayTabView /></Activity>}
+          {visited.has('Fuzzer') && <Activity mode={tab === 'Fuzzer' ? 'visible' : 'hidden'}><FuzzerTab /></Activity>}
+          {visited.has('Decoder') && <Activity mode={tab === 'Decoder' ? 'visible' : 'hidden'}><DecoderTab /></Activity>}
+          {visited.has('Diff') && <Activity mode={tab === 'Diff' ? 'visible' : 'hidden'}><DiffTab /></Activity>}
+          {visited.has('Plugins') && <Activity mode={tab === 'Plugins' ? 'visible' : 'hidden'}><PluginsTab /></Activity>}
+          {visited.has('Logger') && <Activity mode={tab === 'Logger' ? 'visible' : 'hidden'}><LoggerTab /></Activity>}
+          {visited.has('Settings') && (
+            <Activity mode={tab === 'Settings' ? 'visible' : 'hidden'}>
+              <SettingsTab
+                openGroup={settingsGroup}
+                onGroupOpened={consumeSettingsGroup}
+                project={project}
+                onSwitchProject={switchProject}
+                switchingProject={switching}
+                switchError={switchError}
+              />
+            </Activity>
+          )}
+          {visited.has('Docs') && <Activity mode={tab === 'Docs' ? 'visible' : 'hidden'}><DocsTab /></Activity>}
         </BusyProvider>
       </main>
     </div>

@@ -7,9 +7,8 @@ import { linkedWikiPage, wikiGroups, wikiPage } from '../docs/wiki';
 import { useI18n } from '../i18n';
 import { Split } from '../components/Split';
 
-/** The page you were reading, kept outside the component: React unmounts
- *  this tab when you switch away, and losing your place mid-article is
- *  the sort of thing that makes in-app docs annoying to use. */
+/** Keep the selected page when the workspace itself is remounted. Ordinary
+ *  tab switches retain this component, including its scroll position. */
 let lastPageId = '';
 
 /** Test helper: the remembered page deliberately outlives the component. */

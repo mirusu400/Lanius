@@ -70,8 +70,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   const [historySort, setHistorySort] = useState<{ key: HistorySortKey; desc: boolean }>({ key: 'started_at', desc: true });
   const historySortRef = useRef(historySort);
   historySortRef.current = historySort;
-  // Outside the component: switching tabs unmounts this one, and a
-  // selection kept here would be gone when you came back to it.
+  // Shared with actions in other tabs; the selection also survives while
+  // Proxy's effects are paused in the hidden workspace tab.
   const [selected, setSelected] = useState<string | null>(getSelectedFlow);
   useEffect(() => subscribeSelection(setSelected), []);
   const [filters, setFilters] = useState<FlowFilters>({});

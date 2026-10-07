@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
+#[cfg(any(target_os = "linux", test))]
+mod linux_webkit;
 mod projects;
 mod screenshot;
 
@@ -926,6 +928,9 @@ fn update_progress(progress: State<'_, Arc<UpdateProgress>>) -> UpdateProgressRe
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    linux_webkit::configure_before_webview();
+
     tauri::Builder::default()
         .manage(EngineProcess::default())
         .manage(ProjectSession::default())
