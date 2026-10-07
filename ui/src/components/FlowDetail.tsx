@@ -22,6 +22,7 @@ import { ResponsePreview } from './ResponsePreview';
 import { HighlightedBody, HighlightedMessage } from './SyntaxCode';
 import { matchCount } from './searchHighlight';
 import { MarkedText } from './MarkedText';
+import { useShortcuts } from '../useShortcut';
 
 interface Props {
   flow: FlowSummary | null;
@@ -358,6 +359,31 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     };
   }, [flow, flow?.status_code, reveal]);
 
+  const sendRequest = (
+    selected: FlowSummary | null,
+    loaded: FlowDetail | null,
+    send: (flow: FlowSummary, detail: FlowDetail) => void,
+  ) => {
+    if (!selected) return;
+    if (loaded?.id === selected.id) {
+      send(selected, loaded);
+      return;
+    }
+    // Selection can change before the detail fetch finishes. Never attach
+    // the previous request's headers or body to the newly selected flow.
+    void getFlow(selected.id, reveal)
+      .then((fetched) => send(selected, fetched))
+      .catch((err: Error) => setActionError(err.message));
+  };
+  const openInReplay = (selected: FlowSummary, loaded: FlowDetail) => {
+    sendToReplay(selected, loaded);
+    onSentToReplay?.();
+  };
+  useShortcuts({
+    'request.sendToReplay': () => sendRequest(flow, detail, openInReplay),
+    'request.sendToFuzzer': () => sendRequest(flow, detail, sendToFuzzer),
+  }, Boolean(flow));
+
   if (!flow) {
     return (
       <div className="flow-detail empty-detail">
@@ -392,18 +418,19 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const menuItems: MenuItem[] = [
     {
       label: t('menu.sendToReplay'),
+      shortcutId: 'request.sendToReplay',
       onSelect: () => {
         const captured = target.current;
         if (!captured) return;
-        sendToReplay(captured.flow, captured.detail);
-        onSentToReplay?.();
+        sendRequest(captured.flow, captured.detail, openInReplay);
       },
     },
     {
       label: t('menu.sendToFuzzer'),
+      shortcutId: 'request.sendToFuzzer',
       onSelect: () => {
         const captured = target.current;
-        if (captured) sendToFuzzer(captured.flow, captured.detail);
+        if (captured) sendRequest(captured.flow, captured.detail, sendToFuzzer);
       },
     },
     codegen.buildMenu({ flow_id: flow.id }),

@@ -3,7 +3,7 @@
  * asserts the live history table and detail pane behave as expected.
  */
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
+import { fireShortcut, renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import { useI18n, type Locale } from '../i18n';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -494,6 +494,17 @@ describe('selection across tabs', () => {
 });
 
 describe('sending a flow onward', () => {
+  it('sends a selected history row without opening its context menu', async () => {
+    resetTabs();
+    render(<ProxyTab />);
+    const row = (await screen.findByText('/seeded')).closest('tr')!;
+    fireEvent.click(row);
+    fireShortcut('request.sendToReplay', row);
+    await waitFor(() => expect(getTabs()).toHaveLength(1));
+    expect(getTabs()[0].text).toContain('Host: seeded.test');
+    expect(getTabs()[0].text).toContain('Cookie:');
+  });
+
   it('carries the headers and body, not just the request line', async () => {
     // The table row is a summary with neither, so without fetching the
     // full flow first the request arrived in Replay as one bare line,

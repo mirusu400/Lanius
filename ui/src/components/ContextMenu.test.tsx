@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ContextMenu } from './ContextMenu';
-import { renderWithI18n as render } from '../test-utils';
+import { fireShortcut, renderWithI18n as render } from '../test-utils';
+import { useShortcut } from '../useShortcut';
 
 afterEach(cleanup);
 
@@ -14,6 +15,32 @@ const items = [
 ];
 
 describe('ContextMenu', () => {
+  it('prioritizes the menu target and restores the selection shortcut after closing', () => {
+    const selected = vi.fn();
+    const captured = vi.fn();
+    const onClose = vi.fn();
+    function Harness({ open, disabled = false }: { open: boolean; disabled?: boolean }) {
+      useShortcut('request.sendToReplay', selected);
+      return <ContextMenu position={open ? { x: 10, y: 10 } : null}
+        items={[{ label: 'Replay', shortcutId: 'request.sendToReplay', onSelect: captured, disabled }]}
+        onClose={onClose} />;
+    }
+    const { rerender } = render(<Harness open />);
+    fireShortcut('request.sendToReplay');
+    expect(captured).toHaveBeenCalledTimes(1);
+    expect(selected).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    rerender(<Harness open disabled />);
+    fireShortcut('request.sendToReplay');
+    expect(captured).toHaveBeenCalledTimes(1);
+    expect(selected).not.toHaveBeenCalled();
+
+    rerender(<Harness open={false} />);
+    fireShortcut('request.sendToReplay');
+    expect(selected).toHaveBeenCalledTimes(1);
+  });
+
   it('renders nothing when closed', () => {
     render(<ContextMenu position={null} items={items} onClose={vi.fn()} />);
     expect(screen.queryByRole('menu')).toBeNull();

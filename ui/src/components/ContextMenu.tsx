@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useShortcuts } from '../useShortcut';
 
 /** Right-click menus for request and response actions.
  *
@@ -9,6 +10,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 export interface MenuItem {
   label: string;
   onSelect?: () => void;
+  /** Runs this menu's action for its captured target while the menu is open. */
+  shortcutId?: string;
   disabled?: boolean;
   /** Draws a divider above this item. */
   separator?: boolean;
@@ -35,6 +38,16 @@ export function ContextMenu({
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [placed, setPlaced] = useState<MenuPosition | null>(null);
+
+  // A right-click target can differ from the selected request underneath.
+  // Keep disabled entries registered too so they cannot fall through to it.
+  useShortcuts(Object.fromEntries(items
+    .filter((item) => item.shortcutId)
+    .map((item) => [item.shortcutId!, () => {
+      if (item.disabled) return;
+      onClose();
+      item.onSelect?.();
+    }])), Boolean(position), 1);
 
   useLayoutEffect(() => {
     if (!position || !ref.current) {

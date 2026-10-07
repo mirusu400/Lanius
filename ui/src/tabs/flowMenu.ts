@@ -59,11 +59,13 @@ export function flowMenuItems(
     }] : []),
     {
       label: t('menu.sendToReplay'),
+      shortcutId: 'request.sendToReplay',
       separator: Boolean(actions.toggleBookmark || actions.setColor),
       onSelect: () => actions.sendToReplay(flow),
     },
     {
       label: t('menu.sendToFuzzer'),
+      shortcutId: 'request.sendToFuzzer',
       onSelect: () => actions.sendToFuzzer(flow),
     },
     {

@@ -1,6 +1,6 @@
 /** Renders the real InterceptPanel and asserts the edit/forward/drop flow. */
 import {cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { renderWithI18n as render, t } from '../test-utils';
+import { fireShortcut, renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -60,6 +60,20 @@ afterEach(() => {
 });
 
 describe('InterceptPanel', () => {
+  it('sends the held draft to Replay and Fuzzer through shortcuts without forwarding it', () => {
+    render(<InterceptPanel rules={rules} paused={[pausedFlow]} onToggle={() => {}} onResolved={() => {}} />);
+    const draft = 'POST /edited HTTP/1.1\nHost: example.com\n\nchanged';
+    fireEvent.change(editorEl(), { target: { value: draft } });
+    fireShortcut('request.sendToReplay', editorEl());
+    expect(getTabs()[0]).toMatchObject({ url: 'http://example.com', text: draft });
+    const sent: { target: FuzzerTarget | null } = { target: null };
+    const unsubscribe = subscribeTarget((target) => { sent.target = target; });
+    fireShortcut('request.sendToFuzzer', editorEl());
+    unsubscribe();
+    expect(sent.target).toMatchObject({ url: 'http://example.com', template: draft });
+    expect(calls.some(({ url }) => url.includes('/forward'))).toBe(false);
+  });
+
   it('opens the history actions on a held draft and sends its edits to Replay', async () => {
     const user = userEvent.setup();
     render(<InterceptPanel rules={rules} paused={[pausedFlow]} onToggle={() => {}} onResolved={() => {}} />);

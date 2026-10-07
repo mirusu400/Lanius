@@ -120,6 +120,7 @@ export function ReplayTabView() {
     [
       {
         label: t('editor.sendToFuzzer'),
+        shortcutId: 'request.sendToFuzzer',
         onSelect: (_selection, editor) => {
           if (active) sendTextToFuzzer(active.url, editor.value);
         },
@@ -177,6 +178,9 @@ export function ReplayTabView() {
   };
 
   useShortcut('replay.send', send, Boolean(active && !active.sending));
+  useShortcut('request.sendToFuzzer', () => {
+    if (active) sendTextToFuzzer(active.url, active.text);
+  }, Boolean(active));
   useShortcut('replay.new', createTab);
   useShortcut('replay.duplicate', () => {
     if (active) duplicateTab(active);

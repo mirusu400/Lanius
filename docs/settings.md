@@ -114,9 +114,14 @@ you resize the app.
 Switch between Lanius screens with **⌘+Option+0–9** on macOS or
 **Ctrl+Alt+0–9** on Linux and Windows (Dashboard is 0, Proxy is 1, and the
 remaining screens follow the tab bar). Use **⌘+Option+D** or **Ctrl+Alt+D**
-for Docs. **Settings > Shortcuts** lists every screen and Replay action, and
-lets you record, disable, or reset each shortcut. These choices are saved on
-this machine.
+for Docs. Send the selected request to Replay with **⌘+R** on macOS or
+**Ctrl+R** on Linux and Windows, or to Fuzzer with **⌘+I** / **Ctrl+I**.
+These work in Proxy history, Intercept and Target. In Replay, Send to Fuzzer
+carries the current edited request; in Fuzzer, Send to Replay opens the
+selected result. An open context menu uses its right-clicked request.
+**Settings > Shortcuts** lists these actions alongside every screen and Replay
+action, and lets you record, disable, or reset each shortcut. These choices
+are saved on this machine.
 
 ## Updates
 

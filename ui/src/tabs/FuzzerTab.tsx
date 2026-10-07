@@ -33,6 +33,7 @@ import { sendToReplay } from './replayStore';
 import { getFlow } from '../api/client';
 import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
+import { useShortcut } from '../useShortcut';
 
 const DEFAULT_TEMPLATE = 'GET /?q={{test}} HTTP/1.1\nHost: example.com\n\n';
 
@@ -262,6 +263,16 @@ export function FuzzerTab() {
   const running = run?.status === 'running' || run?.status === 'pending';
   const selectedResult = run?.results.find((result) => result.index === selectedResultIndex) ?? null;
 
+  const sendResultToReplay = (id: string | null | undefined) => {
+    if (!id) return;
+    void getFlow(id)
+      .then((detail) => sendToReplay(detail, detail))
+      .catch((err) => setError(errorMessage(err)));
+  };
+  useShortcut('request.sendToReplay', () => {
+    sendResultToReplay(selectedResult?.flow_id);
+  }, Boolean(selectedResult?.flow_id));
+
   return (
     <div className="fuzzer-tab">
       <div className="fuzzer-controls">
@@ -452,15 +463,12 @@ export function FuzzerTab() {
                 ? [
                     {
                       label: t('menu.sendToReplay'),
+                      shortcutId: 'request.sendToReplay',
                       // A result only carries a flow id, so the request
                       // has to be fetched before it can be resent.
                       disabled: !menu.target.flow_id,
                       onSelect: () => {
-                        const id = menu.target?.flow_id;
-                        if (!id) return;
-                        void getFlow(id)
-                          .then((detail) => sendToReplay(detail, detail))
-                          .catch(() => undefined);
+                        sendResultToReplay(menu.target?.flow_id);
                       },
                     },
                     {

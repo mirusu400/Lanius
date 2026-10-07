@@ -18,6 +18,7 @@ import { usePluginActions } from './usePluginActions';
 import { FilterDialog, countActive } from './FilterDialog';
 import { FixedSidebarSplit } from './FixedSidebarSplit';
 import { matchesFilters } from '../tabs/proxyModel';
+import { useShortcuts } from '../useShortcut';
 
 interface Props {
   rules: InterceptRules;
@@ -261,6 +262,27 @@ export function InterceptPanel({
   const menuTarget = menu.target ? heldRequest(menu.target) : null;
   const menuText = menu.target?.requestText ?? '';
 
+  const sendHeldToReplay = (flow: FlowSummary, text: string) => {
+    addTab({
+      ...emptyTab(),
+      title: `${flow.method} ${flow.path ?? '/'}`,
+      url: originOf(flow),
+      text,
+    });
+  };
+  const currentRequest = current ? {
+    paused: shownMenuFlow ?? current,
+    requestText: current.phase === 'request' ? shown : renderRequest(current),
+  } : null;
+  useShortcuts({
+    'request.sendToReplay': () => {
+      if (currentRequest) sendHeldToReplay(heldRequest(currentRequest).flow, currentRequest.requestText);
+    },
+    'request.sendToFuzzer': () => {
+      if (currentRequest) sendTextToFuzzer(originOf(heldRequest(currentRequest).flow), currentRequest.requestText);
+    },
+  }, Boolean(currentRequest));
+
   return (
     <div className="intercept-panel">
       <div className="intercept-controls">
@@ -440,12 +462,7 @@ export function InterceptPanel({
         position={menu.position}
         items={menu.target && menuTarget ? flowMenuItems(menuTarget.flow, t, {
           sendToReplay: (flow) => {
-            addTab({
-              ...emptyTab(),
-              title: `${flow.method} ${flow.path ?? '/'}`,
-              url: originOf(flow),
-              text: menuText,
-            });
+            sendHeldToReplay(flow, menuText);
           },
           sendToFuzzer: (flow) => {
             sendTextToFuzzer(originOf(flow), menuText);

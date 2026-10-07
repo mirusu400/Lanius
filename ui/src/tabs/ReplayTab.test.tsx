@@ -1,6 +1,6 @@
 /** Renders the real Replay tab against a mocked engine. */
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
-import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
+import { fireShortcut, renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import type { Locale } from '../i18n';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReplayTabView } from './ReplayTab';
 import { resetTabs, sendToReplay, getTabs, setTabs } from './replayStore';
 import type { FlowSummary } from '../api/types';
+import { resetTarget, subscribeTarget, type FuzzerTarget } from './fuzzerStore';
 
 const flow: FlowSummary = {
   id: 'f1',
@@ -71,6 +72,27 @@ const editor = () =>
   screen.getByRole('textbox', { name: t('replay.request') }) as HTMLTextAreaElement;
 
 describe('ReplayTab', () => {
+  it('sends the edited draft to Fuzzer with the configured shortcut', async () => {
+    resetTarget();
+    sendToReplay(flow);
+    render(<ReplayTabView />);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const draft = 'POST /edited HTTP/1.1\nHost: echo.test\n\nchanged';
+    fireEvent.change(editor(), { target: { value: draft } });
+    const sentTarget: { current: FuzzerTarget | null } = { current: null };
+    const unsubscribe = subscribeTarget((target) => { sentTarget.current = target; });
+    fireShortcut('request.sendToFuzzer', editor());
+    expect(sentTarget.current).toMatchObject({ url: 'http://echo.test', template: draft });
+
+    fireEvent.contextMenu(editor());
+    expect(screen.getByRole('menuitem', { name: t('editor.sendToFuzzer') })).toBeTruthy();
+    fireShortcut('request.sendToFuzzer', editor());
+    unsubscribe();
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(sentTarget.current).toMatchObject({ url: 'http://echo.test', template: draft, seq: 2 });
+    expect(sent).toHaveLength(0);
+  });
+
   it('shows guidance when there are no tabs', () => {
     render(<ReplayTabView />);
     expect(screen.getByText(t('replay.noTabs'))).toBeTruthy();

@@ -1,13 +1,14 @@
 /** Renders the real Fuzzer tab against a mocked engine. */
 import { Activity, useState } from 'react';
 import {cleanup, screen, waitFor, fireEvent } from '@testing-library/react';
-import { renderWithI18n as render, t } from '../test-utils';
+import { fireShortcut, renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FuzzerTab } from './FuzzerTab';
 import { resetTarget, sendToFuzzer } from './fuzzerStore';
 import type { RunResult, FlowSummary } from '../api/types';
+import { getTabs, resetTabs } from './replayStore';
 
 let started: { url: string; mode: string; payload_sets: string[][] }[] =
   [];
@@ -62,6 +63,7 @@ class MockSocket {
 }
 
 beforeEach(() => {
+  resetTabs();
   resetTarget();
   started = [];
   status = 'completed';
@@ -100,6 +102,14 @@ beforeEach(() => {
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      if (url.includes('/api/flows/')) {
+        return jsonResponse({
+          ...flow, id: new URL(url).pathname.split('/').pop(),
+          request_headers: [['Host', 'app.test']],
+          request_body: `captured-request-${new URL(url).pathname.split('/').pop()}`,
+          response_headers: [], response_body: 'captured-response',
+        });
+      }
       if (url.endsWith('/api/fuzzer/runs') && init?.method === 'POST') {
         started.push(body);
         return jsonResponse({
@@ -281,6 +291,17 @@ describe('FuzzerTab', () => {
 });
 
 describe('result context menu', () => {
+  it('sends the selected result to Replay with the configured shortcut', async () => {
+    render(<FuzzerTab />);
+    await userEvent.click(screen.getByRole('button', { name: t('fuzzer.start') }));
+    const row = (await screen.findByText('letmein')).closest('tr')!;
+    fireEvent.click(row);
+    fireShortcut('request.sendToReplay', row);
+    await waitFor(() => expect(getTabs()).toHaveLength(1));
+    expect(getTabs()[0].text).toContain('captured-request-r1');
+    expect(started).toHaveLength(1);
+  });
+
   it('offers to resend a result, which is the point of finding one', async () => {
     render(<FuzzerTab />);
     await userEvent.click(screen.getByRole('button', { name: t('fuzzer.start') }));

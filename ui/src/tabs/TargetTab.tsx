@@ -662,7 +662,7 @@ export function TargetTab() {
             />
           </div>}
           second={<div className="site-detail">
-            {selectedDetail && <FlowDetailView flow={selectedDetail} splitStorageKey="lanius.split.sitemap.detail" initialSplit={0.35} />}
+            {selectedDetail && selectedDetail.id === selectedFlow?.id && <FlowDetailView flow={selectedDetail} splitStorageKey="lanius.split.sitemap.detail" initialSplit={0.35} />}
           </div>}
         />
       )}
@@ -735,10 +735,12 @@ function treeMenuItems(
   return [
     {
       label: t('menu.sendToReplay'),
+      shortcutId: 'request.sendToReplay',
       onSelect: withDetail((detail) => sendToReplay(detail, detail)),
     },
     {
       label: t('menu.sendToFuzzer'),
+      shortcutId: 'request.sendToFuzzer',
       onSelect: withDetail((detail) => sendToFuzzer(detail)),
     },
     {

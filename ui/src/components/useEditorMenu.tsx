@@ -12,6 +12,7 @@ import { useT } from '../i18n';
 
 export interface EditorMenuExtra {
   label: string;
+  shortcutId?: string;
   onSelect: (selection: string, editor: HTMLTextAreaElement) => void;
   /** Hidden when nothing is selected, for actions that need a selection. */
   needsSelection?: boolean;
@@ -94,6 +95,7 @@ export function useEditorMenu(
       .filter((extra) => !extra.needsSelection || hasSelection)
       .map((extra) => ({
         label: extra.label,
+        shortcutId: extra.shortcutId,
         onSelect: withEditor((editor) => extra.onSelect(selection.text, editor)),
       })),
     ...trailing,

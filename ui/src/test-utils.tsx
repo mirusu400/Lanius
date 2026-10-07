@@ -4,11 +4,12 @@
  * browser language.
  */
 
-import { render, type RenderOptions, type RenderResult } from '@testing-library/react';
+import { fireEvent, render, type RenderOptions, type RenderResult } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { I18nProvider, makeTranslator, type Locale, type Translator } from './i18n';
 import { ToastProvider } from './components/Toast';
+import { getShortcut } from './shortcuts';
 
 // Overridable so CI can run the whole suite in another language and prove no
 // assertion depends on a hardcoded string (see `npm run test:locales`).
@@ -20,6 +21,18 @@ export const t: Translator = makeTranslator(TEST_LOCALE);
 
 export function tk(locale: Locale): Translator {
   return makeTranslator(locale);
+}
+
+export function fireShortcut(id: string, target: Window | Document | Node = window): boolean {
+  const binding = getShortcut(id);
+  if (!binding) throw new Error(`Shortcut ${id} is disabled`);
+  return fireEvent.keyDown(target, {
+    code: binding.code,
+    ctrlKey: binding.ctrl,
+    altKey: binding.alt,
+    shiftKey: binding.shift,
+    metaKey: binding.meta,
+  });
 }
 
 export function renderWithI18n(

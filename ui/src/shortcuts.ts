@@ -62,6 +62,20 @@ const navigation = [
 /** Every shortcut with a handler is listed here and appears in Settings. */
 export const SHORTCUTS: ShortcutDefinition[] = [
   {
+    id: 'request.sendToReplay',
+    category: 'general',
+    label: 'menu.sendToReplay',
+    description: 'shortcuts.sendToReplayHelp',
+    defaults: defaultFor('KeyR'),
+  },
+  {
+    id: 'request.sendToFuzzer',
+    category: 'general',
+    label: 'menu.sendToFuzzer',
+    description: 'shortcuts.sendToFuzzerHelp',
+    defaults: defaultFor('KeyI'),
+  },
+  {
     id: 'app.screenshot',
     category: 'general',
     label: 'shortcuts.captureWindow',

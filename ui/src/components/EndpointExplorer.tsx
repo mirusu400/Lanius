@@ -123,8 +123,8 @@ export function EndpointExplorer({
   };
 
   const menuItems: MenuItem[] = menu.target ? [
-    { label: t('menu.sendToReplay'), onSelect: withDetail(menu.target, (detail) => sendToReplay(detail, detail)) },
-    { label: t('menu.sendToFuzzer'), onSelect: withDetail(menu.target, (detail) => sendToFuzzer(detail, detail)) },
+    { label: t('menu.sendToReplay'), shortcutId: 'request.sendToReplay', onSelect: withDetail(menu.target, (detail) => sendToReplay(detail, detail)) },
+    { label: t('menu.sendToFuzzer'), shortcutId: 'request.sendToFuzzer', onSelect: withDetail(menu.target, (detail) => sendToFuzzer(detail, detail)) },
     {
       label: t('menu.addToScope'),
       separator: true,

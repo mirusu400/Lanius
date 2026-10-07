@@ -192,6 +192,16 @@ beforeEach(() => {
       if (url.includes('/api/endpoints')) {
         return jsonResponse({ items: endpoints, count: endpoints.length });
       }
+      if (url.includes('/api/flows/')) {
+        const id = new URL(url).pathname.split('/').pop();
+        const path = [...paths, ...extraPaths].find((item) => item.id === id) ?? paths[0];
+        return jsonResponse({
+          ...path, id, type: 'http', scheme: 'https', host: 'api.test', port: 443,
+          http_version: 'HTTP/1.1', request_size: 0,
+          request_headers: [['Host', 'api.test']], request_body: '',
+          response_headers: [], response_body: '',
+        });
+      }
       return jsonResponse({});
     }),
   );

@@ -1,13 +1,15 @@
 /** Detail pane: HTTP vs raw TCP rendering. */
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { renderWithI18n as render, t } from '../test-utils';
+import { fireShortcut, renderWithI18n as render, t } from '../test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Activity, useState } from 'react';
 
 import { FlowDetailView } from './FlowDetail';
 import { toHex } from './bodyFormat';
 import type { FlowSummary } from '../api/types';
+import { getTabs, resetTabs } from '../tabs/replayStore';
+import { resetTarget, subscribeTarget, type FuzzerTarget } from '../tabs/fuzzerStore';
 
 const httpFlow: FlowSummary = {
   id: 'h1',
@@ -58,6 +60,8 @@ const tcpFlow: FlowSummary = {
 };
 
 beforeEach(() => {
+  resetTabs();
+  resetTarget();
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
@@ -135,6 +139,44 @@ describe('toHex', () => {
 });
 
 describe('FlowDetailView', () => {
+  it('sends the selected request with its headers and body through both shortcuts', async () => {
+    const onSentToReplay = vi.fn();
+    render(<FlowDetailView flow={codeFlow} onSentToReplay={onSentToReplay} />);
+    await waitFor(() => expect(bodyText(1)).toBe('const answer = 42;'));
+    fireShortcut('request.sendToReplay');
+    expect(getTabs()[0].text).toContain('POST /x HTTP/1.1');
+    expect(getTabs()[0].text).toContain('Content-Type: text/html');
+    expect(getTabs()[0].text).toContain('<main class="card">Hi</main>');
+    expect(onSentToReplay).toHaveBeenCalledTimes(1);
+    const sent: { target: FuzzerTarget | null } = { target: null };
+    const unsubscribe = subscribeTarget((target) => { sent.target = target; });
+    fireShortcut('request.sendToFuzzer');
+    unsubscribe();
+    expect(sent.target?.template).toBe(getTabs()[0].text.replace(/\r\n/g, '\n'));
+    expect(sent.target?.url).toBe('https://api.test');
+  });
+
+  it('fetches the newly selected request instead of sending stale detail', async () => {
+    const { rerender } = render(<FlowDetailView flow={codeFlow} />);
+    await waitFor(() => expect(bodyText(1)).toBe('const answer = 42;'));
+    rerender(<FlowDetailView flow={httpFlow} />);
+    fireShortcut('request.sendToReplay');
+    await waitFor(() => expect(getTabs()).toHaveLength(1));
+    expect(getTabs()[0].text).toContain('GET /x HTTP/1.1');
+    expect(getTabs()[0].text).not.toContain('<main');
+  });
+
+  it('stops dispatching request shortcuts while its workspace tab is hidden', async () => {
+    const { rerender } = render(<Activity mode="visible"><FlowDetailView flow={httpFlow} /></Activity>);
+    await screen.findByText('ok');
+    rerender(<Activity mode="hidden"><FlowDetailView flow={httpFlow} /></Activity>);
+    fireShortcut('request.sendToReplay');
+    expect(getTabs()).toHaveLength(0);
+    rerender(<Activity mode="visible"><FlowDetailView flow={httpFlow} /></Activity>);
+    fireShortcut('request.sendToReplay');
+    expect(getTabs()).toHaveLength(1);
+  });
+
   const half = (index: number) => document.querySelectorAll('.detail-half')[index];
   const bodyText = (index: number) => half(index)?.querySelector('pre.body')?.textContent;
 
