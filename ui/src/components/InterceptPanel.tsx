@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { dropFlow, forwardAll, forwardFlow } from '../api/client';
-import type { InterceptRules, PausedFlow } from '../api/types';
-import { editsFromText, renderPaused, renderPausedVariant } from '../tabs/interceptModel';
-import { errorMessage, renderMessage, useT, type Message } from '../i18n';
+import { addScopeFromUrl } from '../api/client';
+import type { FlowSummary, InterceptRules, PausedFlow } from '../api/types';
+import { editsFromText, parseRequest, renderPaused, renderPausedVariant, renderRequest } from '../tabs/interceptModel';
+import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n';
+import { addTab } from '../tabs/replayStore';
+import { emptyTab, originOf } from '../tabs/replayModel';
+import { sendTextToFuzzer } from '../tabs/fuzzerStore';
+import { flowMenuItems, flowUrl } from '../tabs/flowMenu';
 import { OpenBrowserButton } from './OpenBrowserButton';
 import { MatchReplaceButton } from './MatchReplaceDialog';
 import { HighlightedEditor } from './SyntaxCode';
+import { ContextMenu, useContextMenu } from './ContextMenu';
+import { useCodegenMenu } from './useCodegenMenu';
+import { usePluginActions } from './usePluginActions';
 
 interface Props {
   rules: InterceptRules;
@@ -17,6 +25,55 @@ interface Props {
   onDraftsChange?: Dispatch<SetStateAction<Record<string, string>>>;
   selectedId?: string | null;
   onSelectedChange?: (id: string | null) => void;
+}
+
+interface HeldMenuTarget {
+  paused: PausedFlow;
+  requestText: string;
+}
+
+/** Give the shared history menu the request that is actually shown in Intercept. */
+function heldRequest(target: HeldMenuTarget) {
+  const { paused, requestText } = target;
+  let request: ReturnType<typeof parseRequest>;
+  try {
+    request = parseRequest(requestText);
+  } catch {
+    // Keep the menu available while a draft is incomplete. Replay and Fuzzer
+    // still receive the raw draft so the user can finish it there.
+    request = {
+      method: paused.method,
+      path: paused.path,
+      httpVersion: paused.http_version,
+      headers: paused.request_headers,
+      body: paused.request_body,
+    };
+  }
+  const flow: FlowSummary = {
+    id: paused.id,
+    type: 'http',
+    client_addr: null,
+    server_addr: null,
+    scheme: paused.scheme,
+    method: request.method,
+    host: paused.host,
+    port: paused.port,
+    path: request.path,
+    query: null,
+    http_version: request.httpVersion,
+    request_size: request.body.length,
+    started_at: null,
+    status_code: paused.status_code ?? null,
+    reason: paused.reason ?? null,
+    response_size: paused.response_body?.length ?? 0,
+    response_mime: null,
+    completed_at: null,
+    duration_ms: null,
+    error: null,
+    source: 'proxy',
+    comment: null,
+  };
+  return { flow, request };
 }
 
 export function InterceptPanel({
@@ -44,6 +101,9 @@ export function InterceptPanel({
   const [stage, setStage] = useState<'original' | 'auto_modified' | 'modified'>('modified');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Message | null>(null);
+  const menu = useContextMenu<HeldMenuTarget>();
+  const codegen = useCodegenMenu(setError);
+  const pluginActions = usePluginActions((message) => setError(rawMsg(message)));
   const automatic = useMemo(
     () => (current ? renderPaused(current) : ''),
     [current],
@@ -54,6 +114,15 @@ export function InterceptPanel({
   const shown = current && stage !== 'modified'
     ? renderPausedVariant(current, stage)
     : modified;
+  const shownMenuFlow = current?.phase === 'request' && stage !== 'modified'
+    && current.request_variants?.[stage]
+    ? {
+        ...current,
+        scheme: current.request_variants[stage].scheme,
+        host: current.request_variants[stage].host,
+        port: current.request_variants[stage].port,
+      }
+    : current;
   const shownHeaders = current?.phase === 'request'
     ? (stage !== 'modified' ? current.request_variants?.[stage]?.headers : null) ?? current.request_headers
     : (stage !== 'modified' ? current?.response_variants?.[stage]?.headers : null) ?? current?.response_headers ?? [];
@@ -164,6 +233,20 @@ export function InterceptPanel({
     event.currentTarget.querySelectorAll('button')[next]?.focus();
   };
 
+  const menuRequestText = (flow: PausedFlow) =>
+    flow.phase === 'request'
+      ? drafts[`${flow.id}:${flow.phase}`] ?? renderRequest(flow)
+      : renderRequest(flow);
+  const openCurrentMenu = (event: React.MouseEvent) => {
+    if (!current) return;
+    menu.open(event, {
+      paused: shownMenuFlow ?? current,
+      requestText: current.phase === 'request' ? shown : renderRequest(current),
+    });
+  };
+  const menuTarget = menu.target ? heldRequest(menu.target) : null;
+  const menuText = menu.target?.requestText ?? '';
+
   return (
     <div className="intercept-panel">
       <div className="intercept-controls">
@@ -233,6 +316,10 @@ export function InterceptPanel({
                 className={flow.id === current?.id ? 'active' : undefined}
                 aria-current={flow.id === current?.id ? 'true' : undefined}
                 onClick={() => setSelectedId(flow.id)}
+                onContextMenu={(event) => {
+                  setSelectedId(flow.id);
+                  menu.open(event, { paused: flow, requestText: menuRequestText(flow) });
+                }}
               >
                 <span className={`phase phase-${flow.phase}`}>
                   {flow.phase === 'request'
@@ -257,7 +344,7 @@ export function InterceptPanel({
       )}
       {current ? (
         <>
-          <div className="detail-url mono">
+          <div className="detail-url mono" onContextMenu={openCurrentMenu}>
             <strong>
               {current.phase === 'request'
                 ? t('intercept.waitingRequest')
@@ -281,21 +368,52 @@ export function InterceptPanel({
             {stage !== 'modified' && <span className="muted">{t('intercept.readOnly')}</span>}
             {dirty && <span className="muted">{t('intercept.forwardUsesModified')}</span>}
           </div>
-          <HighlightedEditor
-            className="intercept-editor mono"
-            text={shown}
-            onChange={changeDraft}
-            readOnly={stage !== 'modified'}
-            label={t('intercept.editor')}
-            headers={shownHeaders}
-            responsePath={current.path}
-          />
+          <div className="intercept-editor-shell" onContextMenu={openCurrentMenu}>
+            <HighlightedEditor
+              className="intercept-editor mono"
+              text={shown}
+              onChange={changeDraft}
+              readOnly={stage !== 'modified'}
+              label={t('intercept.editor')}
+              headers={shownHeaders}
+              responsePath={current.path}
+            />
+          </div>
         </>
       ) : (
         <div className="intercept-idle muted">
           {rules.enabled ? t('intercept.idleOn') : t('intercept.idleOff')}
         </div>
       )}
+      <ContextMenu
+        position={menu.position}
+        items={menu.target && menuTarget ? flowMenuItems(menuTarget.flow, t, {
+          sendToReplay: (flow) => {
+            addTab({
+              ...emptyTab(),
+              title: `${flow.method} ${flow.path ?? '/'}`,
+              url: originOf(flow),
+              text: menuText,
+            });
+          },
+          sendToFuzzer: (flow) => {
+            sendTextToFuzzer(originOf(flow), menuText);
+          },
+          addToScope: (flow) => {
+            void addScopeFromUrl(flowUrl(flow)).catch((err: unknown) => setError(errorMessage(err)));
+          },
+          copy: (text) => { void navigator.clipboard?.writeText(text); },
+        }, codegen.buildMenu({
+          url: flowUrl(menuTarget.flow),
+          method: menuTarget.request.method,
+          headers: menuTarget.request.headers,
+          body: menuTarget.request.body,
+        }), pluginActions.buildMenu(
+          ['flow', menu.target.paused.phase],
+          { flow_id: menu.target.paused.id, flow: menuTarget.flow },
+        )) : []}
+        onClose={menu.close}
+      />
     </div>
   );
 }

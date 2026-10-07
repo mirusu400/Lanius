@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InterceptPanel } from './InterceptPanel';
 import type { InterceptRules, PausedFlow } from '../api/types';
+import { getTabs, resetTabs } from '../tabs/replayStore';
+import { resetTarget, subscribeTarget, type FuzzerTarget } from '../tabs/fuzzerStore';
 
 const rules: InterceptRules = {
   enabled: true,
@@ -35,6 +37,8 @@ const editorEl = () =>
 
 beforeEach(() => {
   calls = [];
+  resetTabs();
+  resetTarget();
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -55,6 +59,109 @@ afterEach(() => {
 });
 
 describe('InterceptPanel', () => {
+  it('opens the history actions on a held draft and sends its edits to Replay', async () => {
+    const user = userEvent.setup();
+    render(<InterceptPanel rules={rules} paused={[pausedFlow]} onToggle={() => {}} onResolved={() => {}} />);
+    fireEvent.change(editorEl(), {
+      target: { value: 'POST /edited?x=1 HTTP/1.1\r\nHost: example.com\r\nX-Edit: yes\r\n\r\nbody=changed' },
+    });
+
+    fireEvent.contextMenu(editorEl());
+    expect(screen.getByRole('menuitem', { name: t('menu.sendToReplay') })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: t('menu.sendToFuzzer') })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: t('menu.addToScope') })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: t('menu.copyUrl') })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: t('menu.copyAs') })).toBeTruthy();
+    await user.click(screen.getByRole('menuitem', { name: t('menu.sendToReplay') }));
+
+    expect(getTabs()[0].url).toBe('http://example.com');
+    expect(getTabs()[0].text).toContain('POST /edited?x=1 HTTP/1.1');
+    expect(getTabs()[0].text).toContain('body=changed');
+    expect(calls.some(({ url }) => url.includes('/forward'))).toBe(false);
+  });
+
+  it('uses the right-clicked queue item and its draft for Fuzzer', async () => {
+    const second = { ...pausedFlow, id: 'p2', path: '/second' };
+    const sent: { target: FuzzerTarget | null } = { target: null };
+    const unsubscribe = subscribeTarget((target) => { sent.target = target; });
+    const user = userEvent.setup();
+    render(<InterceptPanel rules={rules} paused={[pausedFlow, second]} onToggle={() => {}} onResolved={() => {}} />);
+    const queue = screen.getByLabelText(t('intercept.queueLabel'));
+    await user.click(within(queue).getByRole('button', { name: /second/ }));
+    fireEvent.change(editorEl(), {
+      target: { value: 'PUT /second-edited HTTP/1.1\r\nHost: example.com\r\n\r\nchanged' },
+    });
+    await user.click(within(queue).getByRole('button', { name: /original/ }));
+
+    fireEvent.contextMenu(within(queue).getByRole('button', { name: /second/ }));
+    await user.click(screen.getByRole('menuitem', { name: t('menu.sendToFuzzer') }));
+
+    expect(sent.target?.template).toContain('PUT /second-edited HTTP/1.1');
+    expect(sent.target?.template).toContain('changed');
+    unsubscribe();
+  });
+
+  it('sends the request when the response is intercepted', async () => {
+    const user = userEvent.setup();
+    render(<InterceptPanel rules={rules} paused={[{
+      ...pausedFlow, phase: 'response', request_body: 'request-data',
+      status_code: 200, response_headers: [['Content-Type', 'text/plain']],
+      response_body: 'response-data',
+    }]} onToggle={() => {}} onResolved={() => {}} />);
+
+    fireEvent.contextMenu(editorEl());
+    await user.click(screen.getByRole('menuitem', { name: t('menu.sendToReplay') }));
+
+    expect(getTabs()[0].text).toContain('request-data');
+    expect(getTabs()[0].text).not.toContain('response-data');
+  });
+
+  it('uses the selected original request variant when right-clicking its editor', async () => {
+    const original = {
+      method: 'GET', scheme: 'https', host: 'original.test', port: 443,
+      path: '/before', http_version: 'HTTP/1.1',
+      headers: [['Host', 'original.test']] as [string, string][],
+      body: 'original-body', charset: 'utf-8', content_encoding: null,
+      body_decoded: false, decode_error: null,
+    };
+    const user = userEvent.setup();
+    render(<InterceptPanel rules={rules} paused={[{
+      ...pausedFlow, request_variants: { original, auto_modified: original },
+    }]} onToggle={() => {}} onResolved={() => {}} />);
+
+    await user.click(screen.getByRole('tab', { name: t('intercept.view.original') }));
+    fireEvent.contextMenu(editorEl());
+    await user.click(screen.getByRole('menuitem', { name: t('menu.sendToReplay') }));
+
+    expect(getTabs()[0].url).toBe('https://original.test');
+    expect(getTabs()[0].text).toContain('GET /before HTTP/1.1');
+    expect(getTabs()[0].text).toContain('original-body');
+  });
+
+  it('uses an edited request for scope and Copy as actions', async () => {
+    const user = userEvent.setup();
+    render(<InterceptPanel rules={rules} paused={[pausedFlow]} onToggle={() => {}} onResolved={() => {}} />);
+    fireEvent.change(editorEl(), {
+      target: { value: 'POST /edited?x=1 HTTP/1.1\r\nHost: example.com\r\nX-Edit: yes\r\n\r\nbody=changed' },
+    });
+
+    fireEvent.contextMenu(editorEl());
+    await user.click(screen.getByRole('menuitem', { name: t('menu.addToScope') }));
+    await waitFor(() => expect(calls.some(({ url }) => url.endsWith('/api/scope/from-url'))).toBe(true));
+    const scopeCall = calls.find(({ url }) => url.endsWith('/api/scope/from-url'))!;
+    expect(JSON.parse(String(scopeCall.init?.body)).url).toBe('http://example.com/edited?x=1');
+
+    fireEvent.contextMenu(editorEl());
+    await user.hover(screen.getByRole('menuitem', { name: t('menu.copyAs') }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'curl' }));
+    await waitFor(() => expect(calls.some(({ url }) => url.endsWith('/api/codegen'))).toBe(true));
+    const codegenCall = calls.find(({ url }) => url.endsWith('/api/codegen'))!;
+    expect(JSON.parse(String(codegenCall.init?.body))).toMatchObject({
+      kind: 'curl', url: 'http://example.com/edited?x=1', method: 'POST',
+      body: 'body=changed',
+    });
+  });
+
   it('shows an idle message when nothing is paused', () => {
     render(
       <InterceptPanel

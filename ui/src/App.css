@@ -2348,6 +2348,12 @@ pre.body {
 
 .intercept-dirty { color: var(--accent); }
 
+.intercept-editor-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 .highlight-editor {
   position: relative;
   display: flex;
