@@ -2,6 +2,16 @@
 
 import type { FlowFilters, FlowSummary } from '../api/types';
 
+interface FilterableFlow {
+  host: string | null;
+  method: string | null;
+  path: string | null;
+  query?: string | null;
+  status_code?: number | null;
+  bookmarked?: boolean;
+  annotation_color?: FlowSummary['annotation_color'];
+}
+
 export const MAX_FLOWS = 5000;
 
 /** Insert or replace a flow, keeping newest-first order and bounding memory. */
@@ -20,7 +30,7 @@ export function mergeFlow(
 }
 
 export function matchesFilters(
-  flow: FlowSummary,
+  flow: FilterableFlow,
   filters: FlowFilters,
 ): boolean {
   if (filters.host && !(flow.host ?? '').toLowerCase().includes(filters.host.toLowerCase())) return false;

@@ -194,6 +194,25 @@ describe('ProxyTab', () => {
     expect((document.querySelector('textarea.intercept-editor') as HTMLTextAreaElement).value).toContain('/after');
   });
 
+  it('keeps the Intercept queue filter when switching Proxy subtabs', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    MockSocket.instances[0].emit('intercept.paused', {
+      id: 'held-1', phase: 'request', method: 'GET', scheme: 'http',
+      host: 'example.com', port: 80, path: '/first', http_version: 'HTTP/1.1',
+      request_headers: [['Host', 'example.com']], request_body: '',
+    });
+    await user.click(screen.getByRole('button', { name: new RegExp(t('proxy.intercept')) }));
+    const search = screen.getByRole('textbox', { name: t('intercept.searchPlaceholder') });
+    await user.type(search, 'missing');
+    expect(screen.getAllByText(t('intercept.noFilterMatches')).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('button', { name: t('proxy.history') }));
+    await user.click(screen.getByRole('button', { name: new RegExp(t('proxy.intercept')) }));
+    expect(screen.getByRole('textbox', { name: t('intercept.searchPlaceholder') })).toHaveProperty('value', 'missing');
+    expect(screen.getAllByText(t('intercept.noFilterMatches')).length).toBeGreaterThan(0);
+  });
+
   it('requests a full-history sort when a column header is clicked', async () => {
     const user = userEvent.setup();
     render(<ProxyTab />);

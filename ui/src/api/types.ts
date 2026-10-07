@@ -110,6 +110,9 @@ export interface PausedFlow {
   reason?: string;
   response_headers?: [string, string][];
   response_body?: string;
+  in_scope?: boolean;
+  bookmarked?: boolean;
+  annotation_color?: HistoryColor | null;
   request_variants?: {
     original: RequestVariant;
     auto_modified: RequestVariant;

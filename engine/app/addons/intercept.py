@@ -166,11 +166,13 @@ class InterceptAddon:
         rules: InterceptRules | None = None,
         *,
         store: FlowStore | None = None,
+        scope_predicate: Callable[[str, str, int, str], bool] | None = None,
         on_forwarded: Callable[[http.HTTPFlow], bool | None] | None = None,
     ) -> None:
         self.broker = broker
         self.rules = rules or InterceptRules()
         self.store = store
+        self.scope_predicate = scope_predicate
         self.on_forwarded = on_forwarded
         self.paused: dict[str, tuple[http.HTTPFlow, Phase]] = {}
 
@@ -200,11 +202,22 @@ class InterceptAddon:
         return self.rules
 
     def list_paused(self) -> list[dict[str, Any]]:
-        enabled = self._auto_decompress()
         return [
-            paused_payload(f, phase, auto_decompress=enabled)
+            self._paused_payload(f, phase)
             for f, phase in self.paused.values()
         ]
+
+    def _paused_payload(self, flow: http.HTTPFlow, phase: Phase) -> dict[str, Any]:
+        payload = paused_payload(flow, phase, auto_decompress=self._auto_decompress())
+        req = flow.request
+        payload["in_scope"] = (
+            self.scope_predicate(req.scheme, req.pretty_host, req.port, req.path)
+            if self.scope_predicate is not None else True
+        )
+        annotation = self.store.get_annotation(flow.id) if self.store is not None else None
+        payload["bookmarked"] = annotation["bookmarked"] if annotation else False
+        payload["annotation_color"] = annotation["annotation_color"] if annotation else None
+        return payload
 
     def forward(self, flow_id: str, edits: dict[str, Any] | None = None) -> None:
         flow, phase = self._take(flow_id)
@@ -262,9 +275,7 @@ class InterceptAddon:
         self.paused[flow.id] = (flow, phase)
         self.broker.publish(
             "intercept.paused",
-            paused_payload(
-                flow, phase, auto_decompress=self._auto_decompress()
-            ),
+            self._paused_payload(flow, phase),
         )
 
     def _take(self, flow_id: str) -> tuple[http.HTTPFlow, Phase]:

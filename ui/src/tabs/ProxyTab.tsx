@@ -75,6 +75,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   const [selected, setSelected] = useState<string | null>(getSelectedFlow);
   useEffect(() => subscribeSelection(setSelected), []);
   const [filters, setFilters] = useState<FlowFilters>({});
+  const [interceptFilters, setInterceptFilters] = useState<FlowFilters>({});
   const appliedMethodRequest = useRef<typeof methodFilterRequest>(null);
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const codegen = useCodegenMenu();
@@ -251,8 +252,20 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                 Object.entries(prev).filter(([key]) => !key.startsWith(`${event.data.id}:`)),
               ));
               return;
+            case 'scope.changed':
+              void getInterceptState().then((state) => setQueue((previous) => {
+                const byId = new Map((state.paused ?? []).map((item) => [item.id, item]));
+                return previous.map((item) => {
+                  const refreshed = byId.get(item.id);
+                  return refreshed ? { ...item, in_scope: refreshed.in_scope } : item;
+                });
+              }))
+                .catch(() => undefined);
+              return;
             case 'flow.annotation':
               setFlows((prev) => prev.map((item) => item.id === event.data.id
+                ? { ...item, ...event.data } : item));
+              setQueue((prev) => prev.map((item) => item.id === event.data.id
                 ? { ...item, ...event.data } : item));
               if (filtersRef.current.bookmarkedOnly || filtersRef.current.annotationColor) void reload();
               return;
@@ -442,6 +455,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
           onDraftsChange={setInterceptDrafts}
           selectedId={interceptSelectedId}
           onSelectedChange={setInterceptSelectedId}
+          filters={interceptFilters}
+          onFiltersChange={setInterceptFilters}
         />
       ) : view === 'websockets' ? (
         <WebSocketPanel />

@@ -252,6 +252,7 @@ class ProxyEngine:
         self.intercept = InterceptAddon(
             broker,
             store=store,
+            scope_predicate=self.scope.contains,
             # A request edited while held does not fire the request hook a
             # second time. Persist it immediately so History can show the
             # final "Modified request" even before a response arrives.

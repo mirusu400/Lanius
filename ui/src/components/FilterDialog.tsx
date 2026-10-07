@@ -1,4 +1,4 @@
-/** The history filter.
+/** Shared history and Intercept queue filter.
  *
  * A capture is mostly images, scripts and stylesheets, and the requests
  * worth looking at are a handful somewhere in the middle. One host, one
@@ -68,11 +68,13 @@ export function FilterDialog({
   filters,
   onClose,
   onApply,
+  title,
 }: {
   open: boolean;
   filters: FlowFilters;
   onClose: () => void;
   onApply: (filters: FlowFilters) => void;
+  title?: string;
 }) {
   const t = useT();
   // Edited locally so a half-built filter is not applied on the way.
@@ -107,7 +109,7 @@ export function FilterDialog({
   return (
     <Dialog
       open={open}
-      title={t('filter.title')}
+      title={title ?? t('filter.title')}
       onClose={onClose}
       className="filter-dialog"
       footer={

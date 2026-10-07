@@ -11,6 +11,7 @@ from app.addons.intercept import (
     InterceptRules,
     apply_edits,
 )
+from app.db.store import FlowRecord, FlowStore
 from app.events import EventBroker
 from app.request_history import remember_auto_modified, remember_original
 from app.response_history import (
@@ -253,6 +254,41 @@ def test_list_paused_serializes_flows() -> None:
     assert entry["id"] == flow.id
     assert entry["method"] == "GET"
     assert any(h[0].lower() == "header" or True for h in entry["request_headers"])
+
+
+def test_paused_payload_reflects_current_scope_for_queue_filter() -> None:
+    broker = EventBroker()
+    events = broker.subscribe()
+    allowed = False
+    a = InterceptAddon(
+        broker,
+        InterceptRules(enabled=True),
+        scope_predicate=lambda _scheme, _host, _port, _path: allowed,
+    )
+    flow = make_flow()
+    a.request(flow)
+    first = events.get_nowait()["data"]
+    assert first["in_scope"] is False
+    assert first["bookmarked"] is False
+    assert first["annotation_color"] is None
+
+    allowed = True
+    assert a.list_paused()[0]["in_scope"] is True
+
+
+def test_paused_payload_includes_history_marks(tmp_path) -> None:
+    flow = make_flow()
+    store = FlowStore(tmp_path / "project.sqlite")
+    try:
+        store.upsert(FlowRecord(id=flow.id, scheme="http", host="example.com", path="/a"))
+        store.patch_annotation(flow.id, {"bookmarked": True, "annotation_color": "green"})
+        a = InterceptAddon(EventBroker(), InterceptRules(enabled=True), store=store)
+        a.request(flow)
+        entry = a.list_paused()[0]
+        assert entry["bookmarked"] is True
+        assert entry["annotation_color"] == "green"
+    finally:
+        store.close()
 
 
 def test_invalid_header_entry_rejected() -> None:

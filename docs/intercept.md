@@ -4,6 +4,15 @@ Hold a request before it reaches the server, edit it as raw HTTP, then forward
 or drop it. You can intercept responses too, and limit interception to a single
 host so the rest of your browsing is unaffected.
 
+## Held request list
+
+The list appears beside the editor as soon as one request is held. Drag its
+divider (or use the arrow keys while focused on it) to resize the list; its
+width is remembered. Search and **Filter** use the same choices as HTTP
+history, including method, status, host, scope, extensions, bookmarks and
+highlights. These filters only change which held requests are shown. Hidden
+requests remain paused, and **Forward all** still sends every held request.
+
 ## Match &amp; Replace
 
 **Match & Replace** opens from this screen and from **Settings > Proxy**. Rules

@@ -37,6 +37,7 @@ const editorEl = () =>
 
 beforeEach(() => {
   calls = [];
+  window.localStorage.removeItem('lanius.intercept.queueWidth');
   resetTabs();
   resetTarget();
   vi.stubGlobal(
@@ -430,8 +431,8 @@ describe('InterceptPanel', () => {
     );
   });
 
-  it('does not show a queue for a single held request', () => {
-    render(
+  it('shows a resizable queue for a single held request and remembers its width', async () => {
+    const view = render(
       <InterceptPanel
         rules={rules}
         paused={[pausedFlow]}
@@ -439,7 +440,42 @@ describe('InterceptPanel', () => {
         onResolved={() => {}}
       />,
     );
-    expect(screen.queryByLabelText(t('intercept.queueLabel'))).toBeNull();
+    expect(within(screen.getByLabelText(t('intercept.queueLabel'))).getAllByRole('button')).toHaveLength(1);
+    const divider = screen.getByRole('separator', { name: t('intercept.resizeQueue') });
+    expect(divider.getAttribute('aria-valuenow')).toBe('300');
+    fireEvent.keyDown(divider, { key: 'ArrowRight' });
+    await waitFor(() => expect(window.localStorage.getItem('lanius.intercept.queueWidth')).toBe('316'));
+    view.unmount();
+    render(<InterceptPanel rules={rules} paused={[pausedFlow]} onToggle={() => {}} onResolved={() => {}} />);
+    expect(screen.getByRole('separator', { name: t('intercept.resizeQueue') }).getAttribute('aria-valuenow')).toBe('316');
+  });
+
+  it('filters the queue like History without releasing hidden requests', async () => {
+    const user = userEvent.setup();
+    const hidden = { ...pausedFlow, id: 'p2', path: '/hidden.js', method: 'POST', in_scope: false };
+    const visible = { ...pausedFlow, id: 'p3', path: '/visible.js', method: 'POST',
+      status_code: 404, in_scope: true, bookmarked: true, annotation_color: 'green' as const };
+    const onResolved = vi.fn();
+    render(<InterceptPanel rules={rules} paused={[pausedFlow, hidden, visible]}
+      onToggle={() => {}} onResolved={onResolved} />);
+
+    await user.click(screen.getByRole('button', { name: t('filter.button') }));
+    const dialog = screen.getByRole('dialog', { name: t('intercept.filterTitle') });
+    await user.click(within(dialog).getByLabelText('POST'));
+    await user.click(within(dialog).getByLabelText('4xx'));
+    await user.click(within(dialog).getByLabelText(t('filter.inScopeOnly')));
+    await user.click(within(dialog).getByLabelText(t('history.bookmarkedOnly')));
+    await userEvent.selectOptions(within(dialog).getByLabelText(t('history.highlight')), 'green');
+    await user.click(within(dialog).getByRole('button', { name: t('filter.apply') }));
+    const queue = screen.getByLabelText(t('intercept.queueLabel'));
+    expect(within(queue).getAllByRole('button')).toHaveLength(1);
+    expect(within(queue).getByRole('button', { name: /visible/ })).toBeTruthy();
+    expect(editorEl().value).toContain('/visible.js');
+    expect(screen.getByText(t('intercept.visibleQueued', { visible: 1, total: 3 }))).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: t('intercept.forwardAll') }));
+    await waitFor(() => expect(onResolved).toHaveBeenCalledWith('*'));
+    expect(calls.some((call) => call.url.endsWith('/api/intercept/forward-all'))).toBe(true);
   });
 
   it('drops the paused flow', async () => {

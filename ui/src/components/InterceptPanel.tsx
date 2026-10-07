@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from
 
 import { dropFlow, forwardAll, forwardFlow } from '../api/client';
 import { addScopeFromUrl } from '../api/client';
-import type { FlowSummary, InterceptRules, PausedFlow } from '../api/types';
+import type { FlowFilters, FlowSummary, InterceptRules, PausedFlow } from '../api/types';
 import { editsFromText, parseRequest, renderPaused, renderPausedVariant, renderRequest } from '../tabs/interceptModel';
 import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { addTab } from '../tabs/replayStore';
@@ -15,6 +15,9 @@ import { HighlightedEditor } from './SyntaxCode';
 import { ContextMenu, useContextMenu } from './ContextMenu';
 import { useCodegenMenu } from './useCodegenMenu';
 import { usePluginActions } from './usePluginActions';
+import { FilterDialog, countActive } from './FilterDialog';
+import { FixedSidebarSplit } from './FixedSidebarSplit';
+import { matchesFilters } from '../tabs/proxyModel';
 
 interface Props {
   rules: InterceptRules;
@@ -25,6 +28,8 @@ interface Props {
   onDraftsChange?: Dispatch<SetStateAction<Record<string, string>>>;
   selectedId?: string | null;
   onSelectedChange?: (id: string | null) => void;
+  filters?: FlowFilters;
+  onFiltersChange?: (filters: FlowFilters) => void;
 }
 
 interface HeldMenuTarget {
@@ -85,6 +90,8 @@ export function InterceptPanel({
   onDraftsChange,
   selectedId: controlledSelectedId,
   onSelectedChange,
+  filters: controlledFilters,
+  onFiltersChange,
 }: Props) {
   const t = useT();
   // Which held request is being shown. Pick from the queue rather than
@@ -93,8 +100,15 @@ export function InterceptPanel({
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(null);
   const selectedId = controlledSelectedId === undefined ? localSelectedId : controlledSelectedId;
   const setSelectedId = onSelectedChange ?? setLocalSelectedId;
+  const [localFilters, setLocalFilters] = useState<FlowFilters>({});
+  const filters = controlledFilters ?? localFilters;
+  const setFilters = onFiltersChange ?? setLocalFilters;
+  const [filterOpen, setFilterOpen] = useState(false);
+  const visiblePaused = paused.filter((flow) =>
+    matchesFilters(flow, filters) && (!filters.inScopeOnly || flow.in_scope === true),
+  );
   const current =
-    paused.find((flow) => flow.id === selectedId) ?? paused[0] ?? null;
+    visiblePaused.find((flow) => flow.id === selectedId) ?? visiblePaused[0] ?? null;
   const [localDrafts, setLocalDrafts] = useState<Record<string, string>>({});
   const drafts = controlledDrafts ?? localDrafts;
   const setDrafts = onDraftsChange ?? setLocalDrafts;
@@ -225,11 +239,11 @@ export function InterceptPanel({
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     const button = (event.target as HTMLElement).closest('button');
     if (!button || !event.currentTarget.contains(button)) return;
-    const index = paused.findIndex((flow) => flow.id === current?.id);
-    const next = Math.max(0, Math.min(paused.length - 1,
+    const index = visiblePaused.findIndex((flow) => flow.id === current?.id);
+    const next = Math.max(0, Math.min(visiblePaused.length - 1,
       index + (event.key === 'ArrowDown' ? 1 : -1)));
     event.preventDefault();
-    setSelectedId(paused[next].id);
+    setSelectedId(visiblePaused[next].id);
     event.currentTarget.querySelectorAll('button')[next]?.focus();
   };
 
@@ -307,79 +321,116 @@ export function InterceptPanel({
         </button>
       </div>
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
-      {paused.length > 1 && (
-        <ul className="intercept-queue" aria-label={t('intercept.queueLabel')} onKeyDown={moveInQueue}>
-          {paused.map((flow) => (
-            <li key={flow.id}>
-              <button
-                type="button"
-                className={flow.id === current?.id ? 'active' : undefined}
-                aria-current={flow.id === current?.id ? 'true' : undefined}
-                onClick={() => setSelectedId(flow.id)}
-                onContextMenu={(event) => {
-                  setSelectedId(flow.id);
-                  menu.open(event, { paused: flow, requestText: menuRequestText(flow) });
-                }}
-              >
-                <span className={`phase phase-${flow.phase}`}>
-                  {flow.phase === 'request'
-                    ? t('intercept.phaseRequest')
-                    : t('intercept.phaseResponse')}
-                </span>
-                <span className="method mono">{flow.method}</span>
-                <span className="target mono" title={`${flow.host}${flow.path}`}>
-                  {flow.host}
-                  {flow.path}
-                </span>
-                {flow.status_code != null && (
-                  <span className="mono muted">{flow.status_code}</span>
-                )}
-                {drafts[`${flow.id}:${flow.phase}`] !== undefined && (
-                  <span className="intercept-dirty" aria-label={t('intercept.unsaved')}>●</span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {current ? (
-        <>
-          <div className="detail-url mono" onContextMenu={openCurrentMenu}>
-            <strong>
-              {current.phase === 'request'
-                ? t('intercept.waitingRequest')
-                : t('intercept.waitingResponse')}
-            </strong>{' '}
-            {stage !== 'modified' && current.phase === 'request' && current.request_variants?.[stage]
-              ? `${current.request_variants[stage].scheme}://${current.request_variants[stage].host}${current.request_variants[stage].path}`
-              : `${current.scheme}://${current.host}${current.path}`}
-          </div>
-          <div className="intercept-versions" role="tablist" aria-label={t('intercept.versions')}>
-            {(['original', 'auto_modified', 'modified'] as const).map((option) => (
-              <button key={option} type="button" role="tab"
-                aria-selected={stage === option}
-                className={stage === option ? 'active' : undefined}
-                onClick={() => setStage(option)}>
-                {t(`intercept.view.${option}`)}
-                {option === 'modified' && dirty && <span className="intercept-dirty" aria-label={t('intercept.unsaved')}> •</span>}
-              </button>
-            ))}
-            <span className="spacer" />
-            {stage !== 'modified' && <span className="muted">{t('intercept.readOnly')}</span>}
-            {dirty && <span className="muted">{t('intercept.forwardUsesModified')}</span>}
-          </div>
-          <div className="intercept-editor-shell" onContextMenu={openCurrentMenu}>
-            <HighlightedEditor
-              className="intercept-editor mono"
-              text={shown}
-              onChange={changeDraft}
-              readOnly={stage !== 'modified'}
-              label={t('intercept.editor')}
-              headers={shownHeaders}
-              responsePath={current.path}
-            />
-          </div>
-        </>
+      <div className="intercept-filter-bar filter-bar">
+        <input
+          className="search"
+          aria-label={t('intercept.searchPlaceholder')}
+          placeholder={t('intercept.searchPlaceholder')}
+          value={filters.search ?? ''}
+          onChange={(event) => setFilters({ ...filters, search: event.target.value || undefined })}
+        />
+        <button className={countActive(filters) > 0 ? 'active' : undefined}
+          onClick={() => setFilterOpen(true)}>
+          {countActive(filters) > 0
+            ? t('filter.buttonActive', { count: String(countActive(filters)) })
+            : t('filter.button')}
+        </button>
+        <button className={filters.bookmarkedOnly ? 'active' : undefined}
+          aria-pressed={Boolean(filters.bookmarkedOnly)}
+          onClick={() => setFilters({ ...filters, bookmarkedOnly: !filters.bookmarkedOnly })}>
+          ★ {t('history.bookmarkedOnly')}
+        </button>
+        <span className="spacer" />
+        {paused.length > 0 && visiblePaused.length !== paused.length && (
+          <span className="count">{t('intercept.visibleQueued', { visible: visiblePaused.length, total: paused.length })}</span>
+        )}
+      </div>
+      <FilterDialog open={filterOpen} filters={filters} title={t('intercept.filterTitle')}
+        onClose={() => setFilterOpen(false)} onApply={setFilters} />
+      {paused.length > 0 ? (
+        <FixedSidebarSplit
+          storageKey="lanius.intercept.queueWidth"
+          label={t('intercept.resizeQueue')}
+          className="intercept-split"
+          sidebar={
+            <ul className="intercept-queue" aria-label={t('intercept.queueLabel')} onKeyDown={moveInQueue}>
+              {visiblePaused.map((flow) => (
+                <li key={flow.id}>
+                  <button
+                    type="button"
+                    className={flow.id === current?.id ? 'active' : undefined}
+                    aria-current={flow.id === current?.id ? 'true' : undefined}
+                    onClick={() => setSelectedId(flow.id)}
+                    onContextMenu={(event) => {
+                      setSelectedId(flow.id);
+                      menu.open(event, { paused: flow, requestText: menuRequestText(flow) });
+                    }}
+                  >
+                    <span className={`phase phase-${flow.phase}`}>
+                      {flow.phase === 'request' ? t('intercept.phaseRequest') : t('intercept.phaseResponse')}
+                    </span>
+                    <span className="method mono">{flow.method}</span>
+                    <span className="target mono" title={`${flow.host}${flow.path}`}>
+                      {flow.host}{flow.path}
+                    </span>
+                    {flow.status_code != null && <span className="mono muted">{flow.status_code}</span>}
+                    {drafts[`${flow.id}:${flow.phase}`] !== undefined && (
+                      <span className="intercept-dirty" aria-label={t('intercept.unsaved')}>●</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+              {visiblePaused.length === 0 && (
+                <li className="intercept-queue-empty muted">{t('intercept.noFilterMatches')}</li>
+              )}
+            </ul>
+          }
+          content={
+            <div className="intercept-detail">
+              {current ? (
+                <>
+                  <div className="detail-url mono" onContextMenu={openCurrentMenu}>
+                    <strong>
+                      {current.phase === 'request' ? t('intercept.waitingRequest') : t('intercept.waitingResponse')}
+                    </strong>{' '}
+                    {stage !== 'modified' && current.phase === 'request' && current.request_variants?.[stage]
+                      ? `${current.request_variants[stage].scheme}://${current.request_variants[stage].host}${current.request_variants[stage].path}`
+                      : `${current.scheme}://${current.host}${current.path}`}
+                  </div>
+                  <div className="intercept-versions" role="tablist" aria-label={t('intercept.versions')}>
+                    {(['original', 'auto_modified', 'modified'] as const).map((option) => (
+                      <button key={option} type="button" role="tab"
+                        aria-selected={stage === option}
+                        className={stage === option ? 'active' : undefined}
+                        onClick={() => setStage(option)}>
+                        {t(`intercept.view.${option}`)}
+                        {option === 'modified' && dirty && (
+                          <span className="intercept-dirty" aria-label={t('intercept.unsaved')}> •</span>
+                        )}
+                      </button>
+                    ))}
+                    <span className="spacer" />
+                    {stage !== 'modified' && <span className="muted">{t('intercept.readOnly')}</span>}
+                    {dirty && <span className="muted">{t('intercept.forwardUsesModified')}</span>}
+                  </div>
+                  <div className="intercept-editor-shell" onContextMenu={openCurrentMenu}>
+                    <HighlightedEditor
+                      className="intercept-editor mono"
+                      text={shown}
+                      onChange={changeDraft}
+                      readOnly={stage !== 'modified'}
+                      label={t('intercept.editor')}
+                      headers={shownHeaders}
+                      responsePath={current.path}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="intercept-idle muted">{t('intercept.noFilterMatches')}</div>
+              )}
+            </div>
+          }
+        />
       ) : (
         <div className="intercept-idle muted">
           {rules.enabled ? t('intercept.idleOn') : t('intercept.idleOff')}
