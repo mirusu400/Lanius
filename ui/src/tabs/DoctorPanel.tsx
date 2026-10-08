@@ -65,6 +65,19 @@ export function DoctorPanel({ onOpenSettings }: {
   const captureConfigured = Boolean(localMode || (capture?.spec !== undefined && capture.spec !== null));
   const downModes = dashboard?.modes?.filter((mode) => !mode.running) ?? [];
   const address = dashboard ? `${dashboard.proxy.host}:${dashboard.proxy.port}` : null;
+  const systemTrust = ca?.system_trust;
+  const caState = results?.ca.error || !ca?.available.pem || systemTrust?.status === 'invalid' ? 'bad'
+    : systemTrust?.status === 'trusted' ? 'ok'
+      : systemTrust?.status === 'not_trusted' ? 'warn'
+        : systemTrust?.platform === 'Windows' ? 'neutral'
+          : browser?.available && browser.ca_trusted ? 'ok' : 'neutral';
+  const caDetail = results?.ca.error ? t('doctor.checkError', { message: results.ca.error })
+    : !ca?.available.pem ? t('doctor.caMissing')
+      : systemTrust?.status === 'invalid' ? t('doctor.caInvalid', { message: systemTrust.detail ?? '' })
+        : systemTrust?.status === 'trusted' ? t('doctor.caWindowsTrusted')
+          : systemTrust?.status === 'not_trusted' ? t('doctor.caWindowsUntrusted')
+            : systemTrust?.platform === 'Windows' ? t('doctor.caWindowsUnknown', { message: systemTrust.detail ?? '' })
+              : browser?.available && browser.ca_trusted ? t('doctor.caReady') : t('doctor.caManual');
 
   return (
     <section className="doctor" aria-label={t('doctor.title')}>
@@ -111,11 +124,9 @@ export function DoctorPanel({ onOpenSettings }: {
           />
           <CheckRow
             title={t('doctor.certificate')}
-            state={results.ca.error ? 'bad' : ca?.available.pem && browser?.available && browser.ca_trusted ? 'ok' : 'warn'}
-            detail={results.ca.error
-              ? t('doctor.checkError', { message: results.ca.error })
-              : !ca?.available.pem ? t('doctor.caMissing')
-                : browser?.available && browser.ca_trusted ? t('doctor.caReady') : t('doctor.caManual')}
+            state={caState}
+            detail={caDetail}
+            label={caState === 'neutral' ? t('doctor.state.unverified') : undefined}
             action={onOpenSettings && <button type="button" onClick={() => onOpenSettings('browser')}>{t('doctor.browserSettings')}</button>}
           />
           {dashboard && <CheckRow
@@ -140,16 +151,17 @@ export function DoctorPanel({ onOpenSettings }: {
   );
 }
 
-function CheckRow({ title, state, detail, action }: {
+function CheckRow({ title, state, detail, action, label }: {
   title: string;
   state: 'ok' | 'warn' | 'bad' | 'neutral';
   detail: string;
   action?: React.ReactNode;
+  label?: string;
 }) {
   const t = useT();
   return <div className="doctor-check">
     <span className={`doctor-state ${state}`} aria-hidden="true" />
-    <div><strong>{title}</strong> <span className={`doctor-label ${state}`}>{t(`doctor.state.${state}`)}</span><p>{detail}</p></div>
+    <div><strong>{title}</strong> <span className={`doctor-label ${state}`}>{label ?? t(`doctor.state.${state}`)}</span><p>{detail}</p></div>
     {action && <div className="doctor-action">{action}</div>}
   </div>;
 }

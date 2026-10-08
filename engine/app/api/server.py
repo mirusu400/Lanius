@@ -60,7 +60,7 @@ from ..lockdown import BLOCKED_DETAIL, LockdownBlocked, LockdownPolicy
 from ..tls_trust import TRUSTED_CA_SETTING
 from .. import updates
 from ..addons.scope import ScopeError, rule_from_url
-from .. import browser
+from .. import browser, ca_trust
 from ..config import Settings
 from ..content_encoding import AUTO_DECOMPRESS_SETTING, auto_decompress_enabled
 from ..db.store import ANNOTATION_COLORS, FlowStore
@@ -1851,6 +1851,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "available": available,
             "install_url": "http://mitm.it",
             "proxy": f"{settings.proxy_host}:{settings.proxy_port}",
+            "system_trust": await asyncio.to_thread(ca_trust.system_trust, settings.confdir),
         }
 
     @app.get("/api/ca/{fmt}")

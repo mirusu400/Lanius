@@ -64,6 +64,7 @@ afterEach(() => {
   resetTabs();
   resetDecoderTabs();
   vi.unstubAllGlobals();
+  delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
 });
 
 async function upload() {
@@ -109,4 +110,44 @@ it('retains the old draft and autosave when the server rejects the import', asyn
   await flushAutosaves();
   expect(getTabs()[0].text).toBe('keep this draft');
   expect((workspace.replay as ReplayTab[])[0].text).toBe('keep this draft');
+});
+
+it.each([
+  ['project.export', 'json', true],
+  ['project.exportNoFlows', 'json', false],
+  ['project.backupDatabase', 'database', true],
+] as const)('uses a native Save As for %s and saves pending edits before export', async (label, kind, includeFlows) => {
+  const invoke = vi.fn(async () => {
+    expect((workspace.replay as ReplayTab[])[0].text).toBe('last edit before export');
+    return '/chosen/location/project-file';
+  });
+  Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: { invoke } });
+  updateTab('old-replay', { text: 'last edit before export' });
+  render(<ProjectSection />);
+  await userEvent.setup().click(screen.getByRole('button', { name: t(label) }));
+  await screen.findByText(t('project.savedFile', { path: '/chosen/location/project-file' }));
+  expect(invoke).toHaveBeenCalledWith('save_project_file', {
+    kind, includeFlows, title: t(label),
+    defaultName: kind === 'database' ? 'lanius-project.sqlite' : expect.stringMatching(/^lanius-\d{4}-\d{2}-\d{2}\.lanius\.json$/),
+  });
+});
+
+it('quietly cancels an export when the native Save As is dismissed', async () => {
+  const invoke = vi.fn(async () => null);
+  Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: { invoke } });
+  render(<ProjectSection />);
+  await userEvent.setup().click(screen.getByRole('button', { name: t('project.export') }));
+  await waitFor(() => expect((screen.getByRole('button', { name: t('project.export') }) as HTMLButtonElement).disabled).toBe(false));
+  expect(invoke).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText(/chosen\/location/)).toBeNull();
+  expect(document.querySelector('.banner.error')).toBeNull();
+});
+
+it('shows a native export failure without claiming the file was saved', async () => {
+  const invoke = vi.fn(async () => { throw new Error('disk full'); });
+  Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: { invoke } });
+  render(<ProjectSection />);
+  await userEvent.setup().click(screen.getByRole('button', { name: t('project.backupDatabase') }));
+  await screen.findByText('disk full');
+  expect(document.querySelector('.banner.error')).toBeTruthy();
 });

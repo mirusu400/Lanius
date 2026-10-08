@@ -433,6 +433,22 @@ def test_ca_info_reports_availability(client) -> None:
     assert "confdir" in data
     assert set(data["available"]) == {"pem", "cer", "p12"}
     assert data["install_url"] == "http://mitm.it"
+    assert data["system_trust"]["status"] in {"trusted", "not_trusted", "unknown", "unsupported", "invalid"}
+
+
+def test_ca_info_includes_local_system_trust_diagnostics(client, monkeypatch) -> None:
+    from app import ca_trust
+
+    expected = {"platform": "Windows", "status": "trusted", "fingerprint_sha256": "AB" * 32}
+    paths = []
+
+    def inspect(path):
+        paths.append(path)
+        return expected
+
+    monkeypatch.setattr(ca_trust, "system_trust", inspect)
+    assert client.get("/api/ca").json()["system_trust"] == expected
+    assert paths == [client.app.state.settings.confdir]
 
 
 def test_ca_download_unknown_format(client) -> None:

@@ -17,6 +17,7 @@ use tauri_plugin_updater::UpdaterExt;
 
 #[cfg(any(target_os = "linux", test))]
 mod linux_webkit;
+mod project_export;
 mod projects;
 mod screenshot;
 mod shutdown;
@@ -1020,6 +1021,7 @@ pub fn run() {
     linux_webkit::configure_before_webview();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .menu(shutdown::menu)
         .on_menu_event(|app, event| {
             if event.id().as_ref() == shutdown::QUIT_MENU_ID {
@@ -1044,6 +1046,7 @@ pub fn run() {
             open_project,
             start_temp_project,
             close_project,
+            project_export::save_project_file,
             close_ready,
             cancel_close,
             finish_close,

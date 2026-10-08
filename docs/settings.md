@@ -5,6 +5,17 @@ capture, appearance, language, keyboard shortcuts, updates and Lockdown Mode.
 Appearance, shortcuts and other machine-level choices are not part of a
 [project export](projects.md).
 
+## Doctor certificate checks
+
+On Windows, Doctor compares the current proxy CA with the local Windows
+Trusted Root Certification Authorities store for HTTPS use. Installing an old
+CA with the same name is not enough. If it is missing, install the certificate
+from `mitm.it` into that store for the current user or local computer and run
+Doctor again. Store inspection failures are shown as **Not verified**, rather
+than as a certificate error. Browsers with separate certificate stores and
+other devices still need their own trust setup. The check makes no test
+connection and does not change TLS verification.
+
 ## Proxy listener and API port
 
 Port 8080 is a popular default and another tool may already have it. Open

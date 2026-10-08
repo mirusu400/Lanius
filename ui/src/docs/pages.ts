@@ -443,7 +443,7 @@ const en: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Settings > Project exports everything as one file. A long capture dwarfs the rest, so there is a second button that leaves it out when you only want to pass on a scope and a set of requests.',
+            body: 'Settings > Project opens a Save As dialog in the desktop app for JSON exports and complete database backups. Choose the folder and filename there. Pending tab edits are saved first, and a failed export does not replace an existing backup. A second JSON button leaves the capture out when you only want to pass on a scope and a set of requests.',
           },
           {
             kind: 'note',
@@ -886,7 +886,7 @@ const ko: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Settings > Project에서 전체를 한 파일로 내보냅니다. 긴 캡처는 나머지보다 훨씬 크므로, 범위와 요청만 전달하고 싶을 때 쓰는 캡처 제외 버튼도 있습니다.',
+            body: '데스크톱 앱의 Settings > Project에서 JSON 내보내기와 전체 DB 백업을 누르면 다른 이름으로 저장 창이 열립니다. 폴더와 파일 이름을 선택하세요. 탭의 마지막 편집을 먼저 저장하며, 내보내기에 실패해도 기존 백업 파일은 대체하지 않습니다. 범위와 요청만 전달할 때 쓰는 캡처 제외 JSON 버튼도 있습니다.',
           },
           {
             kind: 'note',

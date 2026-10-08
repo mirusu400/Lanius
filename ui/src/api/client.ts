@@ -898,6 +898,12 @@ export interface CaInfo {
   available: Record<string, boolean>;
   install_url: string;
   proxy: string;
+  system_trust?: {
+    platform: string;
+    status: 'trusted' | 'not_trusted' | 'unsupported' | 'unknown' | 'invalid';
+    fingerprint_sha256?: string;
+    detail?: string;
+  };
 }
 
 export function getCaInfo(): Promise<CaInfo> {
@@ -1046,6 +1052,16 @@ export async function downloadProjectBackup(): Promise<Blob> {
   const res = await apiFetch('/api/project/backup');
   if (!res.ok) throw new Error(await errorDetail(res));
   return res.blob();
+}
+
+/** Native Save As, then stream the export directly from the local engine. */
+export function saveDesktopProjectFile(
+  kind: 'json' | 'database', includeFlows: boolean, defaultName: string, title: string,
+): Promise<string | null> {
+  const internals = (window as unknown as {
+    __TAURI_INTERNALS__: { invoke(cmd: string, args: unknown): Promise<string | null> };
+  }).__TAURI_INTERNALS__;
+  return internals.invoke('save_project_file', { kind, includeFlows, defaultName, title });
 }
 
 export function importProject(

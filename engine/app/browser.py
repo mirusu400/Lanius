@@ -24,6 +24,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
+
 logger = logging.getLogger(__name__)
 
 # Chromium builds we know how to drive, most preferred first. Firefox is
@@ -90,28 +93,22 @@ def find_browser() -> Browser | None:
 def ca_spki_hash(confdir: Path) -> str | None:
     """Base64 SHA-256 of the CA's public key, as Chromium wants it.
 
-    Returns None when the certificate is missing or openssl is not
-    available, in which case the caller has to decide what to do rather
+    Returns None when the certificate is missing or unreadable,
+    in which case the caller has to decide what to do rather
     than silently launching a browser that trusts everything.
     """
     pem = Path(confdir) / "mitmproxy-ca-cert.pem"
     if not pem.exists():
         return None
     try:
-        public_key = subprocess.run(
-            ["openssl", "x509", "-in", str(pem), "-pubkey", "-noout"],
-            capture_output=True,
-            check=True,
-            timeout=10,
-        ).stdout
-        der = subprocess.run(
-            ["openssl", "pkey", "-pubin", "-outform", "der"],
-            input=public_key,
-            capture_output=True,
-            check=True,
-            timeout=10,
-        ).stdout
-    except (OSError, subprocess.SubprocessError) as exc:
+        # cryptography is bundled with the engine. Windows does not normally
+        # provide an openssl executable, so invoking it gave a false negative.
+        cert = x509.load_pem_x509_certificate(pem.read_bytes())
+        der = cert.public_key().public_bytes(
+            serialization.Encoding.DER,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    except (OSError, ValueError) as exc:
         logger.warning("could not read the CA public key: %s", exc)
         return None
     return base64.b64encode(hashlib.sha256(der).digest()).decode()

@@ -73,6 +73,19 @@ def test_no_certificate_means_no_hash(tmp_path) -> None:
     assert browser.ca_spki_hash(tmp_path / "missing") is None
 
 
+def test_browser_ca_trust_does_not_require_an_openssl_executable(tmp_path) -> None:
+    _write_ca(tmp_path)
+    expected = browser.ca_spki_hash(tmp_path)
+    with mock.patch.object(browser.subprocess, "run", side_effect=FileNotFoundError) as run:
+        assert browser.ca_spki_hash(tmp_path) == expected
+        run.assert_not_called()
+
+
+def test_unreadable_certificate_is_not_trusted(tmp_path) -> None:
+    (tmp_path / "mitmproxy-ca-cert.pem").write_text("invalid certificate")
+    assert browser.ca_spki_hash(tmp_path) is None
+
+
 def test_launch_points_the_browser_at_the_proxy(tmp_path) -> None:
     confdir = tmp_path / "mitm"
     _write_ca(confdir)

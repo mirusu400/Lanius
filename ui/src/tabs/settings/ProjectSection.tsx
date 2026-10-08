@@ -7,10 +7,12 @@ import {
   importProjectFile,
   downloadProjectBackup,
   restartProjectEngine,
+  isDesktop,
+  saveDesktopProjectFile,
 } from '../../api/client';
 import { notifyLockdownChanged } from '../../lockdownEvents';
 import { resetUpdates } from '../../updates';
-import { replaceWorkspace } from '../autosave';
+import { flushAutosaves, replaceWorkspace } from '../autosave';
 import type { Project } from '../../projects';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import {
@@ -37,20 +39,30 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
   const [switchOpen, setSwitchOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
 
-  const download = async (includeFlows: boolean) => {
+  const download = async (includeFlows: boolean, database = false) => {
     setBusy(true);
     setError(null);
     setNote(null);
     try {
-      const data = await exportProject(includeFlows);
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: 'application/json',
-      });
+      await flushAutosaves();
+      const stamp = new Date().toISOString().slice(0, 10);
+      const filename = database ? 'lanius-project.sqlite' : `lanius-${stamp}.lanius.json`;
+      if (isDesktop()) {
+        const path = await saveDesktopProjectFile(
+          database ? 'database' : 'json', includeFlows, filename,
+          t(database ? 'project.backupDatabase' : includeFlows ? 'project.export' : 'project.exportNoFlows'),
+        );
+        if (path) setNote(msg('project.savedFile', { path }));
+        return;
+      }
+      const blob = database ? await downloadProjectBackup()
+        : new Blob([JSON.stringify(await exportProject(includeFlows), null, 2)], {
+          type: 'application/json',
+        });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      const stamp = new Date().toISOString().slice(0, 10);
-      link.download = `lanius-${stamp}.lanius.json`;
+      link.download = filename;
       link.click();
       // Revoking immediately can cancel the download in some browsers.
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
@@ -89,24 +101,6 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
     }
   };
 
-  const backupDatabase = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const blob = await downloadProjectBackup();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'lanius-project.sqlite';
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    } catch (err) {
-      setError(rawMsg((err as Error).message));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <section>
       <h3>{t('project.section')}</h3>
@@ -131,7 +125,7 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
       {switchError && <div className="banner error" role="alert">{switchError}</div>}
 
       <div className="project-actions">
-        <button type="button" disabled={busy} onClick={() => void backupDatabase()}>
+        <button type="button" disabled={busy} onClick={() => void download(true, true)}>
           {t('project.backupDatabase')}
         </button>
         <button type="button" disabled={busy} onClick={() => void download(true)}>

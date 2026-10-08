@@ -17,6 +17,11 @@ Work is saved as you go. **Settings > Project > Back up complete database**
 downloads a consistent SQLite snapshot with every HTTP body and WebSocket
 message.
 
+In the desktop app, both JSON exports and the complete database backup open a
+**Save As** dialog. Choose the folder and filename there; cancelling leaves no
+export file. Pending tab edits are saved before exporting. A failed download
+does not replace an existing backup at the selected path.
+
 The JSON export is intended for sharing smaller projects: it holds at most
 100,000 HTTP flows, omits WebSocket messages, and its readable body encoding
 cannot preserve arbitrary binary bytes. Projects above that limit receive an
