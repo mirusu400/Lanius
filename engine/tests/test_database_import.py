@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -78,10 +79,12 @@ def test_older_backup_is_upgraded_on_a_copy(tmp_path, version):
     source.close()
     prepared = prepare_database(path)
     try:
-        with sqlite3.connect(prepared.path) as conn:
+        # sqlite3's context manager ends a transaction but does not close
+        # the connection. Windows requires that handle closed before cleanup.
+        with closing(sqlite3.connect(prepared.path)) as conn:
             assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
             assert conn.execute("SELECT id FROM flow_history").fetchone()[0] == "raw"
-        with sqlite3.connect(path) as conn:
+        with closing(sqlite3.connect(path)) as conn:
             assert conn.execute("PRAGMA user_version").fetchone()[0] == version
     finally:
         prepared.cleanup()
@@ -90,7 +93,7 @@ def test_older_backup_is_upgraded_on_a_copy(tmp_path, version):
 @pytest.mark.parametrize("version", [0, SCHEMA_VERSION + 1])
 def test_rejects_unrelated_or_future_databases(tmp_path, version):
     path = tmp_path / "other.sqlite"
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         conn.execute("CREATE TABLE unrelated(value TEXT)")
         conn.execute(f"PRAGMA user_version={version}")
     with pytest.raises(ValueError, match="not a supported Lanius"):
