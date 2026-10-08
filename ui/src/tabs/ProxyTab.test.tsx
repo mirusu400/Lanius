@@ -72,6 +72,7 @@ let failListFlows = false;
 let failClearFlows = false;
 let clearResponse: Promise<Response> | null = null;
 let paginateHistory = false;
+let importedHistory = false;
 let calls: { url: string; method: string; body?: unknown }[] = [];
 
 beforeEach(() => {
@@ -83,6 +84,7 @@ beforeEach(() => {
   failClearFlows = false;
   clearResponse = null;
   paginateHistory = false;
+  importedHistory = false;
   MockSocket.instances = [];
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
   vi.stubGlobal(
@@ -138,6 +140,9 @@ beforeEach(() => {
       }
       if (failListFlows) {
         throw new Error('engine down');
+      }
+      if (importedHistory && url.includes('/api/flows?')) {
+        return jsonResponse({ items: [{ ...seeded, id: 'imported', path: '/imported' }], count: 1, has_more: false, anchor: 2 });
       }
       if (paginateHistory && url.includes('/api/flows?')) {
         const offset = Number(new URL(url).searchParams.get('offset') ?? 0);
@@ -412,6 +417,32 @@ describe('ProxyTab', () => {
     await screen.findByText('seeded.test');
     MockSocket.instances[0].emit('flows.cleared', {});
     await waitFor(() => expect(screen.queryByText('seeded.test')).toBeNull());
+  });
+
+  it('resets the page, cursor and selection when another project is imported', async () => {
+    paginateHistory = true;
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('/seeded');
+    await user.click(screen.getByRole('button', { name: t('proxy.olderHistory') }));
+    await user.click(await screen.findByText('/old'));
+    await screen.findByText('<redacted>');
+    const previousCalls = calls.length;
+    importedHistory = true;
+    MockSocket.instances[0].emit('project.imported', { flows: 1, scope: 0, workspace: 0 });
+    await screen.findByText('/imported');
+    expect(screen.queryByText('/old')).toBeNull();
+    expect(screen.getByText(t('detail.selectPrompt'))).toBeTruthy();
+    expect(screen.getByRole('spinbutton', { name: t('proxy.historyPageLabel') })).toHaveProperty('value', '1');
+    const reloads = calls.slice(previousCalls).filter((call) => call.url.includes('/api/flows?'));
+    expect(reloads.length).toBeGreaterThan(0);
+    expect(new URL(reloads[0].url).searchParams.has('anchor')).toBe(false);
+    for (const { url } of reloads) {
+      const params = new URL(url).searchParams;
+      expect(Number(params.get('offset') ?? 0)).toBe(0);
+      expect([null, '2']).toContain(params.get('anchor'));
+      expect(params.has('cursor')).toBe(false);
+    }
   });
 });
 

@@ -64,9 +64,10 @@ interface SettingsTabProps {
   onSwitchProject?: () => Promise<void>;
   switchingProject?: boolean;
   switchError?: string | null;
+  onProjectImported?: () => void;
 }
 
-export function SettingsTab({ project, onSwitchProject, switchingProject = false, switchError, openGroup, onGroupOpened }: SettingsTabProps = {}) {
+export function SettingsTab({ project, onSwitchProject, switchingProject = false, switchError, openGroup, onGroupOpened, onProjectImported }: SettingsTabProps = {}) {
   const t = useT();
   const [group, setGroup] = useState<Group>(() =>
     GROUPS.includes(openGroup as Group) ? (openGroup as Group) : initialGroup(),
@@ -75,6 +76,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
     GROUPS.includes(openGroup as Group) ? (openGroup as Group) : initialGroup(),
   ]));
   const [error, setError] = useState<string | null>(null);
+  const [importRevision, setImportRevision] = useState(0);
 
   useEffect(() => {
     if (!GROUPS.includes(openGroup as Group)) return;
@@ -149,8 +151,12 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
               onSwitchProject={onSwitchProject}
               switchingProject={switchingProject}
               switchError={switchError}
+              onProjectImported={() => {
+                setImportRevision((revision) => revision + 1);
+                onProjectImported?.();
+              }}
             />
-            <ProjectCompactSection />
+            <ProjectCompactSection key={importRevision} />
           </>
         </Activity>}
 

@@ -1078,10 +1078,10 @@ export function importProject(
  * parsed and serialized again on the UI thread. */
 export function importProjectFile(
   file: File,
-): Promise<{ ok: boolean; flows: number; scope: number; workspace: number }> {
+): Promise<{ ok: boolean; flows: number; scope: number; workspace: number; warnings?: string[] }> {
   return request('/api/project/import', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
     body: file,
   });
 }

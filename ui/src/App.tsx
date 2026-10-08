@@ -28,6 +28,7 @@ import { DocsTab } from "./tabs/DocsTab";
 import { useT } from "./i18n";
 import { flushAutosaves } from "./tabs/autosave";
 import { startWorkspaceAutosaves } from "./tabs/workspace";
+import { clearSelection } from "./tabs/selectionStore";
 import {
   getTabs,
   resetTabs,
@@ -127,6 +128,13 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
     { tab: 'Dashboard' as Tab, visited: new Set<Tab>(['Dashboard', 'Proxy']) },
   );
   const [historyMethodRequest, setHistoryMethodRequest] = useState<{ method: string } | null>(null);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const onProjectImported = useCallback(() => {
+    // Hidden Activity tabs have no stream subscription during the import.
+    clearSelection();
+    setHistoryMethodRequest(null);
+    setHistoryRevision((revision) => revision + 1);
+  }, []);
   const [tabOrder, setTabOrder] = useState<Tab[]>(loadTabOrder);
   const [scannerAvailable, setScannerAvailable] = useState(false);
   const [draggedTab, setDraggedTab] = useState<Tab | null>(null);
@@ -332,7 +340,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
       <main className="content">
         <BusyProvider onChange={onBusyChange}>
           <Activity mode={tab === "Proxy" ? "visible" : "hidden"}>
-            <ProxyTab methodFilterRequest={historyMethodRequest} />
+            <ProxyTab key={historyRevision} methodFilterRequest={historyMethodRequest} />
           </Activity>
           <Activity mode={tab === "Dashboard" ? "visible" : "hidden"}>
             <DashboardTab
@@ -364,6 +372,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
                 onSwitchProject={switchProject}
                 switchingProject={switching}
                 switchError={switchError}
+                onProjectImported={onProjectImported}
               />
             </Activity>
           )}

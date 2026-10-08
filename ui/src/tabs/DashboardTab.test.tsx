@@ -8,6 +8,7 @@ import { DashboardTab } from './DashboardTab';
 import { TAB_ORDER_STORAGE_KEY } from '../tabOrder';
 import { renderWithI18n as render, t } from '../test-utils';
 import type { Dashboard } from '../api/types';
+import { getSelectedFlow, setSelectedFlow, clearSelection } from './selectionStore';
 
 const empty: Dashboard = {
   flows: 0,
@@ -74,6 +75,7 @@ let scannerChecks = 0;
 beforeEach(() => {
   payload = empty;
   scannerChecks = 0;
+  clearSelection();
   window.localStorage.clear();
   // Route by path: the title-bar test renders the whole app, so other tabs
   // fetch too and must not be handed the dashboard's shape.
@@ -122,6 +124,8 @@ beforeEach(() => {
           ].filter((site) => !path.includes('in_scope_only=true') || site.in_scope),
         };
         if (path.endsWith('/api/scope')) return { rules: [], restrict_capture: false };
+        if (path.includes('/api/project/import')) return { ok: true, flows: 0, scope: 0, workspace: 0 };
+        if (path.includes('/api/project/compact')) return { db_bytes: 0, reclaimable_bytes: 0, total_flows: 0, sites: [] };
         return { items: [], count: 0 };
       },
     })) as unknown as typeof fetch,
@@ -486,6 +490,30 @@ describe('title bar', () => {
     expect(table.scrollTop).toBe(40);
     await user.click(screen.getByRole('button', { name: t('filter.buttonActive', { count: '1' }) }));
     expect(screen.getByRole('textbox', { name: t('filter.host') })).toHaveProperty('value', 'example.test');
+  });
+
+  it('starts History from the imported project when its Activity tab was hidden during import', async () => {
+    window.localStorage.setItem('lanius.settings.group', 'project');
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Proxy' }));
+    await user.type(await screen.findByPlaceholderText(t('proxy.searchPlaceholder')), 'previous project');
+    const page = screen.getByRole('spinbutton', { name: t('proxy.historyPageLabel') });
+    await user.clear(page);
+    await user.type(page, '3');
+    await user.click(screen.getByRole('button', { name: t('proxy.jumpToPage') }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('offset=400'))).toBe(true));
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: t('settings.group.project') }));
+    setSelectedFlow('previous-project-flow');
+    await user.upload(screen.getByLabelText(t('project.import'), { selector: 'input' }), new File(['SQLite format 3\0'], 'backup.sqlite'));
+    await user.click(within(screen.getByRole('dialog', { name: t('project.import') })).getByRole('button', { name: t('project.import') }));
+    await screen.findByText(t('project.imported', { flows: '0', scope: '0' }));
+    expect(getSelectedFlow()).toBeNull();
+    await user.click(within(screen.getByRole('navigation')).getByRole('button', { name: 'Proxy' }));
+    expect(screen.getByRole('spinbutton', { name: t('proxy.historyPageLabel') })).toHaveProperty('value', '1');
+    expect(screen.getByPlaceholderText(t('proxy.searchPlaceholder'))).toHaveProperty('value', '');
+    expect(screen.getByText(t('detail.selectPrompt'))).toBeTruthy();
   });
 
   it('opens HTTP History filtered to a dashboard method', async () => {

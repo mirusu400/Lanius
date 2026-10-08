@@ -28,6 +28,13 @@ cannot preserve arbitrary binary bytes. Projects above that limit receive an
 error instead of a silently shortened JSON export. A second JSON button leaves
 the capture out when you only want to pass on a scope and a set of requests.
 
+**Import project** accepts JSON exports and `.sqlite`, `.sqlite3`, or `.db`
+Lanius backups. SQLite restores the complete capture, including binary bodies,
+WebSocket messages, bookmarks, issues and saved payload lists. Older backups
+are upgraded on a temporary copy; the selected file is left unchanged.
+Lanius checks the backup before stopping capture, then pauses the proxy during
+restoration. HTTP History reloads from the restored project.
+
 Importing a project also replaces the open Replay and Decoder tabs. Pending
 writes from the previous workspace finish before the import starts, and tabs
 absent from the imported project are cleared.
@@ -45,6 +52,9 @@ index optimization and database rebuilding do not have a reliable percentage.
 Existing projects build summary and full text indexes once when first opened
 after upgrading; a large project can take minutes on that first launch and
 requires additional disk space.
+HTTP History uses a separate table of small summary rows, so listing requests
+does not read large request or response bodies. This table is built once when
+an older project is opened or imported.
 Request and response bodies larger than 8 MiB remain available in the capture
 but are left out of the text search index to keep capture responsive.
 

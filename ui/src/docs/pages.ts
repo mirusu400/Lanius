@@ -447,7 +447,7 @@ const en: DocPage[] = [
           },
           {
             kind: 'note',
-            body: 'Importing replaces what is currently open, including Replay and Decoder tabs, so Lanius asks first. Tabs absent from the imported project are cleared. Pending writes from the previous workspace finish before the import starts.',
+            body: 'Import project accepts JSON exports and Lanius SQLite backups (.sqlite, .sqlite3, .db). SQLite restores binary bodies, WebSocket messages, bookmarks, issues and saved payload lists. Older backups are upgraded on a copy, leaving the selected file unchanged. Capture pauses during restoration. Importing replaces the current project and Replay/Decoder tabs after confirmation; pending writes finish first and absent tabs are cleared.',
           },
         ],
       },
@@ -890,7 +890,7 @@ const ko: DocPage[] = [
           },
           {
             kind: 'note',
-            body: '가져오면 Replay와 Decoder 탭을 포함한 현재 내용이 대체되므로 Lanius가 먼저 확인합니다. 가져온 프로젝트에 없는 탭은 비웁니다. 이전 작업 공간에서 진행 중이던 저장은 가져오기를 시작하기 전에 완료됩니다.',
+            body: '프로젝트 가져오기는 JSON 내보내기와 Lanius SQLite 백업(.sqlite, .sqlite3, .db)을 지원합니다. SQLite는 바이너리 본문, WebSocket 메시지, 북마크, 이슈, 저장된 페이로드 목록까지 복원합니다. 이전 버전 백업은 사본에서 변환하므로 선택한 원본은 바뀌지 않습니다. 복원 중에는 캡처가 잠시 멈춥니다. 확인 후 현재 프로젝트와 Replay/Decoder 탭을 대체하며, 진행 중인 저장은 먼저 완료하고 가져온 프로젝트에 없는 탭은 비웁니다.',
           },
         ],
       },

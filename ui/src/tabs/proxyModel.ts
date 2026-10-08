@@ -80,9 +80,13 @@ export function formatUrl(flow: FlowSummary): string {
   return `${flow.scheme}://${flow.host}${port}${flow.path ?? ''}${query}`;
 }
 
+const historyTimeFormat = new Intl.DateTimeFormat('en-GB', {
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+});
+
 export function formatTime(ts: number | null): string {
   if (!ts) return '';
-  return new Date(ts * 1000).toLocaleTimeString('en-GB', { hour12: false });
+  return historyTimeFormat.format(new Date(ts * 1000));
 }
 
 export function formatBytes(size: number): string {

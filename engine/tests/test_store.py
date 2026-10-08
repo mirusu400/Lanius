@@ -65,6 +65,50 @@ def test_migrate_is_idempotent(tmp_path) -> None:
     conn.close()
 
 
+def test_history_backfills_old_projects_and_never_reads_body_pages(tmp_path) -> None:
+    path = tmp_path / "v11.sqlite"
+    original = FlowStore(path)
+    original.upsert(make_record("large", response_body=b"x" * (10 * 1024 * 1024)))
+    with original._conn:
+        for trigger in ("flow_history_insert", "flow_history_delete", "flow_history_update"):
+            original._conn.execute(f"DROP TRIGGER {trigger}")
+        original._conn.execute("DROP TABLE flow_history")
+        original._conn.execute("PRAGMA user_version=11")
+    original.close()
+
+    store = FlowStore(path)
+    def body_access_forbidden(operation, table, _column, _database, _trigger):
+        return sqlite3.SQLITE_DENY if operation == sqlite3.SQLITE_READ and table == "flows" else sqlite3.SQLITE_OK
+
+    store._read_conn.set_authorizer(body_access_forbidden)
+    try:
+        assert store.page_summaries()["items"][0]["id"] == "large"
+        assert store.page_summaries(search="api/items")["items"][0]["id"] == "large"
+        assert store.page_summaries(sort_by="response_size")["items"][0]["id"] == "large"
+        assert store.page_summaries(scope_predicate=lambda *_: True)["items"][0]["id"] == "large"
+    finally:
+        store._read_conn.set_authorizer(None)
+        store.close()
+
+
+def test_history_summary_follows_capture_updates_replacements_and_deletion() -> None:
+    store = FlowStore()
+    store.upsert(make_record("a", started_at=1, status_code=None, local_source_ip="192.0.2.1"))
+    store.upsert(make_record("a", started_at=1, status_code=201))
+    page = store.page_summaries()["items"]
+    assert [(item["id"], item["status_code"], item["local_source_ip"]) for item in page] == [("a", 201, "192.0.2.1")]
+    with store._conn:
+        store._conn.execute("UPDATE flows SET rowid=100, method='POST' WHERE id='a'")
+    assert store.page_summaries(method="POST")["anchor"] == 100
+    assert store._conn.execute("SELECT COUNT(*) FROM flow_history").fetchone()[0] == 1
+    store.delete(["a"])
+    assert store.page_summaries()["items"] == []
+    store.upsert(make_record("b"))
+    store.clear()
+    assert store.page_summaries()["items"] == []
+    store.close()
+
+
 def test_migrate_upgrades_a_v1_database(tmp_path) -> None:
     """An existing v1 project file must gain the v2 tables, not be recreated."""
     path = tmp_path / "old.sqlite"

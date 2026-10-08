@@ -16,6 +16,9 @@ from starlette.websockets import WebSocketDisconnect
 from app.api.server import create_app, redact_headers
 from app.config import Settings
 from app.db.store import FlowRecord
+from app.lockdown import PROJECT_SETTING, SCOPE_EGRESS_SETTING
+from app.tls_trust import TRUSTED_CA_SETTING
+from .test_database_import import make_backup
 
 
 def free_port() -> int:
@@ -816,6 +819,103 @@ def test_import_refuses_a_future_version(client) -> None:
         ).status_code
         == 422
     )
+
+
+def test_import_sqlite_restores_complete_capture_and_reloads_live_scope(client, tmp_path) -> None:
+    source_path = tmp_path / "source" / "backup.sqlite"
+    source = make_backup(source_path)
+    source.add_scope_rule({"kind": "include", "host": "imported.test", "path": "*",
+                           "protocol": "any", "port": None, "match_type": "glob", "enabled": True})
+    source.close()
+    seed(client, "old")
+    engine = client.app.state.engine
+    with mock.patch.object(engine, "stop", wraps=engine.stop) as stop:
+        result = client.post("/api/project/import", content=source_path.read_bytes(),
+                             headers={"Content-Type": "application/x-sqlite3"})
+    assert result.status_code == 200, result.text
+    assert result.json()["flows"] == 1
+    assert result.json()["websockets"] == 1
+    assert result.json()["warnings"] == []
+    assert stop.await_count == 1
+    assert engine.running
+    store = client.app.state.store
+    assert store.get("old") is None
+    assert store.get_body_bytes("raw", "request") == b"\xff\x00request"
+    assert store.get_body_bytes("raw", "response") == b"\xfe\x00response"
+    assert client.get("/api/websockets/messages/ws/raw").content == b"\xff\x01frame"
+    assert client.get("/api/flows?bookmarked_only=true").json()["items"][0]["id"] == "raw"
+    assert client.get("/api/workspace/decoder").json()["value"][0]["input"] == "saved payload"
+    assert [rule["host"] for rule in client.get("/api/scope").json()["rules"]] == ["imported.test"]
+
+
+@pytest.mark.parametrize("data", [b"SQLite format 3\x00truncated", None])
+def test_import_rejects_invalid_sqlite_without_stopping_or_replacing_current_project(client, tmp_path, data) -> None:
+    if data is None:
+        path = tmp_path / "unrelated.sqlite"
+        with sqlite3.connect(path) as conn:
+            conn.execute("CREATE TABLE other(value TEXT)")
+        data = path.read_bytes()
+    seed(client, "keep")
+    engine = client.app.state.engine
+    with mock.patch.object(engine, "stop", wraps=engine.stop) as stop:
+        result = client.post("/api/project/import", content=data)
+    assert result.status_code == 422
+    assert stop.await_count == 0
+    assert client.app.state.store.get("keep") is not None
+    assert engine.running
+
+
+@pytest.mark.parametrize("already_locked", [False, True])
+def test_sqlite_import_applies_lockdown_before_restore_and_preserves_trust(client, tmp_path, already_locked) -> None:
+    path = tmp_path / "source" / "backup.sqlite"
+    source = make_backup(path)
+    source.set_setting(TRUSTED_CA_SETTING, "unapproved imported CA")
+    source.set_setting(PROJECT_SETTING, "0" if already_locked else "1")
+    source.set_setting(SCOPE_EGRESS_SETTING, "0" if already_locked else "1")
+    source.close()
+    approved_ca = (client.app.state.engine.settings.confdir / "mitmproxy-ca-cert.pem").read_text() if already_locked else None
+    if already_locked:
+        client.put("/api/lockdown/scope-egress", json={"enabled": True})
+        client.put("/api/lockdown/project", json={"enabled": True})
+        client.app.state.store.set_setting(TRUSTED_CA_SETTING, approved_ca)
+    store = client.app.state.store
+    restore = store.restore_database
+
+    def guarded_restore(*args, **kwargs):
+        assert client.app.state.lockdown.enabled
+        assert client.app.state.engine.plugins.suspended
+        restore(*args, **kwargs)
+
+    with mock.patch.object(store, "restore_database", side_effect=guarded_restore):
+        result = client.post("/api/project/import", content=path.read_bytes())
+    assert result.status_code == 200, result.text
+    state = client.get("/api/lockdown").json()
+    assert state["project_enabled"] and state["scope_egress_effective"]
+    assert store.get_setting(TRUSTED_CA_SETTING) == approved_ca
+    assert client.app.state.engine.master.options.connection_strategy == "lazy"
+
+
+def test_sqlite_import_returns_committed_data_and_warning_when_proxy_restart_fails(client, tmp_path) -> None:
+    path = tmp_path / "source" / "backup.sqlite"
+    make_backup(path).close()
+    with mock.patch.object(client.app.state.engine, "start", side_effect=RuntimeError("port occupied")):
+        result = client.post("/api/project/import", content=path.read_bytes())
+    assert result.status_code == 200
+    assert "port occupied" in result.json()["warnings"][0]
+    assert client.app.state.store.get("raw") is not None
+    assert not client.app.state.engine.running
+
+
+def test_sqlite_import_keeps_proxy_stopped_when_scope_reload_fails(client, tmp_path) -> None:
+    path = tmp_path / "source" / "backup.sqlite"
+    make_backup(path).close()
+    engine = client.app.state.engine
+    with mock.patch.object(engine.scope, "reload", side_effect=RuntimeError("invalid scope")):
+        result = client.post("/api/project/import", content=path.read_bytes())
+    assert result.status_code == 200
+    assert "remains stopped" in result.json()["warnings"][0]
+    assert client.app.state.store.get("raw") is not None
+    assert not engine.running
 
 
 def test_listener_reports_where_the_proxy_listens(client) -> None:

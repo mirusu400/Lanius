@@ -15,6 +15,8 @@ let stop: () => void;
 let workspace: Record<string, unknown>;
 let imported: Record<string, unknown>;
 let failImport: boolean;
+let importReady: Promise<void> | null;
+let importWarnings: string[];
 
 function replay(id: string, text: string): ReplayTab {
   return { id, title: id, url: 'http://example.test/', text, sending: false, response: null, error: null };
@@ -28,6 +30,8 @@ beforeEach(async () => {
   resetTabs();
   resetDecoderTabs();
   failImport = false;
+  importReady = null;
+  importWarnings = [];
   workspace = {
     replay: [replay('old-replay', 'old request')],
     decoder: [{ ...emptyDecoderTab(), input: 'old payload' }],
@@ -39,9 +43,10 @@ beforeEach(async () => {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith('/api/project/import')) {
+      if (importReady) await importReady;
       if (failImport) return response({ detail: 'invalid import' }, 422);
       workspace = imported;
-      return response({ ok: true, flows: 0, scope: 0, workspace: Object.keys(imported).length });
+      return response({ ok: true, flows: 0, scope: 0, workspace: Object.keys(imported).length, warnings: importWarnings });
     }
     if (url.includes('/api/workspace/')) {
       const key = url.split('/').pop()!;
@@ -67,10 +72,9 @@ afterEach(() => {
   delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
 });
 
-async function upload() {
+async function upload(file = new File(['{"format":"lanius-project","version":1}'], 'project.json', { type: 'application/json' })) {
   render(<ProjectSection />);
   const user = userEvent.setup();
-  const file = new File(['{"format":"lanius-project","version":1}'], 'project.json', { type: 'application/json' });
   await user.upload(screen.getByLabelText(t('project.import'), { selector: 'input' }), file);
   const dialog = screen.getByRole('dialog', { name: t('project.import') });
   await user.click(within(dialog).getByRole('button', { name: t('project.import') }));
@@ -110,6 +114,31 @@ it('retains the old draft and autosave when the server rejects the import', asyn
   await flushAutosaves();
   expect(getTabs()[0].text).toBe('keep this draft');
   expect((workspace.replay as ReplayTab[])[0].text).toBe('keep this draft');
+});
+
+it('accepts a SQLite backup and shows progress until its imported tabs have loaded', async () => {
+  let finish: () => void = () => {};
+  importReady = new Promise<void>((resolve) => { finish = resolve; });
+  const file = new File(['SQLite format 3\0'], 'project.sqlite', { type: 'application/x-sqlite3' });
+  await upload(file);
+  expect(screen.getByRole('status', { name: t('project.working') })).toBeTruthy();
+  expect((screen.getByRole('button', { name: t('project.export') }) as HTMLButtonElement).disabled).toBe(true);
+  finish();
+  await screen.findByText(t('project.imported', { flows: '0', scope: '0' }));
+  expect(screen.queryByRole('status', { name: t('project.working') })).toBeNull();
+  expect(getTabs()[0].text).toBe('imported request');
+  expect(vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/api/project/import'))?.[1]).toMatchObject({
+    body: file, headers: { 'Content-Type': 'application/x-sqlite3' },
+  });
+});
+
+it('loads the committed workspace when restoration succeeds but the proxy reports a warning', async () => {
+  importWarnings = ['Project restored, but the proxy could not restart: port occupied'];
+  await upload(new File(['SQLite format 3\0'], 'backup.db'));
+  await screen.findByText(importWarnings[0]);
+  expect(getTabs()[0].text).toBe('imported request');
+  await flushAutosaves();
+  expect((workspace.replay as ReplayTab[])[0].text).toBe('imported request');
 });
 
 it.each([

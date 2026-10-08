@@ -228,6 +228,17 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
         onState: setConnection,
         onEvent: (event) => {
           switch (event.type) {
+            case 'project.imported':
+              historyAnchor.current = undefined;
+              historyCursors.current = {};
+              historyPageRef.current = 0;
+              setNextHistoryCursor(null);
+              setHistoryPage(0);
+              setHistoryPageInput('1');
+              setFlows([]);
+              clearSelection();
+              void reload();
+              return;
             case 'flows.cleared':
               historyAnchor.current = undefined;
               historyCursors.current = {};

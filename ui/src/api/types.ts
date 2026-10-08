@@ -236,6 +236,7 @@ export type EngineEvent =
   | { type: 'flow.request' | 'flow.response' | 'flow.error'; data: FlowSummary }
   | { type: 'flow.annotation'; data: { id: string; bookmarked: boolean; annotation_color: HistoryColor | null } }
   | { type: 'flows.cleared'; data: Record<string, never> }
+  | { type: 'project.imported'; data: { flows: number; scope: number; workspace: number } }
   | { type: 'intercept.paused'; data: PausedFlow }
   | { type: 'intercept.resolved'; data: { id: string; action: string } }
   | { type: 'intercept.rules'; data: InterceptRules }

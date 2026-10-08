@@ -9,6 +9,7 @@ import logging
 import re
 import secrets
 import sqlite3
+import tempfile
 import threading
 import time
 from collections.abc import AsyncIterator
@@ -56,7 +57,7 @@ from ..plugin_catalogue import PluginCatalogueError
 from ..plugin_samples import bundled_sample_archive, bundled_samples
 from .. import codegen
 from ..build_info import build_info
-from ..lockdown import BLOCKED_DETAIL, LockdownBlocked, LockdownPolicy
+from ..lockdown import BLOCKED_DETAIL, PROJECT_SETTING, SCOPE_EGRESS_SETTING, LockdownBlocked, LockdownPolicy
 from ..tls_trust import TRUSTED_CA_SETTING
 from .. import updates
 from ..addons.scope import ScopeError, rule_from_url
@@ -64,6 +65,7 @@ from .. import browser, ca_trust
 from ..config import Settings
 from ..content_encoding import AUTO_DECOMPRESS_SETTING, auto_decompress_enabled
 from ..db.store import ANNOTATION_COLORS, FlowStore
+from ..db.database_import import SQLITE_HEADER, PreparedDatabase, prepare_database
 from ..events import EventBroker
 from ..processes import list_processes
 from ..proxy import ProxyEngine, ProxyStartError, local_capture_state
@@ -688,52 +690,126 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             background=BackgroundTask(Path(path).unlink, missing_ok=True),
         )
 
-    @app.post("/api/project/import")
-    async def import_project(request: Request) -> dict[str, Any]:
-        """Load a project document, replacing what is currently open."""
-        try:
-            payload = await asyncio.to_thread(json.loads, await request.body())
-        except (ValueError, UnicodeDecodeError) as exc:
-            raise HTTPException(status_code=422, detail="invalid project JSON") from exc
-        if not isinstance(payload, dict):
-            raise HTTPException(status_code=422, detail="not a Lanius project")
-        if payload.get("format") != "lanius-project":
-            raise HTTPException(status_code=422, detail="not a Lanius project")
-        version = payload.get("version")
-        if version != 1:
-            raise HTTPException(
-                status_code=422, detail=f"unsupported project version: {version!r}"
-            )
-        was_locked = lockdown.project_enabled
-        was_scope_egress = lockdown.scope_egress_effective
-        trusted_ca = store.get_setting(TRUSTED_CA_SETTING)
-        counts = await asyncio.to_thread(store.import_project, payload)
-        # An imported project must not silently authorize a new trust anchor.
-        if trusted_ca is None:
-            store.delete_setting(TRUSTED_CA_SETTING)
-        else:
-            store.set_setting(TRUSTED_CA_SETTING, trusted_ca)
-        # Project exports carry this setting too. Apply an imported switch
-        # before any pending product request can continue. A file can turn
-        # Lockdown on but never off: only the user's own switch loosens it.
+    project_import_lock = asyncio.Lock()
+
+    async def apply_imported_project(was_locked: bool, was_scope_egress: bool) -> None:
+        # Apply policy before reloading plugins or starting the proxy again.
         imported = lockdown.reload()
         lockdown.set_project(was_locked or imported["project_enabled"])
-        # The same rule applies to an effective scope guard: importing an
-        # untrusted project may tighten it, but cannot silently open egress.
         if was_scope_egress:
             lockdown.set_scope_egress(True)
-        # The scope lives in memory once loaded, so without this the
-        # imported rules sit in the database and affect nothing.
         scope = await asyncio.to_thread(engine.scope.reload)
         engine.match_replace.reload()
         await _apply_lockdown_to_plugins(lockdown.enabled)
         if lockdown.scope_egress_effective:
-            # Rules and routing settings have just been replaced. Close every
-            # old session before accepting traffic under the new snapshot.
             await engine.restart_for_scope_egress()
         broker.publish("scope.changed", scope.as_dict())
-        broker.publish("project.imported", counts)
-        return {"ok": True, **counts}
+
+    async def import_sqlite(prepared: PreparedDatabase) -> dict[str, Any]:
+        was_locked = lockdown.project_enabled
+        was_scope_egress = lockdown.scope_egress_effective
+        was_running = engine.running
+        await engine.fuzzer.stop_all()
+        await engine.replay.cancel_active()
+        await engine.stop()
+        warnings = []
+        can_resume = True
+        try:
+            if prepared.settings.get(PROJECT_SETTING) == "1":
+                lockdown.set_project(True)
+                await _apply_lockdown_to_plugins(True)
+            await asyncio.to_thread(
+                store.restore_database, prepared.path,
+                preserve_settings=(TRUSTED_CA_SETTING,),
+                keep_enabled=(PROJECT_SETTING, SCOPE_EGRESS_SETTING),
+            )
+            can_resume = False
+            engine.websockets.clear(persist=False)
+            try:
+                await apply_imported_project(was_locked, was_scope_egress)
+                can_resume = True
+            except Exception as exc:
+                logger.exception("could not apply all restored project settings")
+                warnings.append(f"Project restored, but the proxy remains stopped: {exc}")
+        finally:
+            if was_running and can_resume:
+                try:
+                    await engine.start()
+                except Exception as exc:
+                    # Restoration already committed. Return success so the UI
+                    # reloads imported tabs instead of autosaving stale drafts.
+                    warnings.append(f"Project restored, but the proxy could not restart: {exc}")
+        broker.publish("project.imported", prepared.counts)
+        return {"ok": True, **prepared.counts, "warnings": warnings}
+
+    @app.post("/api/project/import")
+    async def import_project(request: Request) -> dict[str, Any]:
+        """Import JSON or a complete SQLite backup; stream uploads to disk."""
+        prepared: PreparedDatabase | None = None
+        upload_path: Path | None = None
+        try:
+            # Close before reopening by name: Windows cannot reopen a temp
+            # file held with delete-on-close access.
+            with tempfile.NamedTemporaryFile(prefix="lanius_import_", suffix=".project", delete=False) as upload:
+                upload_path = Path(upload.name)
+                async for chunk in request.stream():
+                    await asyncio.to_thread(upload.write, chunk)
+                await asyncio.to_thread(upload.flush)
+
+            def read_upload() -> Any:
+                with open(upload.name, "rb") as source:
+                    if source.read(16) == SQLITE_HEADER:
+                        return prepare_database(upload.name)
+                    source.seek(0)
+                    try:
+                        return json.load(source)
+                    except (ValueError, UnicodeDecodeError) as exc:
+                        raise ValueError("invalid project JSON or SQLite backup") from exc
+
+            read_task = asyncio.create_task(asyncio.to_thread(read_upload))
+            try:
+                payload = await asyncio.shield(read_task)
+            except asyncio.CancelledError:
+                # Keep the upload alive until its worker is done, then remove
+                # both temporary files even if the client disconnected.
+                payload = await read_task
+                if isinstance(payload, PreparedDatabase):
+                    prepared = payload
+                raise
+            if isinstance(payload, PreparedDatabase):
+                prepared = payload
+                async with project_import_lock:
+                    restore_task = asyncio.create_task(import_sqlite(prepared))
+                    try:
+                        return await asyncio.shield(restore_task)
+                    except asyncio.CancelledError:
+                        # A committed restore must finish applying policy and
+                        # restarting the proxy before releasing the import lock.
+                        await restore_task
+                        raise
+            if not isinstance(payload, dict) or payload.get("format") != "lanius-project":
+                raise ValueError("not a Lanius project")
+            if payload.get("version") != 1:
+                raise ValueError(f"unsupported project version: {payload.get('version')!r}")
+            async with project_import_lock:
+                was_locked = lockdown.project_enabled
+                was_scope_egress = lockdown.scope_egress_effective
+                trusted_ca = store.get_setting(TRUSTED_CA_SETTING)
+                counts = await asyncio.to_thread(store.import_project, payload)
+                if trusted_ca is None:
+                    store.delete_setting(TRUSTED_CA_SETTING)
+                else:
+                    store.set_setting(TRUSTED_CA_SETTING, trusted_ca)
+                await apply_imported_project(was_locked, was_scope_egress)
+                broker.publish("project.imported", counts)
+                return {"ok": True, **counts}
+        except (ValueError, sqlite3.DatabaseError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        finally:
+            if prepared is not None:
+                await asyncio.to_thread(prepared.cleanup)
+            if upload_path is not None:
+                await asyncio.to_thread(upload_path.unlink, missing_ok=True)
 
     @app.get("/api/project/compact")
     async def compact_preview() -> dict[str, Any]:

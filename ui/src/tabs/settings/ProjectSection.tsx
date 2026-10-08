@@ -15,6 +15,7 @@ import { resetUpdates } from '../../updates';
 import { flushAutosaves, replaceWorkspace } from '../autosave';
 import type { Project } from '../../projects';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { Spinner } from '../../components/Spinner';
 import {
   msg,
   rawMsg,
@@ -28,10 +29,11 @@ interface ProjectSectionProps {
   onSwitchProject?: () => Promise<void>;
   switchingProject?: boolean;
   switchError?: string | null;
+  onProjectImported?: () => void;
 }
 
 /** Export and import, plus a reminder that work is saved as you go. */
-export function ProjectSection({ project, onSwitchProject, switchingProject = false, switchError }: ProjectSectionProps = {}) {
+export function ProjectSection({ project, onSwitchProject, switchingProject = false, switchError, onProjectImported }: ProjectSectionProps = {}) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Message | null>(null);
@@ -79,12 +81,14 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
     setNote(null);
     try {
       const result = await replaceWorkspace(() => importProjectFile(file));
+      onProjectImported?.();
       setNote(
         msg('project.imported', {
           flows: String(result.flows ?? 0),
           scope: String(result.scope ?? 0),
         }),
       );
+      if (result.warnings?.length) setError(rawMsg(result.warnings.join('; ')));
       try {
         const lockdown = await getLockdown();
         if (lockdown.effective) resetUpdates();
@@ -138,7 +142,7 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
           {t('project.import')}
           <input
             type="file"
-            accept=".json,application/json"
+            accept=".json,.sqlite,.sqlite3,.db,application/json,application/x-sqlite3"
             aria-label={t('project.import')}
             disabled={busy}
             onChange={(event) => {
@@ -150,6 +154,7 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
         </label>
       </div>
 
+      {busy && <p className="project-file-progress"><Spinner label={t('project.working')} />{t('project.working')}</p>}
       {note && <p className="muted">{renderMessage(note, t)}</p>}
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
       <ConfirmDialog

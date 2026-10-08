@@ -5846,6 +5846,17 @@ pre.body {
   margin: 14px 0;
 }
 
+.project-file-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-file-progress .spinner {
+  width: 16px;
+  height: 16px;
+}
+
 .project-actions {
   display: flex;
   flex-wrap: wrap;

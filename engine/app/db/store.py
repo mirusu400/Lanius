@@ -401,6 +401,31 @@ class FlowStore:
             Path(destination).unlink(missing_ok=True)
             raise
 
+    def restore_database(
+        self, path: str | Path, *, preserve_settings: Sequence[str] = (),
+        keep_enabled: Sequence[str] = (),
+    ) -> None:
+        """Atomically restore a validated, migrated snapshot into this store.
+
+        Keep the same connection object for payload stores and capture writers.
+        The proxy must be stopped and drained before this method is called.
+        """
+        with self._read_lock, self._lock:
+            with contextlib.closing(sqlite3.connect(path)) as source:
+                with source:
+                    for key in preserve_settings:
+                        current = self.get_setting(key)
+                        source.execute("DELETE FROM settings WHERE key=?", (key,))
+                        if current is not None:
+                            source.execute("INSERT INTO settings(key,value) VALUES (?,?)", (key, current))
+                    for key in keep_enabled:
+                        if self.get_setting(key) == "1":
+                            source.execute("INSERT OR REPLACE INTO settings(key,value) VALUES (?, '1')", (key,))
+                # SQLite's backup API commits the destination as one transaction;
+                # a failed copy cannot leave a partially restored project.
+                source.backup(self._conn)
+            self._conn.execute("PRAGMA recursive_triggers=ON")
+
     # --- writes -----------------------------------------------------------
     def upsert(self, record: FlowRecord) -> None:
         with self._lock:
@@ -819,7 +844,7 @@ class FlowStore:
         exclude_extensions: Sequence[str] | None = None,
         bookmarked_only: bool = False, annotation_color: str | None = None,
     ) -> dict[str, Any]:
-        """A bounded page over all matching flows, without loading body BLOBs.
+        """A bounded page over small history rows, without touching body pages.
 
         Scope rules may depend on arbitrary paths, so apply them while
         streaming the SQL result before counting the requested page offset.
@@ -852,7 +877,7 @@ class FlowStore:
         with self._read_lock:
             if anchor is None:
                 anchor = int(self._read_conn.execute(
-                    "SELECT COALESCE(MAX(rowid), 0) FROM flows"
+                    "SELECT COALESCE(MAX(rowid), 0) FROM flow_history"
                 ).fetchone()[0])
             where = f"{where} {'AND' if where else 'WHERE'} rowid <= ?"
             params.append(anchor)
@@ -881,9 +906,9 @@ class FlowStore:
                 probe = max(needed, 300)
                 recent = self._read_conn.execute(
                     "WITH recent AS MATERIALIZED ("
-                    f" SELECT rowid FROM flows {base_where}"
+                    f" SELECT rowid FROM flow_history AS flows {base_where}"
                     " ORDER BY started_at DESC, rowid DESC LIMIT ?)"
-                    f" SELECT {_SUMMARY_COLUMNS} FROM flows"
+                    f" SELECT {_SUMMARY_COLUMNS} FROM flow_history AS flows"
                     " JOIN recent ON flows.rowid = recent.rowid"
                     " WHERE EXISTS (SELECT 1 FROM flow_search AS hit"
                     " WHERE hit.rowid = flows.rowid AND instr(hit.text, ?) > 0)"
@@ -900,7 +925,7 @@ class FlowStore:
                     }
             if scope_predicate is None:
                 rows = self._read_conn.execute(
-                    f"SELECT {_SUMMARY_COLUMNS} FROM flows {where}"
+                    f"SELECT {_SUMMARY_COLUMNS} FROM flow_history AS flows {where}"
                     f" ORDER BY {order} LIMIT ? OFFSET ?",
                     (*params, limit + 1, offset),
                 ).fetchall()
@@ -911,7 +936,7 @@ class FlowStore:
                         if default_sort else None}
             last_cursor: str | None = None
             rows_cursor = self._read_conn.execute(
-                f"SELECT {_SUMMARY_COLUMNS} FROM flows {where}"
+                f"SELECT {_SUMMARY_COLUMNS} FROM flow_history AS flows {where}"
                 f" ORDER BY {order}", params,
             )
             for row in rows_cursor:
