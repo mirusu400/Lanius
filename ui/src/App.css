@@ -1034,6 +1034,37 @@ pre.body,
   flex: 1;
 }
 
+.closing-dialog {
+  width: 360px;
+}
+
+.closing-dialog .dialog-body {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.closing-dialog .spinner {
+  height: 48px;
+  width: 48px;
+}
+
+.closing-dialog h3,
+.closing-dialog p {
+  margin: 0;
+}
+
+.closing-dialog .banner {
+  overflow-wrap: anywhere;
+}
+
+.closing-dialog .dialog-foot {
+  justify-content: flex-end;
+}
+
 /* The library needs room: it was a 260px strip, which was too small to
    read a list in, let alone judge one. */
 .payload-dialog {

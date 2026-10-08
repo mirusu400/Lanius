@@ -32,6 +32,14 @@ const en = {
   'common.enabled': 'Enabled',
   'common.proxy': 'Proxy',
 
+  'shutdown.closing': 'Closing Lanius…',
+  'shutdown.saving': 'Saving your open tabs.',
+  'shutdown.stopping': 'Finishing project cleanup.',
+  'shutdown.failed': 'Could not close Lanius',
+  'shutdown.keptOpen': 'The window is still open so your work can be saved. Retry or return to your project.',
+  'shutdown.saveTimeout': 'Saving is taking too long. Check the engine and try again.',
+  'shutdown.retry': 'Retry closing',
+
   // --- proxy tab ---
   'proxy.intercept': 'Intercept',
   'proxy.history': 'HTTP history',
@@ -1025,6 +1033,13 @@ export type TranslationKey = keyof typeof en;
 type Catalogue = Record<TranslationKey, string>;
 
 const ko: Catalogue = {
+  'shutdown.closing': 'Lanius를 닫는 중…',
+  'shutdown.saving': '열린 탭을 저장하고 있습니다.',
+  'shutdown.stopping': '프로젝트를 정리하고 있습니다.',
+  'shutdown.failed': 'Lanius를 닫지 못했습니다',
+  'shutdown.keptOpen': '작업 내용을 저장할 수 있도록 창을 유지했습니다. 다시 시도하거나 프로젝트로 돌아가세요.',
+  'shutdown.saveTimeout': '저장이 오래 걸리고 있습니다. 엔진 상태를 확인한 뒤 다시 시도하세요.',
+  'shutdown.retry': '다시 닫기',
   'common.refresh': '새로고침',
   'common.clear': '지우기',
   'common.reset': '초기화',

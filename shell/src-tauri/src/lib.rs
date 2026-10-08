@@ -19,6 +19,10 @@ use tauri_plugin_updater::UpdaterExt;
 mod linux_webkit;
 mod projects;
 mod screenshot;
+mod shutdown;
+
+#[derive(Default)]
+pub struct ShutdownState(Mutex<shutdown::Shutdown>);
 
 #[derive(Default)]
 pub struct ProjectSession(Mutex<Option<projects::Project>>);
@@ -792,6 +796,90 @@ fn close_project(engine: State<'_, EngineProcess>, session: State<'_, ProjectSes
     end_project(&engine, &session);
 }
 
+fn notify_close_requested(window: &tauri::WebviewWindow) -> Result<(), String> {
+    // Keep the window alive and visible while the UI saves and the engine
+    // drains. This also covers Quit when the window was minimised.
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+    window
+        .eval("window.dispatchEvent(new Event('lanius-close-requested'))")
+        .map_err(|err| err.to_string())
+}
+
+fn request_app_close(app: &tauri::AppHandle) {
+    let notify = app
+        .state::<ShutdownState>()
+        .0
+        .lock()
+        .expect("shutdown lock")
+        .request();
+    if notify {
+        if let Some(window) = app.get_webview_window("main") {
+            if let Err(err) = notify_close_requested(&window) {
+                log::error!("could not request the final workspace save: {err}");
+                let _ = app
+                    .state::<ShutdownState>()
+                    .0
+                    .lock()
+                    .expect("shutdown lock")
+                    .cancel();
+            }
+        }
+    }
+}
+
+#[tauri::command]
+fn close_ready(
+    window: tauri::WebviewWindow,
+    state: State<'_, ShutdownState>,
+) -> Result<(), String> {
+    let notify = state.0.lock().expect("shutdown lock").ready();
+    if notify {
+        notify_close_requested(&window)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn cancel_close(state: State<'_, ShutdownState>) -> Result<(), String> {
+    state.0.lock().expect("shutdown lock").cancel()
+}
+
+#[tauri::command]
+async fn finish_close(app: tauri::AppHandle) -> Result<(), String> {
+    app.state::<ShutdownState>()
+        .0
+        .lock()
+        .expect("shutdown lock")
+        .begin_finish()?;
+    let cleanup_app = app.clone();
+    // stop_engine may wait several seconds. Keep it off the main thread so
+    // the closing progress circle continues animating throughout cleanup.
+    if let Err(err) = tauri::async_runtime::spawn_blocking(move || {
+        end_project(
+            &cleanup_app.state::<EngineProcess>(),
+            &cleanup_app.state::<ProjectSession>(),
+        );
+    })
+    .await
+    {
+        app.state::<ShutdownState>()
+            .0
+            .lock()
+            .expect("shutdown lock")
+            .finish_failed();
+        return Err(err.to_string());
+    }
+    app.state::<ShutdownState>()
+        .0
+        .lock()
+        .expect("shutdown lock")
+        .approved = true;
+    app.exit(0);
+    Ok(())
+}
+
 /// Match the window chrome to the theme the page is using.
 ///
 /// The page repaints itself from a CSS custom property, but the title
@@ -932,8 +1020,15 @@ pub fn run() {
     linux_webkit::configure_before_webview();
 
     tauri::Builder::default()
+        .menu(shutdown::menu)
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == shutdown::QUIT_MENU_ID {
+                request_app_close(app);
+            }
+        })
         .manage(EngineProcess::default())
         .manage(ProjectSession::default())
+        .manage(ShutdownState::default())
         .manage(Arc::new(UpdateProgress::default()))
         .invoke_handler(tauri::generate_handler![
             engine_info,
@@ -949,6 +1044,9 @@ pub fn run() {
             open_project,
             start_temp_project,
             close_project,
+            close_ready,
+            cancel_close,
+            finish_close,
             screenshot::capture_current_window,
             update_check,
             update_install,
@@ -974,22 +1072,49 @@ pub fn run() {
             install_signal_handlers(app.handle().clone());
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Destroyed = event {
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                if !window
+                    .state::<ShutdownState>()
+                    .0
+                    .lock()
+                    .expect("shutdown lock")
+                    .approved
+                {
+                    api.prevent_close();
+                    request_app_close(window.app_handle());
+                }
+            }
+            tauri::WindowEvent::Destroyed => {
                 end_project(
                     &window.state::<EngineProcess>(),
                     &window.state::<ProjectSession>(),
                 );
             }
+            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("error while building lanius")
         .run(|app, event| {
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                end_project(
-                    &app.state::<EngineProcess>(),
-                    &app.state::<ProjectSession>(),
-                );
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                let approved = app
+                    .state::<ShutdownState>()
+                    .0
+                    .lock()
+                    .expect("shutdown lock")
+                    .approved;
+                if approved
+                    || code == Some(tauri::RESTART_EXIT_CODE)
+                    || app.get_webview_window("main").is_none()
+                {
+                    end_project(
+                        &app.state::<EngineProcess>(),
+                        &app.state::<ProjectSession>(),
+                    );
+                } else {
+                    api.prevent_exit();
+                    request_app_close(app);
+                }
             }
         });
 }

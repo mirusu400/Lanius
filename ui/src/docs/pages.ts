@@ -432,6 +432,10 @@ const en: DocPage[] = [
             kind: 'text',
             body: 'Choose a temporary, new, or existing project at launch. Captured traffic, scope, proxy settings, and the tabs you have open in Replay and Decoder are written to that project as you work. Use Settings > Project to switch projects.',
           },
+          {
+            kind: 'text',
+            body: 'Closing the window or quitting Lanius saves pending tab edits before stopping the engine. A progress circle stays visible while saving and cleaning up. If saving fails, the window stays open so you can retry or cancel.',
+          },
         ],
       },
       {
@@ -443,7 +447,7 @@ const en: DocPage[] = [
           },
           {
             kind: 'note',
-            body: 'Importing replaces what is currently open, so Lanius asks first.',
+            body: 'Importing replaces what is currently open, including Replay and Decoder tabs, so Lanius asks first. Tabs absent from the imported project are cleared. Pending writes from the previous workspace finish before the import starts.',
           },
         ],
       },
@@ -871,6 +875,10 @@ const ko: DocPage[] = [
             kind: 'text',
             body: '시작할 때 임시, 새 프로젝트, 기존 프로젝트 중 하나를 선택합니다. 캡처한 트래픽, 범위, 프록시 설정, Replay와 Decoder에 열어 둔 탭이 해당 프로젝트에 자동 저장됩니다. Settings > Project에서 다른 프로젝트를 선택할 수 있습니다.',
           },
+          {
+            kind: 'text',
+            body: '창을 닫거나 Lanius를 종료하면 탭의 마지막 편집을 저장한 뒤 엔진을 중지합니다. 저장과 정리 중에는 원형 진행 표시가 나타납니다. 저장에 실패하면 창을 유지하므로 다시 시도하거나 취소할 수 있습니다.',
+          },
         ],
       },
       {
@@ -882,7 +890,7 @@ const ko: DocPage[] = [
           },
           {
             kind: 'note',
-            body: '가져오면 현재 열린 내용이 대체되므로 Lanius가 먼저 확인합니다.',
+            body: '가져오면 Replay와 Decoder 탭을 포함한 현재 내용이 대체되므로 Lanius가 먼저 확인합니다. 가져온 프로젝트에 없는 탭은 비웁니다. 이전 작업 공간에서 진행 중이던 저장은 가져오기를 시작하기 전에 완료됩니다.',
           },
         ],
       },

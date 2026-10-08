@@ -6,10 +6,17 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { autosave, flushAutosaves } from './autosave';
+import { autosave as startAutosave, flushAutosaves, replaceWorkspace } from './autosave';
 
 let puts: { key: string; value: unknown }[] = [];
 let stored: Record<string, unknown> = {};
+const disposers: Array<() => void> = [];
+
+function autosave<T>(...args: Parameters<typeof startAutosave<T>>) {
+  const dispose = startAutosave<T>(...args);
+  disposers.push(dispose);
+  return dispose;
+}
 
 function jsonResponse(body: unknown) {
   return {
@@ -41,6 +48,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  disposers.splice(0).forEach((dispose) => dispose());
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -50,6 +58,7 @@ function makeStore<T>(initial: T) {
   let value = initial;
   const listeners = new Set<(v: T) => void>();
   return {
+    get: () => value,
     subscribe(listener: (v: T) => void) {
       listeners.add(listener);
       listener(value);
@@ -141,5 +150,112 @@ describe('autosave', () => {
     await flushAutosaves();
     expect(puts).toEqual([{ key: 'replay', value: { tabs: ['unsaved edit'] } }]);
     dispose();
+  });
+
+  it('replaces open tabs without an old debounce overwriting the import', async () => {
+    stored.replay = { tabs: ['old'] };
+    const store = makeStore({ tabs: [] as string[] });
+    autosave('replay', store.subscribe, store.set);
+    await vi.runAllTimersAsync();
+    store.set({ tabs: ['old unsaved edit'] });
+
+    await replaceWorkspace(async () => {
+      stored.replay = { tabs: ['imported'] };
+    });
+    await vi.runAllTimersAsync();
+    expect(store.get()).toEqual({ tabs: ['imported'] });
+    expect(puts).toEqual([]);
+
+    store.set({ tabs: ['imported', 'new edit'] });
+    await flushAutosaves();
+    expect(puts).toEqual([{ key: 'replay', value: { tabs: ['imported', 'new edit'] } }]);
+  });
+
+  it('waits for a write already on the wire before replacing the database', async () => {
+    const store = makeStore({ n: 0 });
+    autosave('replay', store.subscribe, store.set);
+    await vi.runAllTimersAsync();
+    let finishWrite!: (response: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(async () => new Promise<Response>((resolve) => {
+      finishWrite = resolve;
+    }));
+    store.set({ n: 1 });
+    await vi.advanceTimersByTimeAsync(800);
+    const replace = vi.fn(async () => { stored.replay = { n: 2 }; });
+    const pending = replaceWorkspace(replace);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(replace).not.toHaveBeenCalled();
+
+    finishWrite(jsonResponse({ ok: true }));
+    await pending;
+    expect(replace).toHaveBeenCalledOnce();
+    expect(store.get()).toEqual({ n: 2 });
+  });
+
+  it('clears old tabs when the imported workspace has no saved tabs', async () => {
+    stored.replay = { tabs: ['old'] };
+    const store = makeStore({ tabs: [] as string[] });
+    const reset = () => store.set({ tabs: [] });
+    autosave('replay', store.subscribe, store.set, undefined, reset);
+    await vi.runAllTimersAsync();
+
+    await replaceWorkspace(async () => { stored = {}; });
+    expect(store.get()).toEqual({ tabs: [] });
+    await flushAutosaves();
+    expect(puts).toEqual([]);
+  });
+
+  it('keeps and saves the previous draft if the import fails', async () => {
+    const store = makeStore({ n: 0 });
+    autosave('replay', store.subscribe, store.set);
+    await vi.runAllTimersAsync();
+    store.set({ n: 3 });
+
+    await expect(replaceWorkspace(async () => { throw new Error('bad import'); })).rejects.toThrow('bad import');
+    await vi.runAllTimersAsync();
+    expect(store.get()).toEqual({ n: 3 });
+    expect(puts).toEqual([{ key: 'replay', value: { n: 3 } }]);
+  });
+
+  it('waits for an import when flushing for app shutdown', async () => {
+    const store = makeStore({ n: 0 });
+    autosave('replay', store.subscribe, store.set);
+    await vi.runAllTimersAsync();
+    store.set({ n: 1 });
+    let finishImport!: () => void;
+    const pending = replaceWorkspace(async () => {
+      await new Promise<void>((resolve) => { finishImport = resolve; });
+      stored.replay = { n: 2 };
+    });
+    const flushed = vi.fn();
+    const closing = flushAutosaves().then(flushed);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(flushed).not.toHaveBeenCalled();
+    expect(puts).toEqual([]);
+
+    finishImport();
+    await pending;
+    await closing;
+    expect(store.get()).toEqual({ n: 2 });
+    expect(flushed).toHaveBeenCalledOnce();
+    expect(puts).toEqual([]);
+  });
+
+  it('blocks stale saves after a failed reload and retries restoration on close', async () => {
+    const store = makeStore({ n: 0 });
+    autosave('replay', store.subscribe, store.set);
+    await vi.runAllTimersAsync();
+    store.set({ n: 1 });
+    await expect(replaceWorkspace(async () => {
+      stored.replay = { n: 2 };
+      vi.mocked(fetch).mockRejectedValueOnce(new Error('reload offline'));
+    })).rejects.toThrow('reload offline');
+    store.set({ n: 9 });
+    await vi.runAllTimersAsync();
+    expect(puts).toEqual([]);
+
+    await flushAutosaves();
+    expect(store.get()).toEqual({ n: 2 });
+    expect(puts).toEqual([]);
   });
 });

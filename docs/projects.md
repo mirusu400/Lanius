@@ -7,6 +7,10 @@ are removed when closed. Use **Settings > Project > Switch** to return to the
 chooser. The previous single-database workspace remains available as
 **Previous work**.
 
+Closing the window or quitting Lanius saves pending Replay and Decoder edits
+before stopping the engine. A progress circle stays visible while saving and
+cleaning up. If saving fails, the window stays open so you can retry or cancel.
+
 ## Backups and exports
 
 Work is saved as you go. **Settings > Project > Back up complete database**
@@ -18,6 +22,10 @@ The JSON export is intended for sharing smaller projects: it holds at most
 cannot preserve arbitrary binary bytes. Projects above that limit receive an
 error instead of a silently shortened JSON export. A second JSON button leaves
 the capture out when you only want to pass on a scope and a set of requests.
+
+Importing a project also replaces the open Replay and Decoder tabs. Pending
+writes from the previous workspace finish before the import starts, and tabs
+absent from the imported project are cleared.
 
 ## Cleaning up
 

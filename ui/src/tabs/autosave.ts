@@ -8,11 +8,44 @@
 import { getWorkspace, putWorkspace } from '../api/client';
 
 const SAVE_DELAY_MS = 800;
-const flushers = new Set<() => Promise<void>>();
+interface AutosaveControl {
+  flush: () => Promise<void>;
+  suspend: () => void;
+  settle: () => Promise<void>;
+  reload: () => Promise<void>;
+  resume: () => void;
+}
+const controls = new Set<AutosaveControl>();
+let workspaceReplacement: Promise<unknown> | null = null;
 
-/** Finish pending writes before a project switch stops the engine. */
+/** Finish pending writes before switching projects or closing the app. */
 export async function flushAutosaves(): Promise<void> {
-  await Promise.all([...flushers].map((flush) => flush()));
+  // Closing during an import must save the imported tabs, never the old ones.
+  await workspaceReplacement?.catch(() => undefined);
+  await Promise.all([...controls].map((control) => control.flush()));
+}
+
+/** Drain old writes before replacing the DB, then restore the new tab state. */
+export async function replaceWorkspace<T>(replace: () => Promise<T>): Promise<T> {
+  if (workspaceReplacement) throw new Error('A workspace import is already in progress');
+  const active = [...controls];
+  active.forEach((control) => control.suspend());
+  const operation = (async () => {
+    try {
+      await Promise.all(active.map((control) => control.settle()));
+      const result = await replace();
+      await Promise.all(active.map((control) => control.reload()));
+      return result;
+    } finally {
+      active.forEach((control) => control.resume());
+    }
+  })();
+  workspaceReplacement = operation;
+  try {
+    return await operation;
+  } finally {
+    workspaceReplacement = null;
+  }
 }
 
 /** Wire a store up to the workspace.
@@ -26,26 +59,25 @@ export function autosave<T>(
   subscribe: (listener: (value: T) => void) => () => void,
   restore: (value: T) => void,
   legacyKey?: string,
+  reset?: () => void,
 ): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let loaded = false;
   let disposed = false;
+  let suspended = false;
   let latest: T | undefined;
   let inFlight: Promise<void> = Promise.resolve();
 
-  const loadPromise = getWorkspace<T>(key)
-    .then(async (saved) => {
-      if (saved.value != null || !legacyKey) return saved;
-      return getWorkspace<T>(legacyKey);
-    })
-    .then(({ value }) => {
-      if (disposed) return;
-      if (value != null) restore(value);
-    })
-    .catch(() => undefined)
-    .finally(() => {
-      loaded = true;
-    });
+  const load = async (resetMissing: boolean) => {
+    loaded = false;
+    let saved = await getWorkspace<T>(key);
+    if (saved.value == null && legacyKey) saved = await getWorkspace<T>(legacyKey);
+    if (disposed) return;
+    if (saved.value != null) restore(saved.value);
+    else if (resetMissing) reset?.();
+    loaded = true;
+  };
+  const loadPromise = load(false).catch(() => { loaded = true; });
 
   // What was last written. Stores emit on every change, including ones
   // that leave the saved shape identical, and the payload can be hundreds
@@ -70,28 +102,58 @@ export function autosave<T>(
 
   const flush = async () => {
     await loadPromise;
+    // A failed refresh after a successful import must not write stale tabs.
+    // Retry restoration before allowing a later close or project switch.
+    if (!loaded) await reload();
     if (timer) clearTimeout(timer);
     timer = undefined;
     if (latest !== undefined) await save(latest);
     else await inFlight;
   };
-  flushers.add(flush);
+
+  const schedule = (value: T) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = undefined;
+      void save(value).catch(() => undefined);
+    }, SAVE_DELAY_MS);
+  };
+  const reload = async () => {
+    latest = undefined;
+    lastSent = undefined;
+    await load(true);
+  };
+  const control: AutosaveControl = {
+    flush,
+    suspend: () => {
+      suspended = true;
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+    },
+    settle: async () => {
+      await loadPromise;
+      await inFlight.catch(() => undefined);
+    },
+    reload,
+    resume: () => {
+      suspended = false;
+      if (loaded && latest !== undefined) schedule(latest);
+    },
+  };
+  controls.add(control);
 
   const unsubscribe = subscribe((value) => {
     // Ignore the notification the subscription itself fires, and anything
     // before the saved state has been read, which would overwrite it.
     if (!loaded) return;
     latest = value;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      void save(value).catch(() => undefined);
-    }, SAVE_DELAY_MS);
+    if (!suspended) schedule(value);
   });
 
   return () => {
     disposed = true;
     if (timer) clearTimeout(timer);
-    flushers.delete(flush);
+    controls.delete(control);
     unsubscribe();
   };
 }

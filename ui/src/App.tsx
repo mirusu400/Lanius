@@ -26,22 +26,20 @@ import { LoggerTab } from "./tabs/LoggerTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { DocsTab } from "./tabs/DocsTab";
 import { useT } from "./i18n";
-import { autosave, flushAutosaves } from "./tabs/autosave";
+import { flushAutosaves } from "./tabs/autosave";
+import { startWorkspaceAutosaves } from "./tabs/workspace";
 import {
   getTabs,
   resetTabs,
-  setTabs,
-  subscribe as subscribeReplay,
 } from "./tabs/replayStore";
 import {
   getDecoderTabs,
   resetDecoderTabs,
-  setDecoderTabs,
-  subscribe as subscribeDecoder,
 } from "./tabs/decoderStore";
 import { BusyProvider } from "./components/busy";
 import { Spinner, useDelayedBusy } from "./components/Spinner";
 import { useToast } from "./components/Toast";
+import { DesktopClose } from "./components/DesktopClose";
 import { useShortcut, useShortcuts } from "./useShortcut";
 import { autoCheck, useUpdates } from "./updates";
 import "./App.css";
@@ -112,7 +110,7 @@ export default function App() {
     : desktop && !project
       ? <ProjectPicker onOpen={setProject} />
       : <WorkspaceApp project={project} onLeave={leaveProject} />;
-  return content;
+  return <>{content}{desktop && <DesktopClose />}</>;
 }
 
 function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: () => Promise<void> }) {
@@ -267,23 +265,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
 
   // Persist what you were working on, so closing Lanius does not throw
   // away your open requests.
-  useEffect(() => {
-    const stop = [
-      autosave(
-        "replay",
-        (listener) => subscribeReplay(() => listener(getTabs())),
-        setTabs,
-        "repeater",
-      ),
-      autosave(
-        "decoder",
-        (listener) => subscribeDecoder(() => listener(getDecoderTabs())),
-        setDecoderTabs,
-        "transform",
-      ),
-    ];
-    return () => stop.forEach((fn) => fn());
-  }, []);
+  useEffect(startWorkspaceAutosaves, []);
 
   return (
     <div className={switching ? "app switching" : "app"}>

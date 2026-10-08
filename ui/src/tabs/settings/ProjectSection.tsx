@@ -10,6 +10,7 @@ import {
 } from '../../api/client';
 import { notifyLockdownChanged } from '../../lockdownEvents';
 import { resetUpdates } from '../../updates';
+import { replaceWorkspace } from '../autosave';
 import type { Project } from '../../projects';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import {
@@ -65,7 +66,7 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
     setError(null);
     setNote(null);
     try {
-      const result = await importProjectFile(file);
+      const result = await replaceWorkspace(() => importProjectFile(file));
       setNote(
         msg('project.imported', {
           flows: String(result.flows ?? 0),
