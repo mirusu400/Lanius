@@ -1,5 +1,5 @@
 /** Logger + Settings tabs against a mocked engine. */
-import {cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,7 +32,9 @@ function jsonResponse(body: unknown) {
   return { ok: true, status: 200, statusText: 'OK', json: async () => body } as Response;
 }
 
+const originalScrollTo = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
 beforeEach(() => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: vi.fn() });
   // Settings remembers the group you were in, so one test choosing a
   // group would otherwise decide where the next one starts.
   window.localStorage.clear();
@@ -49,6 +51,9 @@ beforeEach(() => {
             { id: 1, ts: 1699999999, level: 'info', message: 'engine.started {}' },
           ],
         });
+      }
+      if (url.includes('/api/capture-storage')) {
+        return jsonResponse({ media_body_limit_mb: 5 });
       }
       if (url.includes('/api/ca')) {
         return jsonResponse({
@@ -87,6 +92,9 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
+  if (originalScrollTo) Object.defineProperty(HTMLElement.prototype, 'scrollTo', originalScrollTo);
+  else Reflect.deleteProperty(HTMLElement.prototype, 'scrollTo');
   vi.unstubAllGlobals();
 });
 
@@ -135,6 +143,57 @@ describe('LoggerTab', () => {
 });
 
 describe('SettingsTab', () => {
+  it('puts the media limit in Project and mounts it only when opened', async () => {
+    const user = userEvent.setup();
+    render(<SettingsTab />);
+    expect(screen.queryByRole('heading', { name: t('captureStorage.section') })).toBeNull();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/capture-storage'))).toBe(false);
+    await user.type(screen.getByRole('searchbox', { name: t('settings.search.label') }), '미디어');
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/capture-storage'))).toBe(false);
+    await user.click(within(screen.getByRole('region', { name: t('settings.search.results') }))
+      .getByRole('button', { name: `${t('settings.group.project')} → ${t('captureStorage.section')}` }));
+    expect(screen.getByRole('button', { name: t('settings.group.project') }).className).toContain('active');
+    const target = screen.getByRole('region', { name: t('captureStorage.section') });
+    // jsdom has no element scrolling; assert navigation/focus using the real parent.
+    await waitFor(() => expect(document.activeElement).toBe(target));
+    expect(target.className).toContain('settings-search-target');
+    expect(screen.getByRole('spinbutton', { name: t('captureStorage.limit') })).toHaveProperty('value', '5');
+    expect(window.localStorage.getItem('lanius.settings.group')).toBe('project');
+    await user.click(screen.getByRole('button', { name: t('settings.group.proxy') }));
+    expect(screen.queryByRole('heading', { name: t('captureStorage.section') })).toBeNull();
+  });
+
+  it('scrolls within Settings and restarts temporary feedback for a repeated destination', async () => {
+    vi.useFakeTimers();
+    const scroll = vi.fn();
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: scroll });
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true })));
+    try {
+      render(<SettingsTab />);
+      const search = screen.getByRole('searchbox', { name: t('settings.search.label') });
+      const jump = async () => {
+        fireEvent.change(search, { target: { value: 'media' } });
+        fireEvent.click(within(screen.getByRole('region', { name: t('settings.search.results') }))
+          .getByRole('button', { name: `${t('settings.group.project')} → ${t('captureStorage.section')}` }));
+        await act(async () => { vi.advanceTimersByTime(20); });
+      };
+      await jump();
+      const target = screen.getByRole('region', { name: t('captureStorage.section') });
+      expect(target.className).toContain('settings-search-target');
+      expect(scroll).toHaveBeenCalledWith({ top: 0, behavior: 'auto' });
+      await act(async () => { vi.advanceTimersByTime(1200); });
+      await jump();
+      await act(async () => { vi.advanceTimersByTime(1200); });
+      expect(target.className).toContain('settings-search-target');
+      await act(async () => { vi.advanceTimersByTime(1100); });
+      expect(target.className).not.toContain('settings-search-target');
+    } finally {
+      if (original) Object.defineProperty(HTMLElement.prototype, 'scrollTo', original);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollTo');
+    }
+  });
+
   it('puts project switching behind Settings > Project and confirms it', async () => {
     const user = userEvent.setup();
     const onSwitchProject = vi.fn(async () => {});

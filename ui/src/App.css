@@ -4501,6 +4501,88 @@ pre.body {
   min-width: max-content;
 }
 
+.settings-search {
+  flex: 0 0 auto;
+  position: relative;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+}
+
+.settings-search-field {
+  display: flex;
+  align-items: center;
+  max-width: 680px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+}
+
+.settings-search-field:focus-within { border-color: var(--accent); }
+.settings-search-icon { display: flex; padding: 0 10px 0 12px; color: var(--muted); }
+.settings-search-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+}
+.settings-search-field input::-webkit-search-cancel-button { display: none; }
+.settings-search-clear { margin: 4px; padding: 2px 8px; border: 0; background: transparent; }
+
+.settings-search-results {
+  position: absolute;
+  top: calc(100% - 6px);
+  left: 24px;
+  width: min(680px, calc(100% - 48px));
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-alt);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.settings-search-count { margin: 0; padding: 10px 12px; font-size: 0.9em; }
+.settings-search-results ul { list-style: none; padding: 0 4px 4px; margin: 0; }
+.settings-search-results li button {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 4px;
+  text-align: left;
+  background: transparent;
+}
+.settings-search-results li button:hover,
+.settings-search-results li button:focus-visible { background: var(--bg-hover); outline: 2px solid var(--accent); outline-offset: -2px; }
+.settings-search-title { font-weight: 600; }
+.settings-search-path { color: var(--muted); font-size: 0.9em; }
+.settings-section { border-radius: 4px; }
+.settings-section:focus { outline: none; }
+.settings-section.settings-search-target {
+  outline: 2px solid transparent;
+  outline-offset: 6px;
+  animation: settings-target-pulse 2200ms ease-out;
+}
+
+@keyframes settings-target-pulse {
+  0%, 45%, 100% { outline-color: transparent; background: transparent; }
+  18%, 65% { outline-color: var(--accent); background: var(--accent-wash); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-section.settings-search-target {
+    animation: none;
+    outline-color: var(--accent);
+    background: var(--accent-wash);
+  }
+}
+
 .lockdown-section h3,
 .lockdown-section .lockdown-label,
 .lockdown-active {
@@ -4538,12 +4620,12 @@ pre.body {
 }
 
 /* The last section has nothing after it to divide from. */
-.settings-body section:last-child {
+.settings-group > .settings-section:last-child > section {
   border-bottom: none;
   margin-bottom: 0;
 }
 
-.settings-body section {
+.settings-group > .settings-section > section {
   border-bottom: 1px solid var(--border);
   margin-bottom: 20px;
   padding-bottom: 20px;

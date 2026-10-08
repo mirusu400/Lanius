@@ -5,6 +5,15 @@ capture, appearance, language, keyboard shortcuts, updates and Lockdown Mode.
 Appearance, shortcuts and other machine-level choices are not part of a
 [project export](projects.md).
 
+## Finding a setting
+
+Use the search box at the top of Settings to search across every tab, including
+ones you have not opened. English and Korean names, option labels and related
+keywords are searchable. Select a result to open its tab, scroll to the section
+and briefly highlight it. Use the arrow keys and Enter to choose a result, or
+Escape to dismiss results. With reduced motion enabled, the destination gets
+a steady highlight instead of a pulse.
+
 ## Doctor certificate checks
 
 On Windows, Doctor compares the current proxy CA with the local Windows
@@ -72,7 +81,7 @@ rejected.
 
 ## Media body storage
 
-**Settings > Proxy > Media body storage** skips storing HTTP image, audio and
+**Settings > Project > Media body storage** skips storing HTTP image, audio and
 video bodies at or above a configurable size. The default is 5 MB
 (5 × 1,024 × 1,024 bytes); set 0 for unlimited storage. The limit applies to
 the actual captured body bytes, including uploads and modified request
