@@ -210,7 +210,7 @@ class CaptureAddon:
         if not self.in_scope(flow):
             return
         try:
-            record = flow_to_record(flow)
+            record = self.store.prepare_capture_record(flow_to_record(flow))
         except Exception:  # pragma: no cover - defensive
             logger.exception("failed to convert flow %s", flow.id)
             return

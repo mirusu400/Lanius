@@ -27,6 +27,7 @@ import logging
 
 from .. import charset
 from ..content_encoding import body_for_display
+from ..media_storage import MEDIA_BODY_LIMIT_SETTING, prepare_record, read_limit
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,8 @@ class RequestSnapshot:
     http_version: str
     headers: list[tuple[str, str]] = field(default_factory=list)
     body: bytes = b""
+    body_omitted: bool = False
+    body_size: int = 0
 
     @classmethod
     def from_mapping(cls, value: dict[str, Any]) -> "RequestSnapshot":
@@ -64,11 +67,13 @@ class RequestSnapshot:
             http_version=str(value.get("http_version") or "HTTP/1.1"),
             headers=[tuple(item) for item in value.get("headers", [])],
             body=bytes(value.get("body") or b""),
+            body_omitted=bool(value.get("body_omitted", False)),
+            body_size=int(value.get("body_size") or 0),
         )
 
     def detail(self, *, auto_decompress: bool) -> dict[str, Any]:
         shown, content_encoding, decoded, decode_error = body_for_display(
-            self.headers, self.body, enabled=auto_decompress
+            self.headers, self.body, enabled=auto_decompress and not self.body_omitted
         )
         content_type = _content_type(self.headers)
         body_charset = charset.charset_of(content_type, shown)
@@ -85,6 +90,8 @@ class RequestSnapshot:
             "content_encoding": content_encoding,
             "body_decoded": decoded,
             "decode_error": decode_error,
+            "body_omitted": self.body_omitted,
+            "body_size": self.body_size or len(self.body),
         }
 
 
@@ -123,6 +130,8 @@ class FlowRecord:
     request_auto_modified: RequestSnapshot | None = None
     auto_modified: bool = False
     modified: bool = False
+    request_body_omitted: bool = False
+    response_body_omitted: bool = False
 
     def summary(self) -> dict[str, Any]:
         """Lightweight dict for list views / WS events (no bodies)."""
@@ -149,14 +158,14 @@ class FlowRecord:
             body_for_display(
                 self.request_headers,
                 self.request_body,
-                enabled=auto_decompress,
+                enabled=auto_decompress and not self.request_body_omitted,
             )
         )
         response_display, response_encoding, response_decoded, response_error = (
             body_for_display(
                 self.response_headers,
                 self.response_body,
-                enabled=auto_decompress,
+                enabled=auto_decompress and not self.response_body_omitted,
             )
         )
         request_charset = charset.charset_of(
@@ -195,6 +204,8 @@ class FlowRecord:
                 http_version=self.http_version or "HTTP/1.1",
                 headers=self.request_headers,
                 body=self.request_body,
+                body_omitted=self.request_body_omitted,
+                body_size=self.request_size,
             )
             automatic = self.request_auto_modified or self.request_original
             data["request_variants"] = {
@@ -286,14 +297,14 @@ _COLUMNS = (
     " http_version, request_headers, request_body, request_size, started_at,"
     " status_code, reason, response_headers, response_body, response_size,"
     " response_mime, completed_at, duration_ms, error, source, comment,"
-    " request_original, request_auto_modified, auto_modified, modified"
+    " request_original, request_auto_modified, auto_modified, modified, request_body_omitted, response_body_omitted"
 )
 
 _SUMMARY_COLUMNS = (
     "id, type, client_addr, server_addr, local_source_ip, scheme, method, host, port, path, query,"
     " http_version, request_size, started_at, status_code, reason, response_size,"
     " response_mime, completed_at, duration_ms, error, source, comment,"
-    " auto_modified, modified, flows.rowid AS history_rowid,"
+    " auto_modified, modified, request_body_omitted, response_body_omitted, flows.rowid AS history_rowid,"
     " COALESCE((SELECT bookmarked FROM flow_annotations WHERE flow_id = flows.id), 0) AS bookmarked,"
     " (SELECT color FROM flow_annotations WHERE flow_id = flows.id) AS annotation_color"
 )
@@ -316,6 +327,8 @@ def _summary_row(row: sqlite3.Row) -> dict[str, Any]:
     data["auto_modified"] = bool(data["auto_modified"])
     data["modified"] = bool(data["modified"])
     data["bookmarked"] = bool(data["bookmarked"])
+    data["request_body_omitted"] = bool(data["request_body_omitted"])
+    data["response_body_omitted"] = bool(data["response_body_omitted"])
     return data
 
 
@@ -362,6 +375,7 @@ class FlowStore:
         self._payload_sets: "PayloadSetStore | None" = None
         self._conn.execute("PRAGMA synchronous=NORMAL")
         migrate(self._conn)
+        self.media_body_limit_mb = read_limit(self.get_setting(MEDIA_BODY_LIMIT_SETTING))
         # A held frame cannot be resumed after its proxy process has gone.
         self._conn.execute(
             "UPDATE websocket_messages SET paused = 0, dropped = 1 WHERE paused = 1"
@@ -425,12 +439,17 @@ class FlowStore:
                 # a failed copy cannot leave a partially restored project.
                 source.backup(self._conn)
             self._conn.execute("PRAGMA recursive_triggers=ON")
+            self.media_body_limit_mb = read_limit(self.get_setting(MEDIA_BODY_LIMIT_SETTING))
 
     # --- writes -----------------------------------------------------------
     def upsert(self, record: FlowRecord) -> None:
         with self._lock:
-            self._upsert_uncommitted(record)
+            self._upsert_uncommitted(self.prepare_capture_record(record))
             self._conn.commit()
+
+    def prepare_capture_record(self, record: FlowRecord) -> FlowRecord:
+        """Use cached policy in capture hooks; no SQLite work on their loop."""
+        return prepare_record(record, self.media_body_limit_mb)
 
     def _upsert_uncommitted(self, record: FlowRecord) -> None:
         values = (
@@ -465,6 +484,8 @@ class FlowStore:
             _dump_snapshot(record.request_auto_modified),
             int(record.auto_modified),
             int(record.modified),
+            int(record.request_body_omitted),
+            int(record.response_body_omitted),
         )
         placeholders = ", ".join(["?"] * len(values))
         updates = ", ".join(
@@ -741,9 +762,9 @@ class FlowStore:
             raise ValueError("side must be request or response")
         with self._read_lock:
             row = self._read_conn.execute(
-                f"SELECT {side}_body FROM flows WHERE id = ?", (flow_id,)
+                f"SELECT {side}_body, {side}_body_omitted FROM flows WHERE id = ?", (flow_id,)
             ).fetchone()
-        return bytes(row[0]) if row is not None and row[0] is not None else None
+        return bytes(row[0]) if row is not None and row[0] is not None and not row[1] else None
 
     def list(
         self,
@@ -1111,6 +1132,8 @@ class FlowStore:
                 (key, value),
             )
             self._conn.commit()
+            if key == MEDIA_BODY_LIMIT_SETTING:
+                self.media_body_limit_mb = read_limit(value)
 
     # --- workspace (Replay/Decoder/Fuzzer state) ----------------------
     def get_workspace(self, key: str) -> Any | None:
@@ -1246,6 +1269,8 @@ class FlowStore:
                     except Exception:
                         logger.warning("skipping an unreadable issue during import")
 
+            self.media_body_limit_mb = read_limit(self.get_setting(MEDIA_BODY_LIMIT_SETTING))
+
         return {
             "scope": len(scope),
             "workspace": len(workspace),
@@ -1259,6 +1284,8 @@ class FlowStore:
         with self._lock:
             self._conn.execute("DELETE FROM settings WHERE key = ?", (key,))
             self._conn.commit()
+            if key == MEDIA_BODY_LIMIT_SETTING:
+                self.media_body_limit_mb = read_limit(None)
 
     # --- scanner issues --------------------------------------------------
     def upsert_issue(self, issue: dict[str, Any]) -> dict[str, Any]:
@@ -1980,4 +2007,6 @@ def _row_to_record(row: sqlite3.Row) -> FlowRecord:
         request_auto_modified=_load_snapshot(row["request_auto_modified"]),
         auto_modified=bool(row["auto_modified"]),
         modified=bool(row["modified"]),
+        request_body_omitted=bool(row["request_body_omitted"]),
+        response_body_omitted=bool(row["response_body_omitted"]),
     )

@@ -29,6 +29,8 @@ export interface FlowSummary {
   /** True when Match & Replace, Intercept, or a plugin changed the request. */
   modified?: boolean;
   auto_modified?: boolean;
+  request_body_omitted?: boolean;
+  response_body_omitted?: boolean;
 }
 
 export type HistoryColor = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
@@ -46,6 +48,8 @@ export interface RequestVariant {
   http_version: string;
   headers: [string, string][];
   body: string;
+  body_omitted?: boolean;
+  body_size?: number;
   charset: string;
   content_encoding: string | null;
   body_decoded: boolean;

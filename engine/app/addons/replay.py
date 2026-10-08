@@ -223,7 +223,7 @@ def render_raw(
     shown, body_encoding, decoded, decode_error = body_for_display(
         record.response_headers,
         record.response_body,
-        enabled=auto_decompress,
+        enabled=auto_decompress and not record.response_body_omitted,
     )
     return {
         "id": record.id,
@@ -241,6 +241,7 @@ def render_raw(
         "content_encoding": body_encoding,
         "body_decoded": decoded,
         "decode_error": decode_error,
+        "body_omitted": record.response_body_omitted,
         "size": record.response_size,
         "duration_ms": record.duration_ms,
         "error": record.error,

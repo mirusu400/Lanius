@@ -298,6 +298,16 @@ export function previewMatchReplace(
 
 // --- body display --------------------------------------------------------
 
+export function getCaptureStorageSettings(): Promise<{ media_body_limit_mb: number }> {
+  return request('/api/capture-storage');
+}
+
+export function setCaptureStorageSettings(media_body_limit_mb: number): Promise<{ media_body_limit_mb: number }> {
+  return request('/api/capture-storage', {
+    method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ media_body_limit_mb }),
+  });
+}
+
 export function getBodyDisplaySettings(): Promise<BodyDisplaySettings> {
   return request('/api/body-display');
 }

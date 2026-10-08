@@ -390,6 +390,24 @@ def test_body_display_defaults_on_and_can_be_disabled(client) -> None:
     assert client.get("/api/body-display").json() == {"auto_decompress": False}
 
 
+def test_media_storage_setting_and_omitted_body_details(client):
+    assert client.get("/api/capture-storage").json() == {"media_body_limit_mb": 5}
+    assert client.patch("/api/capture-storage", json={"media_body_limit_mb": 1}).json() == {"media_body_limit_mb": 1}
+    seed(client, "media", response_mime="image/png", response_headers=[("Content-Type", "image/png")], response_body=b"x" * (1024 * 1024))
+    data = client.get("/api/flows/media").json()
+    assert data["response_body"] == "" and data["response_body_omitted"] is True
+    assert data["response_size"] == 1024 * 1024
+    assert client.get("/api/flows/media/response-preview").json() == {"kind": "unavailable", "reason": "media_body_omitted"}
+    assert client.get("/api/flows/media/body/response").status_code == 404
+    assert client.get("/api/project/export").json()["settings"]["media_body_limit_mb"] == "1"
+
+
+@pytest.mark.parametrize("limit", [-1, 1025, 0.5, True, "5"])
+def test_media_storage_rejects_invalid_limits(client, limit):
+    assert client.patch("/api/capture-storage", json={"media_body_limit_mb": limit}).status_code == 422
+    assert client.get("/api/capture-storage").json()["media_body_limit_mb"] == 5
+
+
 def test_get_flow_automatically_decompresses_body(client) -> None:
     seed(
         client,

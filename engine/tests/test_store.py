@@ -73,6 +73,8 @@ def test_history_backfills_old_projects_and_never_reads_body_pages(tmp_path) -> 
         for trigger in ("flow_history_insert", "flow_history_delete", "flow_history_update"):
             original._conn.execute(f"DROP TRIGGER {trigger}")
         original._conn.execute("DROP TABLE flow_history")
+        original._conn.execute("ALTER TABLE flows DROP COLUMN request_body_omitted")
+        original._conn.execute("ALTER TABLE flows DROP COLUMN response_body_omitted")
         original._conn.execute("PRAGMA user_version=11")
     original.close()
 

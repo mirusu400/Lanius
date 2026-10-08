@@ -17,6 +17,7 @@ export interface ReplayResponse {
   content_encoding?: string | null;
   body_decoded?: boolean;
   decode_error?: string | null;
+  body_omitted?: boolean;
   /** Original length, when the body was too large to keep in full. */
   truncated?: number;
 }

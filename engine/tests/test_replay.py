@@ -4,20 +4,31 @@ from __future__ import annotations
 
 import socket
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from app.addons.replay import ReplayError, build_flow
 from app.api.server import create_app
 from app.config import Settings
+from app.media_storage import MIB
 
 
 class Echo(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def _respond(self) -> None:
+        if self.path == "/media":
+            payload = b"x" * (5 * MIB)
+            self.send_response(200)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         length = int(self.headers.get("content-length", 0))
         body = self.rfile.read(length) if length else b""
         payload = (
@@ -104,6 +115,37 @@ def test_build_flow_rejects_bad_urls() -> None:
 
 
 # --- real sends -----------------------------------------------------------
+
+
+def test_large_media_is_forwarded_in_full_but_storage_obeys_live_limit(client, echo_server) -> None:
+    engine = client.app.state.engine
+    proxy = f"http://127.0.0.1:{engine.settings.proxy_port}"
+    response = httpx.get(f"{echo_server}/media", proxy=proxy, trust_env=False)
+    assert response.status_code == 200 and response.content == b"x" * (5 * MIB)
+    deadline = time.monotonic() + 2
+    saved = None
+    while time.monotonic() < deadline:
+        rows = engine.store.list()
+        if rows and rows[0].completed_at is not None:
+            saved = rows[0]
+            break
+        time.sleep(0.01)
+    assert saved is not None and saved.response_body_omitted
+    assert saved.response_body == b"" and saved.response_size == 5 * MIB
+    client.patch("/api/capture-storage", json={"media_body_limit_mb": 6})
+    replayed = client.post("/api/replay/send", json={"url": f"{echo_server}/media"}).json()
+    assert replayed["body_omitted"] is False
+    assert engine.store.get_body_bytes(replayed["id"], "response") == response.content
+
+
+def test_replay_reports_omitted_media_without_returning_body_for_autosave(client, echo_server) -> None:
+    response = client.post("/api/replay/send", json={"url": f"{echo_server}/media"})
+    assert response.status_code == 200
+    replayed = response.json()
+    assert replayed["body_omitted"] is True and replayed["body"] == ""
+    assert replayed["size"] == 5 * MIB
+    assert replayed["headers"] and replayed["status_code"] == 200
+    assert client.app.state.engine.store.get(replayed["id"]).response_body_omitted
 
 
 def test_send_reaches_a_real_server(client, echo_server) -> None:

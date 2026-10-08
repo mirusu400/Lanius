@@ -70,6 +70,22 @@ importing a project keeps the current CA trust: new trust anchors must be
 registered explicitly. Private keys, leaf certificates and expired CAs are
 rejected.
 
+## Media body storage
+
+**Settings > Proxy > Media body storage** skips storing HTTP image, audio and
+video bodies at or above a configurable size. The default is 5 MB
+(5 × 1,024 × 1,024 bytes); set 0 for unlimited storage. The limit applies to
+the actual captured body bytes, including uploads and modified request
+snapshots. Content-Type identifies media; missing or generic binary types
+also use common media filename extensions. HTML, JSON, other non-media
+downloads and raw TCP streams retain their bodies.
+
+Headers, status, timing and original sizes remain in History, with a notice
+when the body was omitted. Omitted bodies are excluded from body search and
+previews. Proxy forwarding remains complete. The setting is saved with the
+project and takes effect on new captures immediately. Existing captures and
+imported backups are not trimmed automatically.
+
 ## System capture
 
 Some applications never look at the system proxy. Lanius can capture them at

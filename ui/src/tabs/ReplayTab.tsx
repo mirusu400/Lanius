@@ -316,6 +316,8 @@ export function ReplayTabView() {
             />}
             second={<ResponseInspector
               flowId={active.response?.id ?? null}
+              bodyOmitted={active.response?.body_omitted}
+              bodySize={active.response?.size}
               raw={active.response
                 ? renderResponseText(active.response, (count) =>
                     t('replay.bodyTruncated', { count: String(count) }),

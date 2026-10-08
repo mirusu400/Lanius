@@ -18,6 +18,7 @@ import { AppearanceSection } from "./settings/AppearanceSection";
 import { BrowserHelpSection } from "./settings/BrowserHelpSection";
 import { BrowserSection } from "./settings/BrowserSection";
 import { BodyDisplaySection } from "./settings/BodyDisplaySection";
+import { CaptureStorageSection } from "./settings/CaptureStorageSection";
 import { CaSection } from "./settings/CaSection";
 import { CaptureSection } from "./settings/CaptureSection";
 import { EngineSection } from "./settings/EngineSection";
@@ -115,6 +116,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
             <UpstreamSection />
             <TlsTrustSection />
             <BodyDisplaySection />
+            <CaptureStorageSection />
             <MatchReplaceSection />
             <EngineSection />
             <CaptureSection />

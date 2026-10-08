@@ -60,14 +60,21 @@ def test_restore_keeps_raw_bodies_websockets_tabs_marks_and_payload_store_handle
         prepared.cleanup()
 
 
-def test_older_backup_is_upgraded_on_a_copy(tmp_path):
+@pytest.mark.parametrize("version", [11, 12])
+def test_older_backup_is_upgraded_on_a_copy(tmp_path, version):
     path = tmp_path / "v11.sqlite"
     source = make_backup(path)
     with source._conn:
         for trigger in ("flow_history_insert", "flow_history_delete", "flow_history_update"):
             source._conn.execute(f"DROP TRIGGER {trigger}")
         source._conn.execute("DROP TABLE flow_history")
-        source._conn.execute("PRAGMA user_version=11")
+        source._conn.execute("ALTER TABLE flows DROP COLUMN request_body_omitted")
+        source._conn.execute("ALTER TABLE flows DROP COLUMN response_body_omitted")
+        if version == 12:
+            from app.db.history_index import MIGRATION
+            for statement in MIGRATION:
+                source._conn.execute(statement)
+        source._conn.execute(f"PRAGMA user_version={version}")
     source.close()
     prepared = prepare_database(path)
     try:
@@ -75,7 +82,7 @@ def test_older_backup_is_upgraded_on_a_copy(tmp_path):
             assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
             assert conn.execute("SELECT id FROM flow_history").fetchone()[0] == "raw"
         with sqlite3.connect(path) as conn:
-            assert conn.execute("PRAGMA user_version").fetchone()[0] == 11
+            assert conn.execute("PRAGMA user_version").fetchone()[0] == version
     finally:
         prepared.cleanup()
 

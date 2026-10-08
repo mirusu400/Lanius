@@ -33,3 +33,19 @@ MIGRATION = (
     "CREATE TRIGGER flow_history_update AFTER UPDATE ON flows BEGIN "
     f"DELETE FROM flow_history WHERE rowid = OLD.rowid; {_INSERT} END",
 )
+
+# Keep v12's schema unchanged so existing SQLite backups remain recognizable.
+_MEDIA_COLUMNS = _COLUMNS + ", request_body_omitted, response_body_omitted"
+_MEDIA_NEW = _NEW + ", NEW.request_body_omitted, NEW.response_body_omitted"
+_MEDIA_INSERT = f"INSERT INTO flow_history(rowid, {_MEDIA_COLUMNS}) VALUES (NEW.rowid, {_MEDIA_NEW});"
+MEDIA_MIGRATION = (
+    "ALTER TABLE flows ADD COLUMN request_body_omitted INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE flows ADD COLUMN response_body_omitted INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE flow_history ADD COLUMN request_body_omitted INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE flow_history ADD COLUMN response_body_omitted INTEGER NOT NULL DEFAULT 0",
+    "DROP TRIGGER flow_history_insert",
+    "DROP TRIGGER flow_history_update",
+    f"CREATE TRIGGER flow_history_insert AFTER INSERT ON flows BEGIN {_MEDIA_INSERT} END",
+    "CREATE TRIGGER flow_history_update AFTER UPDATE ON flows BEGIN "
+    f"DELETE FROM flow_history WHERE rowid = OLD.rowid; {_MEDIA_INSERT} END",
+)

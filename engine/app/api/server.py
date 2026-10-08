@@ -64,6 +64,7 @@ from ..addons.scope import ScopeError, rule_from_url
 from .. import browser, ca_trust
 from ..config import Settings
 from ..content_encoding import AUTO_DECOMPRESS_SETTING, auto_decompress_enabled
+from ..media_storage import MEDIA_BODY_LIMIT_SETTING, MAX_MEDIA_BODY_LIMIT_MB
 from ..db.store import ANNOTATION_COLORS, FlowStore
 from ..db.database_import import SQLITE_HEADER, PreparedDatabase, prepare_database
 from ..events import EventBroker
@@ -119,6 +120,10 @@ class MatchReplacePreviewBody(MatchReplaceBody):
 
 class BodyDisplayPatch(BaseModel):
     auto_decompress: bool
+
+
+class CaptureStoragePatch(BaseModel):
+    media_body_limit_mb: int = Field(ge=0, le=MAX_MEDIA_BODY_LIMIT_MB, strict=True)
 
 
 class LockdownPatch(BaseModel):
@@ -1408,6 +1413,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return {"raw": result}
 
+    @app.get("/api/capture-storage")
+    async def capture_storage_state() -> dict[str, int]:
+        return {"media_body_limit_mb": store.media_body_limit_mb}
+
+    @app.patch("/api/capture-storage")
+    async def patch_capture_storage(payload: CaptureStoragePatch) -> dict[str, int]:
+        store.set_setting(MEDIA_BODY_LIMIT_SETTING, str(payload.media_body_limit_mb))
+        return {"media_body_limit_mb": store.media_body_limit_mb}
+
     # --- body display ----------------------------------------------------
     @app.get("/api/body-display")
     async def body_display_state() -> dict[str, bool]:
@@ -1503,7 +1517,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ReplayError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return render_raw(
-            record, auto_decompress=auto_decompress_enabled(store)
+            store.prepare_capture_record(record), auto_decompress=auto_decompress_enabled(store)
         )
 
     # --- scope / target (M4) ----------------------------------------------

@@ -139,6 +139,24 @@ describe('toHex', () => {
 });
 
 describe('FlowDetailView', () => {
+  it('explains omitted media bodies in parsed, raw and preview views while preserving headers', async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, status: 200, json: async () => ({
+      ...httpFlow, response_body_omitted: true, response_size: 5 * 1024 * 1024,
+      request_headers: [], request_body: '', response_body: '',
+      response_headers: [['Content-Type', 'video/mp4'], ['Content-Length', '5242880']],
+    }) } as Response);
+    render(<FlowDetailView flow={httpFlow} />);
+    const message = t('detail.mediaBodyOmitted', { size: '5.0 MB' });
+    expect(await screen.findByText(message)).toBeTruthy();
+    expect(screen.getByText('video/mp4')).toBeTruthy();
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole('tab', { name: t('detail.view.raw') })[1]);
+    expect(screen.getByText(message)).toBeTruthy();
+    await user.click(screen.getByRole('tab', { name: t('detail.view.preview') }));
+    expect(screen.getByText(message)).toBeTruthy();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('response-preview'))).toBe(false);
+  });
+
   it('sends the selected request with its headers and body through both shortcuts', async () => {
     const onSentToReplay = vi.fn();
     render(<FlowDetailView flow={codeFlow} onSentToReplay={onSentToReplay} />);

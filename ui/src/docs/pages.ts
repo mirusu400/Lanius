@@ -222,6 +222,13 @@ const en: DocPage[] = [
         ],
       },
       {
+        heading: 'Media body storage',
+        blocks: [{
+          kind: 'text',
+          body: 'Settings > Proxy > Media body storage skips image, audio and video bodies at or above the configured size. The default is 5 MB (1 MB = 1,024 × 1,024 bytes); 0 allows unlimited storage. Headers and original sizes remain, and the response shows when a body was omitted. This applies to new captures immediately, without changing forwarded traffic or existing records. The setting is saved with the project.',
+        }],
+      },
+      {
         heading: 'Changing the port',
         blocks: [
           {
@@ -667,6 +674,13 @@ const ko: DocPage[] = [
             body: '현재는 인증이 없는 프록시 한 곳만 지정할 수 있습니다. SOCKS5와 여러 홉은 별도 연결 계층이 필요하며 아직 지원하지 않습니다.',
           },
         ],
+      },
+      {
+        heading: '미디어 본문 저장',
+        blocks: [{
+          kind: 'text',
+          body: '설정 > 프록시 > 미디어 본문 저장에서 이미지·오디오·비디오 본문의 저장 제한을 조절합니다. 설정한 용량 이상이면 본문을 생략하며, 기본값은 5 MB입니다(1 MB = 1,024 × 1,024 바이트). 0은 제한 없이 저장합니다. 헤더와 원래 크기는 남기고 본문 생략 안내를 표시합니다. 새 캡처부터 즉시 적용되며 실제 전달되는 트래픽과 기존 기록은 유지됩니다. 설정은 프로젝트에 저장됩니다.',
+        }],
       },
       {
         heading: '포트 바꾸기',

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 
 import { getFlow } from '../api/client';
 import type { FlowDetail, FlowSummary, RequestVariant } from '../api/types';
-import { formatUrl } from '../tabs/proxyModel';
+import { formatUrl, formatBytes } from '../tabs/proxyModel';
 import { sendToReplay } from '../tabs/replayStore';
 import { sendToFuzzer } from '../tabs/fuzzerStore';
 import { ContextMenu, useContextMenu, type MenuItem } from './ContextMenu';
@@ -83,6 +83,8 @@ function Half({
   onView,
   headers,
   body,
+  bodyOmitted,
+  bodySize,
   raw,
   charsetLabel,
   encodingLabel,
@@ -108,6 +110,8 @@ function Half({
   onView: (view: View) => void;
   headers: [string, string][] | null;
   body: string;
+  bodyOmitted?: boolean;
+  bodySize?: number;
   raw: string;
   charsetLabel: string | null;
   encodingLabel: string | null;
@@ -251,6 +255,7 @@ function Half({
         <button type="button" onClick={() => setFindOpen(false)} aria-label={t('detail.findClose')}>×</button>
       </div>}
       <div className="detail-half-body">
+        {bodyOmitted && <p className="banner" role="status">{t('detail.mediaBodyOmitted', { size: formatBytes(bodySize ?? 0) })}</p>}
         {decodeError && <div className="banner error">{decodeError}</div>}
         {view === 'parsed' && (
           <>
@@ -270,7 +275,7 @@ function Half({
                 </button>
               )}
             </h4>
-            <HighlightedBody
+            {!bodyOmitted && <HighlightedBody
               text={formattedBody}
               headers={headers}
               fallbackMime={fallbackMime}
@@ -278,7 +283,7 @@ function Half({
               query={query}
               activeIndex={selectedIndex}
               offset={headerMatches}
-            />
+            />}
           </>
         )}
         {view === 'raw' && (
@@ -303,7 +308,7 @@ function Half({
             )}
           </>
         )}
-        {view === 'preview' && previewFlowId && <ResponsePreview flowId={previewFlowId} query={query} activeIndex={selectedIndex} onMatchCount={setPreviewMatches} />}
+        {view === 'preview' && previewFlowId && !bodyOmitted && <ResponsePreview flowId={previewFlowId} query={query} activeIndex={selectedIndex} onMatchCount={setPreviewMatches} />}
       </div>
     </section>
   );
@@ -483,6 +488,8 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       bodyView={requestBodyView}
       onBodyView={setRequestBodyView}
       body={selectedVariant?.body ?? detail?.request_body ?? ''}
+      bodyOmitted={selectedVariant?.body_omitted ?? detail?.request_body_omitted}
+      bodySize={selectedVariant?.body_size ?? detail?.request_size}
       raw={
         isTcp
           ? (detail?.request_body ?? '')
@@ -522,6 +529,8 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       onBodyView={setResponseBodyView}
       headers={detail?.response_headers ?? null}
       body={detail?.response_body ?? ''}
+      bodyOmitted={detail?.response_body_omitted}
+      bodySize={detail?.response_size}
       raw={isTcp ? (detail?.response_body ?? '') : rawResponse(flow, detail)}
       charsetLabel={charsetOf(detail?.response_charset)}
       encodingLabel={encodingOf(

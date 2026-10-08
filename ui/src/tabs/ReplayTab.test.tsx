@@ -72,6 +72,26 @@ const editor = () =>
   screen.getByRole('textbox', { name: t('replay.request') }) as HTMLTextAreaElement;
 
 describe('ReplayTab', () => {
+  it('shows the storage omission notice with response headers in raw and preview views', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: 'media', status_code: 200, reason: 'OK',
+        headers: [['Content-Type', 'video/mp4']], body: '', body_omitted: true,
+        size: 5 * 1024 * 1024, duration_ms: 9, error: null }),
+    })));
+    sendToReplay(flow);
+    render(<ReplayTabView />);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: t('replay.send') }));
+    const notice = t('detail.mediaBodyOmitted', { size: '5.0 MB' });
+    expect(await screen.findByText(notice)).toBeTruthy();
+    expect(screen.getByText(/Content-Type: video\/mp4/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: t('detail.view.preview') }));
+    expect(screen.getByText(notice)).toBeTruthy();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/response-preview'))).toBe(false);
+    expect(getTabs()[0].response?.body_omitted).toBe(true);
+  });
+
   it('sends the edited draft to Fuzzer with the configured shortcut', async () => {
     resetTarget();
     sendToReplay(flow);

@@ -212,6 +212,8 @@ def _csv_preview(body: bytes, content_type: str) -> dict[str, Any]:
 
 def response_preview(record: FlowRecord) -> dict[str, Any]:
     """Return a preview model, never executable captured content."""
+    if record.response_body_omitted:
+        return {"kind": "unavailable", "reason": "media_body_omitted"}
     if record.type != "http" or record.response_body is None:
         return {"kind": "unavailable", "reason": "no_response"}
     raw = record.response_body

@@ -7,9 +7,9 @@ import sqlite3
 from .metrics import MIGRATION as METRICS_MIGRATION
 from .endpoint_index import MIGRATION as ENDPOINT_MIGRATION, register_functions
 from .search_index import MIGRATION as SEARCH_MIGRATION, register_functions as register_search_functions
-from .history_index import MIGRATION as HISTORY_MIGRATION
+from .history_index import MIGRATION as HISTORY_MIGRATION, MEDIA_MIGRATION
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -179,6 +179,7 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         "ALTER TABLE flows ADD COLUMN local_source_ip TEXT",
     ),
     12: HISTORY_MIGRATION,
+    13: MEDIA_MIGRATION,
 }
 
 
