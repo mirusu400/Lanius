@@ -6001,6 +6001,17 @@ pre.body {
   margin: 8px 0;
 }
 
+.project-actions button[aria-busy='true'] {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.project-actions button[aria-busy='true'] .spinner {
+  height: 16px;
+  width: 16px;
+}
+
 .import-button {
   display: inline-flex;
   align-items: center;

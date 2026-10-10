@@ -170,6 +170,28 @@ it.each([
   });
 });
 
+it.each([
+  'project.export',
+  'project.exportNoFlows',
+  'project.backupDatabase',
+] as const)('shows the circular loader on %s while the file is being saved', async (label) => {
+  let finish: (path: string) => void = () => {};
+  const invoke = vi.fn(() => new Promise<string>((resolve) => { finish = resolve; }));
+  Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: { invoke } });
+  render(<ProjectSection />);
+
+  const button = screen.getByRole('button', { name: t(label) });
+  await userEvent.setup().click(button);
+  await waitFor(() => expect(invoke).toHaveBeenCalledOnce());
+  expect(button.getAttribute('aria-busy')).toBe('true');
+  expect(screen.getByRole('status', { name: t('project.working') })).toBeTruthy();
+
+  finish('/chosen/location/project-file');
+  await screen.findByText(t('project.savedFile', { path: '/chosen/location/project-file' }));
+  expect(button.getAttribute('aria-busy')).toBe('false');
+  expect(screen.queryByRole('status', { name: t('project.working') })).toBeNull();
+});
+
 it('quietly cancels an export when the native Save As is dismissed', async () => {
   const invoke = vi.fn(async () => null);
   Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: { invoke } });
@@ -188,4 +210,5 @@ it('shows a native export failure without claiming the file was saved', async ()
   await userEvent.setup().click(screen.getByRole('button', { name: t('project.backupDatabase') }));
   await screen.findByText('disk full');
   expect(document.querySelector('.banner.error')).toBeTruthy();
+  expect(screen.queryByRole('status', { name: t('project.working') })).toBeNull();
 });

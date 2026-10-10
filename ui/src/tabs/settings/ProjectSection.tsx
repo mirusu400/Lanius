@@ -36,12 +36,14 @@ interface ProjectSectionProps {
 export function ProjectSection({ project, onSwitchProject, switchingProject = false, switchError, onProjectImported }: ProjectSectionProps = {}) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
+  const [activeExport, setActiveExport] = useState<'database' | 'json' | 'noFlows' | null>(null);
   const [note, setNote] = useState<Message | null>(null);
   const [error, setError] = useState<Message | null>(null);
   const [switchOpen, setSwitchOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
 
   const download = async (includeFlows: boolean, database = false) => {
+    setActiveExport(database ? 'database' : includeFlows ? 'json' : 'noFlows');
     setBusy(true);
     setError(null);
     setNote(null);
@@ -71,6 +73,7 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
     } catch (err) {
       setError(rawMsg((err as Error).message));
     } finally {
+      setActiveExport(null);
       setBusy(false);
     }
   };
@@ -129,13 +132,16 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
       {switchError && <div className="banner error" role="alert">{switchError}</div>}
 
       <div className="project-actions">
-        <button type="button" disabled={busy} onClick={() => void download(true, true)}>
+        <button type="button" disabled={busy} aria-busy={activeExport === 'database'} aria-label={t('project.backupDatabase')} onClick={() => void download(true, true)}>
+          {activeExport === 'database' && <Spinner label={t('project.working')} />}
           {t('project.backupDatabase')}
         </button>
-        <button type="button" disabled={busy} onClick={() => void download(true)}>
+        <button type="button" disabled={busy} aria-busy={activeExport === 'json'} aria-label={t('project.export')} onClick={() => void download(true)}>
+          {activeExport === 'json' && <Spinner label={t('project.working')} />}
           {t('project.export')}
         </button>
-        <button type="button" disabled={busy} onClick={() => void download(false)}>
+        <button type="button" disabled={busy} aria-busy={activeExport === 'noFlows'} aria-label={t('project.exportNoFlows')} onClick={() => void download(false)}>
+          {activeExport === 'noFlows' && <Spinner label={t('project.working')} />}
           {t('project.exportNoFlows')}
         </button>
         <label className="import-button">
@@ -154,7 +160,7 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
         </label>
       </div>
 
-      {busy && <p className="project-file-progress"><Spinner label={t('project.working')} />{t('project.working')}</p>}
+      {busy && activeExport === null && <p className="project-file-progress"><Spinner label={t('project.working')} />{t('project.working')}</p>}
       {note && <p className="muted">{renderMessage(note, t)}</p>}
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
       <ConfirmDialog
