@@ -1336,6 +1336,17 @@ function shell(): { invoke(cmd: string, args?: unknown): Promise<unknown> } | nu
   );
 }
 
+export function canOpenNetworkExtensionsSettings(): boolean {
+  return shell() !== null;
+}
+
+/** Open the macOS Network Extensions controls for approving local capture. */
+export async function openNetworkExtensionsSettings(): Promise<void> {
+  const internals = shell();
+  if (!internals) throw new Error('Desktop shell is unavailable');
+  await internals.invoke('open_network_extensions_settings');
+}
+
 /** Capture the active Lanius window and copy its image to the OS clipboard. */
 export async function captureWindowToClipboard(): Promise<void> {
   const internals = shell();

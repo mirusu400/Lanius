@@ -8,6 +8,7 @@ import {
   type ProcessInfo,
 } from '../../api/client';
 import type { LocalCaptureState } from '../../api/types';
+import { NetworkExtensionsSettingsButton } from '../../components/NetworkExtensionsSettingsButton';
 import {
   ruleIsValid,
   rulesToSpec,
@@ -43,6 +44,18 @@ export function CaptureSection() {
         }
       })
       .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const refreshApproval = () => {
+      void getStatus()
+        .then((status) => {
+          if (status.local_capture) setState(status.local_capture);
+        })
+        .catch(() => undefined);
+    };
+    window.addEventListener('focus', refreshApproval);
+    return () => window.removeEventListener('focus', refreshApproval);
   }, []);
 
   const apply = async (next: typeof mode, nextRules: CaptureRule[]) => {
@@ -231,6 +244,7 @@ export function CaptureSection() {
         <div className="banner warn">
           <strong>{t('dash.captureWaiting')}</strong>
           <span>{t('dash.captureWaitingHelp')}</span>
+          <NetworkExtensionsSettingsButton />
         </div>
       )}
 

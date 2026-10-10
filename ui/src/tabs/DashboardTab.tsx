@@ -5,6 +5,7 @@ import type { Dashboard } from '../api/types';
 import { connectStream } from '../api/stream';
 import { useT } from '../i18n';
 import { OpenBrowserButton } from '../components/OpenBrowserButton';
+import { NetworkExtensionsSettingsButton } from '../components/NetworkExtensionsSettingsButton';
 import { useReportBusy } from '../components/busy';
 import { DoctorPanel } from './DoctorPanel';
 import {
@@ -54,6 +55,11 @@ export function DashboardTab({
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
   }, [refresh]);
 
   // Recompute on traffic, but no more than once a second: a busy capture
@@ -159,6 +165,7 @@ export function DashboardTab({
                   : t('dash.captureWaiting')}
               </strong>
               <span>{t('dash.captureWaitingHelp')}</span>
+              <NetworkExtensionsSettingsButton />
             </div>
           )}
           {downModes.map((mode) => (

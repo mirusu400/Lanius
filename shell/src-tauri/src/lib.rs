@@ -32,6 +32,8 @@ const API_HOST: &str = "127.0.0.1";
 const DEFAULT_API_PORT: u16 = 12954;
 const DEFAULT_PROXY_PORT: u16 = 8080;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(target_os = "macos")]
+const NETWORK_EXTENSIONS_SETTINGS_URL: &str = "x-apple.systempreferences:com.apple.ExtensionsPreferences?extensionPointIdentifier=com.apple.system_extension.network_extension.extension-point";
 
 /// Handle to the sidecar so we can stop it on exit.
 #[derive(Default)]
@@ -90,6 +92,27 @@ fn port_open(port: u16) -> bool {
         Duration::from_millis(250),
     )
     .is_ok()
+}
+
+#[tauri::command]
+fn open_network_extensions_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let status = Command::new("/usr/bin/open")
+            .arg(NETWORK_EXTENSIONS_SETTINGS_URL)
+            .status()
+            .map_err(|err| err.to_string())?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(format!("System Settings could not be opened: {status}"))
+        };
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Network Extensions settings are only available on macOS".into())
+    }
 }
 
 /// Locate the bundled engine binary, or fall back to the dev checkout.
@@ -1104,6 +1127,7 @@ pub fn run() {
             restart_project_engine,
             set_api_port,
             set_window_theme,
+            open_network_extensions_settings,
             list_projects,
             current_project,
             create_project,

@@ -1047,6 +1047,8 @@ const en = {
     'Comma separated. Prefix a name with ! to exclude it instead.',
   'capture.apply': 'Apply capture rules',
   'capture.applied': 'System capture updated.',
+  'capture.openNetworkExtensions': 'Open Network Extensions settings',
+  'capture.openSettingsFailed': 'Could not open System Settings: {message}',
   'capture.pinningNote':
     'Applications that pin their certificates will refuse the connection rather than be intercepted.',
   'capture.restartNeeded':
@@ -2071,6 +2073,8 @@ const ko: Catalogue = {
   'capture.filterHelp': '쉼표로 구분합니다. 이름 앞에 !를 붙이면 제외됩니다.',
   'capture.apply': '캡처 규칙 적용',
   'capture.applied': '시스템 캡처를 변경했습니다.',
+  'capture.openNetworkExtensions': '네트워크 확장 설정 열기',
+  'capture.openSettingsFailed': '시스템 설정을 열지 못했습니다: {message}',
   'capture.pinningNote':
     '인증서 피닝을 쓰는 앱은 가로채기 대신 연결을 거부합니다.',
   'capture.restartNeeded':

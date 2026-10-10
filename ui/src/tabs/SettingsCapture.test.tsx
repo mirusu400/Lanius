@@ -10,6 +10,7 @@ let captureSpec: string | null = null;
 let posted: unknown[] = [];
 let postFails = false;
 let restartRequired = false;
+let approved = false;
 
 const status = () => ({
   version: '0.1.0',
@@ -26,7 +27,7 @@ const status = () => ({
   paused: 0,
   local_capture: {
     supported: true,
-    approved: false,
+    approved,
     detail: 'activated waiting for user',
     spec: captureSpec,
   },
@@ -37,6 +38,7 @@ beforeEach(() => {
   posted = [];
   postFails = false;
   restartRequired = false;
+  approved = false;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -249,6 +251,30 @@ describe('system capture', () => {
     captureSpec = 'curl';
     render(<CaptureSection />);
     expect(await screen.findByText(t('dash.captureWaiting'))).toBeTruthy();
+  });
+
+  it('opens macOS Network Extensions settings from the approval warning', async () => {
+    captureSpec = 'curl';
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('__TAURI_INTERNALS__', { invoke });
+    render(<CaptureSection />);
+
+    await userEvent.click(await screen.findByRole('button', {
+      name: t('capture.openNetworkExtensions'),
+    }));
+
+    expect(invoke).toHaveBeenCalledWith('open_network_extensions_settings');
+  });
+
+  it('rechecks approval when the user returns from System Settings', async () => {
+    captureSpec = 'curl';
+    render(<CaptureSection />);
+    await screen.findByText(t('dash.captureWaiting'));
+
+    approved = true;
+    window.dispatchEvent(new Event('focus'));
+
+    await waitFor(() => expect(screen.queryByText(t('dash.captureWaiting'))).toBeNull());
   });
 
   it('does not warn about approval while capture is off', async () => {
