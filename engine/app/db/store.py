@@ -1165,7 +1165,7 @@ class FlowStore:
             )
             self._conn.commit()
 
-    def list_fuzzer_runs(self, *, include_results: bool = True) -> list[dict[str, Any]]:
+    def list_fuzzer_runs(self, *, include_results: bool = True) -> List[dict[str, Any]]:
         with self._read_lock:
             runs = self._read_conn.execute(
                 """SELECT fuzzer_runs.*, COUNT(fuzzer_results.result_index) AS completed
@@ -1197,7 +1197,7 @@ class FlowStore:
             "error": row["error"], "results": by_id.get(row["id"], []),
         } for row in runs]
 
-    def get_fuzzer_results(self, run_id: str) -> list[dict[str, Any]]:
+    def get_fuzzer_results(self, run_id: str) -> List[dict[str, Any]]:
         """Load one run's results only when its detail view is opened."""
         with self._read_lock:
             rows = self._read_conn.execute(
