@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -922,6 +922,49 @@ pub struct UpdateProgress {
     total: AtomicU64,
 }
 
+#[derive(Default)]
+struct UpdatePluginStatus(AtomicBool);
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum UpdateChannel {
+    Stable,
+    Nightly,
+}
+
+impl UpdateChannel {
+    fn endpoint(self) -> &'static str {
+        match self {
+            Self::Stable => {
+                "https://github.com/mirusu400/Lanius/releases/latest/download/latest.json"
+            }
+            Self::Nightly => {
+                "https://github.com/mirusu400/Lanius/releases/download/nightly/latest.json"
+            }
+        }
+    }
+}
+
+fn updater_for_channel(
+    app: &tauri::AppHandle,
+    channel: UpdateChannel,
+) -> Result<tauri_plugin_updater::Updater, String> {
+    if !app.state::<UpdatePluginStatus>().0.load(Ordering::Relaxed) {
+        return Err("in-app updater is unavailable in this build".into());
+    }
+    #[cfg(target_os = "linux")]
+    if app.env().appimage.is_none() {
+        return Err("in-app updates require an AppImage on Linux".into());
+    }
+
+    let endpoint = reqwest::Url::parse(channel.endpoint()).map_err(|err| err.to_string())?;
+    app.updater_builder()
+        .endpoints(vec![endpoint])
+        .map_err(|err| err.to_string())?
+        .build()
+        .map_err(|err| err.to_string())
+}
+
 /// What a newer build says about itself.
 #[derive(Clone, Serialize)]
 pub struct UpdateOffer {
@@ -947,8 +990,11 @@ pub struct UpdateProgressReport {
 /// A build with no updater configured says so, and the interface falls
 /// back to the download link.
 #[tauri::command]
-async fn update_check(app: tauri::AppHandle) -> Result<Option<UpdateOffer>, String> {
-    let updater = app.updater().map_err(|err| err.to_string())?;
+async fn update_check(
+    app: tauri::AppHandle,
+    channel: UpdateChannel,
+) -> Result<Option<UpdateOffer>, String> {
+    let updater = updater_for_channel(&app, channel)?;
     let found =
         monitored_product_egress(async { updater.check().await.map_err(|err| err.to_string()) })
             .await?;
@@ -962,12 +1008,12 @@ async fn update_check(app: tauri::AppHandle) -> Result<Option<UpdateOffer>, Stri
 
 /// Download the new build, install it, and come back up on it.
 ///
-/// The engine is stopped first: it holds the project database open and
-/// the proxy port, and an installer replacing the bundle underneath a
-/// running sidecar is how a half-written database happens.
+/// Verify the download before stopping the engine. The engine holds the
+/// project database and bundled files open, so it must be stopped before
+/// the installer replaces them (especially on Windows, where install exits).
 #[tauri::command]
-async fn update_install(app: tauri::AppHandle) -> Result<(), String> {
-    let updater = app.updater().map_err(|err| err.to_string())?;
+async fn update_install(app: tauri::AppHandle, channel: UpdateChannel) -> Result<(), String> {
+    let updater = updater_for_channel(&app, channel)?;
     let update =
         monitored_product_egress(async { updater.check().await.map_err(|err| err.to_string()) })
             .await?
@@ -978,9 +1024,9 @@ async fn update_install(app: tauri::AppHandle) -> Result<(), String> {
     progress.total.store(0, Ordering::Relaxed);
 
     let counter = progress.clone();
-    monitored_product_egress(async {
+    let bytes = monitored_product_egress(async {
         update
-            .download_and_install(
+            .download(
                 move |chunk, total| {
                     counter
                         .downloaded
@@ -995,6 +1041,23 @@ async fn update_install(app: tauri::AppHandle) -> Result<(), String> {
             .map_err(|err| err.to_string())
     })
     .await?;
+
+    let stop_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        stop_engine(&stop_app.state::<EngineProcess>());
+    })
+    .await
+    .map_err(|err| err.to_string())?;
+
+    if let Err(err) = update.install(&bytes) {
+        let cause = err.to_string();
+        if let Err(restart) = restart_project_engine(app.clone()).await {
+            return Err(format!(
+                "{cause}; the project engine could not restart: {restart}"
+            ));
+        }
+        return Err(cause);
+    }
 
     end_project(
         &app.state::<EngineProcess>(),
@@ -1032,6 +1095,7 @@ pub fn run() {
         .manage(ProjectSession::default())
         .manage(ShutdownState::default())
         .manage(Arc::new(UpdateProgress::default()))
+        .manage(UpdatePluginStatus::default())
         .invoke_handler(tauri::generate_handler![
             engine_info,
             engine_running,
@@ -1070,6 +1134,10 @@ pub fn run() {
                 .plugin(tauri_plugin_updater::Builder::new().build())
             {
                 log::warn!("no updater in this build: {err}");
+            } else {
+                app.state::<UpdatePluginStatus>()
+                    .0
+                    .store(true, Ordering::Relaxed);
             }
             #[cfg(unix)]
             install_signal_handlers(app.handle().clone());
@@ -1131,6 +1199,18 @@ mod tests {
     fn theme_names_map_to_window_themes() {
         assert_eq!(parse_theme(Some("dark")), Some(tauri::Theme::Dark));
         assert_eq!(parse_theme(Some("light")), Some(tauri::Theme::Light));
+    }
+
+    #[test]
+    fn update_channels_use_separate_signed_feeds() {
+        assert_eq!(
+            UpdateChannel::Stable.endpoint(),
+            "https://github.com/mirusu400/Lanius/releases/latest/download/latest.json"
+        );
+        assert_eq!(
+            UpdateChannel::Nightly.endpoint(),
+            "https://github.com/mirusu400/Lanius/releases/download/nightly/latest.json"
+        );
     }
 
     #[test]

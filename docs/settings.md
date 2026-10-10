@@ -168,7 +168,10 @@ downloads on its own, and the check itself can be turned off for a network
 where nothing should leave the machine.
 
 Signed builds can install themselves: **Install and restart** downloads the
-new bundle, verifies its signature, replaces the app and comes back up. The
+new bundle from the selected stable or nightly channel, verifies its signature,
+replaces the app and comes back up. Windows MSI and NSIS installs each receive
+their matching installer. Linux AppImage installs support this;
+`.deb` installs use the download link for upgrades. The
 [README](https://github.com/mirusu400/Lanius#releasing-with-the-in-app-updater)
 describes the signing setup.
 

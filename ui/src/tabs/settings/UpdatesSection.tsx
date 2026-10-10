@@ -26,6 +26,7 @@ import {
   type UpdateOffer,
   type UpdateRelease,
 } from '../../api/client';
+import { flushAutosaves } from '../autosave';
 
 /** How often the download is asked how far it has got. Often enough to
  *  look live, rarely enough to be free. */
@@ -64,7 +65,7 @@ export function UpdatesSection() {
   // link to a download, while only a signed build with an updater in it
   // can be installed from here. A button that cannot work is worse than
   // no button, so it appears only once the shell has confirmed it.
-  const [offer, setOffer] = useState<UpdateOffer | null>(null);
+  const [offer, setOffer] = useState<{ channel: UpdateChannel; update: UpdateOffer } | null>(null);
 
   // The startup check may land while this screen is open, and the
   // timestamp lives in storage rather than in the result.
@@ -74,14 +75,15 @@ export function UpdatesSection() {
 
   const available = result?.update_available && result.reason === 'behind';
   useEffect(() => {
-    if (!desktop || !available) {
+    if (!desktop || !available || !result) {
       setOffer(null);
       return;
     }
     let live = true;
-    void desktopUpdateCheck()
+    const selectedChannel = result.channel;
+    void desktopUpdateCheck(selectedChannel)
       .then((found) => {
-        if (live) setOffer(found);
+        if (live) setOffer(found ? { channel: selectedChannel, update: found } : null);
       })
       // A build with no signing key has no updater, which is a working
       // build: it just cannot install its own replacement.
@@ -91,10 +93,11 @@ export function UpdatesSection() {
     return () => {
       live = false;
     };
-  }, [desktop, available]);
+  }, [desktop, available, result?.channel]);
 
   const chooseChannel = (next: UpdateChannel | 'auto') => {
     setChannel(next);
+    setOffer(null);
     setChannelPreference(next === 'auto' ? null : next);
     // The answer depends on the channel, so the one on screen is now
     // about a question nobody asked.
@@ -107,6 +110,7 @@ export function UpdatesSection() {
   };
 
   const install = async () => {
+    if (!result) return;
     setInstalling(true);
     setInstallError(null);
     setPercent(null);
@@ -120,9 +124,10 @@ export function UpdatesSection() {
         .catch(() => undefined);
     }, PROGRESS_INTERVAL_MS);
     try {
+      await flushAutosaves();
       // On Windows the installer closes the app, so this never returns;
       // everywhere else the app restarts itself onto the new build.
-      await desktopUpdateInstall();
+      await desktopUpdateInstall(result.channel);
     } catch (err) {
       setInstallError(String(err instanceof Error ? err.message : err));
       setInstalling(false);
@@ -139,6 +144,7 @@ export function UpdatesSection() {
   };
 
   const latest = result?.latest ?? null;
+  const matchingOffer = offer && offer.channel === result?.channel ? offer.update : null;
   const verdict = () => {
     if (!result) return null;
     if (available) {
@@ -146,7 +152,7 @@ export function UpdatesSection() {
         <>
           <div className="banner">
             {t('updates.available', { name: releaseLabel(latest) ?? '' })}{' '}
-            {offer && (
+            {matchingOffer && (
               <button type="button" disabled={installing} onClick={() => void install()}>
                 {installLabel()}
               </button>
@@ -155,7 +161,7 @@ export function UpdatesSection() {
               {t('updates.download')}
             </a>
           </div>
-          {offer && <p className="muted">{t('updates.installHelp')}</p>}
+          {matchingOffer && <p className="muted">{t('updates.installHelp')}</p>}
           {installError && (
             // Usually a build with no signing key, or a package that
             // cannot replace itself. The download link still works.

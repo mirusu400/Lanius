@@ -74,7 +74,7 @@ afterEach(() => {
 
 /** Pretend to be the desktop shell, which is the half that can install. */
 function mockShell(handlers: Record<string, () => unknown> = {}) {
-  const invoke = vi.fn(async (cmd: string) => {
+  const invoke = vi.fn(async (cmd: string, _args?: { channel: string }) => {
     const handler = handlers[cmd];
     if (handler) return handler();
     if (cmd === 'update_progress') return { downloaded: 0, total: null };
@@ -224,6 +224,18 @@ describe('installing from inside the app', () => {
     await waitFor(() =>
       expect(invoke.mock.calls.map((call) => call[0])).toContain('update_install'),
     );
+    expect(invoke).toHaveBeenCalledWith('update_check', { channel: 'nightly' });
+    expect(invoke).toHaveBeenCalledWith('update_install', { channel: 'nightly' });
+  });
+
+  it('checks and installs from the selected stable channel', async () => {
+    const invoke = mockShell();
+    mockCheck({ channel: 'stable', latest: { ...nightly, channel: 'stable' } });
+    renderWithI18n(<UpdatesSection />);
+    await userEvent.selectOptions(screen.getByLabelText(t('updates.channel')), 'stable');
+    await userEvent.click(await screen.findByRole('button', { name: t('updates.install') }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('update_install', { channel: 'stable' }));
+    expect(invoke).toHaveBeenCalledWith('update_check', { channel: 'stable' });
   });
 
   it('offers no install button in a build that has no updater', async () => {

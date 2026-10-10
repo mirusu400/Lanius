@@ -1348,11 +1348,11 @@ export function canInstallUpdates(): boolean {
   return shell() !== null;
 }
 
-export async function desktopUpdateCheck(): Promise<UpdateOffer | null> {
+export async function desktopUpdateCheck(channel: UpdateChannel): Promise<UpdateOffer | null> {
   const internals = shell();
   if (!internals) return null;
   try {
-    return (await internals.invoke('update_check')) as UpdateOffer | null;
+    return (await internals.invoke('update_check', { channel })) as UpdateOffer | null;
   } catch (error) {
     if (String(error).includes('LOCKDOWN_MODE_BLOCKED')) notifyLockdownBlocked();
     throw error;
@@ -1365,11 +1365,11 @@ export async function desktopUpdateCheck(): Promise<UpdateOffer | null> {
  * installer; on Windows the installer closes it, so treat a resolved
  * promise and a vanished window as the same success.
  */
-export async function desktopUpdateInstall(): Promise<void> {
+export async function desktopUpdateInstall(channel: UpdateChannel): Promise<void> {
   const internals = shell();
   if (!internals) throw new Error('Desktop shell is unavailable');
   try {
-    await internals.invoke('update_install');
+    await internals.invoke('update_install', { channel });
   } catch (error) {
     if (String(error).includes('LOCKDOWN_MODE_BLOCKED')) notifyLockdownBlocked();
     throw error;

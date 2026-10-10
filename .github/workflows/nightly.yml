@@ -61,11 +61,10 @@ jobs:
             echo "date=$(date -u +%Y%m%d)"
             # The in-app updater compares versions, and every build so far
             # called itself 0.1.0, which no comparison can separate. A
-            # minute-stamped prerelease sorts by the only thing that
-            # actually orders two nightlies: when they were built. It
-            # also sorts below the next stable release itself, so a tagged
-            # build still supersedes every nightly that preceded it.
-            echo "version=0.3.1-nightly.$(date -u +%Y%m%dT%H%M)"
+            # minute-stamped prerelease sorts by build time; the run number
+            # makes repeated builds in the same minute unique as well. It
+            # still sorts below the next stable release itself.
+            echo "version=0.3.1-nightly.$(date -u +%Y%m%dT%H%M).$GITHUB_RUN_NUMBER"
             # Windows installers take three numbers and nothing else, and
             # the number has to grow for an upgrade to be an upgrade.
             echo "msi_version=0.3.$GITHUB_RUN_NUMBER"
@@ -354,16 +353,17 @@ jobs:
             if [ "$target" = "app" ]; then
               # With a signing key, tauri archives and signs the .app
               # itself, and that archive is what the signature covers.
-              # Both architectures would otherwise land on one release as
-              # Lanius.app.tar.gz, so the label goes into the name: a
-              # signature is over the bytes, not over the file name.
+              # Use a unique name for every build. A cached update manifest
+              # must never fetch a newer archive under the same URL, because
+              # that archive will fail signature verification.
               signed=0
               for archive in "$bundle"/macos/*.app.tar.gz; do
                 [ -f "$archive" ] || continue
                 name="$(basename "$archive" .app.tar.gz)"
-                cp "$archive" "$staging/${name}-${{ matrix.label }}.app.tar.gz"
+                filename="${name}-${{ needs.meta.outputs.version }}-${{ matrix.label }}.app.tar.gz"
+                cp "$archive" "$staging/$filename"
                 if [ -f "$archive.sig" ]; then
-                  cp "$archive.sig" "$staging/${name}-${{ matrix.label }}.app.tar.gz.sig"
+                  cp "$archive.sig" "$staging/$filename.sig"
                 fi
                 signed=1
               done
@@ -371,7 +371,7 @@ jobs:
                 for app in "$bundle"/macos/*.app; do
                   [ -d "$app" ] || continue
                   name="$(basename "$app" .app)"
-                  tar -czf "$staging/${name}-${{ matrix.label }}.app.tar.gz" \
+                  tar -czf "$staging/${name}-${{ needs.meta.outputs.version }}-${{ matrix.label }}.app.tar.gz" \
                     -C "$bundle/macos" "$(basename "$app")"
                 done
               fi
@@ -472,7 +472,8 @@ jobs:
               "darwin-aarch64": "macos-arm64.app.tar.gz",
               "darwin-x86_64": "macos-x86_64.app.tar.gz",
               "linux-x86_64": ".AppImage",
-              "windows-x86_64": "-setup.exe",
+              "windows-x86_64-msi": ".msi",
+              "windows-x86_64-nsis": "-setup.exe",
           }
 
           platforms = {}
@@ -498,6 +499,8 @@ jobs:
               # a newer build exists and links to it.
               print("no signed bundles, so no update manifest")
               raise SystemExit(0)
+          if len(platforms) != len(wanted):
+              raise SystemExit(f"missing signed updater bundles: {set(wanted) - set(platforms)}")
 
           manifest = {
               "version": os.environ["VERSION"],
@@ -515,6 +518,31 @@ jobs:
           )
           print(json.dumps(manifest, indent=2))
           PY
+
+      - name: Stage the manifest and remember the previous updater bundles
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 15 \
+            "https://github.com/$REPO/releases/download/nightly/latest.json" \
+            -o previous-latest.json || rm -f previous-latest.json
+          python3 - <<'PY' > previous-assets.txt
+          import json
+          from pathlib import Path
+          from urllib.parse import urlparse
+
+          previous = Path("previous-latest.json")
+          if previous.exists():
+              manifest = json.loads(previous.read_text(encoding="utf-8"))
+              for platform in manifest.get("platforms", {}).values():
+                  name = Path(urlparse(platform["url"]).path).name
+                  print(name)
+                  print(name + ".sig")
+          PY
+          if [ -f dist/latest.json ]; then
+            mv dist/latest.json latest.json
+          fi
 
       # One rolling tag rather than one per day. Builds now happen per
       # commit, so dated tags would pile up several a day, and
@@ -563,24 +591,49 @@ jobs:
           files: dist/*
           fail_on_unmatched_files: true
 
-      # Uploads replace files of the same name, so a bundle that changes
-      # name (a version bump, a dropped platform) would otherwise stay on
-      # the release forever, next to the current one, with nothing saying
-      # which is which. Done after the upload: a failed run leaves the
-      # previous build in place rather than an empty release.
-      - name: Drop assets left over from an older build
+      # Publish the pointer only after every bundle is available. Cached old
+      # manifests still refer to the previous, immutable bundle names.
+      - name: Publish the update manifest
+        if: hashFiles('latest.json') != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          # gh works out the repository from the git remote, and this job
-          # never checks anything out.
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload nightly latest.json --clobber
+
+      # Keep the previously advertised bundles and a day's worth of older
+      # assets so cached manifests still lead to their matching archives.
+      - name: Drop expired release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          current="$(cd dist && ls)"
-          gh release view nightly --json assets --jq '.assets[].name' \
-          | while read -r asset; do
-              if ! grep -qxF "$asset" <<< "$current"; then
-                echo "removing stale asset: $asset"
-                gh release delete-asset nightly "$asset" --yes
-              fi
-            done
+          gh release view nightly --json assets > release-assets.json
+          python3 - <<'PY' > expired-assets.txt
+          import json
+          from datetime import datetime, timedelta, timezone
+          from pathlib import Path
+
+          current = {path.name for path in Path("dist").iterdir()}
+          if Path("latest.json").exists():
+              current.add("latest.json")
+          previous = set(Path("previous-assets.txt").read_text().splitlines())
+          cutoff = datetime.now(timezone.utc) - timedelta(days=1)
+          assets = json.loads(Path("release-assets.json").read_text())["assets"]
+          for asset in assets:
+              name = asset["name"]
+              if name in current or name in previous:
+                  continue
+              # A build without a signing key must remove the old feed.
+              if name == "latest.json":
+                  print(name)
+                  continue
+              created = datetime.fromisoformat(asset["createdAt"].replace("Z", "+00:00"))
+              if created < cutoff:
+                  print(name)
+          PY
+          while IFS= read -r asset; do
+            [ -n "$asset" ] || continue
+            echo "removing expired asset: $asset"
+            gh release delete-asset nightly "$asset" --yes
+          done < expired-assets.txt

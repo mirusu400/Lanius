@@ -483,7 +483,8 @@ jobs:
               "darwin-aarch64": "macos-arm64.app.tar.gz",
               "darwin-x86_64": "macos-x86_64.app.tar.gz",
               "linux-x86_64": ".AppImage",
-              "windows-x86_64": "-setup.exe",
+              "windows-x86_64-msi": ".msi",
+              "windows-x86_64-nsis": "-setup.exe",
           }
 
           platforms = {}
