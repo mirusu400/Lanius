@@ -2,6 +2,7 @@
 import { autosave } from './autosave';
 import { getTabs, resetTabs, setTabs, subscribe as subscribeReplay } from './replayStore';
 import { getDecoderTabs, resetDecoderTabs, setDecoderTabs, subscribe as subscribeDecoder } from './decoderStore';
+import { mergeFuzzerWorkspace, resetTarget, setFuzzerWorkspace, subscribeFuzzerWorkspace } from './fuzzerStore';
 
 export function startWorkspaceAutosaves(): () => void {
   const stops = [
@@ -13,6 +14,7 @@ export function startWorkspaceAutosaves(): () => void {
       'transform',
       resetDecoderTabs,
     ),
+    autosave('fuzzer', subscribeFuzzerWorkspace, setFuzzerWorkspace, undefined, resetTarget, mergeFuzzerWorkspace),
   ];
   return () => stops.forEach((stop) => stop());
 }

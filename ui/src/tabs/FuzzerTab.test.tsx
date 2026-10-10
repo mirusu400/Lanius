@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FuzzerTab } from './FuzzerTab';
-import { resetTarget, sendToFuzzer } from './fuzzerStore';
+import { newFuzzerDraft, resetTarget, sendToFuzzer, setFuzzerWorkspace } from './fuzzerStore';
 import type { RunResult, FlowSummary } from '../api/types';
 import { getTabs, resetTabs } from './replayStore';
 
@@ -50,6 +50,7 @@ function jsonResponse(body: unknown) {
 }
 
 class MockSocket {
+  static instances: MockSocket[] = [];
   onopen: (() => void) | null = null;
   onmessage: ((e: { data: string }) => void) | null = null;
   onclose: (() => void) | null = null;
@@ -57,12 +58,14 @@ class MockSocket {
   url: string;
   constructor(url: string) {
     this.url = url;
+    MockSocket.instances.push(this);
     queueMicrotask(() => this.onopen?.());
   }
   close() {}
 }
 
 beforeEach(() => {
+  MockSocket.instances = [];
   resetTabs();
   resetTarget();
   started = [];
@@ -124,6 +127,13 @@ beforeEach(() => {
           error: null,
         });
       }
+      if (url.endsWith('/api/fuzzer/runs')) {
+        return jsonResponse({ items: [{
+          id: 'atk1', mode: 'single_position', url: 'http://app.test',
+          status, total: results.length, completed: results.length,
+          started_at: 1, finished_at: 2, error: null,
+        }] });
+      }
       if (url.includes('/api/fuzzer/runs/atk1')) {
         return jsonResponse({
           id: 'atk1',
@@ -135,6 +145,9 @@ beforeEach(() => {
           started_at: 1,
           finished_at: 2,
           error: null,
+          template: 'GET /saved?q={{x}} HTTP/1.1\nHost: app.test\n\n',
+          payload_sets: [['wrong', 'letmein', 'nope']],
+          speed: { concurrency: 5, delay: 0 },
           results,
         });
       }
@@ -152,6 +165,92 @@ const templateBox = () =>
   screen.getByRole('textbox', { name: t('fuzzer.templateLabel') }) as HTMLTextAreaElement;
 
 describe('FuzzerTab', () => {
+  it('replaces editor state when an imported workspace reuses a tab id', async () => {
+    const draft = newFuzzerDraft('http://old.test', 'GET /old HTTP/1.1\nHost: old.test\n\n');
+    setFuzzerWorkspace({ tabs: [draft], activeId: draft.id });
+    render(<FuzzerTab />);
+    fireEvent.change(templateBox(), { target: { value: 'GET /unsaved HTTP/1.1\nHost: old.test\n\n' } });
+
+    setFuzzerWorkspace({ tabs: [{ ...draft, url: 'http://imported.test', template: 'GET /imported HTTP/1.1\nHost: imported.test\n\n' }], activeId: draft.id });
+
+    await waitFor(() => expect(templateBox().value).toContain('/imported'));
+    expect(screen.getByLabelText(t('fuzzer.targetUrl'))).toHaveProperty('value', 'http://imported.test');
+  });
+
+  it('ignores result events belonging to other runs', async () => {
+    render(<FuzzerTab />);
+    await userEvent.click(screen.getByRole('button', { name: t('fuzzer.start') }));
+    await screen.findByText('letmein');
+    const reads = () => vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes('/api/fuzzer/runs/atk1')).length;
+    const before = reads();
+    for (const socket of MockSocket.instances) socket.onmessage?.({ data: JSON.stringify({
+      type: 'fuzzer.result', data: { run_id: 'another-run', result: results[0] },
+    }) });
+    expect(reads()).toBe(before);
+  });
+
+  it('keeps the newest run response when older refreshes finish later', async () => {
+    render(<FuzzerTab />);
+    await userEvent.click(screen.getByRole('button', { name: t('fuzzer.start') }));
+    await screen.findByText('letmein');
+    const originalFetch = fetch;
+    const pending: Array<(response: Response) => void> = [];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/api/fuzzer/runs/atk1')) {
+        return new Promise<Response>((resolve) => pending.push(resolve));
+      }
+      return originalFetch(input, init);
+    }));
+    const event = JSON.stringify({ type: 'fuzzer.result', data: { run_id: 'atk1', result: results[0] } });
+    for (const socket of MockSocket.instances) socket.onmessage?.({ data: event });
+    for (const socket of MockSocket.instances) socket.onmessage?.({ data: event });
+    expect(pending).toHaveLength(2);
+    const run = (payload: string) => ({
+      id: 'atk1', mode: 'single_position', url: 'http://app.test',
+      status: 'completed', total: 1, completed: 1, started_at: 1,
+      finished_at: 2, error: null, template: 'GET / HTTP/1.1\n\n',
+      payload_sets: [[payload]], speed: { concurrency: 5, delay: 0 },
+      results: [{ ...results[0], payloads: [payload] }],
+    });
+    pending[1](jsonResponse(run('fresh')));
+    await screen.findByText('fresh');
+    pending[0](jsonResponse(run('stale')));
+    await Promise.resolve();
+    expect(screen.getByText('fresh')).toBeTruthy();
+    expect(screen.queryByText('stale')).toBeNull();
+  });
+
+  it('refreshes history again when an event arrives during a list request', async () => {
+    const originalFetch = fetch;
+    let finishFirst!: (response: Response) => void;
+    let lists = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/api/fuzzer/runs') && init?.method !== 'POST') {
+        lists += 1;
+        if (lists === 1) return new Promise<Response>((resolve) => { finishFirst = resolve; });
+        return Promise.resolve(jsonResponse({ items: [{
+          id: 'fresh', mode: 'single_position', url: 'http://fresh.test',
+          status: 'running', total: 2, completed: 1, started_at: 2,
+          finished_at: null, error: null,
+        }] }));
+      }
+      return originalFetch(input, init);
+    }));
+    render(<FuzzerTab />);
+    await Promise.resolve(); // socket open asks for a refresh during the first GET
+    finishFirst(jsonResponse({ items: [] }));
+    expect(await screen.findByRole('option', { name: /fresh\.test/ })).toBeTruthy();
+    expect(lists).toBe(2);
+  });
+
+  it('has separate keyboard-operable select and close buttons', async () => {
+    sendToFuzzer(flow);
+    render(<FuzzerTab />);
+    const close = screen.getByRole('button', { name: `${t('fuzzer.closeTab')} 1` });
+    close.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(screen.queryByRole('button', { name: /app\.test/ })).toBeNull();
+  });
   it('keeps an edited target when its hidden tab is shown again', async () => {
     sendToFuzzer(flow);
     function Harness() {
@@ -253,7 +352,7 @@ describe('FuzzerTab', () => {
 
     expect(await screen.findByText('letmein')).toBeTruthy();
     expect(started[0].payload_sets).toEqual([['a', 'b', 'c']]);
-    expect(screen.getByText(/completed · 3\/3/)).toBeTruthy();
+    expect(screen.getAllByText(/completed · 3\/3/).length).toBeGreaterThan(0);
   });
 
   it('highlights the response whose length stands out', async () => {
@@ -275,10 +374,33 @@ describe('FuzzerTab', () => {
     await waitFor(() =>
       expect(templateBox().value).toContain('GET /login?pw=guess'),
     );
-    expect(screen.getByLabelText(t('fuzzer.targetUrl'))).toHaveProperty(
+    expect(screen.getAllByLabelText(t('fuzzer.targetUrl')).at(-1)).toHaveProperty(
       'value',
       'http://app.test',
     );
+  });
+
+  it('keeps an active run when another request is sent to Fuzzer', async () => {
+    status = 'running';
+    sendToFuzzer(flow);
+    render(<FuzzerTab />);
+    await userEvent.click(screen.getByRole('button', { name: t('fuzzer.start') }));
+    expect(await screen.findByRole('button', { name: t('fuzzer.stop') })).toBeTruthy();
+
+    sendToFuzzer({ ...flow, id: 'f2', host: 'other.test', path: '/second' });
+    await waitFor(() => expect(templateBox().value).toContain('/second'));
+    expect(screen.getByRole('button', { name: t('fuzzer.start') })).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: /app\.test/ }));
+    expect(await screen.findByRole('button', { name: t('fuzzer.stop') })).toBeTruthy();
+    expect(templateBox().value).toContain('/login');
+  });
+
+  it('opens a saved run from history after the editor was reset', async () => {
+    render(<FuzzerTab />);
+    await userEvent.selectOptions(await screen.findByLabelText(t('fuzzer.history')), 'atk1');
+    await waitFor(() => expect(templateBox().value).toContain('/saved'));
+    await waitFor(() => expect(screen.getAllByText(/completed · 3\/3/).length).toBeGreaterThan(1));
   });
 
   it('offers a stop button while a run is active', async () => {

@@ -581,6 +581,10 @@ export function getRun(id: string): Promise<import('./types').FuzzRun> {
   return request(`/api/fuzzer/runs/${id}`);
 }
 
+export function listRuns(): Promise<{ items: import('./types').RunSummary[] }> {
+  return request('/api/fuzzer/runs');
+}
+
 export function stopRun(
   id: string,
 ): Promise<import('./types').RunSummary> {

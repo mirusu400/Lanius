@@ -250,6 +250,9 @@ const en = {
   'fuzzer.positions': 'positions {count} · {requests} requests',
   'fuzzer.positionsError': 'positions error',
   'fuzzer.start': 'Start run',
+  'fuzzer.newTab': 'New Fuzzer tab',
+  'fuzzer.closeTab': 'Close Fuzzer tab',
+  'fuzzer.history': 'Run history',
   'fuzzer.running': 'Running…',
   'fuzzer.stop': 'Stop',
   'fuzzer.template': 'Request template',
@@ -957,6 +960,7 @@ const en = {
 
   // --- dashboard ---
   'dash.title': 'Dashboard',
+  'dash.fuzzerRuns': 'Active Fuzzer runs',
   'dash.home': 'Lanius home',
   'dash.subtitle': 'Overview of the current capture.',
   'doctor.title': 'Doctor',
@@ -1280,6 +1284,9 @@ const ko: Catalogue = {
   'fuzzer.positions': '위치 {count} · 요청 {requests}건',
   'fuzzer.positionsError': '위치 오류',
   'fuzzer.start': 'Start run',
+  'fuzzer.newTab': '새 Fuzzer 탭',
+  'fuzzer.closeTab': 'Fuzzer 탭 닫기',
+  'fuzzer.history': '실행 내역',
   'fuzzer.running': '실행 중…',
   'fuzzer.stop': 'Stop',
   'fuzzer.template': '요청 템플릿',
@@ -1979,6 +1986,7 @@ const ko: Catalogue = {
   'settings.languageHelp': '즉시 적용되며 이 기기에 기억됩니다.',
   // --- dashboard ---
   'dash.title': '대시보드',
+  'dash.fuzzerRuns': '진행 중인 Fuzzer',
   'dash.home': 'Lanius 홈',
   'dash.subtitle': '현재 캡처 상황 요약입니다.',
   'doctor.title': 'Doctor 진단',

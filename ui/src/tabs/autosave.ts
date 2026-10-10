@@ -60,12 +60,15 @@ export function autosave<T>(
   restore: (value: T) => void,
   legacyKey?: string,
   reset?: () => void,
+  mergeDuringInitialLoad?: (saved: T, changed: T) => T,
 ): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let loaded = false;
   let disposed = false;
   let suspended = false;
   let latest: T | undefined;
+  let changedBeforeLoad: T | undefined;
+  let sawInitialEmission = false;
   let inFlight: Promise<void> = Promise.resolve();
 
   const load = async (resetMissing: boolean) => {
@@ -73,9 +76,20 @@ export function autosave<T>(
     let saved = await getWorkspace<T>(key);
     if (saved.value == null && legacyKey) saved = await getWorkspace<T>(legacyKey);
     if (disposed) return;
-    if (saved.value != null) restore(saved.value);
+    const value = saved.value != null
+      ? !resetMissing && changedBeforeLoad !== undefined && mergeDuringInitialLoad
+        ? mergeDuringInitialLoad(saved.value, changedBeforeLoad)
+        : saved.value
+      : null;
+    if (value != null) restore(value);
     else if (resetMissing) reset?.();
     loaded = true;
+    // An action made while the initial GET was pending still needs saving.
+    if (!resetMissing && changedBeforeLoad !== undefined && (value == null || mergeDuringInitialLoad)) {
+      latest = value ?? changedBeforeLoad;
+      if (!suspended) schedule(latest);
+      changedBeforeLoad = undefined;
+    }
   };
   const loadPromise = load(false).catch(() => { loaded = true; });
 
@@ -145,7 +159,13 @@ export function autosave<T>(
   const unsubscribe = subscribe((value) => {
     // Ignore the notification the subscription itself fires, and anything
     // before the saved state has been read, which would overwrite it.
-    if (!loaded) return;
+    if (!loaded) {
+      // A store's first synchronous subscription emission is its baseline.
+      // Later changes are user actions and must survive a slow initial GET.
+      if (sawInitialEmission) changedBeforeLoad = value;
+      sawInitialEmission = true;
+      return;
+    }
     latest = value;
     if (!suspended) schedule(value);
   });

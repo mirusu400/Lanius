@@ -15,11 +15,13 @@ export function PayloadPicker({
   index,
   value,
   onChange,
+  idPrefix = '',
 }: {
   /** Which position this list fills, for the heading. */
   index: number;
   value: string;
   onChange: (payloads: string) => void;
+  idPrefix?: string;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -54,7 +56,7 @@ export function PayloadPicker({
   return (
     <div className="payload-picker">
       <div className="payload-picker-head">
-        <label htmlFor={`payloads-${index}`}>
+        <label htmlFor={`${idPrefix}payloads-${index}`}>
           {t('fuzzer.payloadSet', { index: String(index + 1) })}
         </label>
         <span className="muted">
@@ -72,7 +74,7 @@ export function PayloadPicker({
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
 
       <textarea
-        id={`payloads-${index}`}
+        id={`${idPrefix}payloads-${index}`}
         className="fuzzer-payloads mono"
         spellCheck={false}
         value={value}

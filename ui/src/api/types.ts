@@ -382,6 +382,9 @@ export interface RunSummary {
 }
 
 export interface FuzzRun extends RunSummary {
+  template: string;
+  payload_sets: string[][];
+  speed: { concurrency: number; delay: number };
   results: RunResult[];
 }
 
@@ -690,6 +693,7 @@ export interface Dashboard {
   version: string;
   modes: ProxyModeStatus[];
   local_capture: LocalCaptureState;
+  fuzzer_runs?: RunSummary[];
 }
 
 // --- upstream TLS ---------------------------------------------------------

@@ -73,6 +73,9 @@ def prepare_database(path: str | Path) -> PreparedDatabase:
             with contextlib.closing(sqlite3.connect(staged)) as target:
                 source.backup(target)
                 migrate(target)
+                # IF NOT EXISTS migrations can silently keep a preexisting
+                # table with the right name but incompatible columns.
+                _validate(target)
                 # Old held frames have no live connection to resume.
                 target.execute("UPDATE websocket_messages SET paused=0, dropped=1 WHERE paused=1")
                 target.commit()

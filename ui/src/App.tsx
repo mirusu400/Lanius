@@ -1,5 +1,5 @@
 import { Activity, useCallback, useEffect, useMemo, useReducer, useRef, useState, type DragEvent } from "react";
-import { captureWindowToClipboard, getLockdown, getScannerState, isDesktop, putWorkspace } from "./api/client";
+import { captureWindowToClipboard, getLockdown, getRun, getScannerState, isDesktop, putWorkspace } from "./api/client";
 import { LOCKDOWN_BLOCKED, LOCKDOWN_CHANGED } from "./lockdownEvents";
 import { connectStream } from "./api/stream";
 import { ProjectPicker } from "./ProjectPicker";
@@ -37,6 +37,7 @@ import {
   getDecoderTabs,
   resetDecoderTabs,
 } from "./tabs/decoderStore";
+import { getFuzzerWorkspace, openFuzzerRun, resetTarget } from "./tabs/fuzzerStore";
 import { BusyProvider } from "./components/busy";
 import { Spinner, useDelayedBusy } from "./components/Spinner";
 import { useToast } from "./components/Toast";
@@ -99,11 +100,13 @@ export default function App() {
     await Promise.all([
       putWorkspace('replay', getTabs()),
       putWorkspace('decoder', getDecoderTabs()),
+      putWorkspace('fuzzer', getFuzzerWorkspace()),
     ]);
     await closeProject();
     setProject(null);
     resetTabs();
     resetDecoderTabs();
+    resetTarget();
   };
 
   const content = checking
@@ -345,6 +348,10 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
           <Activity mode={tab === "Dashboard" ? "visible" : "hidden"}>
             <DashboardTab
               onOpenTab={(next) => setTab(next as Tab)}
+              onOpenFuzzerRun={(id) => {
+                setTab('Fuzzer');
+                void getRun(id).then(openFuzzerRun).catch(() => undefined);
+              }}
               onOpenSettings={(group) => {
                 setSettingsGroup(group);
                 setTab('Settings');

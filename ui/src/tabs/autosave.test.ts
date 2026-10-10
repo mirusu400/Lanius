@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { autosave as startAutosave, flushAutosaves, replaceWorkspace } from './autosave';
+import { addFuzzerDraft, ensureFuzzerDraft, getFuzzerWorkspace, mergeFuzzerWorkspace, newFuzzerDraft, resetTarget, setFuzzerWorkspace, subscribeFuzzerWorkspace } from './fuzzerStore';
 
 let puts: { key: string; value: unknown }[] = [];
 let stored: Record<string, unknown> = {};
@@ -29,6 +30,7 @@ function jsonResponse(body: unknown) {
 }
 
 beforeEach(() => {
+  resetTarget();
   puts = [];
   stored = {};
   vi.useFakeTimers();
@@ -72,6 +74,35 @@ function makeStore<T>(initial: T) {
 }
 
 describe('autosave', () => {
+  it('keeps a request sent to Fuzzer before its saved workspace loads', async () => {
+    const old = newFuzzerDraft('http://saved.test');
+    const sent = newFuzzerDraft('http://sent.test');
+    let finishRead!: (response: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => { finishRead = resolve; }));
+    autosave('fuzzer', subscribeFuzzerWorkspace, setFuzzerWorkspace, undefined, resetTarget, mergeFuzzerWorkspace);
+    ensureFuzzerDraft();
+    addFuzzerDraft(sent);
+
+    finishRead(jsonResponse({ value: { tabs: [old], activeId: old.id } }));
+    await vi.runAllTimersAsync();
+
+    expect(getFuzzerWorkspace().tabs.map((tab) => tab.url)).toEqual(['http://saved.test', 'http://sent.test']);
+    expect(getFuzzerWorkspace().activeId).toBe(sent.id);
+    expect(puts.at(-1)?.value).toEqual(getFuzzerWorkspace());
+  });
+  it('drops an untouched starter tab when a saved Fuzzer workspace arrives', async () => {
+    const old = newFuzzerDraft('http://saved.test');
+    let finishRead!: (response: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => { finishRead = resolve; }));
+    autosave('fuzzer', subscribeFuzzerWorkspace, setFuzzerWorkspace, undefined, resetTarget, mergeFuzzerWorkspace);
+    ensureFuzzerDraft();
+
+    finishRead(jsonResponse({ value: { tabs: [old], activeId: old.id } }));
+    await vi.runAllTimersAsync();
+
+    expect(getFuzzerWorkspace().tabs.map((tab) => tab.url)).toEqual(['http://saved.test']);
+    expect(getFuzzerWorkspace().activeId).toBe(old.id);
+  });
   it('does not write when nothing actually changed', async () => {
     // Stores emit freely, and the payload can be large. Re-sending an
     // identical one is pure cost on every keystroke elsewhere.

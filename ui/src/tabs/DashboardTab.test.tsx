@@ -138,6 +138,19 @@ afterEach(() => {
 });
 
 describe('DashboardTab', () => {
+  it('shows an active Fuzzer run even before captured traffic exists', async () => {
+    const openRun = vi.fn();
+    payload = { ...empty, fuzzer_runs: [{
+      id: 'run1', mode: 'single_position', url: 'http://app.test',
+      status: 'running', total: 10, completed: 3,
+      started_at: 1, finished_at: null, error: null,
+    }] };
+    render(<DashboardTab onOpenFuzzerRun={openRun} />);
+    await userEvent.click(await screen.findByRole('button', { name: /http:\/\/app\.test/ }));
+    expect(screen.getByText(t('dash.fuzzerRuns'))).toBeTruthy();
+    expect(screen.getByText('3/10')).toBeTruthy();
+    expect(openRun).toHaveBeenCalledWith('run1');
+  });
   it('invites the user to send traffic when nothing is captured', async () => {
     render(<DashboardTab />);
     expect(await screen.findByText(t('dash.empty'))).toBeTruthy();

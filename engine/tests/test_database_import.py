@@ -110,6 +110,20 @@ def test_rejects_modified_core_triggers_before_restoration(tmp_path):
         prepare_database(path)
 
 
+def test_rejects_legacy_backup_with_colliding_fuzzer_table(tmp_path):
+    path = tmp_path / "colliding.sqlite"
+    source = make_backup(path)
+    with source._conn:
+        source._conn.execute("DROP TABLE fuzzer_results")
+        source._conn.execute("DROP TABLE fuzzer_runs")
+        source._conn.execute("CREATE TABLE fuzzer_runs (id TEXT PRIMARY KEY, started_at REAL)")
+        source._conn.execute("PRAGMA user_version=13")
+    source.close()
+
+    with pytest.raises(ValueError, match="not a recognized Lanius SQLite schema: fuzzer_runs"):
+        prepare_database(path)
+
+
 @pytest.mark.parametrize("trusted_ca", [None, "current approved CA"])
 def test_restore_preserves_current_trust_and_enabled_lockdown(tmp_path, trusted_ca):
     path = tmp_path / "backup.sqlite"

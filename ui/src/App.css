@@ -2472,7 +2472,7 @@ pre.body {
    off and making them look unclickable. Cap the width and let the middle
    of the title go, keeping the method and the end of the path visible. */
 .replay-tabs button:not(.new-tab),
-.fuzzer-tabs button:not(.new-tab) {
+.fuzzer-tabs .fuzzer-tab-choice {
   max-width: 240px;
   white-space: nowrap;
 }
@@ -2868,6 +2868,61 @@ pre.body {
 }
 
 /* --- fuzzer --- */
+.fuzzer-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.fuzzer-tabs {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.fuzzer-tab-choice {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.fuzzer-tab-choice.active {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+
+.fuzzer-tabs .fuzzer-tab-choice button {
+  border: 0;
+}
+
+.fuzzer-tabs .fuzzer-tab-choice.active button { color: var(--fg); }
+.fuzzer-tabs .fuzzer-tab-select { min-width: 0; }
+
+.fuzzer-tabs .tab-title {
+  display: inline-block;
+  max-width: 185px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.fuzzer-tabs .tab-close { color: var(--muted); flex: none; }
+.fuzzer-tabs .tab-close:hover { color: var(--danger); }
+.fuzzer-tabs select { margin-left: auto; max-width: 280px; }
+
+.dash-fuzzer-runs { margin-bottom: 16px; }
+.dash-fuzzer-runs button {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 8px;
+  text-align: left;
+}
+.dash-fuzzer-runs button span:first-child { overflow: hidden; text-overflow: ellipsis; }
+
 .fuzzer-tab {
   display: flex;
   flex-direction: column;

@@ -22,10 +22,12 @@ export function DashboardTab({
   onOpenTab,
   onOpenMethod,
   onOpenSettings,
+  onOpenFuzzerRun,
 }: {
   onOpenTab?: (tab: string) => void;
   onOpenMethod?: (method: string) => void;
   onOpenSettings?: (group: 'proxy' | 'browser') => void;
+  onOpenFuzzerRun?: (id: string) => void;
 }) {
   const t = useT();
   const [data, setData] = useState<Dashboard | null>(null);
@@ -97,6 +99,7 @@ export function DashboardTab({
   const capture = data.local_capture;
   const captureBlocked =
     capture && !capture.approved && (data.modes ?? []).some((m) => m.spec.startsWith('local'));
+  const activeFuzzerRuns = (data.fuzzer_runs ?? []).filter((run) => run.status === 'pending' || run.status === 'running');
 
   return (
     <div className="dash">
@@ -133,6 +136,15 @@ export function DashboardTab({
         <button type="button" onClick={() => void refresh()}>{t('common.refresh')}</button>
       </div>}
       {doctorOpen && <DoctorPanel onOpenSettings={onOpenSettings} />}
+
+      {activeFuzzerRuns.length > 0 && <section className="dash-panel dash-fuzzer-runs">
+        <h3>{t('dash.fuzzerRuns')}</h3>
+        {activeFuzzerRuns.map((run) => <button type="button" key={run.id}
+          onClick={() => onOpenFuzzerRun?.(run.id)}>
+          <span className="mono">{run.url}</span>
+          <span>{run.completed}/{run.total}</span>
+        </button>)}
+      </section>}
 
       {(downModes.length > 0 || captureBlocked) && (
         <section className="dash-alerts">

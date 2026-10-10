@@ -260,7 +260,7 @@ class ProxyEngine:
         )
         self.websockets = WebSocketProxyAddon(broker, store=store)
         self.replay = ReplayAddon(store)
-        self.fuzzer = FuzzerAddon(self.replay, broker)
+        self.fuzzer = FuzzerAddon(self.replay, broker, store=store)
         self.plugin_packages = PluginPackageManager(
             settings.plugins_dir,
             trusted_keys_path=settings.plugin_trusted_keys,

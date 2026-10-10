@@ -619,6 +619,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         data = await asyncio.to_thread(store.dashboard, top, window)
         return {
             **data,
+            "fuzzer_runs": [
+                run.summary() for run in engine.fuzzer.runs.values()
+                if run.status in ("pending", "running")
+            ],
             "proxy": {
                 "running": engine.running,
                 "host": settings.proxy_host,
@@ -677,6 +681,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "workspace": await asyncio.to_thread(store.all_workspace),
             "settings": await asyncio.to_thread(store.all_settings),
             "issues": await asyncio.to_thread(store.all_issues),
+            "fuzzer_runs": await asyncio.to_thread(store.list_fuzzer_runs),
         }
         if include_flows:
             flows = await asyncio.to_thread(lambda: store.list(limit=100000))
@@ -730,6 +735,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             can_resume = False
             engine.websockets.clear(persist=False)
+            engine.fuzzer.reload()
             try:
                 await apply_imported_project(was_locked, was_scope_egress)
                 can_resume = True
@@ -800,7 +806,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 was_locked = lockdown.project_enabled
                 was_scope_egress = lockdown.scope_egress_effective
                 trusted_ca = store.get_setting(TRUSTED_CA_SETTING)
+                await engine.fuzzer.stop_all()
                 counts = await asyncio.to_thread(store.import_project, payload)
+                engine.fuzzer.reload()
                 if trusted_ca is None:
                     store.delete_setting(TRUSTED_CA_SETTING)
                 else:
@@ -1787,13 +1795,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/fuzzer/runs")
     async def fuzzer_start(body: FuzzRunBody) -> dict[str, Any]:
         try:
-            run = await engine.fuzzer.start(
-                url=body.url,
-                template=body.template,
-                mode=body.mode,  # type: ignore[arg-type]
-                payload_sets=_resolve_payload_sets(body),
-                speed=_speed(body),
-            )
+            async with project_import_lock:
+                run = await engine.fuzzer.start(
+                    url=body.url,
+                    template=body.template,
+                    mode=body.mode,  # type: ignore[arg-type]
+                    payload_sets=_resolve_payload_sets(body),
+                    speed=_speed(body),
+                )
         except FuzzerError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return run.summary()
@@ -1876,20 +1885,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/fuzzer/runs")
     async def fuzzer_list() -> dict[str, Any]:
         return {
-            "items": [run.summary() for run in engine.fuzzer.runs.values()],
+            "items": [run.summary() for run in sorted(engine.fuzzer.runs.values(), key=lambda run: run.started_at, reverse=True)],
         }
 
     @app.get("/api/fuzzer/runs/{run_id}")
     async def fuzzer_get(run_id: str) -> dict[str, Any]:
         try:
-            return engine.fuzzer.get(run_id).as_dict()
+            run = engine.fuzzer.get(run_id)
+            detail = run.as_dict()
+            if engine.fuzzer.store is not None:
+                detail["results"] = await asyncio.to_thread(store.get_fuzzer_results, run_id)
+                detail["completed"] = len(detail["results"])
+            return detail
         except FuzzerError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/api/fuzzer/runs/{run_id}/stop")
     async def fuzzer_stop(run_id: str) -> dict[str, Any]:
         try:
-            return engine.fuzzer.stop(run_id).summary()
+            async with project_import_lock:
+                return (await engine.fuzzer.stop(run_id)).summary()
         except FuzzerError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

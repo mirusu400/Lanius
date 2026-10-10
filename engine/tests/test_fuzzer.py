@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import socket
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.addons.fuzzer import (
+    FuzzerAddon,
     FuzzerError,
     apply_payloads,
     count_requests,
@@ -21,6 +24,7 @@ from app.addons.fuzzer import (
 )
 from app.api.server import create_app
 from app.config import Settings
+from app.db.store import FlowStore
 
 OPEN, CLOSE = "{{", "}}"
 
@@ -311,6 +315,160 @@ def test_run_is_listed_and_retrievable(client, target) -> None:
     wait_for(client, started["id"])
     listed = client.get("/api/fuzzer/runs").json()["items"]
     assert started["id"] in [a["id"] for a in listed]
+
+
+def test_run_history_survives_engine_restart(tmp_path, target) -> None:
+    settings = Settings(
+        proxy_port=free_port(), api_port=free_port(), data_dir=tmp_path,
+        db_path=tmp_path / "runs.sqlite", confdir=tmp_path / "mitm",
+    )
+    template = f"GET /login?pw={OPEN}base{CLOSE} HTTP/1.1\nHost: t\n\n"
+    with TestClient(create_app(settings)) as first:
+        started = first.post("/api/fuzzer/runs", json={
+            "url": target, "template": template,
+            "payload_sets": [["wrong", "letmein"]],
+        }).json()
+        done = wait_for(first, started["id"])
+        assert done["completed"] == 2
+    with TestClient(create_app(settings)) as reopened:
+        restored = reopened.get(f"/api/fuzzer/runs/{started['id']}").json()
+        assert restored["status"] == "completed"
+        assert restored["template"] == template
+        assert restored["payload_sets"] == [["wrong", "letmein"]]
+        assert [item["payloads"][0] for item in restored["results"]] == ["wrong", "letmein"]
+        assert started["id"] in [item["id"] for item in reopened.get("/api/fuzzer/runs").json()["items"]]
+        assert reopened.app.state.engine.fuzzer.runs[started["id"]].results == []
+
+
+@pytest.mark.asyncio
+async def test_stop_during_final_save_remains_stopped(tmp_path):
+    class Store:
+        def __init__(self):
+            self.status = ""
+            self.final_save_started = threading.Event()
+            self.release_final_save = threading.Event()
+
+        def interrupt_fuzzer_runs(self):
+            pass
+
+        def list_fuzzer_runs(self, *, include_results=True):
+            return []
+
+        def save_fuzzer_run(self, run):
+            if run["status"] == "completed":
+                self.final_save_started.set()
+                assert self.release_final_save.wait(5)
+            self.status = run["status"]
+
+        def save_fuzzer_result(self, run_id, result):
+            pass
+
+    class Replay:
+        auto_decompress = False
+
+        async def send(self, flow):
+            return type("Record", (), dict(
+                status_code=200, response_size=0, duration_ms=1, error=None, id="flow"
+            ))()
+
+    store = Store()
+    addon = FuzzerAddon(Replay(), store=store)
+    run = await addon.start(
+        url="http://example.test", template="GET /{{x}} HTTP/1.1\nHost: example.test\n\n",
+        payload_sets=[["a"]],
+    )
+    try:
+        assert await asyncio.to_thread(store.final_save_started.wait, 5)
+        stopping = asyncio.create_task(addon.stop(run.id))
+        await asyncio.sleep(0)
+        assert not stopping.done()
+    finally:
+        store.release_final_save.set()
+    await stopping
+    assert store.status == "stopped"
+    assert run.status == "stopped"
+
+
+def test_import_waits_for_fuzzer_start(client, target):
+    exported = client.get("/api/project/export").json()
+    store = client.app.state.store
+    original_save = store.save_fuzzer_run
+    saving = threading.Event()
+    release = threading.Event()
+
+    def delayed_save(run):
+        if run["status"] == "pending":
+            saving.set()
+            assert release.wait(5)
+        return original_save(run)
+
+    store.save_fuzzer_run = delayed_save
+    body = {
+        "url": target,
+        "template": "GET /{{x}} HTTP/1.1\nHost: t\n\n",
+        "payload_sets": [["a"]],
+        "concurrency": 1,
+        "delay": 5,
+    }
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        start = pool.submit(client.post, "/api/fuzzer/runs", json=body)
+        try:
+            assert saving.wait(5)
+            importing = pool.submit(client.post, "/api/project/import", json=exported)
+            # Import must not replace the project while start is persisting.
+            time.sleep(0.1)
+            assert not importing.done()
+        finally:
+            release.set()
+        assert start.result(timeout=10).status_code == 200
+        assert importing.result(timeout=10).status_code == 200
+    assert client.get("/api/fuzzer/runs").json()["items"] == []
+    assert store.list_fuzzer_runs() == []
+
+
+def test_stop_waits_for_project_import(client, target):
+    exported = client.get("/api/project/export").json()
+    started = client.post("/api/fuzzer/runs", json={
+        "url": target,
+        "template": "GET /{{x}} HTTP/1.1\nHost: t\n\n",
+        "payload_sets": [["a"]],
+        "delay": 5,
+    }).json()
+    store = client.app.state.store
+    original_import = store.import_project
+    importing = threading.Event()
+    release = threading.Event()
+
+    def delayed_import(payload):
+        importing.set()
+        assert release.wait(5)
+        return original_import(payload)
+
+    store.import_project = delayed_import
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        import_request = pool.submit(client.post, "/api/project/import", json=exported)
+        try:
+            assert importing.wait(5)
+            stop_request = pool.submit(client.post, f"/api/fuzzer/runs/{started['id']}/stop")
+            time.sleep(0.1)
+            assert not stop_request.done()
+        finally:
+            release.set()
+        assert import_request.result(timeout=10).status_code == 200
+        assert stop_request.result(timeout=10).status_code == 404
+    assert store.list_fuzzer_runs() == []
+
+
+def test_dashboard_lists_active_run(client, target) -> None:
+    started = client.post("/api/fuzzer/runs", json={
+        "url": target,
+        "template": f"GET /login?pw={OPEN}a{CLOSE} HTTP/1.1\nHost: t\n\n",
+        "payload_sets": [["a", "b"]],
+        "concurrency": 1, "delay": 0.5,
+    }).json()
+    dashboard = client.get("/api/dashboard").json()
+    assert started["id"] in [run["id"] for run in dashboard["fuzzer_runs"]]
+    client.post(f"/api/fuzzer/runs/{started['id']}/stop")
 
 
 def test_unknown_run_404(client) -> None:

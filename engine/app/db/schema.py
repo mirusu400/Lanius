@@ -9,7 +9,7 @@ from .endpoint_index import MIGRATION as ENDPOINT_MIGRATION, register_functions
 from .search_index import MIGRATION as SEARCH_MIGRATION, register_functions as register_search_functions
 from .history_index import MIGRATION as HISTORY_MIGRATION, MEDIA_MIGRATION
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -180,6 +180,34 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
     ),
     12: HISTORY_MIGRATION,
     13: MEDIA_MIGRATION,
+    14: (
+        """CREATE TABLE IF NOT EXISTS fuzzer_runs (
+            id TEXT PRIMARY KEY,
+            mode TEXT NOT NULL,
+            url TEXT NOT NULL,
+            template TEXT NOT NULL,
+            payload_sets TEXT NOT NULL,
+            concurrency INTEGER NOT NULL,
+            delay REAL NOT NULL,
+            total INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            started_at REAL NOT NULL,
+            finished_at REAL,
+            error TEXT
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_fuzzer_runs_started ON fuzzer_runs(started_at DESC)",
+        """CREATE TABLE IF NOT EXISTS fuzzer_results (
+            run_id TEXT NOT NULL REFERENCES fuzzer_runs(id) ON DELETE CASCADE,
+            result_index INTEGER NOT NULL,
+            payloads TEXT NOT NULL,
+            status_code INTEGER,
+            length INTEGER NOT NULL,
+            duration_ms REAL,
+            error TEXT,
+            flow_id TEXT,
+            PRIMARY KEY (run_id, result_index)
+        )""",
+    ),
 }
 
 

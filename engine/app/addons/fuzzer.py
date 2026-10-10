@@ -236,8 +236,10 @@ class FuzzRun:
     url: str
     template: str
     total: int
+    payload_sets: list[list[str]] = field(default_factory=list)
     speed: RunSpeed = field(default_factory=lambda: RunSpeed())
     results: list[RunResult] = field(default_factory=list)
+    completed_count: int = 0
     status: str = "pending"
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
@@ -245,7 +247,7 @@ class FuzzRun:
 
     @property
     def completed(self) -> int:
-        return len(self.results)
+        return self.completed_count
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -264,8 +266,22 @@ class FuzzRun:
     def as_dict(self) -> dict[str, Any]:
         return {
             **self.summary(),
+            "template": self.template,
+            "payload_sets": self.payload_sets,
             "results": [r.as_dict() for r in self.results],
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "FuzzRun":
+        return cls(
+            id=data["id"], mode=data["mode"], url=data["url"],
+            template=data["template"], total=data["total"],
+            payload_sets=data["payload_sets"], speed=RunSpeed(**data["speed"]),
+            results=[RunResult(**item) for item in data.get("results", [])],
+            completed_count=data.get("completed", len(data.get("results", []))),
+            status=data["status"], started_at=data["started_at"],
+            finished_at=data["finished_at"], error=data["error"],
+        )
 
 
 def parse_request_template(url: str, text: str) -> dict[str, Any]:
@@ -300,14 +316,45 @@ def parse_request_template(url: str, text: str) -> dict[str, Any]:
 
 
 class FuzzerAddon:
-    """Runs payload fuzzing jobs and keeps their results in memory."""
+    """Runs payload fuzzing jobs; the project database owns result history."""
 
-    def __init__(self, replay: Any, broker: Any = None, concurrency: int = 5) -> None:
+    def __init__(self, replay: Any, broker: Any = None, concurrency: int = 5, store: Any = None) -> None:
         self.replay = replay
         self.broker = broker
         self.concurrency = concurrency
+        self.store = store
         self.runs: dict[str, FuzzRun] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._save_locks: dict[str, asyncio.Lock] = {}
+        self.reload()
+
+    def reload(self) -> None:
+        """Restore the open project's history after startup or import."""
+        if self.store is None:
+            return
+        self.store.interrupt_fuzzer_runs()
+        self.runs = {
+            run.id: run
+            for run in (FuzzRun.from_dict(data) for data in self.store.list_fuzzer_runs(include_results=False))
+        }
+        self._tasks.clear()
+        self._save_locks.clear()
+
+    @staticmethod
+    async def _durable_write(method: Any, *args: Any) -> None:
+        """Finish a SQLite write even if its caller is cancelled."""
+        pending = asyncio.create_task(asyncio.to_thread(method, *args))
+        try:
+            await asyncio.shield(pending)
+        except asyncio.CancelledError:
+            await pending
+            raise
+
+    async def _save_run(self, run: FuzzRun) -> None:
+        if self.store is None:
+            return
+        async with self._save_locks.setdefault(run.id, asyncio.Lock()):
+            await self._durable_write(self.store.save_fuzzer_run, run.as_dict())
 
     def _publish(self, event: str, data: Any) -> None:
         if self.broker is not None:
@@ -348,10 +395,12 @@ class FuzzerAddon:
             url=url,
             template=template,
             total=total,
+            payload_sets=[list(items) for items in payload_sets],
             # Falls back to the addon's configured default, so an
             # existing caller keeps the behaviour it had.
             speed=speed or RunSpeed(concurrency=self.concurrency),
         )
+        await self._save_run(run)
         self.runs[run.id] = run
         task = asyncio.create_task(
             self._run(run, payload_sets), name=f"fuzzer-{run.id}"
@@ -359,15 +408,19 @@ class FuzzerAddon:
         self._tasks[run.id] = task
         return run
 
-    def stop(self, run_id: str) -> FuzzRun:
+    async def stop(self, run_id: str) -> FuzzRun:
         run = self.runs.get(run_id)
         if run is None:
             raise FuzzerError(f"run {run_id} not found")
         task = self._tasks.get(run_id)
-        if task is not None and not task.done():
-            task.cancel()
         run.status = "stopped"
         run.finished_at = time.time()
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        await self._save_run(run)
+        if self.store is not None:
+            run.results.clear()
         self._publish("fuzzer.finished", run.summary())
         return run
 
@@ -384,6 +437,13 @@ class FuzzerAddon:
             tasks.append(task)
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+        for run_id in self._tasks:
+            run = self.runs.get(run_id)
+            if run is not None and run.status == "stopped":
+                run.finished_at = run.finished_at or time.time()
+                await self._save_run(run)
+                if self.store is not None:
+                    run.results.clear()
 
     def get(self, run_id: str) -> FuzzRun:
         run = self.runs.get(run_id)
@@ -421,7 +481,17 @@ class FuzzerAddon:
                 raise
             except Exception as exc:  # network/parse errors are per-request
                 result.error = str(exc)
-            run.results.append(result)
+            if self.store is not None:
+                try:
+                    await self._durable_write(self.store.save_fuzzer_result, run.id, result.as_dict())
+                except asyncio.CancelledError:
+                    # The shielded write finished before cancellation exits.
+                    run.completed_count += 1
+                    self._publish("fuzzer.result", {"run_id": run.id, "result": result.as_dict()})
+                    raise
+            else:
+                run.results.append(result)
+            run.completed_count += 1
             self._publish(
                 "fuzzer.result",
                 {"run_id": run.id, "result": result.as_dict()},
@@ -472,7 +542,8 @@ class FuzzerAddon:
                     task.cancel()
                 await asyncio.gather(*workers, return_exceptions=True)
                 raise
-            run.status = "completed"
+            if run.status != "stopped":
+                run.status = "completed"
         except asyncio.CancelledError:
             run.status = "stopped"
         except FuzzerError as exc:
@@ -483,9 +554,17 @@ class FuzzerAddon:
             run.error = str(exc)
             logger.exception("run %s crashed", run.id)
         finally:
-            run.finished_at = time.time()
-            run.results.sort(key=lambda r: r.index)
-            self._publish("fuzzer.finished", run.summary())
+            run.finished_at = run.finished_at or time.time()
+            if self.store is None:
+                run.results.sort(key=lambda r: r.index)
+            try:
+                await self._save_run(run)
+                self._publish("fuzzer.finished", run.summary())
+            finally:
+                if self.store is not None:
+                    run.results.clear()
+                self._tasks.pop(run.id, None)
+                self._save_locks.pop(run.id, None)
 
 
 def _render_request(

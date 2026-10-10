@@ -1136,6 +1136,90 @@ class FlowStore:
                 self.media_body_limit_mb = read_limit(value)
 
     # --- workspace (Replay/Decoder/Fuzzer state) ----------------------
+    def save_fuzzer_run(self, run: dict[str, Any]) -> None:
+        with self._lock:
+            self._conn.execute(
+                """INSERT INTO fuzzer_runs
+                (id, mode, url, template, payload_sets, concurrency, delay, total,
+                 status, started_at, finished_at, error)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status=excluded.status, finished_at=excluded.finished_at,
+                    error=excluded.error""",
+                (run["id"], run["mode"], run["url"], run["template"],
+                 json.dumps(run["payload_sets"]), run["speed"]["concurrency"],
+                 run["speed"]["delay"], run["total"], run["status"],
+                 run["started_at"], run["finished_at"], run["error"]),
+            )
+            self._conn.commit()
+
+    def save_fuzzer_result(self, run_id: str, result: dict[str, Any]) -> None:
+        with self._lock:
+            self._conn.execute(
+                """INSERT OR REPLACE INTO fuzzer_results
+                (run_id, result_index, payloads, status_code, length,
+                 duration_ms, error, flow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (run_id, result["index"], json.dumps(result["payloads"]),
+                 result["status_code"], result["length"], result["duration_ms"],
+                 result["error"], result["flow_id"]),
+            )
+            self._conn.commit()
+
+    def list_fuzzer_runs(self, *, include_results: bool = True) -> list[dict[str, Any]]:
+        with self._read_lock:
+            runs = self._read_conn.execute(
+                """SELECT fuzzer_runs.*, COUNT(fuzzer_results.result_index) AS completed
+                FROM fuzzer_runs LEFT JOIN fuzzer_results ON fuzzer_runs.id=fuzzer_results.run_id
+                GROUP BY fuzzer_runs.id ORDER BY fuzzer_runs.started_at DESC"""
+            ).fetchall()
+            results = (self._read_conn.execute(
+                "SELECT * FROM fuzzer_results ORDER BY run_id, result_index"
+            ).fetchall() if include_results else [])
+        by_id: dict[str, list[dict[str, Any]]] = {}
+        for row in results:
+            by_id.setdefault(row["run_id"], []).append({
+                "index": row["result_index"],
+                "payloads": json.loads(row["payloads"]),
+                "status_code": row["status_code"],
+                "length": row["length"],
+                "duration_ms": row["duration_ms"],
+                "error": row["error"],
+                "flow_id": row["flow_id"],
+            })
+        return [{
+            "id": row["id"], "mode": row["mode"], "url": row["url"],
+            "template": row["template"],
+            "payload_sets": json.loads(row["payload_sets"]),
+            "speed": {"concurrency": row["concurrency"], "delay": row["delay"]},
+            "total": row["total"], "status": row["status"],
+            "completed": row["completed"],
+            "started_at": row["started_at"], "finished_at": row["finished_at"],
+            "error": row["error"], "results": by_id.get(row["id"], []),
+        } for row in runs]
+
+    def get_fuzzer_results(self, run_id: str) -> list[dict[str, Any]]:
+        """Load one run's results only when its detail view is opened."""
+        with self._read_lock:
+            rows = self._read_conn.execute(
+                "SELECT * FROM fuzzer_results WHERE run_id=? ORDER BY result_index",
+                (run_id,),
+            ).fetchall()
+        return [{
+            "index": row["result_index"], "payloads": json.loads(row["payloads"]),
+            "status_code": row["status_code"], "length": row["length"],
+            "duration_ms": row["duration_ms"], "error": row["error"],
+            "flow_id": row["flow_id"],
+        } for row in rows]
+
+    def interrupt_fuzzer_runs(self) -> None:
+        with self._lock:
+            self._conn.execute(
+                """UPDATE fuzzer_runs SET status='stopped', finished_at=?
+                WHERE status IN ('pending', 'running')""",
+                (time.time(),),
+            )
+            self._conn.commit()
+
     def get_workspace(self, key: str) -> Any | None:
         """Saved workspace state, or None if this key was never written."""
         with self._lock:
@@ -1193,6 +1277,7 @@ class FlowStore:
         settings = data.get("settings") or {}
         flows = data.get("flows") or []
         issues = data.get("issues") or []
+        fuzzer_runs = data.get("fuzzer_runs") or []
 
         imported_flows = 0
         imported_issues = 0
@@ -1201,6 +1286,8 @@ class FlowStore:
                 self._conn.execute("DELETE FROM scope_rules")
                 self._conn.execute("DELETE FROM workspace")
                 self._conn.execute("DELETE FROM issues")
+                self._conn.execute("DELETE FROM fuzzer_results")
+                self._conn.execute("DELETE FROM fuzzer_runs")
                 if flows:
                     self._conn.execute("DELETE FROM flows")
 
@@ -1225,6 +1312,28 @@ class FlowStore:
                         " VALUES (?, ?, ?)",
                         (key, json.dumps(value), now),
                     )
+                for run in fuzzer_runs:
+                    speed = run.get("speed") or {}
+                    self._conn.execute(
+                        """INSERT INTO fuzzer_runs
+                        (id, mode, url, template, payload_sets, concurrency, delay,
+                         total, status, started_at, finished_at, error)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (run["id"], run["mode"], run["url"], run["template"],
+                         json.dumps(run.get("payload_sets", [])), speed.get("concurrency", 5),
+                         speed.get("delay", 0), run["total"], run["status"],
+                         run["started_at"], run.get("finished_at"), run.get("error")),
+                    )
+                    for result in run.get("results", []):
+                        self._conn.execute(
+                            """INSERT INTO fuzzer_results
+                            (run_id, result_index, payloads, status_code, length,
+                             duration_ms, error, flow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (run["id"], result["index"], json.dumps(result["payloads"]),
+                             result.get("status_code"), result.get("length", 0),
+                             result.get("duration_ms"), result.get("error"),
+                             result.get("flow_id")),
+                        )
                 for key, value in settings.items():
                     self._conn.execute(
                         "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",

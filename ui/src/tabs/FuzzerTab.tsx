@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Activity, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   getRun,
+  listRuns,
   startRun,
   stopRun,
   type RunConfig,
 } from '../api/client';
 import { connectStream } from '../api/stream';
-import type { FuzzRun, RunResult, RunMode } from '../api/types';
+import type { FuzzRun, RunResult, RunMode, RunSummary } from '../api/types';
 import {
   RUN_MODES,
   addMarker,
@@ -18,7 +19,11 @@ import {
   parsePayloads,
   requiredSets,
 } from './fuzzerModel';
-import { subscribeTarget } from './fuzzerStore';
+import {
+  addFuzzerDraft, ensureFuzzerDraft, getFuzzerWorkspace, getFuzzerWorkspaceEpoch, newFuzzerDraft, openFuzzerRun,
+  patchFuzzerDraft, removeFuzzerDraft, selectFuzzerDraft,
+  subscribeFuzzerWorkspace, type FuzzerDraft,
+} from './fuzzerStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { toSendPayload } from './replayModel';
@@ -35,41 +40,93 @@ import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 import { useShortcut } from '../useShortcut';
 
-const DEFAULT_TEMPLATE = 'GET /?q={{test}} HTTP/1.1\nHost: example.com\n\n';
-
 export function FuzzerTab() {
   const t = useT();
+  const [workspace, setWorkspace] = useState(getFuzzerWorkspace);
+  const [history, setHistory] = useState<RunSummary[]>([]);
+  const historyPending = useRef(false);
+  const historyDirty = useRef(false);
+  const historyMounted = useRef(false);
+  useEffect(() => subscribeFuzzerWorkspace(setWorkspace), []);
+  useEffect(() => {
+    ensureFuzzerDraft();
+  }, []);
+  const refreshHistory = useCallback(() => {
+    if (historyPending.current) { historyDirty.current = true; return; }
+    historyPending.current = true;
+    void (async () => {
+      do {
+        historyDirty.current = false;
+        try {
+          const { items } = await listRuns();
+          if (historyMounted.current && !historyDirty.current) setHistory(items ?? []);
+        } catch { /* history can be refreshed by the next stream event */ }
+      } while (historyDirty.current && historyMounted.current);
+      historyPending.current = false;
+    })();
+  }, []);
+  useEffect(() => {
+    let timer: number | undefined;
+    historyMounted.current = true;
+    refreshHistory();
+    const dispose = connectStream({
+      onState: (state) => { if (state === 'open') refreshHistory(); },
+      onEvent: (event) => {
+        if (event.type !== 'fuzzer.started' && event.type !== 'fuzzer.finished' && event.type !== 'fuzzer.result') return;
+        if (timer !== undefined) return;
+        timer = window.setTimeout(() => { timer = undefined; refreshHistory(); }, 1000);
+      },
+    });
+    return () => { historyMounted.current = false; if (timer !== undefined) window.clearTimeout(timer); dispose(); };
+  }, [refreshHistory]);
+  const openHistory = async (id: string) => {
+    if (!id) return;
+    try { openFuzzerRun(await getRun(id)); } catch { /* history may have changed */ }
+  };
+  return <div className="fuzzer-workspace">
+    <div className="subtabs fuzzer-tabs">
+      {workspace.tabs.map((draft, index) => <div key={draft.id} className={`fuzzer-tab-choice ${draft.id === workspace.activeId ? 'active' : ''}`}>
+        <button type="button" className="fuzzer-tab-select" aria-current={draft.id === workspace.activeId ? 'page' : undefined}
+          onClick={() => selectFuzzerDraft(draft.id)}>
+          <span className="tab-title" title={draft.url}>{index + 1}. {draft.url}</span>
+        </button>
+        <button type="button" className="tab-close" aria-label={`${t('fuzzer.closeTab')} ${index + 1}`}
+          onClick={() => removeFuzzerDraft(draft.id)}>×</button>
+      </div>)}
+      <button className="new-tab" onClick={() => addFuzzerDraft(newFuzzerDraft())} aria-label={t('fuzzer.newTab')}>+</button>
+      <select aria-label={t('fuzzer.history')} value="" onChange={(event) => void openHistory(event.target.value)}>
+        <option value="">{t('fuzzer.history')}</option>
+        {history.map((run) => <option key={run.id} value={run.id}>
+          {run.url} · {run.status} · {run.completed}/{run.total}
+        </option>)}
+      </select>
+    </div>
+    {workspace.tabs.map((draft) => <Activity key={`${getFuzzerWorkspaceEpoch()}:${draft.id}`} mode={draft.id === workspace.activeId ? 'visible' : 'hidden'}>
+      <FuzzerPane draft={draft} />
+    </Activity>)}
+  </div>;
+}
+
+function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
+  const t = useT();
   const resultColumns = useResizableColumns('lanius.columns.fuzzer', [70, 340, 85, 90, 110]);
-  const [url, setUrl] = useState('http://example.com');
-  const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
-  const [mode, setRunMode] = useState<RunMode>('single_position');
-  const [payloadText, setPayloadText] = useState(['a\nb\nc']);
+  const [url, setUrl] = useState(draft.url);
+  const [template, setTemplate] = useState(draft.template);
+  const [mode, setRunMode] = useState<RunMode>(draft.mode);
+  const [payloadText, setPayloadText] = useState(draft.payloadText);
   const [run, setRun] = useState<FuzzRun | null>(null);
   const [selectedResultIndex, setSelectedResultIndex] = useState<number | null>(null);
   // How hard to push. Gentle by default: a run that knocks a service
   // over tells you nothing.
-  const [concurrency, setConcurrency] = useState(5);
-  const [delay, setDelay] = useState(0);
+  const [concurrency, setConcurrency] = useState(draft.concurrency);
+  const [delay, setDelay] = useState(draft.delay);
   const [error, setError] = useState<Message | null>(null);
 
-  const runIdRef = useRef<string | null>(null);
-  const lastTargetSeq = useRef(0);
-
-  useEffect(
-    () =>
-      subscribeTarget((target) => {
-        // Activity reconnects this subscription when the tab is shown again.
-        // The store replays its last target then; keep this tab's current draft
-        // and results unless another request was actually sent to Fuzzer.
-        if (!target || target.seq === lastTargetSeq.current) return;
-        lastTargetSeq.current = target.seq;
-        setUrl(target.url);
-        setTemplate(target.template);
-        setRun(null);
-        setSelectedResultIndex(null);
-      }),
-    [],
-  );
+  const runIdRef = useRef<string | null>(draft.runId);
+  const refreshVersionRef = useRef(0);
+  useEffect(() => {
+    patchFuzzerDraft(draft.id, { url, template, mode, payloadText, concurrency, delay });
+  }, [draft.id, url, template, mode, payloadText, concurrency, delay]);
 
   const positions = countPositions(template);
   const sets = useMemo(
@@ -92,16 +149,31 @@ export function FuzzerTab() {
   }, [needed]);
 
   const refresh = useCallback(async (id: string) => {
+    const version = ++refreshVersionRef.current;
     try {
-      setRun(await getRun(id));
+      const next = await getRun(id);
+      if (runIdRef.current === id && refreshVersionRef.current === version) setRun(next);
     } catch {
       /* run may not exist yet */
     }
   }, []);
 
+  useEffect(() => {
+    if (runIdRef.current !== draft.runId) {
+      runIdRef.current = draft.runId;
+      refreshVersionRef.current += 1;
+      setRun(null);
+      setSelectedResultIndex(null);
+    }
+    if (runIdRef.current) void refresh(runIdRef.current);
+  }, [draft.runId, refresh]);
+
   useEffect(
     () =>
       connectStream({
+        onState: (state) => {
+          if (state === 'open' && runIdRef.current) void refresh(runIdRef.current);
+        },
         onEvent: (event) => {
           if (
             event.type !== 'fuzzer.result' &&
@@ -109,7 +181,8 @@ export function FuzzerTab() {
           ) {
             return;
           }
-          const id = runIdRef.current;
+          const id = event.type === 'fuzzer.result' ? event.data.run_id : event.data.id;
+          if (id !== runIdRef.current) return;
           if (!id) return;
           void refresh(id);
         },
@@ -240,7 +313,9 @@ export function FuzzerTab() {
     try {
       const started = await startRun(config);
       runIdRef.current = started.id;
-      setRun({ ...started, results: [] });
+      refreshVersionRef.current += 1;
+      patchFuzzerDraft(draft.id, { runId: started.id });
+      setRun({ ...started, template, payload_sets: sets, speed: { concurrency, delay }, results: [] });
       setSelectedResultIndex(null);
       void refresh(started.id);
     } catch (err) {
@@ -382,6 +457,7 @@ export function FuzzerTab() {
               <PayloadPicker
                 key={index}
                 index={index}
+                idPrefix={`${draft.id}-`}
                 value={text}
                 onChange={(next) =>
                   setPayloadText((prev) =>
