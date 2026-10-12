@@ -24,6 +24,7 @@ import {
   type BodyView,
 } from './bodyFormat';
 import { useT } from '../i18n';
+import { UndoableTextarea } from './UndoableText';
 
 const VIEWS: BodyView[] = ['pretty', 'raw', 'hex'];
 
@@ -36,18 +37,21 @@ export function RequestEditor({
   onContextMenu,
   extraControls,
   onSelectionChange,
+  historyKey,
 }: {
   /** The raw request. Always exactly what will be sent. */
   value: string;
   onChange: (raw: string) => void;
   label: string;
   className?: string;
-  editorRef?: React.Ref<HTMLTextAreaElement>;
+  editorRef?: React.RefObject<HTMLTextAreaElement | null>;
   onContextMenu?: (event: React.MouseEvent) => void;
   /** Buttons that belong beside the view switch. */
   extraControls?: React.ReactNode;
   /** Fires as the caret moves, for callers that act on a selection. */
   onSelectionChange?: () => void;
+  /** A different document must not inherit the previous document's undo stack. */
+  historyKey?: string;
 }) {
   const t = useT();
   const [view, setView] = useState<BodyView>('raw');
@@ -115,14 +119,15 @@ export function RequestEditor({
       </div>
 
       {view === 'raw' ? (
-        <textarea
-          ref={editorRef}
+        <UndoableTextarea
+          textareaRef={editorRef}
+          historyKey={historyKey}
           className={className}
           wrap="soft"
           aria-label={label}
           spellCheck={false}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onValueChange={onChange}
           onContextMenu={onContextMenu}
           onSelect={onSelectionChange}
           onKeyUp={onSelectionChange}

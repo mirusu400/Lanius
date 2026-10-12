@@ -9,6 +9,7 @@ import xml from 'highlight.js/lib/languages/xml';
 import { splitMessage } from './bodyFormat';
 import { bodyLanguage, HIGHLIGHT_LIMIT, type SyntaxHeaders, type SyntaxLanguage } from './syntaxLanguage';
 import { markHighlightedHtml } from './searchHighlight';
+import { UndoableTextarea } from './UndoableText';
 
 // Register only the grammars used by captured HTTP bodies. XML also handles
 // HTML and its embedded script/style elements.
@@ -67,7 +68,7 @@ function messageHtml(text: string, headers: SyntaxHeaders, responsePath?: string
 }
 
 /** An editable raw message with inert syntax colours behind the textarea. */
-export function HighlightedEditor({ text, onChange, headers, responsePath, className, readOnly = false, label }: {
+export function HighlightedEditor({ text, onChange, headers, responsePath, className, readOnly = false, label, historyKey }: {
   text: string;
   onChange: (text: string) => void;
   headers: SyntaxHeaders;
@@ -75,19 +76,21 @@ export function HighlightedEditor({ text, onChange, headers, responsePath, class
   className: string;
   readOnly?: boolean;
   label?: string;
+  historyKey?: string;
 }) {
   const highlight = useMemo(() => messageHtml(text, headers, responsePath), [text, headers, responsePath]);
   const overlay = useRef<HTMLPreElement>(null);
   return <div className="highlight-editor">
     <pre ref={overlay} className="highlight-editor-overlay mono syntax-code" aria-hidden="true"><code dangerouslySetInnerHTML={{ __html: highlight }} /></pre>
-    <textarea
+    <UndoableTextarea
       className={className}
       value={text}
+      historyKey={historyKey}
       aria-label={label}
       readOnly={readOnly}
       wrap="soft"
       spellCheck={false}
-      onChange={(event) => onChange(event.target.value)}
+      onValueChange={onChange}
       onScroll={(event) => {
         if (overlay.current) {
           overlay.current.scrollTop = event.currentTarget.scrollTop;

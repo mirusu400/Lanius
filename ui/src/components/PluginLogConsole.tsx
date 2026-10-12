@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { clearPluginLogs, getPluginLogs } from '../api/client';
 import type { PluginLogEntry } from '../api/types';
 import { useT } from '../i18n';
+import { UndoableInput } from './UndoableText';
 
 const POLL_INTERVAL_MS = 750;
 
@@ -118,11 +119,11 @@ export function PluginLogConsole({ plugin }: { plugin: string }) {
             <option key={item} value={item}>{item}</option>
           ))}
         </select>
-        <input
+        <UndoableInput
           aria-label={t('plugins.searchLogs')}
           placeholder={t('plugins.searchLogs')}
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onValueChange={setSearch}
         />
         <label><input type="checkbox" checked={autoFollow} onChange={(event) => setAutoFollow(event.target.checked)} /> {t('plugins.autoFollow')}</label>
         <label><input type="checkbox" checked={wrap} onChange={(event) => setWrap(event.target.checked)} /> {t('plugins.wrapLines')}</label>

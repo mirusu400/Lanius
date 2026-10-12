@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import type { FlowFilters, HistoryColor } from '../api/types';
 import { Dialog } from './Dialog';
 import { useT } from '../i18n';
+import { UndoableInput } from './UndoableText';
 
 /** The methods worth a checkbox. Anything else is still reachable
  *  through the search box. */
@@ -204,11 +205,11 @@ export function FilterDialog({
 
         <section>
           <h5>{t('filter.host')}</h5>
-          <input
+          <UndoableInput
             aria-label={t('filter.host')}
             placeholder={t('filter.hostPlaceholder')}
             value={draft.host ?? ''}
-            onChange={(event) => set({ host: event.target.value || undefined })}
+            onValueChange={(value) => set({ host: value || undefined })}
           />
           <label className="filter-toggle">
             <input
@@ -237,11 +238,11 @@ export function FilterDialog({
           {/* The text is kept as typed. Deriving it back from the parsed
               list ate the separator: "php," parses to ["php"], which
               renders as "php", so the comma vanished as it was typed. */}
-          <input
+          <UndoableInput
             aria-label={t('filter.showOnlyOther')}
             placeholder={t('filter.extensionsPlaceholder')}
             value={otherText}
-            onChange={(event) => setInclude(ticked, event.target.value)}
+            onValueChange={(value) => setInclude(ticked, value)}
           />
         </section>
 

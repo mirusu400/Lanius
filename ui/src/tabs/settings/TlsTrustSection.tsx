@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getTlsTrust, setTlsTrust } from '../../api/client';
 import type { TlsTrustState } from '../../api/types';
 import { msg, rawMsg, renderMessage, useI18n, type Message } from '../../i18n';
+import { UndoableTextarea } from '../../components/UndoableText';
 
 export function TlsTrustSection() {
   const { t } = useI18n();
@@ -78,9 +79,9 @@ export function TlsTrustSection() {
       </div>
       <div className="tls-trust-pem">
         <label htmlFor="tls-trust-pem">{t('tlsTrust.pem')}</label>
-        <textarea id="tls-trust-pem" className="mono" rows={5} value={pem}
+        <UndoableTextarea id="tls-trust-pem" className="mono" rows={5} value={pem}
           disabled={busy || !saved} placeholder="-----BEGIN CERTIFICATE-----"
-          onChange={(event) => setPem(event.target.value)} />
+          onValueChange={setPem} />
       </div>
       <div className="settings-row">
         <button type="button" disabled={busy || !saved || !pem.trim()} onClick={() => void apply(pem)}>{t('tlsTrust.apply')}</button>

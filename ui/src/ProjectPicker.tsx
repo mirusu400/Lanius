@@ -9,6 +9,7 @@ import {
   type Project,
 } from './projects';
 import './ProjectPicker.css';
+import { UndoableInput } from './components/UndoableText';
 
 export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }) {
   const t = useT();
@@ -100,14 +101,14 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
 
         <div className="project-picker-port">
           <label htmlFor="startup-api-port">{t('mcp.port')}</label>
-          <input
+          <UndoableInput
             id="startup-api-port"
             type="number"
             min="1"
             max="65535"
             value={port}
             disabled={busy}
-            onChange={(event) => setPort(event.target.value)}
+            onValueChange={setPort}
           />
           <button type="button" disabled={busy || port === currentPort} onClick={() => void applyPort()}>
             {t('mcp.applyPort')}
@@ -134,11 +135,11 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
             <h2>{t('startup.newTitle')}</h2>
             <p className="muted">{t('startup.newHelp')}</p>
             <label htmlFor="project-name">{t('startup.name')}</label>
-            <input
+            <UndoableInput
               id="project-name"
               value={name}
               maxLength={80}
-              onChange={(event) => setName(event.target.value)}
+              onValueChange={setName}
               placeholder={t('startup.namePlaceholder')}
             />
             <button type="submit" disabled={busy || !name.trim()}>

@@ -17,6 +17,7 @@ import {
   setActiveId,
   subscribe,
 } from './decoderStore';
+import { UndoableInput, UndoableTextarea } from '../components/UndoableText';
 
 interface StepOutput {
   codec: string;
@@ -132,12 +133,13 @@ export function DecoderTab() {
           {t('decoder.addStep')}
         </button>
         <button onClick={() => patchActive({ steps: [] })}>{t('common.reset')}</button>
-        <input
+        <UndoableInput
           className="decoder-name"
           aria-label={t('decoder.tabName')}
           placeholder={t('decoder.untitled')}
           value={active.title}
-          onChange={(e) => patchActive({ title: e.target.value, renamed: true })}
+          historyKey={`${active.id}:title`}
+          onValueChange={(value) => patchActive({ title: value, renamed: true })}
         />
         <span className="muted">{t('decoder.chainSteps', { count: steps.length })}</span>
       </div>
@@ -146,12 +148,13 @@ export function DecoderTab() {
       <div className="decoder-body">
         <label className="field">
           <span className="muted">{t('decoder.input')}</span>
-          <textarea
+          <UndoableTextarea
             aria-label={t('decoder.inputLabel')}
             className="mono"
             spellCheck={false}
             value={input}
-            onChange={(e) => patchActive({ input: e.target.value })}
+            historyKey={`${active.id}:input`}
+            onValueChange={(value) => patchActive({ input: value })}
           />
         </label>
 

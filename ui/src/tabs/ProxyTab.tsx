@@ -29,6 +29,7 @@ import { useCodegenMenu } from '../components/useCodegenMenu';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Split } from '../components/Split';
 import { FilterDialog } from '../components/FilterDialog';
+import { UndoableInput } from '../components/UndoableText';
 import {
   clearSelection,
   getSelectedFlow,
@@ -523,8 +524,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
               setHistoryPage((page) => page - 1);
             }}>{t('proxy.newerHistory')}</button>
             <label>{t('proxy.historyPageLabel')}
-              <input type="number" min="1" value={historyPageInput}
-                onChange={(event) => setHistoryPageInput(event.target.value)}
+              <UndoableInput type="number" min="1" value={historyPageInput}
+                onValueChange={setHistoryPageInput}
                 onKeyDown={(event) => { if (event.key === 'Enter') jumpToHistoryPage(); }} />
             </label>
             <button disabled={historyLoading} onClick={jumpToHistoryPage}>{t('proxy.jumpToPage')}</button>

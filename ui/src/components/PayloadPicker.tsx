@@ -10,6 +10,7 @@ import { listPayloadSets, savePayloadSet } from '../api/client';
 import { PayloadLibrary } from './PayloadLibrary';
 import { errorMessage, renderMessage, type Message } from '../i18n/message';
 import { useT } from '../i18n';
+import { UndoableTextarea } from './UndoableText';
 
 export function PayloadPicker({
   index,
@@ -73,12 +74,13 @@ export function PayloadPicker({
 
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
 
-      <textarea
+      <UndoableTextarea
         id={`${idPrefix}payloads-${index}`}
         className="fuzzer-payloads mono"
         spellCheck={false}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        historyKey={`${idPrefix}payloads-${index}`}
+        onValueChange={onChange}
       />
 
       <PayloadLibrary

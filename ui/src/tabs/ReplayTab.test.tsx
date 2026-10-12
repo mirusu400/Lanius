@@ -156,6 +156,25 @@ describe('ReplayTab', () => {
     expect(screen.getByText(/201 · 4 B · 9 ms/)).toBeTruthy();
   });
 
+  it('undoes and redoes edits in the request body', async () => {
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    const original = editor().value;
+    const originalStored = getTabs()[0].text;
+    editor().setSelectionRange(original.length, original.length);
+
+    await user.type(editor(), 'changed');
+    expect(getTabs()[0].text).toBe(`${original}changed`);
+    fireEvent.keyDown(editor(), { key: 'z', code: 'KeyZ', ctrlKey: true });
+    expect(editor().value).toBe(original);
+    expect(getTabs()[0].text).toBe(originalStored);
+    fireEvent.keyDown(editor(), { key: 'y', code: 'KeyY', ctrlKey: true });
+    expect(editor().value).toBe(`${original}changed`);
+    expect(getTabs()[0].text).toBe(`${original}changed`);
+  });
+
   it('browses saved request and response pairs and restores an unsent edit', async () => {
     const user = userEvent.setup();
     render(<ReplayTabView />);

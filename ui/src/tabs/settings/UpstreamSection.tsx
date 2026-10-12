@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { getUpstream, setUpstream } from '../../api/client';
 import type { UpstreamState } from '../../api/types';
 import { msg, rawMsg, renderMessage, useI18n, type Message } from '../../i18n';
+import { UndoableInput } from '../../components/UndoableText';
 
 export function UpstreamSection() {
   const { t } = useI18n();
@@ -79,14 +80,15 @@ export function UpstreamSection() {
           {hops.map((hop, index) => (
             <div className="upstream-hop" key={index}>
               <label htmlFor={`upstream-hop-${index}`}>{t('upstream.hop', { number: index + 1 })}</label>
-              <input
+              <UndoableInput
                 id={`upstream-hop-${index}`}
                 className="mono upstream-url"
                 type="url"
                 placeholder="http://127.0.0.1:8081"
                 value={hop}
                 disabled={busy}
-                onChange={(event) => replaceHop(index, event.target.value)}
+                historyKey={`upstream-hop-${index}`}
+                onValueChange={(value) => replaceHop(index, value)}
               />
               <button type="button" disabled={busy || index === 0} onClick={() => moveHop(index, -1)} aria-label={t('upstream.moveUp', { number: index + 1 })}>↑</button>
               <button type="button" disabled={busy || index === hops.length - 1} onClick={() => moveHop(index, 1)} aria-label={t('upstream.moveDown', { number: index + 1 })}>↓</button>

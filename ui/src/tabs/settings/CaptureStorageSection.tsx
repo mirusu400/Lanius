@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getCaptureStorageSettings, setCaptureStorageSettings } from '../../api/client';
 import { useT } from '../../i18n';
+import { UndoableInput } from '../../components/UndoableText';
 
 export function CaptureStorageSection() {
   const t = useT();
@@ -33,8 +34,8 @@ export function CaptureStorageSection() {
     <h3>{t('captureStorage.section')}</h3>
     <p className="muted">{t('captureStorage.help')}</p>
     <div className="settings-row">
-      <label>{t('captureStorage.limit')} <input type="number" min={0} max={1024} step={1}
-        value={value} disabled={saved === null || busy} onChange={(event) => setValue(event.target.value)} /></label>
+      <label>{t('captureStorage.limit')} <UndoableInput type="number" min={0} max={1024} step={1}
+        value={value} disabled={saved === null || busy} onValueChange={setValue} /></label>
       <button type="button" disabled={saved === null || busy || !valid || limit === saved} onClick={() => void apply()}>{t('captureStorage.apply')}</button>
     </div>
     <p className="muted">{t('captureStorage.hint')}</p>

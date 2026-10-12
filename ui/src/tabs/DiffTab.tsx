@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { compareTexts, type CompareBlock } from '../api/client';
 import { useT } from '../i18n';
 import { Split } from '../components/Split';
+import { UndoableTextarea } from '../components/UndoableText';
 
 interface Result {
   blocks: CompareBlock[];
@@ -61,21 +62,21 @@ export function DiffTab() {
         direction="horizontal"
         storageKey="lanius.split.diff"
         className="diff-inputs"
-        first={<textarea
+        first={<UndoableTextarea
           aria-label={t('diff.left')}
           className="mono"
           spellCheck={false}
           placeholder={t('diff.leftPlaceholder')}
           value={left}
-          onChange={(e) => setLeft(e.target.value)}
+          onValueChange={setLeft}
         />}
-        second={<textarea
+        second={<UndoableTextarea
           aria-label={t('diff.right')}
           className="mono"
           spellCheck={false}
           placeholder={t('diff.rightPlaceholder')}
           value={right}
-          onChange={(e) => setRight(e.target.value)}
+          onValueChange={setRight}
         />}
       />
 

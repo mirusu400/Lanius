@@ -13,6 +13,7 @@ import {
   useI18n,
   type Message,
 } from '../../i18n';
+import { UndoableInput } from '../../components/UndoableText';
 
 /** Reshapes the handshake Lanius makes towards the server. */
 export function TlsSection() {
@@ -88,13 +89,13 @@ export function TlsSection() {
       <div className="tls-custom">
         <label htmlFor="tls-ciphers">{t('tls.customLabel')}</label>
         <div className="row">
-          <input
+          <UndoableInput
             id="tls-ciphers"
             className="mono"
             value={custom}
             disabled={busy}
             placeholder={t('tls.customPlaceholder')}
-            onChange={(e) => setCustom(e.target.value)}
+            onValueChange={setCustom}
           />
           <button
             type="button"

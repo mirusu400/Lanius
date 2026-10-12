@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useT } from '../../i18n';
 import { searchSettings, type SettingsSection } from './settingsCatalogue';
+import { UndoableInput } from '../../components/UndoableText';
 
 export function SettingsSearch({ onSelect }: { onSelect: (section: SettingsSection) => void }) {
   const t = useT();
@@ -38,11 +39,11 @@ export function SettingsSearch({ onSelect }: { onSelect: (section: SettingsSecti
   }}>
     <div className="settings-search-field">
       <span className="settings-search-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="8" cy="8" r="5.5" /><path d="m12 12 5 5" /></svg></span>
-      <input ref={inputRef} type="search" aria-label={t('settings.search.label')}
+      <UndoableInput inputRef={inputRef} type="search" aria-label={t('settings.search.label')}
         placeholder={t('settings.search.placeholder')} value={query}
         aria-expanded={expanded} aria-controls={expanded ? resultsId : undefined}
         onFocus={() => setOpen(true)}
-        onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
+        onValueChange={(value) => { setQuery(value); setOpen(true); }}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
           if (event.key === 'Escape') { event.preventDefault(); setOpen(false); }

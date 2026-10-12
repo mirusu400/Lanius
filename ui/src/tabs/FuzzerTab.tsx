@@ -29,6 +29,7 @@ import { useCodegenMenu } from '../components/useCodegenMenu';
 import { toSendPayload } from './replayModel';
 import { PayloadPicker } from '../components/PayloadPicker';
 import { RequestEditor } from '../components/RequestEditor';
+import { UndoableInput } from '../components/UndoableText';
 import { Split } from '../components/Split';
 import { ResponseInspector } from '../components/ResponseInspector';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
@@ -351,11 +352,11 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
   return (
     <div className="fuzzer-tab">
       <div className="fuzzer-controls">
-        <input
+        <UndoableInput
           className="target"
           aria-label={t('fuzzer.targetUrl')}
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onValueChange={setUrl}
         />
         <select
           aria-label={t('fuzzer.mode')}
@@ -377,30 +378,30 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
             a target that falls over at three requests a second. */}
         <label className="speed-field">
           {t('fuzzer.concurrency')}
-          <input
+          <UndoableInput
             type="number"
             min={1}
             max={64}
-            value={concurrency}
+            value={String(concurrency)}
             disabled={running}
-            onChange={(e) =>
+            onValueChange={(value) =>
               setConcurrency(
-                Math.min(64, Math.max(1, Number(e.target.value) || 1)),
+                Math.min(64, Math.max(1, Number(value) || 1)),
               )
             }
           />
         </label>
         <label className="speed-field">
           {t('fuzzer.delay')}
-          <input
+          <UndoableInput
             type="number"
             min={0}
             max={60}
             step={0.1}
-            value={delay}
+            value={String(delay)}
             disabled={running}
-            onChange={(e) =>
-              setDelay(Math.min(60, Math.max(0, Number(e.target.value) || 0)))
+            onValueChange={(value) =>
+              setDelay(Math.min(60, Math.max(0, Number(value) || 0)))
             }
           />
         </label>

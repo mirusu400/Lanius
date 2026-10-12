@@ -5,6 +5,7 @@ import type { MatchReplaceRule } from '../api/types';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
 import { Dialog } from './Dialog';
 import { Split } from './Split';
+import { UndoableInput, UndoableTextarea } from './UndoableText';
 
 function newRule(): MatchReplaceRule {
   return {
@@ -139,11 +140,12 @@ export function MatchReplaceDialog({
                   <input type="checkbox" checked={rule.enabled} onChange={(event) => update(rule.id, { enabled: event.target.checked })} />
                   {t('common.enabled')}
                 </label>
-                <input
+                <UndoableInput
                   aria-label={t('common.name')}
                   placeholder={t('matchReplace.namePlaceholder')}
                   value={rule.name}
-                  onChange={(event) => update(rule.id, { name: event.target.value })}
+                  historyKey={`${rule.id}:name`}
+                  onValueChange={(value) => update(rule.id, { name: value })}
                 />
                 <button type="button" className="danger" onClick={() => {
                   setRules((value) => value.filter((item) => item.id !== rule.id));
@@ -180,10 +182,14 @@ export function MatchReplaceDialog({
                 storageKey="lanius.split.matchReplaceFields"
                 className="match-replace-fields"
                 first={<label>{t('matchReplace.match')}
-                  <textarea className="mono" value={rule.match} onChange={(event) => update(rule.id, { match: event.target.value })} />
+                  <UndoableTextarea className="mono" value={rule.match}
+                    historyKey={`${rule.id}:match`}
+                    onValueChange={(value) => update(rule.id, { match: value })} />
                 </label>}
                 second={<label>{t('matchReplace.replace')}
-                  <textarea className="mono" value={rule.replace} onChange={(event) => update(rule.id, { replace: event.target.value })} />
+                  <UndoableTextarea className="mono" value={rule.replace}
+                    historyKey={`${rule.id}:replace`}
+                    onValueChange={(value) => update(rule.id, { replace: value })} />
                 </label>}
               />
             </section>
@@ -218,12 +224,13 @@ export function MatchReplaceDialog({
           storageKey="lanius.split.matchReplacePreview"
           className="match-replace-preview-panes"
           first={<label>{t(previewPhase === 'request' ? 'matchReplace.rawRequest' : 'matchReplace.rawResponse')}
-            <textarea
+            <UndoableTextarea
               className="mono"
               value={previewRaw}
+              historyKey={`preview:${previewPhase}`}
               placeholder={previewPhase === 'request' ? 'GET /old HTTP/1.1\r\nHost: example.com\r\n\r\n' : 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n'}
-              onChange={(event) => {
-                setPreviewRaw(event.target.value);
+              onValueChange={(value) => {
+                setPreviewRaw(value);
                 setPreviewResult(null);
                 setPreviewError(null);
               }}

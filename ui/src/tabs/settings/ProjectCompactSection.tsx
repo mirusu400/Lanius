@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useT } from '../../i18n';
 import { formatBytes } from '../dashboardModel';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../../components/ResizableColumns';
+import { UndoableInput } from '../../components/UndoableText';
 
 const siteKey = (site: CompactSite) => JSON.stringify([site.scheme, site.host, site.port]);
 
@@ -142,9 +143,9 @@ export function ProjectCompactSection() {
       <h4>{t('compact.targets')}</h4>
       <p className="muted">{t('compact.contentHelp')}</p>
       <div className="compact-actions">
-        <input
+        <UndoableInput
           value={filter}
-          onChange={(event) => setFilter(event.target.value)}
+          onValueChange={setFilter}
           placeholder={t('compact.search')}
           aria-label={t('compact.search')}
         />

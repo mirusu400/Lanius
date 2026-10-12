@@ -15,6 +15,7 @@ import {
   useI18n,
   type Message,
 } from '../../i18n';
+import { UndoableInput } from '../../components/UndoableText';
 
 export function McpSection() {
   const { t } = useI18n();
@@ -133,14 +134,14 @@ export function McpSection() {
           {isDesktop() && (
             <div className="settings-row">
               <label htmlFor="mcp-port">{t('mcp.port')}</label>
-              <input
+              <UndoableInput
                 id="mcp-port"
                 type="number"
                 min="1"
                 max="65535"
                 value={port}
                 disabled={busy}
-                onChange={(event) => setPort(event.target.value)}
+                onValueChange={setPort}
               />
               <button
                 type="button"

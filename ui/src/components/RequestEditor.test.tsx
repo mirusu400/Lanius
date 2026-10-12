@@ -5,8 +5,9 @@
  * went on the wire and a body checked by length, hash or signature no
  * longer matched what was captured.
  */
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { RequestEditor } from './RequestEditor';
@@ -31,6 +32,11 @@ function editor(value = RAW) {
 
 const box = () => screen.getByRole('textbox') as HTMLTextAreaElement;
 const tab = (name: string) => screen.getByRole('tab', { name });
+
+function StatefulEditor({ initial = RAW }: { initial?: string }) {
+  const [value, setValue] = useState(initial);
+  return <RequestEditor value={value} onChange={setValue} label="request" />;
+}
 
 describe('what gets sent', () => {
   it('opens on the raw bytes, exactly as captured', () => {
@@ -100,6 +106,45 @@ describe('views', () => {
     expect(onChange).toHaveBeenCalled();
     const last = onChange.mock.calls.at(-1)?.[0] ?? '';
     expect(last).toContain('GET / HTTP/1.1');
+  });
+});
+
+describe('edit history', () => {
+  it('undoes and redoes controlled edits with Windows and Linux shortcuts', async () => {
+    renderWithI18n(<StatefulEditor />);
+    const input = box();
+    input.setSelectionRange(input.value.length, input.value.length);
+    await userEvent.type(input, 'x');
+    expect(input.value).toBe(`${RAW}x`);
+
+    fireEvent.keyDown(input, { key: 'z', code: 'KeyZ', ctrlKey: true });
+    expect(input.value).toBe(RAW);
+    fireEvent.keyDown(input, { key: 'y', code: 'KeyY', ctrlKey: true });
+    expect(input.value).toBe(`${RAW}x`);
+  });
+
+  it('supports the macOS redo shortcut and clears redo after a new edit', async () => {
+    renderWithI18n(<StatefulEditor initial="abc" />);
+    const input = box();
+    input.setSelectionRange(3, 3);
+    await userEvent.type(input, 'd');
+    fireEvent.keyDown(input, { key: 'z', code: 'KeyZ', metaKey: true });
+    expect(input.value).toBe('abc');
+    fireEvent.keyDown(input, { key: 'z', code: 'KeyZ', metaKey: true, shiftKey: true });
+    expect(input.value).toBe('abcd');
+
+    fireEvent.keyDown(input, { key: 'z', code: 'KeyZ', metaKey: true });
+    await userEvent.type(input, 'x');
+    fireEvent.keyDown(input, { key: 'y', code: 'KeyY', ctrlKey: true });
+    expect(input.value).toBe('abcx');
+  });
+
+  it('can undo a formatting action', async () => {
+    renderWithI18n(<StatefulEditor />);
+    await userEvent.click(screen.getByRole('button', { name: t('body.format') }));
+    expect(box().value).toContain('"a": 1');
+    fireEvent.keyDown(box(), { key: 'z', code: 'KeyZ', ctrlKey: true });
+    expect(box().value).toBe(RAW);
   });
 });
 

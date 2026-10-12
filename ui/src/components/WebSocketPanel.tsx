@@ -18,6 +18,7 @@ import type {
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
 import { Split } from './Split';
+import { UndoableTextarea } from './UndoableText';
 
 const DEFAULT_RULES: WebSocketInterceptRules = {
   enabled: false,
@@ -257,7 +258,8 @@ export function WebSocketPanel() {
                 {selected.paused && <button type="button" className="danger" onClick={() => void drop()}>{t('intercept.drop')}</button>}
                 <button type="button" disabled={!active} onClick={() => void repeat()}>{t('websocket.repeat')}</button>
               </div>
-              <textarea className="mono" value={content} spellCheck={false} onChange={(event) => setContent(event.target.value)} />
+              <UndoableTextarea className="mono" value={content}
+                historyKey={selected.id} spellCheck={false} onValueChange={setContent} />
             </>
           ) : <p className="muted">{t('websocket.select')}</p>}
         </div>}

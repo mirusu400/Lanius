@@ -18,6 +18,7 @@ import type {
 } from '../api/types';
 import { useReportBusy } from '../components/busy';
 import { rawMsg, renderMessage, useT, type Message } from '../i18n';
+import { UndoableInput } from '../components/UndoableText';
 
 const EMPTY_SUMMARY: IssueSummary = {
   total: 0,
@@ -142,31 +143,31 @@ export function IssuesTab() {
           />
           {t('issues.passive')} ({scanner.passive_checks.length})
         </label>
-        <input
+        <UndoableInput
           value={flowId}
-          onChange={(event) => setFlowId(event.target.value)}
+          onValueChange={setFlowId}
           placeholder={t('issues.flowId')}
           aria-label={t('issues.flowId')}
         />
         <label>
           {t('issues.concurrency')}
-          <input
+          <UndoableInput
             type="number"
             min={1}
             max={10}
-            value={concurrency}
-            onChange={(event) => setConcurrency(Number(event.target.value))}
+            value={String(concurrency)}
+            onValueChange={(value) => setConcurrency(Number(value))}
           />
         </label>
         <label>
           {t('issues.rate')}
-          <input
+          <UndoableInput
             type="number"
             min={0.1}
             max={50}
             step={0.1}
-            value={rate}
-            onChange={(event) => setRate(Number(event.target.value))}
+            value={String(rate)}
+            onValueChange={(value) => setRate(Number(value))}
           />
         </label>
         <button disabled={!flowId.trim() || scanner.active_checks.length === 0} onClick={() => void start()}>
@@ -220,7 +221,7 @@ export function IssuesTab() {
           <option value="">{t('issues.allSeverities')}</option>
           {SEVERITIES.map((value) => <option key={value} value={value}>{value}</option>)}
         </select>
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('issues.search')} />
+        <UndoableInput value={search} onValueChange={setSearch} placeholder={t('issues.search')} />
         <span className="issue-counts mono">
           {SEVERITIES.map((value) => `${value} ${summary.by_severity[value]}`).join(' · ')}
         </span>

@@ -35,6 +35,7 @@ import { PluginFrame } from '../components/PluginFrame';
 import { PluginLogConsole } from '../components/PluginLogConsole';
 import { useReportBusy } from '../components/busy';
 import { usePluginActions } from '../components/usePluginActions';
+import { UndoableInput } from '../components/UndoableText';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 
 type Surface = 'installed' | 'catalogue';
@@ -544,7 +545,9 @@ export function PluginsTab() {
             </div>
             {developmentMode && (
               <div className="plugin-development-link">
-                <input aria-label={t('plugins.developmentPath')} placeholder={t('plugins.developmentPath')} value={developmentPath} onChange={(event) => setDevelopmentPath(event.target.value)} />
+                <UndoableInput aria-label={t('plugins.developmentPath')}
+                  placeholder={t('plugins.developmentPath')} value={developmentPath}
+                  onValueChange={setDevelopmentPath} />
                 <button onClick={() => void installDevelopment()}>{t('plugins.linkDevelopment')}</button>
               </div>
             )}
@@ -631,7 +634,7 @@ export function PluginsTab() {
                         {settings?.plugin === selected.name && settings.fields.map((field) => (
                           <label key={field.key} className="plugin-setting-field">
                             <span>{field.title}<small>{field.scope === 'user' ? t('plugins.userScope') : t('plugins.projectScope')}</small></span>
-                            {field.kind === 'boolean' ? <input type="checkbox" checked={Boolean(settingsDraft[field.key])} onChange={(event) => changeSetting(field, event.target.checked)} /> : field.kind === 'enum' ? <select value={String(settingsDraft[field.key] ?? '')} onChange={(event) => changeSetting(field, event.target.value)}>{field.choices.map((choice) => <option key={choice}>{choice}</option>)}</select> : <input type={field.kind === 'integer' || field.kind === 'number' ? 'number' : 'text'} step={field.kind === 'integer' ? 1 : field.kind === 'number' ? 'any' : undefined} value={String(settingsDraft[field.key] ?? '')} onChange={(event) => changeSetting(field, field.kind === 'integer' || field.kind === 'number' ? Number(event.target.value) : event.target.value)} />}
+                            {field.kind === 'boolean' ? <input type="checkbox" checked={Boolean(settingsDraft[field.key])} onChange={(event) => changeSetting(field, event.target.checked)} /> : field.kind === 'enum' ? <select value={String(settingsDraft[field.key] ?? '')} onChange={(event) => changeSetting(field, event.target.value)}>{field.choices.map((choice) => <option key={choice}>{choice}</option>)}</select> : field.kind === 'integer' || field.kind === 'number' ? <UndoableInput type="number" step={field.kind === 'integer' ? 1 : 'any'} value={String(settingsDraft[field.key] ?? '')} historyKey={`${selected.name}:${field.key}`} onValueChange={(value) => changeSetting(field, Number(value))} /> : <UndoableInput type="text" value={String(settingsDraft[field.key] ?? '')} historyKey={`${selected.name}:${field.key}`} onValueChange={(value) => changeSetting(field, value)} />}
                             {field.description && <small className="muted">{field.description}</small>}
                           </label>
                         ))}
@@ -671,7 +674,8 @@ export function PluginsTab() {
               <p className="muted">{t('plugins.catalogueHelp')}</p>
             </div>
             {!catalogueEmpty && <div className="plugin-marketplace-tools">
-              <input value={catalogueSearch} onChange={(event) => setCatalogueSearch(event.target.value)} placeholder={t('plugins.catalogueSearch')} aria-label={t('plugins.catalogueSearch')} />
+              <UndoableInput value={catalogueSearch} onValueChange={setCatalogueSearch}
+                placeholder={t('plugins.catalogueSearch')} aria-label={t('plugins.catalogueSearch')} />
               <button disabled={catalogueBusy !== null} onClick={() => void refreshCatalogue(true)}>{catalogueBusy === 'refresh' ? t('common.loading') : t('plugins.catalogueRefresh')}</button>
             </div>}
           </div>
@@ -696,11 +700,11 @@ export function PluginsTab() {
             <summary>{t('plugins.catalogueSources')} ({catalogue.sources.length})</summary>
             {catalogue.sources.map((source) => <div key={source.id} className="plugin-source-row"><span><strong>{source.title}</strong> <code>{source.id}</code></span><span className="muted mono">{source.url}</span><button className="danger" disabled={catalogueBusy !== null} onClick={() => void saveSources(catalogue.sources.filter((item) => item.id !== source.id))}>{t('common.delete')}</button></div>)}
             <div className="plugin-source-form">
-              <input value={sourceDraft.id} onChange={(event) => setSourceDraft((current) => ({ ...current, id: event.target.value }))} placeholder={t('plugins.sourceId')} aria-label={t('plugins.sourceId')} />
-              <input value={sourceDraft.title} onChange={(event) => setSourceDraft((current) => ({ ...current, title: event.target.value }))} placeholder={t('plugins.sourceTitle')} aria-label={t('plugins.sourceTitle')} />
-              <input value={sourceDraft.url} onChange={(event) => setSourceDraft((current) => ({ ...current, url: event.target.value }))} placeholder={t('plugins.sourceUrl')} aria-label={t('plugins.sourceUrl')} />
-              <input value={sourceDraft.public_key} onChange={(event) => setSourceDraft((current) => ({ ...current, public_key: event.target.value }))} placeholder={t('plugins.sourceKey')} aria-label={t('plugins.sourceKey')} />
-              <input value={sourceDraft.key_id ?? ''} onChange={(event) => setSourceDraft((current) => ({ ...current, key_id: event.target.value }))} placeholder={t('plugins.sourceKeyId')} aria-label={t('plugins.sourceKeyId')} />
+              <UndoableInput value={sourceDraft.id} onValueChange={(value) => setSourceDraft((current) => ({ ...current, id: value }))} placeholder={t('plugins.sourceId')} aria-label={t('plugins.sourceId')} />
+              <UndoableInput value={sourceDraft.title} onValueChange={(value) => setSourceDraft((current) => ({ ...current, title: value }))} placeholder={t('plugins.sourceTitle')} aria-label={t('plugins.sourceTitle')} />
+              <UndoableInput type="url" value={sourceDraft.url} onValueChange={(value) => setSourceDraft((current) => ({ ...current, url: value }))} placeholder={t('plugins.sourceUrl')} aria-label={t('plugins.sourceUrl')} />
+              <UndoableInput value={sourceDraft.public_key} onValueChange={(value) => setSourceDraft((current) => ({ ...current, public_key: value }))} placeholder={t('plugins.sourceKey')} aria-label={t('plugins.sourceKey')} />
+              <UndoableInput value={sourceDraft.key_id ?? ''} onValueChange={(value) => setSourceDraft((current) => ({ ...current, key_id: value }))} placeholder={t('plugins.sourceKeyId')} aria-label={t('plugins.sourceKeyId')} />
               <button disabled={catalogueBusy !== null} onClick={() => void addSource()}>{t('plugins.addSource')}</button>
             </div>
           </details>

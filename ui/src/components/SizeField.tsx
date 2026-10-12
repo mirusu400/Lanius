@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { UndoableInput } from './UndoableText';
 
 export function SizeField({
   id,
@@ -51,7 +52,7 @@ export function SizeField({
 
   return (
     <span className="size-field">
-      <input
+      <UndoableInput
         id={id}
         type="number"
         inputMode="numeric"
@@ -59,11 +60,11 @@ export function SizeField({
         min={min}
         max={max}
         value={text}
-        onChange={(event) => {
-          setText(event.target.value);
+        onValueChange={(raw) => {
+          setText(raw);
           // Apply as you type once the value is usable, so the preview
           // keeps up, but leave the text alone until focus leaves.
-          const parsed = Number.parseInt(event.target.value, 10);
+          const parsed = Number.parseInt(raw, 10);
           if (!Number.isNaN(parsed) && parsed >= min && parsed <= max) {
             onChange(parsed);
           }

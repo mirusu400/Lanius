@@ -23,6 +23,7 @@ import { HighlightedBody, HighlightedMessage } from './SyntaxCode';
 import { matchCount } from './searchHighlight';
 import { MarkedText } from './MarkedText';
 import { useShortcuts } from '../useShortcut';
+import { UndoableInput } from './UndoableText';
 
 interface Props {
   flow: FlowSummary | null;
@@ -244,8 +245,8 @@ function Half({
         <button type="button" className="detail-find-toggle" onClick={openFind} aria-label={t('detail.findIn', { pane: title })} title={t('detail.findShortcut')} aria-expanded={findOpen}>⌕</button>
       </div>
       {findOpen && <div className="detail-find-bar">
-        <input ref={inputRef} type="search" aria-label={t('detail.findIn', { pane: title })} placeholder={t('detail.findPlaceholder')}
-          value={findQuery} onChange={(event) => { setFindQuery(event.target.value); setActiveIndex(0); }}
+        <UndoableInput inputRef={inputRef} type="search" aria-label={t('detail.findIn', { pane: title })} placeholder={t('detail.findPlaceholder')}
+          value={findQuery} onValueChange={(value) => { setFindQuery(value); setActiveIndex(0); }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') { event.preventDefault(); move(event.shiftKey ? -1 : 1); }
           }} />

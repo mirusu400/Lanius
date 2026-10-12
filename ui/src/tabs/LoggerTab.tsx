@@ -7,6 +7,7 @@ import { useT } from '../i18n';
 import { useReportBusy } from '../components/busy';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 import { Split } from '../components/Split';
+import { UndoableInput } from '../components/UndoableText';
 
 const MAX_LIVE = 500;
 
@@ -80,11 +81,11 @@ export function LoggerTab() {
   return (
     <div className="logger-tab">
       <div className="logger-controls">
-        <input
+        <UndoableInput
           aria-label={t('logger.filter')}
           placeholder={t('logger.filterPlaceholder')}
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onValueChange={setFilter}
         />
         <button onClick={() => setPaused((p) => !p)}>
           {paused ? t('common.resume') : t('common.pause')}

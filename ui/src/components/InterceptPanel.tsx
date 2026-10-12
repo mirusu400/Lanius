@@ -19,6 +19,7 @@ import { FilterDialog, countActive } from './FilterDialog';
 import { FixedSidebarSplit } from './FixedSidebarSplit';
 import { matchesFilters } from '../tabs/proxyModel';
 import { useShortcuts } from '../useShortcut';
+import { UndoableInput } from './UndoableText';
 
 interface Props {
   rules: InterceptRules;
@@ -314,11 +315,11 @@ export function InterceptPanel({
           />
           {t('intercept.responses')}
         </label>
-        <input
+        <UndoableInput
           className="host"
           placeholder={t('intercept.hostFilter')}
           value={rules.host_filter ?? ''}
-          onChange={(e) => onToggle({ host_filter: e.target.value })}
+          onValueChange={(value) => onToggle({ host_filter: value })}
         />
         <span className="spacer" />
         <span className="queue">
@@ -339,12 +340,12 @@ export function InterceptPanel({
       </div>
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
       <div className="intercept-filter-bar filter-bar">
-        <input
+        <UndoableInput
           className="search"
           aria-label={t('intercept.searchPlaceholder')}
           placeholder={t('intercept.searchPlaceholder')}
           value={filters.search ?? ''}
-          onChange={(event) => setFilters({ ...filters, search: event.target.value || undefined })}
+          onValueChange={(value) => setFilters({ ...filters, search: value || undefined })}
         />
         <button className={countActive(filters) > 0 ? 'active' : undefined}
           onClick={() => setFilterOpen(true)}>
@@ -434,6 +435,7 @@ export function InterceptPanel({
                     <HighlightedEditor
                       className="intercept-editor mono"
                       text={shown}
+                      historyKey={`${currentKey}:${stage}`}
                       onChange={changeDraft}
                       readOnly={stage !== 'modified'}
                       label={t('intercept.editor')}

@@ -18,6 +18,7 @@ import {
 import {
   useI18n,
 } from '../../i18n';
+import { UndoableInput } from '../../components/UndoableText';
 
 export function CaptureSection() {
   const { t } = useI18n();
@@ -153,17 +154,18 @@ export function CaptureSection() {
                     <option value="include">{t('capture.include')}</option>
                     <option value="exclude">{t('capture.exclude')}</option>
                   </select>
-                  <input
+                  <UndoableInput
                     className={
                       rule.value.includes(',') ? 'mono invalid' : 'mono'
                     }
                     aria-label={t('capture.ruleValue', { index: String(index + 1) })}
                     placeholder={t('capture.rulePlaceholder')}
                     value={rule.value}
-                    onChange={(e) =>
+                    historyKey={`capture-rule-${index}`}
+                    onValueChange={(value) =>
                       updateRules(
                         rules.map((r, i) =>
-                          i === index ? { ...r, value: e.target.value } : r,
+                          i === index ? { ...r, value } : r,
                         ),
                       )
                     }

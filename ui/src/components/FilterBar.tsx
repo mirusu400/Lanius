@@ -2,6 +2,7 @@ import type { ConnectionState } from '../api/stream';
 import { useT } from '../i18n';
 import { countActive } from './FilterDialog';
 import type { EngineStatus, FlowFilters } from '../api/types';
+import { UndoableInput } from './UndoableText';
 
 interface Props {
   filters: FlowFilters;
@@ -34,12 +35,12 @@ export function FilterBar({
   const active = countActive(filters);
   return (
     <div className="filter-bar">
-      <input
+      <UndoableInput
         className="search"
         placeholder={t('proxy.searchPlaceholder')}
         value={filters.search ?? ''}
-        onChange={(e) =>
-          onChange({ ...filters, search: e.target.value || undefined })
+        onValueChange={(value) =>
+          onChange({ ...filters, search: value || undefined })
         }
       />
       {/* Everything except the search moved into the dialog: host,

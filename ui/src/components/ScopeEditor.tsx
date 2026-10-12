@@ -4,6 +4,7 @@ import type { ScopeState } from '../api/types';
 import { describeRule, summarizeScope } from '../tabs/targetModel';
 import { useT } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
+import { UndoableInput } from './UndoableText';
 
 interface Props {
   scope: ScopeState;
@@ -50,12 +51,12 @@ export function ScopeEditor({
           <option value="include">{t('scope.include')}</option>
           <option value="exclude">{t('scope.exclude')}</option>
         </select>
-        <input
+        <UndoableInput
           className="scope-url"
           aria-label={t('scope.url')}
           placeholder={t('scope.urlPlaceholder')}
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onValueChange={setUrl}
           onKeyDown={(e) => e.key === 'Enter' && void add()}
         />
         <button onClick={() => void add()}>{t('scope.addRule')}</button>

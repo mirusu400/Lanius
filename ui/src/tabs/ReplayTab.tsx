@@ -30,6 +30,7 @@ import { usePluginActions } from '../components/usePluginActions';
 import { errorMessage, rawMsg, renderMessage, useT } from '../i18n';
 import { sendTextToFuzzer } from './fuzzerStore';
 import { useShortcut } from '../useShortcut';
+import { UndoableInput } from '../components/UndoableText';
 
 export function ReplayTabView() {
   const t = useT();
@@ -258,10 +259,11 @@ export function ReplayTabView() {
       {active ? (
         <>
           <div className="replay-controls">
-            <input
+            <UndoableInput
               className="target"
               value={active.url}
-              onChange={(e) => editReplayTab(active.id, { url: e.target.value })}
+              historyKey={`${active.id}:url`}
+              onValueChange={(value) => editReplayTab(active.id, { url: value })}
               placeholder={t('replay.targetPlaceholder')}
             />
             {(active.history?.length ?? 0) > 0 && (
@@ -308,6 +310,7 @@ export function ReplayTabView() {
             className="replay-split"
             first={<RequestEditor
               editorRef={editorMenu.ref}
+              historyKey={active.id}
               className="replay-editor mono"
               label={t('replay.request')}
               value={active.text}

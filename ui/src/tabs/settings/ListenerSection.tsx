@@ -13,6 +13,7 @@ import {
   useI18n,
   type Message,
 } from '../../i18n';
+import { UndoableInput } from '../../components/UndoableText';
 
 const LOOPBACK = '127.0.0.1';
 const ALL_INTERFACES = '0.0.0.0';
@@ -111,7 +112,7 @@ export function ListenerSection() {
 
       <div className="settings-row">
         <label htmlFor="listener-port">{t('listener.port')}</label>
-        <input
+        <UndoableInput
           id="listener-port"
           type="number"
           min={1}
@@ -119,7 +120,7 @@ export function ListenerSection() {
           className="mono"
           value={port}
           disabled={busy}
-          onChange={(event) => setPort(event.target.value)}
+          onValueChange={setPort}
         />
       </div>
 
@@ -152,13 +153,13 @@ export function ListenerSection() {
       {!known && (
         <div className="settings-row">
           <label htmlFor="listener-custom">{t('listener.hostOther')}</label>
-          <input
+          <UndoableInput
             id="listener-custom"
             className="mono"
             placeholder={t('listener.hostPlaceholder')}
             value={customHost}
             disabled={busy}
-            onChange={(event) => setCustomHost(event.target.value)}
+            onValueChange={setCustomHost}
           />
         </div>
       )}
