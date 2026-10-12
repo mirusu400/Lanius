@@ -230,7 +230,7 @@ const en: DocPage[] = [
           },
           {
             kind: 'text',
-            body: 'Windows Trusted Root Certification Authorities and macOS Keychain trust are used automatically. Restart Lanius after installing a Windows root. On other systems, or for project-only trust, add the public CA in Settings > Proxy > Upstream CA certificates. Hostname and certificate validity checks stay enabled.',
+            body: 'Windows Trusted Root Certification Authorities, Linux system CA trust and macOS Keychain trust are used automatically. Restart Lanius after installing a Windows or Linux root. On other systems, or for project-only trust, add the public CA in Settings > Proxy > Upstream CA certificates. Hostname and certificate validity checks stay enabled.',
           },
         ],
       },
@@ -697,7 +697,7 @@ const ko: DocPage[] = [
           },
           {
             kind: 'text',
-            body: 'Windows의 신뢰할 수 있는 루트 인증 기관과 macOS 키체인 신뢰는 자동으로 사용합니다. Windows 루트를 설치한 뒤에는 Lanius를 다시 시작하세요. 다른 OS이거나 프로젝트에만 신뢰를 추가하려면 Settings > 프록시 > 서버 연결용 CA 인증서에서 공개 CA를 등록하세요. 호스트 이름과 인증서 유효기간 검증은 계속 유지됩니다.',
+            body: 'Windows의 신뢰할 수 있는 루트 인증 기관, Linux 시스템 CA 신뢰 저장소와 macOS 키체인 신뢰는 자동으로 사용합니다. Windows 또는 Linux 루트를 설치한 뒤에는 Lanius를 다시 시작하세요. 다른 OS이거나 프로젝트에만 신뢰를 추가하려면 Settings > 프록시 > 서버 연결용 CA 인증서에서 공개 CA를 등록하세요. 호스트 이름과 인증서 유효기간 검증은 계속 유지됩니다.',
           },
         ],
       },

@@ -46,7 +46,12 @@ from .tls import (
     validate_ciphers,
 )
 from .upstream import UpstreamBridge
-from .tls_trust import TRUSTED_CA_SETTING, parse_ca_bundle, upstream_ca_file
+from .tls_trust import (
+    TRUSTED_CA_SETTING,
+    linux_ca_dir,
+    parse_ca_bundle,
+    upstream_ca_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -402,9 +407,13 @@ class ProxyEngine:
         profile = self.store.get_setting(self.TLS_PROFILE_SETTING) or DEFAULT_PROFILE
         custom = self.store.get_setting(self.TLS_CIPHERS_SETTING) or None
         master.options.update(**options_for(profile, custom))
-        master.options.update(ssl_verify_upstream_trusted_ca=upstream_ca_file(
-            self.settings.data_dir, self.store.get_setting(TRUSTED_CA_SETTING) or ""
-        ))
+        master.options.update(
+            ssl_verify_upstream_trusted_ca=upstream_ca_file(
+                self.settings.data_dir,
+                self.store.get_setting(TRUSTED_CA_SETTING) or "",
+            ),
+            ssl_verify_upstream_trusted_confdir=linux_ca_dir(),
+        )
         if sys.platform == "darwin":
             master.addons.add(MacOSSystemTrustAddon(
                 self.store.get_setting(TRUSTED_CA_SETTING) or ""
@@ -634,6 +643,7 @@ class ProxyEngine:
         system_trust = (
             "macos" if sys.platform == "darwin"
             else "windows" if sys.platform == "win32"
+            else "linux" if sys.platform.startswith("linux")
             else "certifi"
         )
         return {

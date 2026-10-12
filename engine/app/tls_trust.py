@@ -129,15 +129,56 @@ def _cached_windows_root_pem() -> bytes:
     return b"".join(certificates[key] for key in sorted(certificates))
 
 
+def linux_ca_bundle() -> bytes:
+    if not sys.platform.startswith("linux"):
+        return b""
+    return _cached_linux_ca_paths()[0]
+
+
+def linux_ca_dir() -> str | None:
+    if not sys.platform.startswith("linux"):
+        return None
+    return _cached_linux_ca_paths()[1]
+
+
+@lru_cache(maxsize=1)
+def _cached_linux_ca_paths() -> tuple[bytes, str | None]:
+    """Read OpenSSL's Linux trust locations without doing network I/O.
+
+    Linux distributions expose trust through a bundle, a hashed certificate
+    directory, or both. Preserve the bundle bytes so OpenSSL-specific trust
+    and reject annotations remain intact, and pass the directory through to
+    mitmproxy separately. The cache means trust-store changes take effect on
+    the next Lanius start, matching the Windows behavior.
+    """
+    paths = ssl.get_default_verify_paths()
+    bundle = b""
+    if paths.cafile:
+        try:
+            bundle = Path(paths.cafile).read_bytes()
+        except OSError:
+            logger.warning("could not read Linux CA bundle", exc_info=True)
+
+    ca_dir: str | None = None
+    if paths.capath:
+        try:
+            path = Path(paths.capath)
+            if path.is_dir():
+                ca_dir = str(path.resolve())
+        except OSError:
+            logger.warning("could not inspect Linux CA directory", exc_info=True)
+    return bundle, ca_dir
+
+
 def upstream_ca_file(data_dir: Path, pem: str) -> str | None:
-    """Extend public and Windows roots rather than replacing either set.
+    """Extend public and operating-system roots rather than replacing them.
 
     Content-addressed filenames prevent mitmproxy's cached OpenSSL contexts
     from retaining an old CA after the user replaces the bundle.
     """
     normalized, _ = parse_ca_bundle(pem)
-    system_roots = windows_root_pem()
-    if not normalized and not system_roots:
+    system_roots = windows_root_pem() + linux_ca_bundle()
+    if not normalized and not system_roots and not linux_ca_dir():
         return None
     bundle = Path(certifi.where()).read_bytes()
     if system_roots:

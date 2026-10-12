@@ -43,6 +43,13 @@ describe('Upstream CA trust', () => {
     expect(posted).toEqual([]);
   });
 
+  it('shows that installed Linux VPN roots are used automatically', async () => {
+    systemTrust = 'linux';
+    render(<TlsTrustSection />);
+    expect(await screen.findByText(t('tlsTrust.linux'))).toBeTruthy();
+    expect(posted).toEqual([]);
+  });
+
   it('applies pasted CA certificates and shows the saved identity', async () => {
     render(<TlsTrustSection />);
     await screen.findByText(t('tlsTrust.default'));

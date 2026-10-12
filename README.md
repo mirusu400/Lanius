@@ -143,13 +143,13 @@ Chrome, Firefox or Safari, or forces TLS 1.2, and accepts a custom OpenSSL
 cipher string. This covers the cipher list and TLS version, not a full JA3 or
 JA4 match.
 
-On Windows and macOS, HTTPS server certificates use the operating system's
-trusted roots automatically, including trusted VPN and private CAs. A CA already
-trusted for TLS server authentication does not need to be registered again in
-Lanius. Windows trust changes take effect after restarting Lanius; new macOS
-connections use current Keychain decisions. Hostname and leaf validity checks
-remain enabled, and verification does not download intermediates or revocation
-responses.
+On Windows, macOS and Linux, HTTPS server certificates use the operating
+system's trusted roots automatically, including trusted VPN and private CAs. A
+CA already trusted for TLS server authentication does not need to be registered
+again in Lanius. Windows and Linux trust changes take effect after restarting
+Lanius; new macOS connections use current Keychain decisions. Hostname and leaf
+validity checks remain enabled, and verification does not download intermediates
+or revocation responses.
 
 **Settings > Proxy > Upstream CA certificates** lets a project add other VPN or
 private CAs when needed. Choose a PEM file or paste its public CA certificates,
