@@ -102,11 +102,11 @@ fn open_network_extensions_settings() -> Result<(), String> {
             .arg(NETWORK_EXTENSIONS_SETTINGS_URL)
             .status()
             .map_err(|err| err.to_string())?;
-        return if status.success() {
+        if status.success() {
             Ok(())
         } else {
             Err(format!("System Settings could not be opened: {status}"))
-        };
+        }
     }
 
     #[cfg(not(target_os = "macos"))]

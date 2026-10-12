@@ -102,8 +102,14 @@ def test_windows_tls_roots_honor_server_auth_and_disallowed_store(tmp_path):
         ],
         "Disallowed": [(encoded(blocked), "x509_asn", True)],
     }
-    with mock.patch("app.tls_trust.sys.platform", "win32"), mock.patch(
-        "app.tls_trust.ssl.enum_certificates", side_effect=lambda store: stores[store]
+    # Replacing sys.platform would mutate the process-wide sys module and make
+    # unrelated POSIX socket code take Windows-only branches.
+    with mock.patch(
+        "app.tls_trust.sys", SimpleNamespace(platform="win32")
+    ), mock.patch(
+        "app.tls_trust.ssl.enum_certificates",
+        create=True,
+        side_effect=lambda store: stores[store],
     ):
         tls_trust._cached_windows_root_pem.cache_clear()
         try:
@@ -131,7 +137,7 @@ def test_linux_tls_roots_use_openssl_bundle_and_hashed_directory(tmp_path):
 
     defaults = SimpleNamespace(cafile=str(ca_file), capath=str(ca_path))
     with (
-        mock.patch("app.tls_trust.sys.platform", "linux"),
+        mock.patch("app.tls_trust.sys", SimpleNamespace(platform="linux")),
         mock.patch(
             "app.tls_trust.ssl.get_default_verify_paths", return_value=defaults
         ),
@@ -250,18 +256,20 @@ async def test_https_accepts_only_trusted_ca_and_correct_hostname(
 ):
     ca = certificate()
     if trust_source == "certifi":
-        monkeypatch.setattr("app.proxy.sys.platform", "linux")
+        monkeypatch.setattr("app.tls_trust.windows_root_pem", lambda: b"")
         monkeypatch.setattr("app.tls_trust.linux_ca_bundle", lambda: b"")
         monkeypatch.setattr("app.tls_trust.linux_ca_dir", lambda: None)
         monkeypatch.setattr("app.proxy.linux_ca_dir", lambda: None)
     elif trust_source == "windows-store":
-        monkeypatch.setattr("app.proxy.sys.platform", "win32")
         monkeypatch.setattr(
             "app.tls_trust.windows_root_pem",
             lambda: ca[0].public_bytes(serialization.Encoding.PEM),
         )
+        monkeypatch.setattr("app.tls_trust.linux_ca_bundle", lambda: b"")
+        monkeypatch.setattr("app.tls_trust.linux_ca_dir", lambda: None)
+        monkeypatch.setattr("app.proxy.linux_ca_dir", lambda: None)
     elif trust_source == "linux-store":
-        monkeypatch.setattr("app.proxy.sys.platform", "linux")
+        monkeypatch.setattr("app.tls_trust.windows_root_pem", lambda: b"")
         monkeypatch.setattr("app.tls_trust.linux_ca_bundle", lambda: b"")
         ca_dir = tmp_path / "system-ca-directory"
         ca_dir.mkdir()
