@@ -255,6 +255,13 @@ async def test_https_accepts_only_trusted_ca_and_correct_hostname(
     tmp_path, trust_source, monkeypatch
 ):
     ca = certificate()
+    if (
+        trust_source in {"windows-store", "linux-store"}
+        and sys.platform == "darwin"
+    ):
+        # These cases exercise mitmproxy's OpenSSL CA file/directory paths.
+        # Suppress the real macOS Keychain addon without mutating global sys.
+        monkeypatch.setattr("app.proxy.sys", SimpleNamespace(platform="linux"))
     if trust_source == "certifi":
         monkeypatch.setattr("app.tls_trust.windows_root_pem", lambda: b"")
         monkeypatch.setattr("app.tls_trust.linux_ca_bundle", lambda: b"")
