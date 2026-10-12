@@ -631,9 +631,14 @@ class ProxyEngine:
 
     def tls_trust_state(self) -> dict[str, Any]:
         _, certificates = parse_ca_bundle(self.store.get_setting(TRUSTED_CA_SETTING) or "")
+        system_trust = (
+            "macos" if sys.platform == "darwin"
+            else "windows" if sys.platform == "win32"
+            else "certifi"
+        )
         return {
             "certificates": certificates,
-            "system_trust": "macos" if sys.platform == "darwin" else "certifi",
+            "system_trust": system_trust,
         }
 
     async def set_tls_trust(self, pem: str) -> dict[str, Any]:

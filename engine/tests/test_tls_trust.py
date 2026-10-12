@@ -19,7 +19,13 @@ from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from fastapi.testclient import TestClient
 
 from app.api.server import create_app
-from app.tls_trust import TRUSTED_CA_SETTING, parse_ca_bundle, upstream_ca_file
+from app import tls_trust
+from app.tls_trust import (
+    TRUSTED_CA_SETTING,
+    parse_ca_bundle,
+    upstream_ca_file,
+    windows_root_pem,
+)
 from .test_proxy import engine, free_port
 
 
@@ -54,14 +60,58 @@ def pem(cert) -> str:
 
 def test_bundle_extends_public_roots_and_uses_a_new_path_when_replaced(tmp_path):
     first = pem(certificate()[0])
-    normalized, certs = parse_ca_bundle(first + first, check_dates=True)
-    assert normalized == first
-    assert len(certs) == 1 and certs[0]["valid"]
-    path = upstream_ca_file(tmp_path, first)
-    assert Path(path).read_bytes().startswith(Path(certifi.where()).read_bytes())
-    assert Path(path).read_text().endswith(first)
-    assert upstream_ca_file(tmp_path, pem(certificate()[0])) != path
-    assert upstream_ca_file(tmp_path, "") is None
+    with mock.patch("app.tls_trust.windows_root_pem", return_value=b""):
+        normalized, certs = parse_ca_bundle(first + first, check_dates=True)
+        assert normalized == first
+        assert len(certs) == 1 and certs[0]["valid"]
+        path = upstream_ca_file(tmp_path, first)
+        assert Path(path).read_bytes().startswith(Path(certifi.where()).read_bytes())
+        assert Path(path).read_text().endswith(first)
+        assert upstream_ca_file(tmp_path, pem(certificate()[0])) != path
+        assert upstream_ca_file(tmp_path, "") is None
+
+
+def test_windows_tls_roots_honor_server_auth_and_disallowed_store(tmp_path):
+    trusted = certificate()[0]
+    blocked = certificate()[0]
+    wrong_purpose = certificate()[0]
+
+    def encoded(cert):
+        return cert.public_bytes(serialization.Encoding.DER)
+
+    stores = {
+        "ROOT": [
+            (encoded(trusted), "x509_asn", True),
+            (encoded(trusted), "x509_asn", True),
+            (
+                encoded(blocked), "x509_asn",
+                {ExtendedKeyUsageOID.SERVER_AUTH.dotted_string},
+            ),
+            (
+                encoded(wrong_purpose), "x509_asn",
+                {ExtendedKeyUsageOID.CLIENT_AUTH.dotted_string},
+            ),
+        ],
+        "Disallowed": [(encoded(blocked), "x509_asn", True)],
+    }
+    with mock.patch("app.tls_trust.sys.platform", "win32"), mock.patch(
+        "app.tls_trust.ssl.enum_certificates", side_effect=lambda store: stores[store]
+    ):
+        tls_trust._cached_windows_root_pem.cache_clear()
+        try:
+            roots = windows_root_pem()
+            path = upstream_ca_file(tmp_path, "")
+        finally:
+            tls_trust._cached_windows_root_pem.cache_clear()
+
+    assert roots.count(b"-----BEGIN CERTIFICATE-----") == 1
+    assert trusted.public_bytes(serialization.Encoding.PEM) in roots
+    assert blocked.public_bytes(serialization.Encoding.PEM) not in roots
+    assert wrong_purpose.public_bytes(serialization.Encoding.PEM) not in roots
+    assert path is not None
+    bundle = Path(path).read_bytes()
+    assert bundle.startswith(Path(certifi.where()).read_bytes())
+    assert bundle.endswith(roots)
 
 
 @pytest.mark.parametrize("bad", [
@@ -88,8 +138,13 @@ def test_api_persists_and_applies_trust_and_rejects_bad_updates(tmp_path):
     app = create_app(eng.settings)
     ca = pem(certificate()[0])
     with TestClient(app) as client:
+        system_trust = (
+            "macos" if sys.platform == "darwin"
+            else "windows" if sys.platform == "win32"
+            else "certifi"
+        )
         assert client.get("/api/tls/trust").json() == {
-            "certificates": [], "system_trust": "macos" if sys.platform == "darwin" else "certifi",
+            "certificates": [], "system_trust": system_trust,
         }
         before = app.state.engine.master
         response = client.put("/api/tls/trust", json={"ca_pem": ca})
@@ -112,7 +167,8 @@ def test_api_persists_and_applies_trust_and_rejects_bad_updates(tmp_path):
         assert len(client.get("/api/tls/trust").json()["certificates"]) == 1
         assert client.app.state.engine.master.options.ssl_verify_upstream_trusted_ca
         assert client.put("/api/tls/trust", json={"ca_pem": ""}).status_code == 200
-        assert client.app.state.engine.master.options.ssl_verify_upstream_trusted_ca is None
+        trusted_ca = client.app.state.engine.master.options.ssl_verify_upstream_trusted_ca
+        assert (trusted_ca is not None) == (sys.platform == "win32")
         assert client.app.state.store.get_setting(TRUSTED_CA_SETTING) is None
         assert client.post("/api/project/import", json=payload).status_code == 200
         assert client.get("/api/tls/trust").json()["certificates"] == []
@@ -134,18 +190,27 @@ async def test_restart_failure_restores_previous_trust(tmp_path):
                 await eng.set_tls_trust(pem(certificate()[0]))
         assert eng.running
         assert eng.store.get_setting(TRUSTED_CA_SETTING) is None
-        assert eng.master.options.ssl_verify_upstream_trusted_ca is None
+        trusted_ca = eng.master.options.ssl_verify_upstream_trusted_ca
+        assert (trusted_ca is not None) == (sys.platform == "win32")
     finally:
         await eng.stop()
         eng.store.close()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("platform", ["native", "certifi"])
-async def test_https_accepts_only_trusted_ca_and_correct_hostname(tmp_path, platform, monkeypatch):
-    if platform == "certifi":
-        monkeypatch.setattr("app.proxy.sys.platform", "linux")
+@pytest.mark.parametrize("trust_source", ["native", "certifi", "windows-store"])
+async def test_https_accepts_only_trusted_ca_and_correct_hostname(
+    tmp_path, trust_source, monkeypatch
+):
     ca = certificate()
+    if trust_source == "certifi":
+        monkeypatch.setattr("app.proxy.sys.platform", "linux")
+    elif trust_source == "windows-store":
+        monkeypatch.setattr("app.proxy.sys.platform", "win32")
+        monkeypatch.setattr(
+            "app.tls_trust.windows_root_pem",
+            lambda: ca[0].public_bytes(serialization.Encoding.PEM),
+        )
     leaf, key = certificate(ca=False, issuer=ca)
     cert_path, key_path = tmp_path / "server.pem", tmp_path / "key.pem"
     cert_path.write_text(pem(leaf))
@@ -168,6 +233,10 @@ async def test_https_accepts_only_trusted_ca_and_correct_hostname(tmp_path, plat
         async with httpx.AsyncClient(proxy=f"http://127.0.0.1:{eng.settings.proxy_port}", verify=browser_trust, timeout=5) as client:
             return await client.get(f"https://{host}:{port}/")
     try:
+        if trust_source == "windows-store":
+            assert (await get()).status_code == 200
+            assert (await get("127.0.0.1")).status_code == 502
+            return
         assert (await get()).status_code == 502
         await eng.set_tls_trust(pem(ca[0]))
         assert (await get()).status_code == 200

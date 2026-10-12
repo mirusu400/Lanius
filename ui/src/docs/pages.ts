@@ -222,6 +222,19 @@ const en: DocPage[] = [
         ],
       },
       {
+        heading: 'VPN and private CA certificates',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Lanius terminates the browser TLS connection and starts a separate connection to the destination. If a bug-bounty VPN intercepts that second connection, the browser trusts the Lanius CA while Lanius must trust the VPN CA. The two roots do not replace or conflict with each other.',
+          },
+          {
+            kind: 'text',
+            body: 'Windows Trusted Root Certification Authorities and macOS Keychain trust are used automatically. Restart Lanius after installing a Windows root. On other systems, or for project-only trust, add the public CA in Settings > Proxy > Upstream CA certificates. Hostname and certificate validity checks stay enabled.',
+          },
+        ],
+      },
+      {
         heading: 'Changing the port',
         blocks: [
           {
@@ -672,6 +685,19 @@ const ko: DocPage[] = [
           {
             kind: 'note',
             body: '현재는 인증이 없는 프록시 한 곳만 지정할 수 있습니다. SOCKS5와 여러 홉은 별도 연결 계층이 필요하며 아직 지원하지 않습니다.',
+          },
+        ],
+      },
+      {
+        heading: 'VPN 및 사설 CA 인증서',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Lanius는 브라우저와의 TLS를 종단한 뒤 목적지로 별도 연결을 만듭니다. 버그바운티 VPN이 두 번째 연결을 가로챈다면 브라우저는 Lanius CA를, Lanius는 VPN CA를 신뢰해야 합니다. 두 루트 인증서는 서로 대체되거나 충돌하지 않습니다.',
+          },
+          {
+            kind: 'text',
+            body: 'Windows의 신뢰할 수 있는 루트 인증 기관과 macOS 키체인 신뢰는 자동으로 사용합니다. Windows 루트를 설치한 뒤에는 Lanius를 다시 시작하세요. 다른 OS이거나 프로젝트에만 신뢰를 추가하려면 Settings > 프록시 > 서버 연결용 CA 인증서에서 공개 CA를 등록하세요. 호스트 이름과 인증서 유효기간 검증은 계속 유지됩니다.',
           },
         ],
       },

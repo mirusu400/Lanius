@@ -766,7 +766,7 @@ export interface TlsState {
 }
 
 export interface TlsTrustState {
-  system_trust: 'macos' | 'certifi';
+  system_trust: 'macos' | 'windows' | 'certifi';
   certificates: {
     subject: string;
     expires_at: string;

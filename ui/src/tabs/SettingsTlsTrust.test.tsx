@@ -36,6 +36,13 @@ describe('Upstream CA trust', () => {
     expect(posted).toEqual([]);
   });
 
+  it('shows that installed Windows VPN roots are used automatically', async () => {
+    systemTrust = 'windows';
+    render(<TlsTrustSection />);
+    expect(await screen.findByText(t('tlsTrust.windows'))).toBeTruthy();
+    expect(posted).toEqual([]);
+  });
+
   it('applies pasted CA certificates and shows the saved identity', async () => {
     render(<TlsTrustSection />);
     await screen.findByText(t('tlsTrust.default'));
