@@ -41,3 +41,15 @@ it('searches displayed CSV cells and reports the visible match count', async () 
   expect(document.querySelectorAll('.preview-grid mark')).toHaveLength(2);
   expect(document.querySelector('.preview-grid mark.find-current')?.textContent).toBe('ONE');
 });
+
+it('colours a text preview using its response MIME while keeping search marks', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: true,
+    json: async () => ({ kind: 'text', text: 'const answer = 42;', mime: 'application/javascript', path: '/script.js' }),
+  })));
+  const onMatchCount = vi.fn();
+  render(<ResponsePreview flowId="script" query="answer" activeIndex={0} onMatchCount={onMatchCount} />);
+  await waitFor(() => expect(onMatchCount).toHaveBeenLastCalledWith(1));
+  expect(document.querySelector('.response-preview-text .hljs-keyword')?.textContent).toBe('const');
+  expect(document.querySelector('.response-preview-text mark.find-current')?.textContent).toBe('answer');
+});

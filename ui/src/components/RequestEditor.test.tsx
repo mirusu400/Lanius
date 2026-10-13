@@ -48,6 +48,14 @@ describe('what gets sent', () => {
     expect(box().value).not.toContain('"a": 1');
   });
 
+  it('colours the editable raw request without changing its text', () => {
+    editor();
+    expect(document.querySelector('.request-highlight-editor .hljs-keyword')?.textContent).toBe('POST');
+    expect([...document.querySelectorAll('.request-highlight-editor .hljs-attr')].map((node) => node.textContent)).toContain('Content-Type');
+    expect([...document.querySelectorAll('.request-highlight-editor .hljs-attr')].map((node) => node.textContent)).toContain('"a"');
+    expect(box().value).toBe(RAW);
+  });
+
   it('does not rewrite the request when a view is changed', async () => {
     // Looking at something must not alter it.
     const { onChange } = editor();
@@ -70,14 +78,15 @@ describe('views', () => {
   it('lays the body out in the pretty view', async () => {
     editor();
     await userEvent.click(tab(t('detail.view.parsed')));
-    expect(screen.getByText(/"a": 1/)).toBeTruthy();
+    expect(document.querySelector('.request-editor-view pre')?.textContent).toContain('"a": 1');
+    expect([...document.querySelectorAll('.request-editor-view .hljs-attr')].map((node) => node.textContent)).toContain('"a"');
   });
 
   it('leaves the headers alone when laying the body out', async () => {
     // Headers are not JSON, and are often the thing being tested.
     editor();
     await userEvent.click(tab(t('detail.view.parsed')));
-    expect(screen.getByText(/Content-Type: application\/json/)).toBeTruthy();
+    expect(document.querySelector('.request-editor-view pre')?.textContent).toContain('Content-Type: application/json');
   });
 
   it('shows a hex dump', async () => {

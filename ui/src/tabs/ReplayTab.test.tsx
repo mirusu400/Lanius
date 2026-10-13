@@ -85,7 +85,8 @@ describe('ReplayTab', () => {
     fireEvent.click(screen.getByRole('button', { name: t('replay.send') }));
     const notice = t('detail.mediaBodyOmitted', { size: '5.0 MB' });
     expect(await screen.findByText(notice)).toBeTruthy();
-    expect(screen.getByText(/Content-Type: video\/mp4/)).toBeTruthy();
+    expect(document.querySelector('.replay-response')?.textContent).toContain('Content-Type: video/mp4');
+    expect(document.querySelector('.replay-response .hljs-attr')?.textContent).toBe('Content-Type');
     fireEvent.click(screen.getByRole('tab', { name: t('detail.view.preview') }));
     expect(screen.getByText(notice)).toBeTruthy();
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/response-preview'))).toBe(false);

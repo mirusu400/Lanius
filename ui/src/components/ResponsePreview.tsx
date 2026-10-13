@@ -7,6 +7,7 @@ import { ImagePreview } from './ImagePreview';
 import { matchCount } from './searchHighlight';
 import { MarkedText } from './MarkedText';
 import { markHtmlPreview } from './htmlPreviewSearch';
+import { HighlightedBody } from './SyntaxCode';
 
 const PREVIEW_CSP = "default-src 'none'; script-src 'none'; connect-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'; navigate-to 'none'";
 const NOOP_MATCH_COUNT = () => {};
@@ -137,7 +138,8 @@ function PreviewContent({ preview, query, activeIndex, onMatchCount }: {
     return <PdfPreview data={preview.data} />;
   }
   if (preview.kind === 'text') {
-    return <pre className="response-preview-text mono"><MarkedText text={preview.text} query={query} activeIndex={activeIndex} /></pre>;
+    return <HighlightedBody className="response-preview-text" text={preview.text} headers={null}
+      fallbackMime={preview.mime} responsePath={preview.path} query={query} activeIndex={activeIndex} />;
   }
   if (preview.kind === 'csv') {
     const rows = preview.rows.map((cells, index) => ({ number: String(index + 1), cells: cells.map((value, column) => ({ ref: `${columnName(column)}${index + 1}`, value })) }));

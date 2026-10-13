@@ -70,6 +70,14 @@ def test_list_flows_empty(client) -> None:
     }
 
 
+def test_text_response_preview_includes_syntax_metadata(client) -> None:
+    seed(client, "script", path="/assets/app.js", response_headers=[("Content-Type", "text/plain")],
+         response_body=b"const value = 1;")
+    assert client.get("/api/flows/script/response-preview").json() == {
+        "kind": "text", "text": "const value = 1;", "mime": "text/plain", "path": "/assets/app.js",
+    }
+
+
 def test_list_and_filter_flows(client) -> None:
     seed(client, "a", host="a.com")
     seed(client, "b", host="b.com", method="POST")

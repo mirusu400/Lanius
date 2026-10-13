@@ -436,6 +436,7 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
             editorRef={editorRef}
             label={t('fuzzer.templateLabel')}
             className="fuzzer-editor mono"
+            highlightClassName="fuzzer-highlight-editor"
             value={template}
             onChange={setTemplate}
             onContextMenu={editorMenu.open}

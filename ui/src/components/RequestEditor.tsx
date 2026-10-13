@@ -24,7 +24,8 @@ import {
   type BodyView,
 } from './bodyFormat';
 import { useT } from '../i18n';
-import { UndoableTextarea } from './UndoableText';
+import { HighlightedEditor, HighlightedMessage } from './SyntaxCode';
+import { messageHeaders } from './syntaxLanguage';
 
 const VIEWS: BodyView[] = ['pretty', 'raw', 'hex'];
 
@@ -33,6 +34,7 @@ export function RequestEditor({
   onChange,
   label,
   className,
+  highlightClassName,
   editorRef,
   onContextMenu,
   extraControls,
@@ -44,6 +46,7 @@ export function RequestEditor({
   onChange: (raw: string) => void;
   label: string;
   className?: string;
+  highlightClassName?: string;
   editorRef?: React.RefObject<HTMLTextAreaElement | null>;
   onContextMenu?: (event: React.MouseEvent) => void;
   /** Buttons that belong beside the view switch. */
@@ -66,6 +69,7 @@ export function RequestEditor({
 
   const truncated = view === 'hex' ? hexPreview(value).truncated : 0;
   const reformattable = canReformat(splitMessage(value).body);
+  const headers = useMemo(() => messageHeaders(value), [value]);
 
   return (
     <div className="request-editor">
@@ -119,15 +123,15 @@ export function RequestEditor({
       </div>
 
       {view === 'raw' ? (
-        <UndoableTextarea
-          textareaRef={editorRef}
+        <HighlightedEditor
+          text={value}
+          headers={headers}
+          onChange={onChange}
+          className={className || 'mono'}
+          containerClassName={`request-highlight-editor${highlightClassName ? ` ${highlightClassName}` : ''}`}
+          label={label}
+          editorRef={editorRef}
           historyKey={historyKey}
-          className={className}
-          wrap="soft"
-          aria-label={label}
-          spellCheck={false}
-          value={value}
-          onValueChange={onChange}
           onContextMenu={onContextMenu}
           onSelect={onSelectionChange}
           onKeyUp={onSelectionChange}
@@ -135,7 +139,9 @@ export function RequestEditor({
         />
       ) : (
         <div className="request-editor-view" onContextMenu={onContextMenu}>
-          <pre className={className} data-view={view}>{shown}</pre>
+          {view === 'pretty'
+            ? <HighlightedMessage className={className || ''} text={shown} headers={headers} />
+            : <pre className={className} data-view={view}>{shown}</pre>}
           {truncated > 0 && (
             <p className="muted">
               {t('detail.hexTruncated', { count: String(truncated) })}

@@ -1168,9 +1168,49 @@ pre.body,
   white-space: pre;
 }
 
-.request-editor > textarea {
+.request-highlight-editor {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+}
+
+.request-highlight-editor .highlight-editor-overlay {
+  border: 0;
+  padding: 10px;
+}
+
+.fuzzer-highlight-editor .highlight-editor-overlay {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px;
+}
+
+.fuzzer-highlight-editor {
+  min-height: 160px;
+}
+
+.request-highlight-editor textarea {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--fg);
+  line-height: 1.4;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.request-editor-view pre.syntax-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 /* --- fuzzer payloads --- */
@@ -2236,6 +2276,12 @@ pre.body {
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+pre.response-preview-text {
+  max-height: none;
+  padding: 10px;
+  word-break: normal;
 }
 
 /* --- sub tabs (Proxy: Intercept / History) --- */

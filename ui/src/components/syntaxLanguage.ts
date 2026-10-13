@@ -3,6 +3,14 @@ import { isFormattable } from './bodyFormat';
 export type SyntaxLanguage = 'css' | 'javascript' | 'json' | 'xml';
 export type SyntaxHeaders = [string, string][] | null;
 
+export function messageHeaders(text: string): SyntaxHeaders {
+  const head = text.split(/\r?\n\r?\n/, 1)[0];
+  return head.split(/\r?\n/).slice(1).flatMap((line): [string, string][] => {
+    const colon = line.indexOf(':');
+    return colon > 0 ? [[line.slice(0, colon), line.slice(colon + 1).trim()]] : [];
+  });
+}
+
 // Highlight.js tokenises synchronously. Large captures stay fully readable
 // and selectable, but skip the expensive colouring pass.
 export const HIGHLIGHT_LIMIT = 128 * 1024;

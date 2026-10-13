@@ -49,7 +49,7 @@ function messageHeadHtml(text: string): string {
     if (index === 0) {
       const request = line.match(/^([A-Z]+)(\s+)(\S+)(\s+)(HTTP\/\S+)$/);
       if (request) return `<span class="hljs-keyword">${escapeHtml(request[1])}</span>${escapeHtml(request[2])}<span class="hljs-link">${escapeHtml(request[3])}</span>${escapeHtml(request[4])}<span class="hljs-meta">${escapeHtml(request[5])}</span>`;
-      const response = line.match(/^(HTTP\/\S+)(\s+)(\d{3})(.*)$/);
+      const response = line.match(/^(HTTP(?:\/\S+)?)(\s+)(\d{3})(.*)$/);
       if (response) return `<span class="hljs-meta">${escapeHtml(response[1])}</span>${escapeHtml(response[2])}<span class="hljs-number">${escapeHtml(response[3])}</span>${escapeHtml(response[4])}`;
     }
 
@@ -68,21 +68,28 @@ function messageHtml(text: string, headers: SyntaxHeaders, responsePath?: string
 }
 
 /** An editable raw message with inert syntax colours behind the textarea. */
-export function HighlightedEditor({ text, onChange, headers, responsePath, className, readOnly = false, label, historyKey }: {
+export function HighlightedEditor({ text, onChange, headers, responsePath, className, containerClassName, readOnly = false, label, historyKey, editorRef, onContextMenu, onSelect, onKeyUp, onMouseUp }: {
   text: string;
   onChange: (text: string) => void;
   headers: SyntaxHeaders;
   responsePath?: string | null;
   className: string;
+  containerClassName?: string;
   readOnly?: boolean;
   label?: string;
   historyKey?: string;
+  editorRef?: React.RefObject<HTMLTextAreaElement | null>;
+  onContextMenu?: React.MouseEventHandler<HTMLTextAreaElement>;
+  onSelect?: React.ReactEventHandler<HTMLTextAreaElement>;
+  onKeyUp?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+  onMouseUp?: React.MouseEventHandler<HTMLTextAreaElement>;
 }) {
   const highlight = useMemo(() => messageHtml(text, headers, responsePath), [text, headers, responsePath]);
   const overlay = useRef<HTMLPreElement>(null);
-  return <div className="highlight-editor">
+  return <div className={`highlight-editor${containerClassName ? ` ${containerClassName}` : ''}`}>
     <pre ref={overlay} className="highlight-editor-overlay mono syntax-code" aria-hidden="true"><code dangerouslySetInnerHTML={{ __html: highlight }} /></pre>
     <UndoableTextarea
+      textareaRef={editorRef}
       className={className}
       value={text}
       historyKey={historyKey}
@@ -91,6 +98,10 @@ export function HighlightedEditor({ text, onChange, headers, responsePath, class
       wrap="soft"
       spellCheck={false}
       onValueChange={onChange}
+      onContextMenu={onContextMenu}
+      onSelect={onSelect}
+      onKeyUp={onKeyUp}
+      onMouseUp={onMouseUp}
       onScroll={(event) => {
         if (overlay.current) {
           overlay.current.scrollTop = event.currentTarget.scrollTop;
@@ -106,6 +117,7 @@ export function HighlightedBody({
   headers,
   fallbackMime,
   responsePath,
+  className,
   query = '',
   activeIndex = null,
   offset = 0,
@@ -114,12 +126,13 @@ export function HighlightedBody({
   headers: SyntaxHeaders;
   fallbackMime?: string | null;
   responsePath?: string | null;
+  className?: string;
   query?: string;
   activeIndex?: number | null;
   offset?: number;
 }) {
   const language = bodyLanguage(headers, text, fallbackMime, responsePath);
-  return <pre className="body mono syntax-code"><code>
+  return <pre className={`body mono syntax-code${className ? ` ${className}` : ''}`}><code>
     <SyntaxFragment text={text} language={language} query={query} activeIndex={activeIndex} offset={offset} />
   </code></pre>;
 }

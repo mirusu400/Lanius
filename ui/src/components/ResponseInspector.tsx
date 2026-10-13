@@ -5,6 +5,8 @@ import { useT } from '../i18n';
 import { rawResponse } from './rawHttp';
 import { ResponsePreview } from './ResponsePreview';
 import { formatBytes } from '../tabs/proxyModel';
+import { HighlightedMessage } from './SyntaxCode';
+import { messageHeaders } from './syntaxLanguage';
 
 /** The same recorded response can be inspected from Replay or Fuzzer.
  * Replay already has raw text; Fuzzer retrieves it from its result flow.
@@ -60,7 +62,7 @@ export function ResponseInspector({
         ? !omitted && <ResponsePreview flowId={flowId} />
         : error ? <p className="banner error">{error}</p>
           : rawText === undefined ? <p className="muted">{t('detail.preview.loading')}</p>
-            : <pre className="replay-response mono">{rawText}</pre>}
+            : <HighlightedMessage className="replay-response mono" text={rawText} headers={messageHeaders(rawText)} />}
     </div>
   </section>;
 }

@@ -353,6 +353,8 @@ describe('FuzzerTab', () => {
     expect(await screen.findByText('letmein')).toBeTruthy();
     expect(started[0].payload_sets).toEqual([['a', 'b', 'c']]);
     expect(screen.getAllByText(/completed · 3\/3/).length).toBeGreaterThan(0);
+    await user.click(screen.getByText('letmein').closest('tr')!);
+    await waitFor(() => expect(document.querySelector('.replay-response .hljs-number')?.textContent).toBe('403'));
   });
 
   it('highlights the response whose length stands out', async () => {

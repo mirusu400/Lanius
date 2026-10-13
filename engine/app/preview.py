@@ -206,7 +206,7 @@ def _csv_preview(body: bytes, content_type: str) -> dict[str, Any]:
     try:
         rows = list(csv.reader(io.StringIO(decoded[:500_000])))[:MAX_SHEET_ROWS]
     except csv.Error:
-        return {"kind": "text", "text": decoded}
+        return {"kind": "text", "text": decoded, "mime": content_type}
     return {"kind": "csv", "rows": [row[:MAX_SHEET_COLUMNS] for row in rows]}
 
 
@@ -273,7 +273,7 @@ def response_preview(record: FlowRecord) -> dict[str, Any]:
             text = json.dumps(json.loads(text), ensure_ascii=False, indent=2)
         except ValueError:
             pass
-        return {"kind": "text", "text": text}
+        return {"kind": "text", "text": text, "mime": mime, "path": record.path}
     if mime.startswith("text/") or mime in {"application/xml", "application/javascript"} or mime.endswith("+xml"):
-        return {"kind": "text", "text": text}
+        return {"kind": "text", "text": text, "mime": mime, "path": record.path}
     return {"kind": "unavailable", "reason": "unsupported"}
