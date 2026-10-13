@@ -3,6 +3,7 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { fireShortcut, renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import type { Locale } from '../i18n';
 import userEvent from '@testing-library/user-event';
+import { Activity } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ReplayTabView } from './ReplayTab';
@@ -372,6 +373,48 @@ describe('ReplayTab', () => {
       .filter((b) => b.textContent === 'GET /hello×');
     await user.click(helloTab);
     expect(editor().value).toContain('/hello');
+  });
+
+  it('shows a newly transferred request while an older Replay tab is selected', async () => {
+    const user = userEvent.setup();
+    const view = (visible: boolean) => <Activity mode={visible ? 'visible' : 'hidden'}><ReplayTabView /></Activity>;
+    const { rerender } = render(view(true));
+    sendToReplay(flow);
+    sendToReplay({ ...flow, id: 'f2', path: '/older' });
+    await waitFor(() => expect(editor().value).toContain('/older'));
+
+    await user.click(screen.getByText('GET /hello').closest('button')!);
+    expect(editor().value).toContain('/hello');
+
+    rerender(view(false));
+    sendToReplay({ ...flow, id: 'f3', path: '/newest' });
+    rerender(view(true));
+    await waitFor(() => expect(editor().value).toContain('/newest'));
+    expect(document.querySelector('.replay-tabs button.active .tab-title')?.textContent).toBe('GET /newest');
+  });
+
+  it('copies the request URL from the editor context menu', async () => {
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+
+    fireEvent.contextMenu(editor());
+    await user.click(screen.getByRole('menuitem', { name: t('menu.copyUrl') }));
+    expect(await navigator.clipboard.readText()).toBe('http://echo.test/hello');
+  });
+
+  it('copies the right-clicked Replay tab URL without changing the selected tab', async () => {
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    sendToReplay({ ...flow, id: 'f2', path: '/second' });
+    await waitFor(() => expect(editor().value).toContain('/second'));
+
+    fireEvent.contextMenu(screen.getByText('GET /hello').closest('button')!);
+    await user.click(screen.getByRole('menuitem', { name: t('menu.copyUrl') }));
+    expect(await navigator.clipboard.readText()).toBe('http://echo.test/hello');
+    expect(editor().value).toContain('/second');
   });
 
   it('closes a tab', async () => {

@@ -14,9 +14,12 @@ import {
   addTab,
   editReplayTab,
   finishReplaySend,
+  getActiveTabId,
   removeTab,
+  selectTab,
   stepReplayHistory,
   subscribe,
+  subscribeSelection,
   updateTab,
 } from './replayStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
@@ -32,52 +35,49 @@ import { sendTextToFuzzer } from './fuzzerStore';
 import { useShortcut } from '../useShortcut';
 import { UndoableInput } from '../components/UndoableText';
 
+function requestUrl(tab: Pick<ReplayTab, 'url' | 'text'>): string | null {
+  try {
+    return toSendPayload(tab.url, tab.text).url;
+  } catch {
+    return null;
+  }
+}
+
 export function ReplayTabView() {
   const t = useT();
   const [tabs, setTabs] = useState<ReplayTab[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState(getActiveTabId);
 
   const menu = useContextMenu<string>();
 
   useEffect(() => subscribe(setTabs), []);
-
-  useEffect(() => {
-    if (tabs.length === 0) {
-      setActiveId(null);
-      return;
-    }
-    if (!activeId || !tabs.some((t) => t.id === activeId)) {
-      setActiveId(tabs[tabs.length - 1].id);
-    }
-  }, [tabs, activeId]);
+  useEffect(() => subscribeSelection(setActiveId), []);
 
   const active = tabs.find((t) => t.id === activeId) ?? null;
+  const activeUrl = active ? requestUrl(active) : null;
+  const menuTab = tabs.find((tab) => tab.id === menu.target);
+  const menuUrl = menuTab ? requestUrl(menuTab) : null;
   const sendingIds = useRef(new Set<string>());
 
   const createTab = () => {
-    const next = addTab(emptyTab());
-    setActiveId(next.id);
+    addTab(emptyTab());
   };
 
   const duplicateTab = (source: ReplayTab) => {
-    const next = addTab({
+    addTab({
       ...source, id: nextTabId(), sending: false, error: null,
       history: [], historyIndex: null, draft: null,
     });
-    setActiveId(next.id);
   };
 
   const closeTab = (id: string) => {
-    const index = tabs.findIndex((item) => item.id === id);
-    if (index < 0) return;
-    setActiveId(tabs[index + 1]?.id ?? tabs[index - 1]?.id ?? null);
     removeTab(id);
   };
 
   const selectRelativeTab = (step: number) => {
     if (!active || tabs.length < 2) return;
     const index = tabs.findIndex((item) => item.id === active.id);
-    setActiveId(tabs[(index + step + tabs.length) % tabs.length].id);
+    selectTab(tabs[(index + step + tabs.length) % tabs.length].id);
   };
 
   // The request here has been edited, so carrying it to Fuzzer as text
@@ -149,6 +149,12 @@ export function ReplayTabView() {
       },
     ],
     [
+      {
+        label: t('menu.copyUrl'),
+        separator: true,
+        disabled: !activeUrl,
+        onSelect: () => { if (activeUrl) void navigator.clipboard?.writeText(activeUrl); },
+      },
       codegen.buildMenu(codegenTarget()),
       ...(pluginMenu ? [pluginMenu] : []),
     ],
@@ -199,7 +205,7 @@ export function ReplayTabView() {
           <button
             key={tab.id}
             className={tab.id === activeId ? 'active' : ''}
-            onClick={() => setActiveId(tab.id)}
+            onClick={() => selectTab(tab.id)}
             onContextMenu={(event) => menu.open(event, tab.id)}
           >
             <span className="tab-title" title={tab.title}>
@@ -227,7 +233,13 @@ export function ReplayTabView() {
             menu.target
               ? [
                   {
+                    label: t('menu.copyUrl'),
+                    disabled: !menuUrl,
+                    onSelect: () => { if (menuUrl) void navigator.clipboard?.writeText(menuUrl); },
+                  },
+                  {
                     label: t('menu.duplicate'),
+                    separator: true,
                     onSelect: () => {
                       const source = tabs.find((tab) => tab.id === menu.target);
                       // Copying a request to try a variation without

@@ -17,18 +17,41 @@ import { asMessage, type Message } from '../i18n/message';
 import { notifyRequestTransferred } from '../requestTransfers';
 
 type Listener = (tabs: ReplayTab[]) => void;
+type SelectionListener = (id: string | null) => void;
 
 let tabs: ReplayTab[] = [];
+let activeId: string | null = null;
 const listeners = new Set<Listener>();
+const selectionListeners = new Set<SelectionListener>();
 
 function emit(): void {
   for (const listener of listeners) listener(tabs);
+}
+
+function emitSelection(): void {
+  for (const listener of selectionListeners) listener(activeId);
 }
 
 export function subscribe(listener: Listener): () => void {
   listeners.add(listener);
   listener(tabs);
   return () => listeners.delete(listener);
+}
+
+export function subscribeSelection(listener: SelectionListener): () => void {
+  selectionListeners.add(listener);
+  listener(activeId);
+  return () => selectionListeners.delete(listener);
+}
+
+export function getActiveTabId(): string | null {
+  return activeId;
+}
+
+export function selectTab(id: string): void {
+  if (id === activeId || !tabs.some((tab) => tab.id === id)) return;
+  activeId = id;
+  emitSelection();
 }
 
 export function getTabs(): ReplayTab[] {
@@ -66,12 +89,16 @@ export function setTabs(next: ReplayTab[]): void {
       draft: draft ? { ...draft, error: asMessage(draft.error) } : null,
     };
   }));
+  if (!tabs.some((tab) => tab.id === activeId)) activeId = tabs.at(-1)?.id ?? null;
   emit();
+  emitSelection();
 }
 
 export function addTab(tab: ReplayTab): ReplayTab {
   tabs = [...tabs, tab];
+  activeId = tab.id;
   emit();
+  emitSelection();
   return tab;
 }
 
@@ -139,8 +166,12 @@ export function finishReplaySend(
 }
 
 export function removeTab(id: string): void {
+  const index = tabs.findIndex((tab) => tab.id === id);
+  if (index < 0) return;
   tabs = tabs.filter((t) => t.id !== id);
+  if (activeId === id) activeId = tabs[index]?.id ?? tabs[index - 1]?.id ?? null;
   emit();
+  emitSelection();
 }
 
 /** "Send to Replay" from the Proxy history. */
@@ -163,5 +194,7 @@ export function sendTextToReplay(url: string, text: string, title: string): Repl
 /** Test helper. */
 export function resetTabs(): void {
   tabs = [];
+  activeId = null;
   emit();
+  emitSelection();
 }
