@@ -34,10 +34,12 @@ import {
 import { ContextMenu, useContextMenu, type MenuItem } from '../components/ContextMenu';
 import { useReportBusy } from '../components/busy';
 import { useCodegenMenu } from '../components/useCodegenMenu';
+import { requestMenuItems } from '../components/requestMenu';
 import { usePluginActions } from '../components/usePluginActions';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { sendToReplay } from './replayStore';
 import { sendToFuzzer } from './fuzzerStore';
+import { formatUrl } from './proxyModel';
 import {
   buildTree,
   deletionTarget,
@@ -732,31 +734,18 @@ function treeMenuItems(
       .catch(() => undefined);
   };
 
-  return [
-    {
-      label: t('menu.sendToReplay'),
-      shortcutId: 'request.sendToReplay',
-      onSelect: withDetail((detail) => sendToReplay(detail, detail)),
-    },
-    {
-      label: t('menu.sendToFuzzer'),
-      shortcutId: 'request.sendToFuzzer',
-      onSelect: withDetail((detail) => sendToFuzzer(detail)),
-    },
-    {
-      label: t('menu.copyPath'),
-      separator: true,
-      onSelect: () => copy(flow.path ?? ''),
-    },
+  return requestMenuItems(t, {
+    url: null,
+    sendToReplay: withDetail((detail) => sendToReplay(detail, detail)),
+    sendToFuzzer: withDetail((detail) => sendToFuzzer(detail)),
+    copyUrlAction: withDetail((detail) => copy(formatUrl(detail))),
     // Rendered from the stored flow's id, so the engine uses the headers
     // and body it captured rather than the summary this tree holds.
-    codegen.buildMenu({ flow_id: flow.id }),
-    ...(pluginActions ? [pluginActions] : []),
-    {
-      label: t('menu.deleteFlow'),
-      separator: true,
-      danger: true,
-      onSelect: () => onDelete(target),
-    },
-  ];
+    copyAs: codegen.buildMenu({ flow_id: flow.id }),
+    pluginActions,
+    after: [
+      { label: t('menu.copyPath'), separator: true, onSelect: () => copy(flow.path ?? '') },
+      { label: t('menu.deleteFlow'), separator: true, danger: true, onSelect: () => onDelete(target) },
+    ],
+  });
 }

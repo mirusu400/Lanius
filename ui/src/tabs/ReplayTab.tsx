@@ -29,6 +29,7 @@ import { Split } from '../components/Split';
 import { ResponseInspector } from '../components/ResponseInspector';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
+import { requestMenuItems } from '../components/requestMenu';
 import { usePluginActions } from '../components/usePluginActions';
 import { errorMessage, rawMsg, renderMessage, useT } from '../i18n';
 import { sendTextToFuzzer } from './fuzzerStore';
@@ -119,13 +120,6 @@ export function ReplayTabView() {
 
   const editorMenu = useEditorMenu(
     [
-      {
-        label: t('editor.sendToFuzzer'),
-        shortcutId: 'request.sendToFuzzer',
-        onSelect: (_selection, editor) => {
-          if (active) sendTextToFuzzer(active.url, editor.value);
-        },
-      },
       // An explicit action rather than a view toggle: this rewrites the
       // request you are editing, so it has to be something you asked
       // for and can undo, not a display mode you might not notice.
@@ -148,16 +142,12 @@ export function ReplayTabView() {
         },
       },
     ],
-    [
-      {
-        label: t('menu.copyUrl'),
-        separator: true,
-        disabled: !activeUrl,
-        onSelect: () => { if (activeUrl) void navigator.clipboard?.writeText(activeUrl); },
-      },
-      codegen.buildMenu(codegenTarget()),
-      ...(pluginMenu ? [pluginMenu] : []),
-    ],
+    requestMenuItems(t, {
+      url: activeUrl,
+      sendToFuzzer: active ? () => sendTextToFuzzer(active.url, active.text) : undefined,
+      copyAs: codegen.buildMenu(codegenTarget()),
+      pluginActions: pluginMenu,
+    }),
   );
 
   const send = async () => {
@@ -231,37 +221,35 @@ export function ReplayTabView() {
           position={menu.position}
           items={
             menu.target
-              ? [
-                  {
-                    label: t('menu.copyUrl'),
-                    disabled: !menuUrl,
-                    onSelect: () => { if (menuUrl) void navigator.clipboard?.writeText(menuUrl); },
-                  },
-                  {
-                    label: t('menu.duplicate'),
-                    separator: true,
-                    onSelect: () => {
-                      const source = tabs.find((tab) => tab.id === menu.target);
-                      // Copying a request to try a variation without
-                      // losing the original is the common Replay move.
-                      if (source) duplicateTab(source);
+              ? requestMenuItems(t, {
+                  url: menuUrl,
+                  after: [
+                    {
+                      label: t('menu.duplicate'),
+                      separator: true,
+                      onSelect: () => {
+                        const source = tabs.find((tab) => tab.id === menu.target);
+                        // Copying a request to try a variation without
+                        // losing the original is the common Replay move.
+                        if (source) duplicateTab(source);
+                      },
                     },
-                  },
-                  {
-                    label: t('menu.closeTab'),
-                    separator: true,
-                    onSelect: () => closeTab(menu.target as string),
-                  },
-                  {
-                    label: t('menu.closeOthers'),
-                    disabled: tabs.length < 2,
-                    onSelect: () => {
-                      for (const tab of tabs) {
-                        if (tab.id !== menu.target) removeTab(tab.id);
-                      }
+                    {
+                      label: t('menu.closeTab'),
+                      separator: true,
+                      onSelect: () => closeTab(menu.target as string),
                     },
-                  },
-                ]
+                    {
+                      label: t('menu.closeOthers'),
+                      disabled: tabs.length < 2,
+                      onSelect: () => {
+                        for (const tab of tabs) {
+                          if (tab.id !== menu.target) removeTab(tab.id);
+                        }
+                      },
+                    },
+                  ],
+                })
               : []
           }
           onClose={menu.close}

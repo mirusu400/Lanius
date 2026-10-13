@@ -7,6 +7,7 @@
 import type { MenuItem } from '../components/ContextMenu';
 import type { FlowSummary, HistoryColor } from '../api/types';
 import type { Translator } from '../i18n';
+import { requestMenuItems } from '../components/requestMenu';
 
 export interface FlowMenuActions {
   sendToReplay: (flow: FlowSummary) => void;
@@ -42,48 +43,34 @@ export function flowMenuItems(
   copyAs?: MenuItem,
   pluginActions?: MenuItem,
 ): MenuItem[] {
-  return [
-    ...(actions.toggleBookmark ? [{
-      label: t(flow.bookmarked ? 'history.removeBookmark' : 'history.addBookmark'),
-      onSelect: () => actions.toggleBookmark?.(flow),
-    }] : []),
-    ...(actions.setColor ? [{
-      label: t('history.highlight'),
-      items: ([
-        { label: t('history.noColor'), onSelect: () => actions.setColor?.(flow, null) },
-        ...(['red', 'orange', 'yellow', 'green', 'blue', 'purple'] as HistoryColor[]).map((color) => ({
-          label: `${flow.annotation_color === color ? '✓ ' : ''}${t(`history.color.${color}`)}`,
-          onSelect: () => actions.setColor?.(flow, color),
-        })),
-      ]),
-    }] : []),
-    {
-      label: t('menu.sendToReplay'),
-      shortcutId: 'request.sendToReplay',
-      separator: Boolean(actions.toggleBookmark || actions.setColor),
-      onSelect: () => actions.sendToReplay(flow),
-    },
-    {
-      label: t('menu.sendToFuzzer'),
-      shortcutId: 'request.sendToFuzzer',
-      onSelect: () => actions.sendToFuzzer(flow),
-    },
-    {
-      label: t('menu.addToScope'),
-      separator: true,
-      onSelect: () => actions.addToScope(flow),
-    },
-    {
-      label: t('menu.copyUrl'),
-      separator: true,
-      onSelect: () => actions.copy(flowUrl(flow)),
-    },
-    ...(copyAs ? [copyAs] : []),
-    ...(pluginActions ? [pluginActions] : []),
+  return requestMenuItems(t, {
+    url: flowUrl(flow),
+    sendToReplay: () => actions.sendToReplay(flow),
+    sendToFuzzer: () => actions.sendToFuzzer(flow),
+    addToScope: () => actions.addToScope(flow),
+    copyUrl: actions.copy,
+    copyAs,
+    pluginActions,
+    before: [
+      ...(actions.toggleBookmark ? [{
+        label: t(flow.bookmarked ? 'history.removeBookmark' : 'history.addBookmark'),
+        onSelect: () => actions.toggleBookmark?.(flow),
+      }] : []),
+      ...(actions.setColor ? [{
+        label: t('history.highlight'),
+        items: ([
+          { label: t('history.noColor'), onSelect: () => actions.setColor?.(flow, null) },
+          ...(['red', 'orange', 'yellow', 'green', 'blue', 'purple'] as HistoryColor[]).map((color) => ({
+            label: `${flow.annotation_color === color ? '✓ ' : ''}${t(`history.color.${color}`)}`,
+            onSelect: () => actions.setColor?.(flow, color),
+          })),
+        ]),
+      }] : []),
+    ],
     // Last, separated and marked: a capture is mostly noise and removing
     // it is what keeps the database from growing without bound, but it
     // is also the one item here that cannot be undone.
-    ...(actions.deleteFlow
+    after: actions.deleteFlow
       ? [
           {
             label: t('menu.deleteFlow'),
@@ -92,6 +79,6 @@ export function flowMenuItems(
             onSelect: () => actions.deleteFlow?.(flow),
           },
         ]
-      : []),
-  ];
+      : [],
+  });
 }

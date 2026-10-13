@@ -305,12 +305,23 @@ describe('FlowDetailView', () => {
     expect(screen.queryByRole('button', { name: t('menu.sendToFuzzer') })).toBeNull();
   });
 
-  it('offers them on right-click instead', async () => {
+  it('offers the shared request actions on right-click', async () => {
     render(<FlowDetailView flow={httpFlow} />);
     const half = (await screen.findByText(t('detail.request'))).closest('section')!;
     fireEvent.contextMenu(half);
     expect(screen.getByRole('menuitem', { name: t('menu.sendToReplay') })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: t('menu.sendToFuzzer') })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: t('menu.copyUrl') }));
+    expect(await navigator.clipboard.readText()).toBe('https://api.test/x');
+  });
+
+  it('keeps the right-clicked request as the menu target when selection changes', async () => {
+    const { rerender } = render(<FlowDetailView flow={httpFlow} />);
+    const half = (await screen.findByText(t('detail.request'))).closest('section')!;
+    fireEvent.contextMenu(half);
+    rerender(<FlowDetailView flow={{ ...httpFlow, id: 'other', host: 'other.test' }} />);
+    fireEvent.click(screen.getByRole('menuitem', { name: t('menu.copyUrl') }));
+    expect(await navigator.clipboard.readText()).toBe('https://api.test/x');
   });
 
   it('keeps the reveal toggle reachable next to a long URL', async () => {

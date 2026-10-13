@@ -97,6 +97,17 @@ describe('InterceptPanel', () => {
     expect(calls.some(({ url }) => url.includes('/forward'))).toBe(false);
   });
 
+  it('copies the URL shown by the edited Intercept request', async () => {
+    const user = userEvent.setup();
+    render(<InterceptPanel rules={rules} paused={[pausedFlow]} onToggle={() => {}} onResolved={() => {}} />);
+    fireEvent.change(editorEl(), {
+      target: { value: 'GET /edited?x=1 HTTP/1.1\r\nHost: example.com\r\n\r\n' },
+    });
+    fireEvent.contextMenu(editorEl());
+    await user.click(screen.getByRole('menuitem', { name: t('menu.copyUrl') }));
+    expect(await navigator.clipboard.readText()).toBe('http://example.com/edited?x=1');
+  });
+
   it('uses the right-clicked queue item and its draft for Fuzzer', async () => {
     const second = { ...pausedFlow, id: 'p2', path: '/second' };
     const sent: { target: FuzzerTarget | null } = { target: null };

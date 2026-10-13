@@ -13,6 +13,7 @@ import { FlowDetailView } from './FlowDetail';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
 import { Split } from './Split';
 import { useCodegenMenu } from './useCodegenMenu';
+import { requestMenuItems } from './requestMenu';
 
 const PAGE_SIZE = 200;
 
@@ -122,25 +123,19 @@ export function EndpointExplorer({
     setSelectedRequestId(id);
   };
 
-  const menuItems: MenuItem[] = menu.target ? [
-    { label: t('menu.sendToReplay'), shortcutId: 'request.sendToReplay', onSelect: withDetail(menu.target, (detail) => sendToReplay(detail, detail)) },
-    { label: t('menu.sendToFuzzer'), shortcutId: 'request.sendToFuzzer', onSelect: withDetail(menu.target, (detail) => sendToFuzzer(detail, detail)) },
-    {
-      label: t('menu.addToScope'),
-      separator: true,
-      onSelect: withDetail(menu.target, (detail) => {
-        void addScopeFromUrl(formatUrl(detail)).then(onChanged).catch((err: Error) => setError(err.message));
-      }),
-    },
-    {
-      label: t('menu.copyUrl'),
-      onSelect: withDetail(menu.target, (detail) => {
-        void navigator.clipboard?.writeText(formatUrl(detail));
-      }),
-    },
-    codegen.buildMenu({ flow_id: menu.target.id }),
-    { label: t('menu.deleteFlow'), separator: true, danger: true, onSelect: () => setPendingDelete(menu.target) },
-  ] : [];
+  const menuItems: MenuItem[] = menu.target ? requestMenuItems(t, {
+    url: null,
+    sendToReplay: withDetail(menu.target, (detail) => sendToReplay(detail, detail)),
+    sendToFuzzer: withDetail(menu.target, (detail) => sendToFuzzer(detail, detail)),
+    addToScope: withDetail(menu.target, (detail) => {
+      void addScopeFromUrl(formatUrl(detail)).then(onChanged).catch((err: Error) => setError(err.message));
+    }),
+    copyUrlAction: withDetail(menu.target, (detail) => {
+      void navigator.clipboard?.writeText(formatUrl(detail));
+    }),
+    copyAs: codegen.buildMenu({ flow_id: menu.target.id }),
+    after: [{ label: t('menu.deleteFlow'), separator: true, danger: true, onSelect: () => setPendingDelete(menu.target) }],
+  }) : [];
 
   const deleteRequest = async () => {
     if (!pendingDelete) return;

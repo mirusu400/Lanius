@@ -421,6 +421,15 @@ describe('TargetTab', () => {
     expect(screen.getByRole('menuitem', { name: 'Python requests' })).toBeTruthy();
   });
 
+  it('copies the URL of a request loaded from the site map', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await expandAll(user);
+    fireEvent.contextMenu(document.querySelector('.tree-row.leaf') as HTMLElement);
+    await user.click(screen.getByRole('menuitem', { name: t('menu.copyUrl') }));
+    expect(await navigator.clipboard.readText()).toBe('https://api.test/api/v1/login');
+  });
+
   it('renders the code from the stored flow, not the tree row', async () => {
     // The tree holds a summary with no headers and no body, so rendering
     // from it would produce a command that does not repeat the request.

@@ -5,7 +5,8 @@ import type { FlowDetail, FlowSummary, RequestVariant } from '../api/types';
 import { formatUrl, formatBytes } from '../tabs/proxyModel';
 import { sendToReplay } from '../tabs/replayStore';
 import { sendToFuzzer } from '../tabs/fuzzerStore';
-import { ContextMenu, useContextMenu, type MenuItem } from './ContextMenu';
+import { ContextMenu, useContextMenu } from './ContextMenu';
+import { requestMenuItems } from './requestMenu';
 import { Split } from './Split';
 import { useCodegenMenu } from './useCodegenMenu';
 import { usePluginActions } from './usePluginActions';
@@ -328,15 +329,9 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const [requestStage, setRequestStage] = useState<RequestStage>('modified');
   const previousFlowId = useRef<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const menu = useContextMenu<'request' | 'response'>();
+  const menu = useContextMenu<{ message: 'request' | 'response'; flow: FlowSummary; detail: FlowDetail | null }>();
   const codegen = useCodegenMenu();
   const pluginActions = usePluginActions(setActionError);
-  // Captured when the menu opens: the flow can change underneath while
-  // it is open, and acting on a different request than the one that was
-  // right-clicked is worse than the menu doing nothing.
-  const target = useRef<{ flow: FlowSummary; detail: FlowDetail | null } | null>(
-    null,
-  );
   const activeHalf = useRef<'request' | 'response'>('response');
   const activateRequest = useCallback(() => { activeHalf.current = 'request'; }, []);
   const activateResponse = useCallback(() => { activeHalf.current = 'response'; }, []);
@@ -408,40 +403,34 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     event: React.MouseEvent,
     message: 'request' | 'response',
   ) => {
-    target.current = { flow, detail };
-    menu.open(event, message);
+    menu.open(event, { message, flow, detail });
   };
 
+  const menuFlow = menu.target?.flow ?? flow;
+  const menuDetail = menu.target ? menu.target.detail : detail;
   const pluginMenu = pluginActions.buildMenu(
-    menu.target ? ['flow', menu.target] : ['flow'],
+    menu.target ? ['flow', menu.target.message] : ['flow'],
     {
-      flow_id: flow.id,
-      flow,
-      detail,
-      message: menu.target,
+      flow_id: menuFlow.id,
+      flow: menuFlow,
+      detail: menuDetail,
+      message: menu.target?.message,
     },
   );
-  const menuItems: MenuItem[] = [
-    {
-      label: t('menu.sendToReplay'),
-      shortcutId: 'request.sendToReplay',
-      onSelect: () => {
-        const captured = target.current;
-        if (!captured) return;
-        sendRequest(captured.flow, captured.detail, openInReplay);
-      },
+  const menuItems = requestMenuItems(t, {
+    url: menuFlow.type === 'http' ? formatUrl(menuFlow) : null,
+    sendToReplay: () => {
+      const captured = menu.target;
+      if (!captured) return;
+      sendRequest(captured.flow, captured.detail, openInReplay);
     },
-    {
-      label: t('menu.sendToFuzzer'),
-      shortcutId: 'request.sendToFuzzer',
-      onSelect: () => {
-        const captured = target.current;
-        if (captured) sendRequest(captured.flow, captured.detail, sendToFuzzer);
-      },
+    sendToFuzzer: () => {
+      const captured = menu.target;
+      if (captured) sendRequest(captured.flow, captured.detail, sendToFuzzer);
     },
-    codegen.buildMenu({ flow_id: flow.id }),
-    ...(pluginMenu ? [pluginMenu] : []),
-  ];
+    copyAs: codegen.buildMenu({ flow_id: menuFlow.id }),
+    pluginActions: pluginMenu,
+  });
 
   const charsetOf = (charset: string | null | undefined) =>
     // Only when it is not the default, so the common case stays quiet.

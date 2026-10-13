@@ -165,6 +165,20 @@ const templateBox = () =>
   screen.getByRole('textbox', { name: t('fuzzer.templateLabel') }) as HTMLTextAreaElement;
 
 describe('FuzzerTab', () => {
+  it('shares URL copy and send to Replay actions with the other request editors', async () => {
+    const user = userEvent.setup();
+    sendToFuzzer(flow);
+    render(<FuzzerTab />);
+    await waitFor(() => expect(templateBox().value).toContain('/login?pw=guess'));
+
+    fireEvent.contextMenu(templateBox());
+    await user.click(screen.getByRole('menuitem', { name: t('menu.copyUrl') }));
+    expect(await navigator.clipboard.readText()).toBe('http://app.test/login?pw=guess');
+
+    fireEvent.contextMenu(templateBox());
+    await user.click(screen.getByRole('menuitem', { name: t('menu.sendToReplay') }));
+    expect(getTabs()[0].text).toContain('/login?pw=guess');
+  });
   it('replaces editor state when an imported workspace reuses a tab id', async () => {
     const draft = newFuzzerDraft('http://old.test', 'GET /old HTTP/1.1\nHost: old.test\n\n');
     setFuzzerWorkspace({ tabs: [draft], activeId: draft.id });

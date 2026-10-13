@@ -1,4 +1,4 @@
-/** Context menu for the request editors in Replay and Fuzzer.
+/** Editing actions layered onto the shared request menu.
  *
  * Without one, right-clicking the body fell through to the webview's own
  * text menu, which knows nothing about the request being edited. This
@@ -98,7 +98,7 @@ export function useEditorMenu(
         shortcutId: extra.shortcutId,
         onSelect: withEditor((editor) => extra.onSelect(selection.text, editor)),
       })),
-    ...trailing,
+    ...trailing.map((item, index) => index === 0 ? { ...item, separator: true } : item),
   ];
 
   const element = (

@@ -34,8 +34,9 @@ import { Split } from '../components/Split';
 import { ResponseInspector } from '../components/ResponseInspector';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
+import { requestMenuItems } from '../components/requestMenu';
 import { usePluginActions } from '../components/usePluginActions';
-import { sendToReplay } from './replayStore';
+import { sendTextToReplay, sendToReplay } from './replayStore';
 import { getFlow } from '../api/client';
 import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
@@ -256,10 +257,14 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
         },
       },
     ],
-    [
-      codegen.buildMenu(codegenTarget()),
-      ...(pluginMenu ? [pluginMenu] : []),
-    ],
+    requestMenuItems(t, {
+      url: codegenTarget()?.url ?? null,
+      sendToReplay: () => sendTextToReplay(
+        url, clearMarkers(template), clearMarkers(template).split(/\r?\n/, 1)[0] || url,
+      ),
+      copyAs: codegen.buildMenu(codegenTarget()),
+      pluginActions: pluginMenu,
+    }),
   );
   const editorRef = editorMenu.ref;
 
