@@ -46,6 +46,7 @@ import { WebSocketPanel } from '../components/WebSocketPanel';
 import { matchesFilters, mergeFlow } from './proxyModel';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { useReportBusy } from '../components/busy';
+import { Busy } from '../components/Spinner';
 import { useToast } from '../components/Toast';
 
 const DEFAULT_RULES: InterceptRules = {
@@ -500,17 +501,19 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
             initial={0.58}
             className="proxy-split"
             first={
-              <FlowTable
-                flows={flows}
-                searchQuery={filters.search || ''}
-                selectedId={selected}
-                onSelect={setSelectedFlow}
-                onContextMenu={menu.open}
-                sortBy={historySort.key}
-                sortDesc={historySort.desc}
-                onSort={onSortHistory}
-                onToggleBookmark={(flow) => void updateAnnotation(flow, { bookmarked: !flow.bookmarked })}
-              />
+              <Busy busy={Boolean(filters.search) && historyLoading} label={t('proxy.searching')}>
+                <FlowTable
+                  flows={flows}
+                  searchQuery={filters.search || ''}
+                  selectedId={selected}
+                  onSelect={setSelectedFlow}
+                  onContextMenu={menu.open}
+                  sortBy={historySort.key}
+                  sortDesc={historySort.desc}
+                  onSort={onSortHistory}
+                  onToggleBookmark={(flow) => void updateAnnotation(flow, { bookmarked: !flow.bookmarked })}
+                />
+              </Busy>
             }
             second={<FlowDetailView flow={selectedFlow} searchQuery={filters.search || ''} />}
           />

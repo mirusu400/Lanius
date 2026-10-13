@@ -83,9 +83,11 @@ export function LoadingPane({ label }: { label?: string }) {
 export function Busy({
   busy,
   children,
+  label,
 }: {
   busy: boolean;
   children: React.ReactNode;
+  label?: string;
 }) {
   const visible = useDelayedBusy(busy);
   return (
@@ -93,7 +95,7 @@ export function Busy({
       {children}
       {visible && (
         <div className="busy-overlay">
-          <Spinner />
+          <Spinner label={label} />
         </div>
       )}
     </div>

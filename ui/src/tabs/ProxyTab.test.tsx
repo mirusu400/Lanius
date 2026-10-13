@@ -73,6 +73,7 @@ let failClearFlows = false;
 let clearResponse: Promise<Response> | null = null;
 let paginateHistory = false;
 let importedHistory = false;
+let searchResponse: Promise<Response> | null = null;
 let calls: { url: string; method: string; body?: unknown }[] = [];
 
 beforeEach(() => {
@@ -85,6 +86,7 @@ beforeEach(() => {
   clearResponse = null;
   paginateHistory = false;
   importedHistory = false;
+  searchResponse = null;
   MockSocket.instances = [];
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
   vi.stubGlobal(
@@ -140,6 +142,9 @@ beforeEach(() => {
       }
       if (failListFlows) {
         throw new Error('engine down');
+      }
+      if (searchResponse && url.includes('/api/flows?') && new URL(url).searchParams.has('search')) {
+        return searchResponse;
       }
       if (importedHistory && url.includes('/api/flows?')) {
         return jsonResponse({ items: [{ ...seeded, id: 'imported', path: '/imported' }], count: 1, has_more: false, anchor: 2 });
@@ -262,6 +267,23 @@ describe('ProxyTab', () => {
     await waitFor(() => expect(document.querySelector('.flow-table td mark')?.textContent).toBe('seeded'));
     await user.click(document.querySelector('.flow-table tbody tr')!);
     await waitFor(() => expect(document.querySelector('.detail-half .headers mark')?.textContent).toBe('seeded'));
+  });
+
+  it('shows search progress over the history list while a full-text search is pending', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    let finishSearch!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finishSearch = resolve; });
+
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'needle');
+    const progress = await screen.findByRole('status', { name: t('proxy.searching') });
+    expect(progress.closest('.split-pane')).toBe(document.querySelector('.proxy-split > .split-pane'));
+    expect(screen.getByText('seeded.test')).toBeTruthy();
+
+    finishSearch(jsonResponse({ items: [{ ...seeded, id: 'match', host: 'needle.test' }], count: 1 }));
+    await waitFor(() => expect(document.querySelector('.flow-table tbody tr')?.textContent).toContain('needle.test'));
+    await waitFor(() => expect(screen.queryByRole('status', { name: t('proxy.searching') })).toBeNull());
   });
 
   it('pages into older history without holding every flow in the table', async () => {
