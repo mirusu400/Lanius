@@ -8,11 +8,12 @@ import type { MenuItem } from '../components/ContextMenu';
 import type { FlowSummary, HistoryColor } from '../api/types';
 import type { Translator } from '../i18n';
 import { requestMenuItems } from '../components/requestMenu';
+import type { ScopeKind, ScopeTarget } from '../components/requestScope';
 
 export interface FlowMenuActions {
   sendToReplay: (flow: FlowSummary) => void;
   sendToFuzzer: (flow: FlowSummary) => void;
-  addToScope: (flow: FlowSummary) => void;
+  addScopeRule: (flow: FlowSummary, kind: ScopeKind, target: ScopeTarget) => void;
   copy: (text: string) => void;
   /** Optional so a menu without deletion still renders. */
   deleteFlow?: (flow: FlowSummary) => void;
@@ -47,7 +48,7 @@ export function flowMenuItems(
     url: flowUrl(flow),
     sendToReplay: () => actions.sendToReplay(flow),
     sendToFuzzer: () => actions.sendToFuzzer(flow),
-    addToScope: () => actions.addToScope(flow),
+    addScopeRule: (kind, target) => actions.addScopeRule(flow, kind, target),
     copyUrl: actions.copy,
     copyAs,
     pluginActions,

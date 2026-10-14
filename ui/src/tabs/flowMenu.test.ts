@@ -37,7 +37,7 @@ describe('flowMenuItems', () => {
   const actions = {
     sendToReplay: vi.fn(),
     sendToFuzzer: vi.fn(),
-    addToScope: vi.fn(),
+    addScopeRule: vi.fn(),
     copy: vi.fn(),
   };
 
@@ -45,7 +45,8 @@ describe('flowMenuItems', () => {
     const labels = flowMenuItems(flow, t, actions).map((i) => i.label);
     expect(labels).toContain(t('menu.sendToReplay'));
     expect(labels).toContain(t('menu.sendToFuzzer'));
-    expect(labels).toContain(t('menu.addToScope'));
+    expect(labels).toContain(t('menu.scopeIncludeRule'));
+    expect(labels).toContain(t('menu.scopeExcludeRule'));
   });
 
   it('copies the URL, not the raw fields', () => {

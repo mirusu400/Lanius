@@ -30,6 +30,7 @@ import { ResponseInspector } from '../components/ResponseInspector';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { requestMenuItems } from '../components/requestMenu';
+import { useAddRequestScopeRule } from '../components/requestScope';
 import { usePluginActions } from '../components/usePluginActions';
 import { errorMessage, rawMsg, renderMessage, useT } from '../i18n';
 import { sendTextToFuzzer } from './fuzzerStore';
@@ -46,6 +47,7 @@ function requestUrl(tab: Pick<ReplayTab, 'url' | 'text'>): string | null {
 
 export function ReplayTabView() {
   const t = useT();
+  const addRequestScopeRule = useAddRequestScopeRule();
   const [tabs, setTabs] = useState<ReplayTab[]>([]);
   const [activeId, setActiveId] = useState(getActiveTabId);
 
@@ -144,6 +146,9 @@ export function ReplayTabView() {
     ],
     requestMenuItems(t, {
       url: activeUrl,
+      addScopeRule: activeUrl
+        ? (kind, target) => void addRequestScopeRule(activeUrl, kind, target)
+        : undefined,
       sendToFuzzer: active ? () => sendTextToFuzzer(active.url, active.text) : undefined,
       copyAs: codegen.buildMenu(codegenTarget()),
       pluginActions: pluginMenu,
@@ -223,6 +228,9 @@ export function ReplayTabView() {
             menu.target
               ? requestMenuItems(t, {
                   url: menuUrl,
+                  addScopeRule: menuUrl
+                    ? (kind, target) => void addRequestScopeRule(menuUrl, kind, target)
+                    : undefined,
                   after: [
                     {
                       label: t('menu.duplicate'),

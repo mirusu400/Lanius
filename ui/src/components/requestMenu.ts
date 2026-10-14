@@ -5,12 +5,13 @@
  */
 import type { Translator } from '../i18n';
 import type { MenuItem } from './ContextMenu';
+import type { ScopeKind, ScopeTarget } from './requestScope';
 
 export interface RequestMenuOptions {
   url: string | null;
   sendToReplay?: () => void;
   sendToFuzzer?: () => void;
-  addToScope?: () => void;
+  addScopeRule?: (kind: ScopeKind, target: ScopeTarget) => void;
   copyUrl?: (url: string) => void;
   /** Use when only a flow ID is available and the URL must be loaded first. */
   copyUrlAction?: () => void;
@@ -22,7 +23,7 @@ export interface RequestMenuOptions {
 
 export function requestMenuItems(t: Translator, options: RequestMenuOptions): MenuItem[] {
   const {
-    url, sendToReplay, sendToFuzzer, addToScope, copyUrl, copyUrlAction,
+    url, sendToReplay, sendToFuzzer, addScopeRule, copyUrl, copyUrlAction,
     copyAs, pluginActions, before = [], after = [],
   } = options;
   return [
@@ -38,14 +39,10 @@ export function requestMenuItems(t: Translator, options: RequestMenuOptions): Me
       shortcutId: 'request.sendToFuzzer',
       onSelect: sendToFuzzer,
     }] : []),
-    ...(addToScope ? [{
-      label: t('menu.addToScope'),
-      separator: true,
-      onSelect: addToScope,
-    }] : []),
+    ...(addScopeRule ? requestScopeMenuItems(t, addScopeRule) : []),
     {
       label: t('menu.copyUrl'),
-      separator: Boolean(before.length || sendToReplay || sendToFuzzer || addToScope),
+      separator: Boolean(before.length || sendToReplay || sendToFuzzer || addScopeRule),
       disabled: !url && !copyUrlAction,
       onSelect: () => {
         if (copyUrlAction) { copyUrlAction(); return; }
@@ -59,4 +56,19 @@ export function requestMenuItems(t: Translator, options: RequestMenuOptions): Me
     ...(pluginActions ? [pluginActions] : []),
     ...after,
   ];
+}
+
+export function requestScopeMenuItems(
+  t: Translator,
+  onAdd: (kind: ScopeKind, target: ScopeTarget) => void,
+  separated = true,
+): MenuItem[] {
+  return (['include', 'exclude'] as const).map((kind, index) => ({
+    label: t(kind === 'include' ? 'menu.scopeIncludeRule' : 'menu.scopeExcludeRule'),
+    separator: separated && index === 0,
+    items: ([
+      { label: t('menu.scopeHostname'), onSelect: () => onAdd(kind, 'hostname') },
+      { label: t('menu.scopePath'), onSelect: () => onAdd(kind, 'path') },
+    ]),
+  }));
 }

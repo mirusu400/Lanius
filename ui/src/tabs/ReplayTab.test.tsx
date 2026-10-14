@@ -404,6 +404,22 @@ describe('ReplayTab', () => {
     expect(await navigator.clipboard.readText()).toBe('http://echo.test/hello');
   });
 
+  it('adds the edited Replay path as an Exclude rule', async () => {
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    fireEvent.change(editor(), { target: { value: 'GET /edited?q=1 HTTP/1.1\nHost: echo.test\n\n' } });
+    fireEvent.contextMenu(editor());
+    await user.hover(screen.getByRole('menuitem', { name: t('menu.scopeExcludeRule') }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: t('menu.scopePath') }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input, init]) =>
+      String(input).endsWith('/api/scope/rules') &&
+      JSON.parse(String(init?.body)).path === '/edited*' &&
+      JSON.parse(String(init?.body)).kind === 'exclude'
+    )).toBe(true));
+  });
+
   it('copies the right-clicked Replay tab URL without changing the selected tab', async () => {
     const user = userEvent.setup();
     render(<ReplayTabView />);

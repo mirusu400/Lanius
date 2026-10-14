@@ -129,6 +129,11 @@ beforeEach(() => {
         rules = [...rules, created];
         return jsonResponse(created);
       }
+      if (url.endsWith('/api/scope/rules') && method === 'POST') {
+        const created: ScopeRule = { ...body, id: rules.length + 1 };
+        rules = [...rules, created];
+        return jsonResponse(created);
+      }
       if (url.match(/\/api\/scope\/rules\/\d+$/)) {
         const id = Number(url.split('/').pop());
         if (method === 'DELETE') {
@@ -634,13 +639,15 @@ describe('TargetTab', () => {
     render(<TargetTab />);
     const host = await screen.findByText('http://cdn.test');
     fireEvent.contextMenu(host);
-    await user.click(await screen.findByText(t('menu.addToScope')));
+    await user.hover(await screen.findByRole('menuitem', { name: t('menu.scopeIncludeRule') }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: t('menu.scopeHostname') }));
     await waitFor(() =>
       expect(
         calls.some(
           (c) =>
-            c.url.includes('/api/scope/from-url') &&
-            (c.body as { url: string }).url === 'http://cdn.test',
+            c.url.endsWith('/api/scope/rules') &&
+            (c.body as ScopeRule).host === 'cdn.test' &&
+            (c.body as ScopeRule).path === '*',
         ),
       ).toBe(true),
     );

@@ -578,6 +578,20 @@ describe('sending a flow onward', () => {
     expect(text).toContain('Host: seeded.test');
     expect(screen.getByText(t('toast.requestTransferred', { tool: 'Replay' }))).toBeTruthy();
   });
+
+  it('adds the right-clicked history hostname as an Include rule', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    fireEvent.contextMenu((await screen.findByText('/seeded')).closest('tr')!);
+    await user.hover(screen.getByRole('menuitem', { name: t('menu.scopeIncludeRule') }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: t('menu.scopeHostname') }));
+    await waitFor(() => expect(calls.some((call) =>
+      call.url.endsWith('/api/scope/rules') &&
+      (call.body as { kind: string; host: string; path: string }).kind === 'include' &&
+      (call.body as { kind: string; host: string; path: string }).host === 'seeded.test' &&
+      (call.body as { kind: string; host: string; path: string }).path === '*'
+    )).toBe(true));
+  });
 });
 
 describe('deleting from the history', () => {

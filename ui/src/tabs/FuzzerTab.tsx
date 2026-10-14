@@ -34,7 +34,9 @@ import { Split } from '../components/Split';
 import { ResponseInspector } from '../components/ResponseInspector';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
-import { requestMenuItems } from '../components/requestMenu';
+import { requestMenuItems, requestScopeMenuItems } from '../components/requestMenu';
+import { useAddRequestScopeRule } from '../components/requestScope';
+import { formatUrl } from './proxyModel';
 import { usePluginActions } from '../components/usePluginActions';
 import { sendTextToReplay, sendToReplay } from './replayStore';
 import { getFlow } from '../api/client';
@@ -111,6 +113,7 @@ export function FuzzerTab() {
 
 function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
   const t = useT();
+  const addRequestScopeRule = useAddRequestScopeRule();
   const resultColumns = useResizableColumns('lanius.columns.fuzzer', [70, 340, 85, 90, 110]);
   const [url, setUrl] = useState(draft.url);
   const [template, setTemplate] = useState(draft.template);
@@ -212,13 +215,14 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
       return null;
     }
   };
+  const requestTarget = codegenTarget();
   const pluginActions = usePluginActions((message) => setError(rawMsg(message)));
   const pluginMenu = pluginActions.buildMenu(
     ['fuzzer', 'request'],
     {
       url,
       raw_request: template,
-      request: codegenTarget(),
+      request: requestTarget,
       run_mode: mode,
       payload_sets: sets,
     },
@@ -258,11 +262,14 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
       },
     ],
     requestMenuItems(t, {
-      url: codegenTarget()?.url ?? null,
+      url: requestTarget?.url ?? null,
+      addScopeRule: requestTarget
+        ? (kind, target) => void addRequestScopeRule(requestTarget.url, kind, target)
+        : undefined,
       sendToReplay: () => sendTextToReplay(
         url, clearMarkers(template), clearMarkers(template).split(/\r?\n/, 1)[0] || url,
       ),
-      copyAs: codegen.buildMenu(codegenTarget()),
+      copyAs: codegen.buildMenu(requestTarget),
       pluginActions: pluginMenu,
     }),
   );
@@ -554,6 +561,13 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
                         sendResultToReplay(menu.target?.flow_id);
                       },
                     },
+                    ...(menu.target.flow_id ? requestScopeMenuItems(t, (kind, target) => {
+                      const flowId = menu.target?.flow_id;
+                      if (!flowId) return;
+                      void getFlow(flowId)
+                        .then((detail) => addRequestScopeRule(formatUrl(detail), kind, target))
+                        .catch((err: unknown) => setError(errorMessage(err)));
+                    }) : []),
                     {
                       label: t('menu.copyPayload'),
                       separator: true,

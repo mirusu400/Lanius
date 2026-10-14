@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { addScopeFromUrl, deleteFlows, getEndpointFlows, getFlow } from '../api/client';
+import { deleteFlows, getEndpointFlows, getFlow } from '../api/client';
 import type { EndpointGroup, FlowDetail, SitePath } from '../api/types';
 import { formatBytes, formatTime, formatUrl, statusClass } from '../tabs/proxyModel';
 import { endpointHost } from '../tabs/targetModel';
@@ -14,6 +14,7 @@ import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable
 import { Split } from './Split';
 import { useCodegenMenu } from './useCodegenMenu';
 import { requestMenuItems } from './requestMenu';
+import { useAddRequestScopeRule } from './requestScope';
 
 const PAGE_SIZE = 200;
 
@@ -33,6 +34,7 @@ export function EndpointExplorer({
   onChanged: () => Promise<void>;
 }) {
   const t = useT();
+  const addRequestScopeRule = useAddRequestScopeRule();
   const endpointColumns = useResizableColumns('lanius.columns.endpoints', [70, 180, 300, 78, 180, 180]);
   const requestColumns = useResizableColumns('lanius.columns.endpointRequests', [90, 360, 75, 90]);
   const [endpointKey, setEndpointKey] = useState<string | null>(null);
@@ -127,9 +129,9 @@ export function EndpointExplorer({
     url: null,
     sendToReplay: withDetail(menu.target, (detail) => sendToReplay(detail, detail)),
     sendToFuzzer: withDetail(menu.target, (detail) => sendToFuzzer(detail, detail)),
-    addToScope: withDetail(menu.target, (detail) => {
-      void addScopeFromUrl(formatUrl(detail)).then(onChanged).catch((err: Error) => setError(err.message));
-    }),
+    addScopeRule: (kind, target) => withDetail(menu.target!, (detail) => {
+      void addRequestScopeRule(formatUrl(detail), kind, target, () => void onChanged());
+    })(),
     copyUrlAction: withDetail(menu.target, (detail) => {
       void navigator.clipboard?.writeText(formatUrl(detail));
     }),

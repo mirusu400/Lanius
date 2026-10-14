@@ -179,6 +179,21 @@ describe('FuzzerTab', () => {
     await user.click(screen.getByRole('menuitem', { name: t('menu.sendToReplay') }));
     expect(getTabs()[0].text).toContain('/login?pw=guess');
   });
+
+  it('adds the template hostname as an Exclude rule', async () => {
+    const user = userEvent.setup();
+    sendToFuzzer(flow);
+    render(<FuzzerTab />);
+    await waitFor(() => expect(templateBox().value).toContain('/login'));
+    fireEvent.contextMenu(templateBox());
+    await user.hover(screen.getByRole('menuitem', { name: t('menu.scopeExcludeRule') }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: t('menu.scopeHostname') }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input, init]) =>
+      String(input).endsWith('/api/scope/rules') &&
+      JSON.parse(String(init?.body)).host === 'app.test' &&
+      JSON.parse(String(init?.body)).kind === 'exclude'
+    )).toBe(true));
+  });
   it('replaces editor state when an imported workspace reuses a tab id', async () => {
     const draft = newFuzzerDraft('http://old.test', 'GET /old HTTP/1.1\nHost: old.test\n\n');
     setFuzzerWorkspace({ tabs: [draft], activeId: draft.id });
@@ -450,7 +465,22 @@ describe('result context menu', () => {
     expect(
       screen.getByRole('menuitem', { name: t('menu.sendToReplay') }),
     ).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: t('menu.scopeIncludeRule') })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: t('menu.copyPayload') })).toBeTruthy();
+  });
+
+  it('adds a result path to Scope from its captured request', async () => {
+    const user = userEvent.setup();
+    render(<FuzzerTab />);
+    await user.click(screen.getByRole('button', { name: t('fuzzer.start') }));
+    fireEvent.contextMenu((await screen.findByText('letmein')).closest('tr')!);
+    await user.hover(screen.getByRole('menuitem', { name: t('menu.scopeIncludeRule') }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: t('menu.scopePath') }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input, init]) =>
+      String(input).endsWith('/api/scope/rules') &&
+      JSON.parse(String(init?.body)).path === '/login*' &&
+      JSON.parse(String(init?.body)).kind === 'include'
+    )).toBe(true));
   });
 
   it('cannot resend a result that has no request behind it', async () => {

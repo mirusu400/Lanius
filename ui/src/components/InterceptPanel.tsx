@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { dropFlow, forwardAll, forwardFlow } from '../api/client';
-import { addScopeFromUrl } from '../api/client';
 import type { FlowFilters, FlowSummary, InterceptRules, PausedFlow } from '../api/types';
 import { editsFromText, parseRequest, renderPaused, renderPausedVariant, renderRequest } from '../tabs/interceptModel';
 import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n';
@@ -9,6 +8,7 @@ import { sendTextToReplay } from '../tabs/replayStore';
 import { originOf } from '../tabs/replayModel';
 import { sendTextToFuzzer } from '../tabs/fuzzerStore';
 import { flowMenuItems, flowUrl } from '../tabs/flowMenu';
+import { useAddRequestScopeRule } from './requestScope';
 import { OpenBrowserButton } from './OpenBrowserButton';
 import { MatchReplaceButton } from './MatchReplaceDialog';
 import { HighlightedEditor } from './SyntaxCode';
@@ -96,6 +96,7 @@ export function InterceptPanel({
   onFiltersChange,
 }: Props) {
   const t = useT();
+  const addRequestScopeRule = useAddRequestScopeRule();
   // Which held request is being shown. Pick from the queue rather than
   // only ever seeing the oldest, which matters once several
   // are waiting and the one you care about is not first.
@@ -464,8 +465,8 @@ export function InterceptPanel({
           sendToFuzzer: (flow) => {
             sendTextToFuzzer(originOf(flow), menuText);
           },
-          addToScope: (flow) => {
-            void addScopeFromUrl(flowUrl(flow)).catch((err: unknown) => setError(errorMessage(err)));
+          addScopeRule: (flow, kind, target) => {
+            void addRequestScopeRule(flowUrl(flow), kind, target);
           },
           copy: (text) => { void navigator.clipboard?.writeText(text); },
         }, codegen.buildMenu({

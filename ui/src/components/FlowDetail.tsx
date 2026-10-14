@@ -7,6 +7,7 @@ import { sendToReplay } from '../tabs/replayStore';
 import { sendToFuzzer } from '../tabs/fuzzerStore';
 import { ContextMenu, useContextMenu } from './ContextMenu';
 import { requestMenuItems } from './requestMenu';
+import { useAddRequestScopeRule } from './requestScope';
 import { Split } from './Split';
 import { useCodegenMenu } from './useCodegenMenu';
 import { usePluginActions } from './usePluginActions';
@@ -318,6 +319,7 @@ function Half({
 
 export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitStorageKey = 'lanius.split.detail', initialSplit = 0.5 }: Props) {
   const t = useT();
+  const addRequestScopeRule = useAddRequestScopeRule();
   const [detail, setDetail] = useState<FlowDetail | null>(null);
   const [reveal, setReveal] = useState(false);
   const [requestView, setRequestView] = useState<View>('parsed');
@@ -419,6 +421,9 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   );
   const menuItems = requestMenuItems(t, {
     url: menuFlow.type === 'http' ? formatUrl(menuFlow) : null,
+    addScopeRule: menuFlow.type === 'http'
+      ? (kind, target) => void addRequestScopeRule(formatUrl(menuFlow), kind, target)
+      : undefined,
     sendToReplay: () => {
       const captured = menu.target;
       if (!captured) return;

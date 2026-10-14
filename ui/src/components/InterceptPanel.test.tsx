@@ -86,7 +86,8 @@ describe('InterceptPanel', () => {
     fireEvent.contextMenu(editorEl());
     expect(screen.getByRole('menuitem', { name: t('menu.sendToReplay') })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: t('menu.sendToFuzzer') })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: t('menu.addToScope') })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: t('menu.scopeIncludeRule') })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: t('menu.scopeExcludeRule') })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: t('menu.copyUrl') })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: t('menu.copyAs') })).toBeTruthy();
     await user.click(screen.getByRole('menuitem', { name: t('menu.sendToReplay') }));
@@ -174,10 +175,13 @@ describe('InterceptPanel', () => {
     });
 
     fireEvent.contextMenu(editorEl());
-    await user.click(screen.getByRole('menuitem', { name: t('menu.addToScope') }));
-    await waitFor(() => expect(calls.some(({ url }) => url.endsWith('/api/scope/from-url'))).toBe(true));
-    const scopeCall = calls.find(({ url }) => url.endsWith('/api/scope/from-url'))!;
-    expect(JSON.parse(String(scopeCall.init?.body)).url).toBe('http://example.com/edited?x=1');
+    await user.hover(screen.getByRole('menuitem', { name: t('menu.scopeExcludeRule') }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: t('menu.scopePath') }));
+    await waitFor(() => expect(calls.some(({ url }) => url.endsWith('/api/scope/rules'))).toBe(true));
+    const scopeCall = calls.find(({ url }) => url.endsWith('/api/scope/rules'))!;
+    expect(JSON.parse(String(scopeCall.init?.body))).toMatchObject({
+      kind: 'exclude', host: 'example.com', path: '/edited*', protocol: 'http', port: 80,
+    });
 
     fireEvent.contextMenu(editorEl());
     await user.hover(screen.getByRole('menuitem', { name: t('menu.copyAs') }));

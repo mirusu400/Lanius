@@ -36,4 +36,20 @@ describe('requestMenuItems', () => {
     items[0].onSelect?.();
     expect(copyUrlAction).toHaveBeenCalledOnce();
   });
+
+  it('offers hostname and path under both scope rule kinds', () => {
+    const addScopeRule = vi.fn();
+    const items = requestMenuItems(t, { url: 'https://api.test/x', addScopeRule });
+    expect(items.map((item) => item.label)).toEqual([
+      t('menu.scopeIncludeRule'), t('menu.scopeExcludeRule'), t('menu.copyUrl'),
+    ]);
+    items[0].items?.[0].onSelect?.();
+    items[0].items?.[1].onSelect?.();
+    items[1].items?.[0].onSelect?.();
+    items[1].items?.[1].onSelect?.();
+    expect(addScopeRule.mock.calls).toEqual([
+      ['include', 'hostname'], ['include', 'path'],
+      ['exclude', 'hostname'], ['exclude', 'path'],
+    ]);
+  });
 });

@@ -38,7 +38,7 @@ import {
 } from './selectionStore';
 import { sendToReplay } from './replayStore';
 import { sendToFuzzer } from './fuzzerStore';
-import { addScopeFromUrl } from '../api/client';
+import { useAddRequestScopeRule } from '../components/requestScope';
 import { FlowDetailView } from '../components/FlowDetail';
 import { FilterBar } from '../components/FilterBar';
 import { InterceptPanel } from '../components/InterceptPanel';
@@ -61,6 +61,7 @@ type View = 'intercept' | 'history' | 'websockets';
 export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { method: string } | null }) {
   const t = useT();
   const { showToast } = useToast();
+  const addRequestScopeRule = useAddRequestScopeRule();
   const [view, setView] = useState<View>('history');
   const [flows, setFlows] = useState<FlowSummary[]>([]);
   const flowsRef = useRef(flows);
@@ -577,8 +578,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                         sendToFuzzer(flow, detail),
                       );
                     },
-                    addToScope: (flow) => {
-                      void addScopeFromUrl(flowUrl(flow)).catch(() => undefined);
+                    addScopeRule: (flow, kind, target) => {
+                      void addRequestScopeRule(flowUrl(flow), kind, target);
                     },
                     copy: (text) => {
                       void navigator.clipboard?.writeText(text);

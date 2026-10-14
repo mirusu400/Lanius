@@ -34,7 +34,8 @@ import {
 import { ContextMenu, useContextMenu, type MenuItem } from '../components/ContextMenu';
 import { useReportBusy } from '../components/busy';
 import { useCodegenMenu } from '../components/useCodegenMenu';
-import { requestMenuItems } from '../components/requestMenu';
+import { requestMenuItems, requestScopeMenuItems } from '../components/requestMenu';
+import { useAddRequestScopeRule, type ScopeKind, type ScopeTarget } from '../components/requestScope';
 import { usePluginActions } from '../components/usePluginActions';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { sendToReplay } from './replayStore';
@@ -64,6 +65,7 @@ function flowIdsUnder(node: TreeNode): string[] {
 
 export function TargetTab() {
   const t = useT();
+  const addRequestScopeRule = useAddRequestScopeRule();
   const [view, setView] = useState<View>('sitemap');
   const [sites, setSites] = useState<Site[]>([]);
   const [sitePaths, setSitePaths] = useState<Record<string, SitePath[]>>({});
@@ -648,6 +650,8 @@ export function TargetTab() {
                         },
                         codegen,
                         (target) => setPendingDelete([target]),
+                        addRequestScopeRule,
+                        (error) => setError(rawMsg(error.message)),
                         menu.target.clicked.kind === 'flow'
                           ? pluginActions.buildMenu(
                               ['flow'],
@@ -683,6 +687,8 @@ function treeMenuItems(
   onScopeChanged: () => void,
   codegen: ReturnType<typeof useCodegenMenu>,
   onDelete: (target: SitemapRowTarget) => void,
+  addRequestScopeRule: ReturnType<typeof useAddRequestScopeRule>,
+  onError: (error: Error) => void,
   pluginActions?: MenuItem,
 ): MenuItem[] {
   const copy = (text: string) => {
@@ -692,18 +698,17 @@ function treeMenuItems(
   if (target.kind === 'node') {
     const { node } = target;
     const site = node.site;
+    const port = site?.port && !(
+      (site.scheme === 'http' && site.port === 80) ||
+      (site.scheme === 'https' && site.port === 443)
+    ) ? `:${site.port}` : '';
     const url = site
-      ? `${site.scheme}://${site.host}${node.path.startsWith('/') ? node.path : ''}`
+      ? `${site.scheme}://${site.host}${port}${node.path.startsWith('/') ? node.path : ''}`
       : node.path;
     return [
-      {
-        label: t('menu.addToScope'),
-        onSelect: () => {
-          void addScopeFromUrl(url)
-            .then(onScopeChanged)
-            .catch(() => undefined);
-        },
-      },
+      ...requestScopeMenuItems(t, (kind, scopeTarget) => {
+        void addRequestScopeRule(url, kind, scopeTarget, onScopeChanged);
+      }, false),
       { label: t('menu.copyPath'), separator: true, onSelect: () => copy(node.path) },
       ...(site
         ? [{ label: t('menu.copyHost'), onSelect: () => copy(site.host) }]
@@ -731,13 +736,16 @@ function treeMenuItems(
   const withDetail = (send: (detail: FlowDetail) => void) => () => {
     void getFlow(flow.id)
       .then(send)
-      .catch(() => undefined);
+      .catch((error: Error) => onError(error));
   };
 
   return requestMenuItems(t, {
     url: null,
     sendToReplay: withDetail((detail) => sendToReplay(detail, detail)),
     sendToFuzzer: withDetail((detail) => sendToFuzzer(detail)),
+    addScopeRule: (kind: ScopeKind, scopeTarget: ScopeTarget) => withDetail((detail) => {
+      void addRequestScopeRule(formatUrl(detail), kind, scopeTarget, onScopeChanged);
+    })(),
     copyUrlAction: withDetail((detail) => copy(formatUrl(detail))),
     // Rendered from the stored flow's id, so the engine uses the headers
     // and body it captured rather than the summary this tree holds.
