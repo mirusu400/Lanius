@@ -526,7 +526,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release view nightly --json assets --jq '.assets[].name' > previous-release-assets.txt
-          if rg -qx 'latest\.json' previous-release-assets.txt; then
+          if grep -Fxq latest.json previous-release-assets.txt; then
             gh release download nightly --pattern latest.json --dir .
             mv latest.json previous-latest.json
           fi
@@ -543,6 +543,7 @@ jobs:
                   print(name)
                   print(name + ".sig")
           PY
+          echo "preserving $(wc -l < previous-assets.txt) previous updater assets"
           if [ -f dist/latest.json ]; then
             mv dist/latest.json latest.json
           fi
@@ -631,6 +632,6 @@ jobs:
           PY
           while IFS= read -r asset; do
             [ -n "$asset" ] || continue
-            echo "removing expired asset: $asset"
+            echo "removing superseded asset: $asset"
             gh release delete-asset nightly "$asset" --yes
           done < superseded-assets.txt
