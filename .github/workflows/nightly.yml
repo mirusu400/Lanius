@@ -64,10 +64,10 @@ jobs:
             # minute-stamped prerelease sorts by build time; the run number
             # makes repeated builds in the same minute unique as well. It
             # still sorts below the next stable release itself.
-            echo "version=0.3.1-nightly.$(date -u +%Y%m%dT%H%M).$GITHUB_RUN_NUMBER"
+            echo "version=0.4.1-nightly.$(date -u +%Y%m%dT%H%M).$GITHUB_RUN_NUMBER"
             # Windows installers take three numbers and nothing else, and
             # the number has to grow for an upgrade to be an upgrade.
-            echo "msi_version=0.3.$GITHUB_RUN_NUMBER"
+            echo "msi_version=0.4.$GITHUB_RUN_NUMBER"
           } >> "$GITHUB_OUTPUT"
 
           if [ "$EVENT" = "workflow_dispatch" ]; then
