@@ -521,12 +521,15 @@ jobs:
 
       - name: Stage the manifest and remember the previous updater bundles
         env:
-          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          curl -fsSL --max-time 15 \
-            "https://github.com/$REPO/releases/download/nightly/latest.json" \
-            -o previous-latest.json || rm -f previous-latest.json
+          gh release view nightly --json assets --jq '.assets[].name' > previous-release-assets.txt
+          if rg -qx 'latest\.json' previous-release-assets.txt; then
+            gh release download nightly --pattern latest.json --dir .
+            mv latest.json previous-latest.json
+          fi
           python3 - <<'PY' > previous-assets.txt
           import json
           from pathlib import Path
@@ -600,40 +603,34 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: gh release upload nightly latest.json --clobber
 
-      # Keep the previously advertised bundles and a day's worth of older
-      # assets so cached manifests still lead to their matching archives.
-      - name: Drop expired release assets
+      # Keep the current release and the updater bundles named by the last
+      # manifest. A cached manifest can still install its signed bundle, but
+      # older per-commit downloads do not keep piling up on the release.
+      - name: Drop superseded release assets
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           gh release view nightly --json assets > release-assets.json
-          python3 - <<'PY' > expired-assets.txt
+          python3 - <<'PY' > superseded-assets.txt
           import json
-          from datetime import datetime, timedelta, timezone
           from pathlib import Path
 
           current = {path.name for path in Path("dist").iterdir()}
           if Path("latest.json").exists():
               current.add("latest.json")
           previous = set(Path("previous-assets.txt").read_text().splitlines())
-          cutoff = datetime.now(timezone.utc) - timedelta(days=1)
           assets = json.loads(Path("release-assets.json").read_text())["assets"]
           for asset in assets:
               name = asset["name"]
               if name in current or name in previous:
                   continue
-              # A build without a signing key must remove the old feed.
-              if name == "latest.json":
-                  print(name)
-                  continue
-              created = datetime.fromisoformat(asset["createdAt"].replace("Z", "+00:00"))
-              if created < cutoff:
-                  print(name)
+              # This also removes the old feed if a build has no signing key.
+              print(name)
           PY
           while IFS= read -r asset; do
             [ -n "$asset" ] || continue
             echo "removing expired asset: $asset"
             gh release delete-asset nightly "$asset" --yes
-          done < expired-assets.txt
+          done < superseded-assets.txt
