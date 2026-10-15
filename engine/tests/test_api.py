@@ -530,6 +530,7 @@ def test_events_are_newest_first(client) -> None:
 def test_dashboard_is_empty_before_any_traffic(client) -> None:
     data = client.get("/api/dashboard").json()
     assert data["flows"] == 0
+    assert data["project_bytes"] > 0
     assert data["top_hosts"] == []
     assert data["proxy"]["running"] is True
 

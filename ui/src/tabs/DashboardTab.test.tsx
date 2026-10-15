@@ -11,6 +11,7 @@ import type { Dashboard } from '../api/types';
 import { getSelectedFlow, setSelectedFlow, clearSelection } from './selectionStore';
 
 const empty: Dashboard = {
+  project_bytes: 64 * 1024,
   flows: 0,
   hosts: 0,
   bytes: 0,
@@ -154,6 +155,7 @@ describe('DashboardTab', () => {
   it('invites the user to send traffic when nothing is captured', async () => {
     render(<DashboardTab />);
     expect(await screen.findByText(t('dash.empty'))).toBeTruthy();
+    expect(screen.getByText('64 KB')).toBeTruthy();
     // The address must be spelled out, otherwise the hint is not actionable.
     expect(screen.getByText(t('dash.emptyHelp', { address: '127.0.0.1:8080' }))).toBeTruthy();
   });
@@ -165,6 +167,14 @@ describe('DashboardTab', () => {
     expect(await screen.findByText('42')).toBeTruthy();
     expect(screen.getByText('5.0 MB')).toBeTruthy();
     expect(screen.getByText('126 ms')).toBeTruthy();
+  });
+
+  it('opens Project settings from the project size card', async () => {
+    const onOpenSettings = vi.fn();
+    render(<DashboardTab onOpenSettings={onOpenSettings} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /64 KB/ }));
+    expect(onOpenSettings).toHaveBeenCalledWith('project');
   });
 
   it('separates in-flight requests from completed ones', async () => {
@@ -446,6 +456,15 @@ describe('title bar', () => {
 
     await userEvent.click(screen.getByRole('button', { name: t('dash.home') }));
     expect(screen.getByRole('button', { name: t('dash.title') }).className).toContain('active');
+  });
+
+  it('opens Settings on the Project tab from the project size card', async () => {
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /64 KB/ }));
+    expect(screen.getByRole('button', { name: 'Settings' }).className).toContain('active');
+    expect(screen.getByRole('button', { name: t('settings.group.project') }).className).toContain('active');
+    expect(screen.getByRole('heading', { name: t('project.section') })).toBeTruthy();
   });
 
   it('keeps Target and Logger filters when switching workspace tabs', async () => {

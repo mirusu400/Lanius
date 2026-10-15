@@ -5281,6 +5281,14 @@ pre.response-preview-text {
   gap: 2px;
 }
 
+.dash-card-button {
+  text-align: left;
+}
+
+.dash-card-button:hover {
+  background: var(--bg-hover);
+}
+
 .dash-card-label {
   color: var(--muted);
   font-size: 0.85em;

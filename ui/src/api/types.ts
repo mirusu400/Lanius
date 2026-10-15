@@ -673,6 +673,7 @@ export interface DashboardHost {
 }
 
 export interface Dashboard {
+  project_bytes: number;
   flows: number;
   hosts: number;
   bytes: number;

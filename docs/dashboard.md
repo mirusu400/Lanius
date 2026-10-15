@@ -1,8 +1,9 @@
 # Dashboard
 
 The Dashboard is an overview of the current capture. It shows request, host
-and traffic totals, average response time, a recent-seconds window with
-in-flight and failed counts, and how long capturing has been running.
+and traffic totals, the current project size, average response time, a
+recent-seconds window with in-flight and failed counts, and how long capturing
+has been running. Select the project-size card to open **Settings > Project**.
 
 **Doctor** checks whether the engine responds, the proxy listener and other
 configured modes are running, a proxied browser and CA file are available,

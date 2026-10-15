@@ -578,6 +578,16 @@ def test_dashboard_on_an_empty_capture_is_all_zeroes() -> None:
     assert data["span_seconds"] == 0.0
 
 
+def test_dashboard_reports_project_disk_usage(tmp_path) -> None:
+    store = FlowStore(tmp_path / "project.sqlite")
+    try:
+        data = store.dashboard()
+        assert data["project_bytes"] >= (tmp_path / "project.sqlite").stat().st_size
+        assert data["project_bytes"] > 0
+    finally:
+        store.close()
+
+
 def test_dashboard_counts_recent_flows_within_the_window() -> None:
     store = FlowStore()
     now = time.time()

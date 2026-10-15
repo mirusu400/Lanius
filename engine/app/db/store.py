@@ -693,21 +693,27 @@ class FlowStore:
             page_size = int(self._read_conn.execute("PRAGMA page_size").fetchone()[0])
             free_pages = int(self._read_conn.execute("PRAGMA freelist_count").fetchone()[0])
             total_flows = int(self._read_conn.execute("SELECT flows FROM flow_totals").fetchone()[0])
-        path = Path(self.path)
-        db_bytes = (
-            sum(
-                candidate.stat().st_size if candidate.exists() else 0
-                for candidate in (path, Path(f"{self.path}-wal"))
-            )
-            if self.path != ":memory:"
-            else 0
-        )
         return {
-            "db_bytes": db_bytes,
+            "db_bytes": self.project_size(),
             "reclaimable_bytes": page_size * free_pages,
             "total_flows": total_flows,
             "sites": [dict(row) for row in rows],
         }
+
+    def project_size(self) -> int:
+        """Bytes currently occupied by the project database and its WAL."""
+        if self.path == ":memory:":
+            return 0
+        total = 0
+        for candidate in (Path(self.path), Path(f"{self.path}-wal")):
+            try:
+                total += candidate.stat().st_size
+            except FileNotFoundError:
+                # A checkpoint can remove the WAL between discovering and
+                # measuring it. Treat that as zero instead of failing a
+                # dashboard refresh.
+                pass
+        return total
 
     def delete_sites(
         self,
@@ -1581,6 +1587,7 @@ class FlowStore:
         span = (last_seen - first_seen) if (first_seen and last_seen) else 0.0
 
         return {
+            "project_bytes": self.project_size(),
             "flows": int(totals["flows"] or 0),
             "hosts": int(hosts or 0),
             "bytes": int(totals["bytes"] or 0),

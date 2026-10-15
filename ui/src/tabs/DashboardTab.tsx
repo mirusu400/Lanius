@@ -27,7 +27,7 @@ export function DashboardTab({
 }: {
   onOpenTab?: (tab: string) => void;
   onOpenMethod?: (method: string) => void;
-  onOpenSettings?: (group: 'proxy' | 'browser') => void;
+  onOpenSettings?: (group: 'proxy' | 'browser' | 'project') => void;
   onOpenFuzzerRun?: (id: string) => void;
 }) {
   const t = useT();
@@ -181,50 +181,54 @@ export function DashboardTab({
         </section>
       )}
 
+      <section className="dash-cards">
+        <Card label={t('dash.flows')} value={String(data.flows)}>
+          {data.pending > 0 && (
+            <span className="dash-note">
+              {data.pending} {t('dash.pending')}
+            </span>
+          )}
+        </Card>
+        <Card label={t('dash.hosts')} value={String(data.hosts)} />
+        <Card label={t('dash.traffic')} value={formatBytes(data.bytes)} />
+        <Card
+          label={t('dash.avgDuration')}
+          value={formatMillis(data.avg_duration_ms)}
+        >
+          {failures > 0 && (
+            <span className="dash-note bad">
+              {failures} {t('dash.failures')}
+            </span>
+          )}
+        </Card>
+        <Card
+          label={t('dash.recent', {
+            seconds: String(Math.round(data.recent_window_seconds)),
+          })}
+          value={String(data.recent_flows)}
+        >
+          {data.span_seconds > 0 && (
+            <span className="dash-note">
+              {t('dash.captureSpan', {
+                duration: formatDuration(data.span_seconds),
+              })}
+            </span>
+          )}
+        </Card>
+        <Card
+          label={t('dash.projectSize')}
+          value={formatBytes(data.project_bytes)}
+          onClick={onOpenSettings ? () => onOpenSettings('project') : undefined}
+        />
+      </section>
+
       {data.flows === 0 ? (
         <div className="dash-empty">
           <p>{t('dash.empty')}</p>
           <p className="dash-sub">{t('dash.emptyHelp', { address })}</p>
         </div>
       ) : (
-        <>
-          <section className="dash-cards">
-            <Card label={t('dash.flows')} value={String(data.flows)}>
-              {data.pending > 0 && (
-                <span className="dash-note">
-                  {data.pending} {t('dash.pending')}
-                </span>
-              )}
-            </Card>
-            <Card label={t('dash.hosts')} value={String(data.hosts)} />
-            <Card label={t('dash.traffic')} value={formatBytes(data.bytes)} />
-            <Card
-              label={t('dash.avgDuration')}
-              value={formatMillis(data.avg_duration_ms)}
-            >
-              {failures > 0 && (
-                <span className="dash-note bad">
-                  {failures} {t('dash.failures')}
-                </span>
-              )}
-            </Card>
-            <Card
-              label={t('dash.recent', {
-                seconds: String(Math.round(data.recent_window_seconds)),
-              })}
-              value={String(data.recent_flows)}
-            >
-              {data.span_seconds > 0 && (
-                <span className="dash-note">
-                  {t('dash.captureSpan', {
-                    duration: formatDuration(data.span_seconds),
-                  })}
-                </span>
-              )}
-            </Card>
-          </section>
-
-          <section className="dash-grid">
+        <section className="dash-grid">
             <Panel title={t('dash.statusTitle')}>
               {totalStatus === 0 ? (
                 <p className="dash-sub">{t('dash.noStatus')}</p>
@@ -293,8 +297,7 @@ export function DashboardTab({
                 </tbody>
               </table>
             </Panel>
-          </section>
-        </>
+        </section>
       )}
     </div>
   );
@@ -304,18 +307,23 @@ function Card({
   label,
   value,
   children,
+  onClick,
 }: {
   label: string;
   value: string;
   children?: React.ReactNode;
+  onClick?: () => void;
 }) {
-  return (
-    <div className="dash-card">
+  const content = (
+    <>
       <span className="dash-card-label">{label}</span>
       <strong className="dash-card-value">{value}</strong>
       {children}
-    </div>
+    </>
   );
+  return onClick
+    ? <button type="button" className="dash-card dash-card-button" onClick={onClick}>{content}</button>
+    : <div className="dash-card">{content}</div>;
 }
 
 function Panel({
