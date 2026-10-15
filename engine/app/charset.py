@@ -24,6 +24,7 @@ _META_CHARSET = re.compile(
 )
 
 DEFAULT_CHARSET = "utf-8"
+LEGACY_KOREAN_CHARSET = "cp949"
 
 # What a byte-order mark tells us, checked before anything the headers say
 # because it is in the data itself.
@@ -56,6 +57,29 @@ def charset_from_headers(content_type: str | bytes | None) -> str | None:
     return match.group(1).decode("ascii", "replace") if match else None
 
 
+def _legacy_korean_charset(content_type: str | None, body: bytes) -> str | None:
+    """Recognise Korean HTML/plain text that omitted its charset.
+
+    CP949 is a superset of EUC-KR and round-trips both encodings. Keep this
+    deliberately narrow: guessing arbitrary binary data as a legacy text
+    encoding would make the detail view misleading.
+    """
+    media_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if media_type not in {"text/html", "text/plain", "application/xhtml+xml"}:
+        return None
+    try:
+        text = body.decode(LEGACY_KOREAN_CHARSET)
+    except UnicodeDecodeError:
+        return None
+    hangul = sum(
+        "\uac00" <= char <= "\ud7a3"
+        or "\u1100" <= char <= "\u11ff"
+        or "\u3130" <= char <= "\u318f"
+        for char in text
+    )
+    return LEGACY_KOREAN_CHARSET if hangul >= 2 else None
+
+
 def charset_of(content_type: str | None, body: bytes | None) -> str:
     """Work out how to read this body.
 
@@ -70,12 +94,31 @@ def charset_of(content_type: str | None, body: bytes | None) -> str:
 
     declared = charset_from_headers(content_type)
     if declared:
-        return normalise(declared)
+        declared_charset = normalise(declared)
+        # A surprising number of legacy pages claim UTF-8 while sending
+        # CP949. Only override that default when UTF-8 demonstrably fails
+        # and the decoded text contains Korean, so explicit legacy charsets
+        # and arbitrary binary bodies remain untouched.
+        if body and declared_charset == DEFAULT_CHARSET:
+            try:
+                body.decode(DEFAULT_CHARSET)
+            except UnicodeDecodeError:
+                guessed = _legacy_korean_charset(content_type, body)
+                if guessed:
+                    return guessed
+        return declared_charset
 
     if body:
         match = _META_CHARSET.search(body[:2048])
         if match:
             return normalise(match.group(1).decode("ascii", "replace"))
+
+        try:
+            body.decode(DEFAULT_CHARSET)
+        except UnicodeDecodeError:
+            guessed = _legacy_korean_charset(content_type, body)
+            if guessed:
+                return guessed
 
     return DEFAULT_CHARSET
 

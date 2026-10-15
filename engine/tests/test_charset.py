@@ -75,6 +75,33 @@ def test_charset_is_taken_from_the_headers() -> None:
     assert charset.charset_of("text/html; charset=nonsense-9", None) == "utf-8"
 
 
+def test_korean_html_without_a_charset_is_detected_as_cp949() -> None:
+    text = (
+        "<p>오류 '80040e07'</p>"
+        "<p>nvarchar 값 'SDB_new_board_back'을(를) 데이터 형식 int(으)로 "
+        "변환하지 못했습니다.</p><p>줄 62</p>"
+    )
+    raw = text.encode("cp949")
+
+    assert charset.charset_of("text/html", raw) == "cp949"
+    assert charset.decode_body("text/html", raw) == text
+    assert charset.encode(charset.decode_body("text/html", raw), "cp949") == raw
+
+
+def test_mislabelled_utf8_korean_html_is_detected_as_cp949() -> None:
+    text = "<p>데이터 형식을 변환하지 못했습니다.</p>"
+    raw = text.encode("cp949")
+
+    assert charset.charset_of("text/html; charset=utf-8", raw) == "cp949"
+    assert charset.decode_body("text/html; charset=utf-8", raw) == text
+
+
+def test_legacy_korean_guess_does_not_apply_to_binary_content() -> None:
+    raw = "한글 데이터".encode("cp949")
+
+    assert charset.charset_of("application/octet-stream", raw) == "utf-8"
+
+
 def test_round_trip_keeps_the_original_bytes() -> None:
     """Decoding then encoding has to give back what came in, or an edit in
     the UI silently rewrites a body the user never touched."""

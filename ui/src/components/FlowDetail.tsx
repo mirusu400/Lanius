@@ -331,7 +331,12 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const [requestStage, setRequestStage] = useState<RequestStage>('modified');
   const previousFlowId = useRef<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const menu = useContextMenu<{ message: 'request' | 'response'; flow: FlowSummary; detail: FlowDetail | null }>();
+  const menu = useContextMenu<{
+    message: 'request' | 'response';
+    flow: FlowSummary;
+    detail: FlowDetail | null;
+    selection: string;
+  }>();
   const codegen = useCodegenMenu();
   const pluginActions = usePluginActions(setActionError);
   const activeHalf = useRef<'request' | 'response'>('response');
@@ -405,7 +410,17 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     event: React.MouseEvent,
     message: 'request' | 'response',
   ) => {
-    menu.open(event, { message, flow, detail });
+    const selection = window.getSelection();
+    const anchor = selection?.anchorNode;
+    const focus = selection?.focusNode;
+    // Capture this before opening the menu: clicking an action can collapse
+    // the browser selection. Ignore a stale selection from the other pane.
+    const selectedText = selection && !selection.isCollapsed && anchor && focus
+      && event.currentTarget.contains(anchor)
+      && event.currentTarget.contains(focus)
+      ? selection.toString()
+      : '';
+    menu.open(event, { message, flow, detail, selection: selectedText });
   };
 
   const menuFlow = menu.target?.flow ?? flow;
@@ -435,6 +450,11 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     },
     copyAs: codegen.buildMenu({ flow_id: menuFlow.id }),
     pluginActions: pluginMenu,
+    before: [{
+      label: t('editor.copy'),
+      disabled: !menu.target?.selection,
+      onSelect: () => void navigator.clipboard?.writeText(menu.target?.selection ?? ''),
+    }],
   });
 
   const charsetOf = (charset: string | null | undefined) =>

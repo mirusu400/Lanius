@@ -315,6 +315,38 @@ describe('FlowDetailView', () => {
     expect(await navigator.clipboard.readText()).toBe('https://api.test/x');
   });
 
+  it('copies selected request or response text from the right-click menu', async () => {
+    render(<FlowDetailView flow={httpFlow} />);
+    await waitFor(() => expect(bodyText(1)).toBe('ok'));
+    const responseBody = half(1)!.querySelector('pre.body')!;
+    const selection = window.getSelection()!;
+    const range = document.createRange();
+    range.selectNodeContents(responseBody);
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    fireEvent.contextMenu(responseBody);
+    const copy = screen.getByRole('menuitem', { name: t('editor.copy') });
+    expect((copy as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(copy);
+    expect(await navigator.clipboard.readText()).toBe('ok');
+  });
+
+  it('does not copy a stale selection from the other message pane', async () => {
+    render(<FlowDetailView flow={httpFlow} />);
+    await waitFor(() => expect(bodyText(1)).toBe('ok'));
+    const request = half(0)!;
+    const responseBody = half(1)!.querySelector('pre.body')!;
+    const selection = window.getSelection()!;
+    const range = document.createRange();
+    range.selectNodeContents(responseBody);
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    fireEvent.contextMenu(request);
+    expect((screen.getByRole('menuitem', { name: t('editor.copy') }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('keeps the right-clicked request as the menu target when selection changes', async () => {
     const { rerender } = render(<FlowDetailView flow={httpFlow} />);
     const half = (await screen.findByText(t('detail.request'))).closest('section')!;
