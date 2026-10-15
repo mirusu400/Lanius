@@ -1804,6 +1804,21 @@ td.empty {
   color: var(--muted);
 }
 
+.detail-charset {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.78em;
+  gap: 5px;
+}
+
+.detail-charset select {
+  background: var(--bg);
+  font-size: 1em;
+  max-width: 170px;
+  padding: 2px 5px;
+}
+
 .view-switch {
   display: flex;
   gap: 2px;
@@ -4804,12 +4819,6 @@ pre.response-preview-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* Charset badge in the detail header: informative, not alarming. */
-.pill.charset {
-  margin-left: 8px;
-  opacity: 0.85;
 }
 
 /* Shows the editor font at the chosen size, so the effect of a change is

@@ -178,25 +178,26 @@ function PreviewContent({ preview, query, activeIndex, onMatchCount }: {
   return null;
 }
 
-export function ResponsePreview({ flowId, query = '', activeIndex = null, onMatchCount = NOOP_MATCH_COUNT }: {
+export function ResponsePreview({ flowId, charset, query = '', activeIndex = null, onMatchCount = NOOP_MATCH_COUNT }: {
   flowId: string;
+  charset?: string | null;
   query?: string;
   activeIndex?: number | null;
   onMatchCount?: (count: number) => void;
 }) {
   const t = useT();
-  const [result, setResult] = useState<{ flowId: string; preview?: PreviewData; error?: string } | null>(null);
+  const [result, setResult] = useState<{ flowId: string; charset: string | null; preview?: PreviewData; error?: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     onMatchCount(0);
-    getResponsePreview(flowId)
-      .then((data) => { if (!cancelled) setResult({ flowId, preview: data }); })
-      .catch((cause: unknown) => { if (!cancelled) setResult({ flowId, error: cause instanceof Error ? cause.message : String(cause) }); });
+    getResponsePreview(flowId, charset)
+      .then((data) => { if (!cancelled) setResult({ flowId, charset: charset ?? null, preview: data }); })
+      .catch((cause: unknown) => { if (!cancelled) setResult({ flowId, charset: charset ?? null, error: cause instanceof Error ? cause.message : String(cause) }); });
     return () => { cancelled = true; };
-  }, [flowId, onMatchCount]);
+  }, [flowId, charset, onMatchCount]);
 
-  if (result?.flowId !== flowId) return <p className="muted">{t('detail.preview.loading')}</p>;
+  if (result?.flowId !== flowId || result.charset !== (charset ?? null)) return <p className="muted">{t('detail.preview.loading')}</p>;
   if (result.error) return <p className="banner error">{t('detail.preview.failed', { message: result.error })}</p>;
   if (!result.preview) return <p className="muted">{t('detail.preview.loading')}</p>;
   return <div className="response-preview"><PreviewContent preview={result.preview} query={query} activeIndex={activeIndex} onMatchCount={onMatchCount} /></div>;

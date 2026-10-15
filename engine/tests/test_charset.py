@@ -102,6 +102,13 @@ def test_legacy_korean_guess_does_not_apply_to_binary_content() -> None:
     assert charset.charset_of("application/octet-stream", raw) == "utf-8"
 
 
+def test_only_text_charsets_can_be_selected_manually() -> None:
+    assert charset.selectable("EUC-KR") == "euc_kr"
+    assert charset.selectable("windows-1252") == "cp1252"
+    with pytest.raises(ValueError, match="unsupported charset"):
+        charset.selectable("base64_codec")
+
+
 def test_round_trip_keeps_the_original_bytes() -> None:
     """Decoding then encoding has to give back what came in, or an edit in
     the UI silently rewrites a body the user never touched."""

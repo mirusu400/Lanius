@@ -71,12 +71,21 @@ class RequestSnapshot:
             body_size=int(value.get("body_size") or 0),
         )
 
-    def detail(self, *, auto_decompress: bool) -> dict[str, Any]:
+    def detail(
+        self,
+        *,
+        auto_decompress: bool,
+        charset_override: str | None = None,
+    ) -> dict[str, Any]:
         shown, content_encoding, decoded, decode_error = body_for_display(
             self.headers, self.body, enabled=auto_decompress and not self.body_omitted
         )
         content_type = _content_type(self.headers)
-        body_charset = charset.charset_of(content_type, shown)
+        body_charset = (
+            charset.normalise(charset_override)
+            if charset_override
+            else charset.charset_of(content_type, shown)
+        )
         return {
             "method": self.method,
             "scheme": self.scheme,
@@ -144,12 +153,19 @@ class FlowRecord:
         data.pop("request_auto_modified", None)
         return data
 
-    def detail(self, *, auto_decompress: bool = False) -> dict[str, Any]:
+    def detail(
+        self,
+        *,
+        auto_decompress: bool = False,
+        request_charset_override: str | None = None,
+        response_charset_override: str | None = None,
+    ) -> dict[str, Any]:
         """Full dict with headers and bodies rendered as text-safe values.
 
-        Bodies are read with the charset each message declares. Decoding
-        everything as UTF-8 turned a Korean EUC-KR page into replacement
-        characters, which cannot be turned back into the original bytes.
+        Bodies are read with a manual display override when supplied, then
+        with the charset each message declares or detects. Decoding everything
+        as UTF-8 turned a Korean EUC-KR page into replacement characters,
+        which cannot be turned back into the original bytes.
         """
         data = asdict(self)
         data.pop("request_original", None)
@@ -168,11 +184,19 @@ class FlowRecord:
                 enabled=auto_decompress and not self.response_body_omitted,
             )
         )
-        request_charset = charset.charset_of(
-            _content_type(self.request_headers), request_display
+        request_charset = (
+            charset.normalise(request_charset_override)
+            if request_charset_override
+            else charset.charset_of(
+                _content_type(self.request_headers), request_display
+            )
         )
-        response_charset = charset.charset_of(
-            _content_type(self.response_headers), response_display
+        response_charset = (
+            charset.normalise(response_charset_override)
+            if response_charset_override
+            else charset.charset_of(
+                _content_type(self.response_headers), response_display
+            )
         )
         data["request_body"] = (
             None
@@ -210,12 +234,17 @@ class FlowRecord:
             automatic = self.request_auto_modified or self.request_original
             data["request_variants"] = {
                 "original": self.request_original.detail(
-                    auto_decompress=auto_decompress
+                    auto_decompress=auto_decompress,
+                    charset_override=request_charset_override,
                 ),
                 "auto_modified": automatic.detail(
-                    auto_decompress=auto_decompress
+                    auto_decompress=auto_decompress,
+                    charset_override=request_charset_override,
                 ),
-                "modified": final.detail(auto_decompress=auto_decompress),
+                "modified": final.detail(
+                    auto_decompress=auto_decompress,
+                    charset_override=request_charset_override,
+                ),
             }
         return data
 

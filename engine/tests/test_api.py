@@ -78,6 +78,49 @@ def test_text_response_preview_includes_syntax_metadata(client) -> None:
     }
 
 
+def test_flow_body_charsets_can_be_overridden_independently(client) -> None:
+    request_text = "요청 본문"
+    response_text = "日本語の応答"
+    seed(
+        client,
+        "legacy",
+        request_headers=[("Content-Type", "text/plain")],
+        request_body=request_text.encode("utf-16-le"),
+        response_headers=[("Content-Type", "text/html")],
+        response_body=response_text.encode("shift_jis"),
+    )
+
+    data = client.get(
+        "/api/flows/legacy?request_charset=utf-16-le&response_charset=shift_jis"
+    ).json()
+    assert data["request_body"] == request_text
+    assert data["response_body"] == response_text
+    assert data["request_charset"] == "utf-16-le"
+    assert data["response_charset"] == "shift_jis"
+
+
+def test_flow_body_charset_rejects_non_text_codecs(client) -> None:
+    seed(client, "legacy")
+    response = client.get("/api/flows/legacy?response_charset=base64_codec")
+    assert response.status_code == 422
+    assert response.json()["detail"] == "unsupported charset"
+
+
+def test_response_preview_uses_the_selected_charset(client) -> None:
+    text = "<p>日本語の応答</p>"
+    seed(
+        client,
+        "legacy-preview",
+        response_headers=[("Content-Type", "text/html")],
+        response_body=text.encode("shift_jis"),
+    )
+
+    preview = client.get(
+        "/api/flows/legacy-preview/response-preview?charset=shift_jis"
+    ).json()
+    assert preview == {"kind": "html", "text": text}
+
+
 def test_list_and_filter_flows(client) -> None:
     seed(client, "a", host="a.com")
     seed(client, "b", host="b.com", method="POST")

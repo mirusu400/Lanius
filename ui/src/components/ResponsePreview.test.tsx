@@ -53,3 +53,22 @@ it('colours a text preview using its response MIME while keeping search marks', 
   expect(document.querySelector('.response-preview-text .hljs-keyword')?.textContent).toBe('const');
   expect(document.querySelector('.response-preview-text mark.find-current')?.textContent).toBe('answer');
 });
+
+it('reloads the preview with the selected response charset', async () => {
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL) => ({
+    ok: true,
+    json: async () => ({ kind: 'html', text: '<p>日本語</p>' }),
+  }));
+  vi.stubGlobal('fetch', fetchMock);
+  const { rerender } = render(<ResponsePreview flowId="legacy" charset="shift_jis" />);
+  await screen.findByTitle(t('detail.preview.htmlTitle'));
+  expect(String(fetchMock.mock.calls[0][0])).toContain(
+    '/api/flows/legacy/response-preview?charset=shift_jis',
+  );
+
+  rerender(<ResponsePreview flowId="legacy" charset="cp949" />);
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  expect(String(fetchMock.mock.calls[1][0])).toContain(
+    '/api/flows/legacy/response-preview?charset=cp949',
+  );
+});

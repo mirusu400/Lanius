@@ -44,6 +44,19 @@ interface Props {
 type View = 'parsed' | 'raw' | 'hex' | 'preview';
 type RequestStage = 'original' | 'auto_modified' | 'modified';
 
+const CHARSET_OPTIONS = [
+  ['utf-8', 'UTF-8'],
+  ['cp949', 'CP949 / Windows-949'],
+  ['euc-kr', 'EUC-KR'],
+  ['shift_jis', 'Shift_JIS'],
+  ['gb18030', 'GB18030'],
+  ['big5', 'Big5'],
+  ['windows-1252', 'Windows-1252'],
+  ['iso-8859-1', 'ISO-8859-1'],
+  ['utf-16-le', 'UTF-16 LE'],
+  ['utf-16-be', 'UTF-16 BE'],
+] as const;
+
 function HeaderList({
   headers,
   t,
@@ -89,7 +102,9 @@ function Half({
   bodyOmitted,
   bodySize,
   raw,
-  charsetLabel,
+  charset,
+  charsetOverride,
+  onCharsetOverride,
   encodingLabel,
   decodeError,
   requestStage,
@@ -116,7 +131,9 @@ function Half({
   bodyOmitted?: boolean;
   bodySize?: number;
   raw: string;
-  charsetLabel: string | null;
+  charset: string | null | undefined;
+  charsetOverride: string;
+  onCharsetOverride: (charset: string) => void;
   encodingLabel: string | null;
   decodeError?: string | null;
   requestStage?: RequestStage;
@@ -207,7 +224,18 @@ function Half({
       <div className="detail-half-bar">
         <span className="detail-half-title">{title}</span>
         {note && <span className="muted">{note}</span>}
-        {charsetLabel && <span className="pill charset">{charsetLabel}</span>}
+        {http && <label className="detail-charset">
+          <span>{t('detail.charsetOption')}</span>
+          <select
+            aria-label={t('detail.charsetFor', { pane: title })}
+            title={t('detail.charsetFor', { pane: title })}
+            value={charsetOverride}
+            onChange={(event) => onCharsetOverride(event.target.value)}
+          >
+            <option value="">{t('detail.charsetAuto', { charset: charset || 'utf-8' })}</option>
+            {CHARSET_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>}
         {encodingLabel && <span className="pill encoding">{encodingLabel}</span>}
         {requestStage && onRequestStage && (
           <div className="request-variants" role="tablist">
@@ -311,7 +339,7 @@ function Half({
             )}
           </>
         )}
-        {view === 'preview' && previewFlowId && !bodyOmitted && <ResponsePreview flowId={previewFlowId} query={query} activeIndex={selectedIndex} onMatchCount={setPreviewMatches} />}
+        {view === 'preview' && previewFlowId && !bodyOmitted && <ResponsePreview flowId={previewFlowId} charset={charsetOverride || null} query={query} activeIndex={selectedIndex} onMatchCount={setPreviewMatches} />}
       </div>
     </section>
   );
@@ -329,6 +357,11 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const [requestBodyView, setRequestBodyView] = useState<BodyView>('pretty');
   const [responseBodyView, setResponseBodyView] = useState<BodyView>('pretty');
   const [requestStage, setRequestStage] = useState<RequestStage>('modified');
+  const [charsetChoices, setCharsetChoices] = useState({
+    flowId: null as string | null,
+    request: '',
+    response: '',
+  });
   const previousFlowId = useRef<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const menu = useContextMenu<{
@@ -344,6 +377,13 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const activateResponse = useCallback(() => { activeHalf.current = 'response'; }, []);
   const isRequestActive = useCallback(() => activeHalf.current === 'request', []);
   const isResponseActive = useCallback(() => activeHalf.current === 'response', []);
+  const currentFlowId = flow?.id ?? null;
+  const requestCharsetOverride = charsetChoices.flowId === currentFlowId
+    ? charsetChoices.request
+    : '';
+  const responseCharsetOverride = charsetChoices.flowId === currentFlowId
+    ? charsetChoices.response
+    : '';
 
   useEffect(() => {
     if ((flow?.id ?? null) !== previousFlowId.current) {
@@ -355,7 +395,10 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       return;
     }
     let cancelled = false;
-    getFlow(flow.id, reveal)
+    getFlow(flow.id, reveal, {
+      request: requestCharsetOverride,
+      response: responseCharsetOverride,
+    })
       .then((d) => {
         if (!cancelled) setDetail(d);
       })
@@ -365,7 +408,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     return () => {
       cancelled = true;
     };
-  }, [flow, flow?.status_code, reveal]);
+  }, [flow, flow?.status_code, reveal, requestCharsetOverride, responseCharsetOverride]);
 
   const sendRequest = (
     selected: FlowSummary | null,
@@ -379,7 +422,10 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     }
     // Selection can change before the detail fetch finishes. Never attach
     // the previous request's headers or body to the newly selected flow.
-    void getFlow(selected.id, reveal)
+    void getFlow(selected.id, reveal, selected.id === currentFlowId ? {
+      request: requestCharsetOverride,
+      response: responseCharsetOverride,
+    } : {})
       .then((fetched) => send(selected, fetched))
       .catch((err: Error) => setActionError(err.message));
   };
@@ -405,6 +451,17 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const requestViews: View[] = isTcp ? ['raw', 'hex'] : ['parsed', 'raw', 'hex'];
   const responseViews: View[] = isTcp ? ['raw', 'hex'] : ['parsed', 'raw', 'hex', 'preview'];
   const pick = (view: View, views: View[]) => (views.includes(view) ? view : views[0]);
+  const setCharsetOverride = (
+    side: 'request' | 'response',
+    value: string,
+  ) => {
+    setCharsetChoices((current) => ({
+      flowId: flow.id,
+      request: current.flowId === flow.id ? current.request : '',
+      response: current.flowId === flow.id ? current.response : '',
+      [side]: value,
+    }));
+  };
 
   const openMenu = (
     event: React.MouseEvent,
@@ -457,12 +514,6 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     }],
   });
 
-  const charsetOf = (charset: string | null | undefined) =>
-    // Only when it is not the default, so the common case stays quiet.
-    charset && charset !== 'utf-8'
-      ? t('detail.charset', { charset })
-      : null;
-
   const variants = detail?.request_variants ?? null;
   const selectedVariant: RequestVariant | null = variants
     ? variants[requestStage]
@@ -513,7 +564,9 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
             : rawRequest(flow, detail)
       }
       headers={selectedVariant?.headers ?? detail?.request_headers ?? null}
-      charsetLabel={charsetOf(selectedVariant?.charset ?? detail?.request_charset)}
+      charset={selectedVariant?.charset ?? detail?.request_charset}
+      charsetOverride={requestCharsetOverride}
+      onCharsetOverride={(value) => setCharsetOverride('request', value)}
       encodingLabel={encodingOf(requestEncoding, requestDecoded)}
       decodeError={decodeErrorOf(requestEncoding, requestDecodeError)}
       requestStage={variants ? requestStage : undefined}
@@ -547,7 +600,9 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       bodyOmitted={detail?.response_body_omitted}
       bodySize={detail?.response_size}
       raw={isTcp ? (detail?.response_body ?? '') : rawResponse(flow, detail)}
-      charsetLabel={charsetOf(detail?.response_charset)}
+      charset={detail?.response_charset}
+      charsetOverride={responseCharsetOverride}
+      onCharsetOverride={(value) => setCharsetOverride('response', value)}
       encodingLabel={encodingOf(
         detail?.response_content_encoding,
         detail?.response_body_decoded,

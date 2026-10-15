@@ -201,8 +201,25 @@ def _spreadsheet_preview(archive: zipfile.ZipFile) -> dict[str, Any]:
     return {"kind": "spreadsheet", "sheets": sheets, "total_sheets": len(all_sheets)}
 
 
-def _csv_preview(body: bytes, content_type: str) -> dict[str, Any]:
-    decoded = charset.decode_body(content_type, body)
+def _text_body(
+    body: bytes,
+    content_type: str,
+    charset_override: str | None,
+) -> str:
+    selected = (
+        charset.normalise(charset_override)
+        if charset_override
+        else charset.charset_of(content_type, body)
+    )
+    return charset.decode(body, selected)
+
+
+def _csv_preview(
+    body: bytes,
+    content_type: str,
+    charset_override: str | None,
+) -> dict[str, Any]:
+    decoded = _text_body(body, content_type, charset_override)
     try:
         rows = list(csv.reader(io.StringIO(decoded[:500_000])))[:MAX_SHEET_ROWS]
     except csv.Error:
@@ -210,7 +227,10 @@ def _csv_preview(body: bytes, content_type: str) -> dict[str, Any]:
     return {"kind": "csv", "rows": [row[:MAX_SHEET_COLUMNS] for row in rows]}
 
 
-def response_preview(record: FlowRecord) -> dict[str, Any]:
+def response_preview(
+    record: FlowRecord,
+    charset_override: str | None = None,
+) -> dict[str, Any]:
     """Return a preview model, never executable captured content."""
     if record.response_body_omitted:
         return {"kind": "unavailable", "reason": "media_body_omitted"}
@@ -263,11 +283,11 @@ def response_preview(record: FlowRecord) -> dict[str, Any]:
     if image_mime or mime in IMAGE_TYPES:
         return {"kind": "image", "mime": image_mime or mime, "data": base64.b64encode(body).decode("ascii")}
 
-    text = charset.decode_body(content_type, body)
+    text = _text_body(body, content_type, charset_override)
     if mime in {"text/html", "application/xhtml+xml"} or suffix in {".html", ".htm"} or re.match(r"\s*(?:<!doctype html|<html[\s>])", text[:200], re.I):
         return {"kind": "html", "text": text}
     if mime in {"text/csv", "application/csv"} or suffix == ".csv":
-        return _csv_preview(body, content_type)
+        return _csv_preview(body, content_type, charset_override)
     if mime == "application/json" or mime.endswith("+json") or suffix == ".json":
         try:
             text = json.dumps(json.loads(text), ensure_ascii=False, indent=2)

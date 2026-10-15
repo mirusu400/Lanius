@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
-from .. import __version__
+from .. import __version__, charset
 from ..addons.intercept import InterceptError
 from ..addons.match_replace import MatchReplaceError, preview as preview_match_replace
 from ..addons.replay import ReplayError, build_flow, render_raw
@@ -78,6 +78,15 @@ logger = logging.getLogger(__name__)
 # and the code generators. There were three lists, and the shortest of
 # them left a real x-goog-api-key on screen.
 SENSITIVE_HEADERS = codegen.SECRET_HEADERS
+
+
+def _display_charset(value: str | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        return charset.selectable(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="unsupported charset") from exc
 
 
 class InterceptRulesPatch(BaseModel):
@@ -1176,11 +1185,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {**page, "count": len(page["items"])}
 
     @app.get("/api/flows/{flow_id}")
-    async def get_flow(flow_id: str, reveal: bool = False) -> dict[str, Any]:
+    async def get_flow(
+        flow_id: str,
+        reveal: bool = False,
+        request_charset: str | None = None,
+        response_charset: str | None = None,
+    ) -> dict[str, Any]:
         record = await asyncio.to_thread(store.get, flow_id)
         if record is None:
             raise HTTPException(status_code=404, detail="flow not found")
-        data = record.detail(auto_decompress=auto_decompress_enabled(store))
+        data = record.detail(
+            auto_decompress=auto_decompress_enabled(store),
+            request_charset_override=_display_charset(request_charset),
+            response_charset_override=_display_charset(response_charset),
+        )
         annotation = await asyncio.to_thread(store.get_annotation, flow_id)
         data.update(annotation or {})
         data["request_headers"] = redact_headers(
@@ -1224,11 +1242,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="body not found")
         return Response(body, media_type="application/octet-stream")
     @app.get("/api/flows/{flow_id}/response-preview")
-    async def get_response_preview(flow_id: str) -> dict[str, Any]:
+    async def get_response_preview(
+        flow_id: str,
+        charset: str | None = None,
+    ) -> dict[str, Any]:
         record = await asyncio.to_thread(store.get, flow_id)
         if record is None:
             raise HTTPException(status_code=404, detail="flow not found")
-        return await asyncio.to_thread(response_preview, record)
+        return await asyncio.to_thread(
+            response_preview,
+            record,
+            _display_charset(charset),
+        )
 
     @app.get("/api/about")
     async def about() -> dict[str, Any]:

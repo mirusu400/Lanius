@@ -172,8 +172,17 @@ export async function listFlowPage(
     anchor: data?.anchor, next_cursor: data?.next_cursor };
 }
 
-export function getFlow(id: string, reveal = false): Promise<FlowDetail> {
-  return request<FlowDetail>(`/api/flows/${id}${reveal ? '?reveal=true' : ''}`);
+export function getFlow(
+  id: string,
+  reveal = false,
+  charsets: { request?: string | null; response?: string | null } = {},
+): Promise<FlowDetail> {
+  const params = new URLSearchParams();
+  if (reveal) params.set('reveal', 'true');
+  if (charsets.request) params.set('request_charset', charsets.request);
+  if (charsets.response) params.set('response_charset', charsets.response);
+  const query = params.size ? `?${params}` : '';
+  return request<FlowDetail>(`/api/flows/${encodeURIComponent(id)}${query}`);
 }
 
 export function patchFlowAnnotation(
@@ -186,8 +195,9 @@ export function patchFlowAnnotation(
   });
 }
 
-export function getResponsePreview(id: string): Promise<ResponsePreview> {
-  return request<ResponsePreview>(`/api/flows/${encodeURIComponent(id)}/response-preview`);
+export function getResponsePreview(id: string, charset?: string | null): Promise<ResponsePreview> {
+  const query = charset ? `?charset=${encodeURIComponent(charset)}` : '';
+  return request<ResponsePreview>(`/api/flows/${encodeURIComponent(id)}/response-preview${query}`);
 }
 
 export function clearFlows(): Promise<{ ok: boolean }> {

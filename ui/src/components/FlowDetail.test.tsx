@@ -65,10 +65,13 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
-      const isTcp = String(input).includes('t1');
-      const isJson = String(input).includes('j1');
-      const isCode = String(input).includes('c1');
-      const isModified = String(input).includes('m1');
+      const url = new URL(String(input));
+      const isTcp = url.href.includes('t1');
+      const isJson = url.href.includes('j1');
+      const isCode = url.href.includes('c1');
+      const isModified = url.href.includes('m1');
+      const requestCharset = url.searchParams.get('request_charset');
+      const responseCharset = url.searchParams.get('response_charset');
       return {
         ok: true,
         status: 200,
@@ -78,15 +81,21 @@ beforeEach(() => {
           request_headers: isTcp ? [] : isCode
             ? [['Host', 'api.test'], ['Content-Type', 'text/html']]
             : [['Host', 'api.test']],
-          request_body: isTcp ? 'HELLO\r\n' : isCode ? '<main class="card">Hi</main>' : '',
+          request_body: requestCharset
+            ? `decoded request as ${requestCharset}`
+            : isTcp ? 'HELLO\r\n' : isCode ? '<main class="card">Hi</main>' : '',
           response_headers: isTcp ? null : [['Content-Type', isCode ? 'application/javascript' : 'text/plain']],
-          response_body: isTcp
+          response_body: responseCharset
+            ? `decoded response as ${responseCharset}`
+            : isTcp
             ? '220 READY\r\n'
             : isJson
               ? '{"a":1,"b":2}'
               : isCode
                 ? 'const answer = 42;'
               : 'ok',
+          request_charset: requestCharset || 'utf-8',
+          response_charset: responseCharset || 'utf-8',
           request_variants: isModified
             ? {
                 original: {
@@ -224,6 +233,36 @@ describe('FlowDetailView', () => {
     render(<FlowDetailView flow={httpFlow} />);
     expect(await screen.findByText(t('detail.request'))).toBeTruthy();
     expect(screen.getByText(`${t('detail.response')} (200)`)).toBeTruthy();
+  });
+
+  it('lets request and response use independent manual charsets', async () => {
+    render(<FlowDetailView flow={httpFlow} />);
+    await waitFor(() => expect(bodyText(1)).toBe('ok'));
+    const requestCharset = screen.getByRole('combobox', {
+      name: t('detail.charsetFor', { pane: t('detail.request') }),
+    });
+    const responseCharset = screen.getByRole('combobox', {
+      name: t('detail.charsetFor', { pane: `${t('detail.response')} (200)` }),
+    });
+    expect(requestCharset.textContent).toContain(t('detail.charsetAuto', { charset: 'utf-8' }));
+
+    await userEvent.selectOptions(responseCharset, 'shift_jis');
+    await waitFor(() => expect(bodyText(1)).toBe('decoded response as shift_jis'));
+    let url = new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]));
+    expect(url.searchParams.get('response_charset')).toBe('shift_jis');
+    expect(url.searchParams.has('request_charset')).toBe(false);
+
+    await userEvent.selectOptions(requestCharset, 'cp949');
+    await waitFor(() => expect(bodyText(0)).toBe('decoded request as cp949'));
+    url = new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]));
+    expect(url.searchParams.get('request_charset')).toBe('cp949');
+    expect(url.searchParams.get('response_charset')).toBe('shift_jis');
+  });
+
+  it('does not offer a character encoding for raw TCP streams', async () => {
+    render(<FlowDetailView flow={tcpFlow} />);
+    await screen.findByText(t('detail.toServer'));
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0);
   });
 
   it('parses headers for HTTP flows', async () => {

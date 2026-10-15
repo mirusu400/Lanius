@@ -25,6 +25,18 @@ _META_CHARSET = re.compile(
 
 DEFAULT_CHARSET = "utf-8"
 LEGACY_KOREAN_CHARSET = "cp949"
+SELECTABLE_CHARSETS = (
+    "utf-8",
+    "cp949",
+    "euc_kr",
+    "shift_jis",
+    "gb18030",
+    "big5",
+    "cp1252",
+    "iso8859-1",
+    "utf-16-le",
+    "utf-16-be",
+)
 
 # What a byte-order mark tells us, checked before anything the headers say
 # because it is in the data itself.
@@ -46,6 +58,22 @@ def normalise(name: str | None) -> str:
         return codecs.lookup(cleaned).name
     except LookupError:
         return DEFAULT_CHARSET
+
+
+def selectable(name: str) -> str:
+    """Return an allowed manual display charset, or reject it.
+
+    Python's codec registry also contains transforms such as base64 whose
+    decoders do not return text. Manual HTTP body decoding intentionally
+    exposes only common character encodings.
+    """
+    try:
+        resolved = codecs.lookup(name.strip().strip('"\'').lower()).name
+    except LookupError as exc:
+        raise ValueError("unsupported charset") from exc
+    if resolved not in SELECTABLE_CHARSETS:
+        raise ValueError("unsupported charset")
+    return resolved
 
 
 def charset_from_headers(content_type: str | bytes | None) -> str | None:
@@ -171,10 +199,12 @@ def decode_body(content_type: str | None, body: bytes | None) -> str:
 
 __all__ = [
     "DEFAULT_CHARSET",
+    "SELECTABLE_CHARSETS",
     "charset_from_headers",
     "charset_of",
     "decode",
     "decode_body",
     "encode",
     "normalise",
+    "selectable",
 ]
