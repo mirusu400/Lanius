@@ -353,9 +353,7 @@ jobs:
             if [ "$target" = "app" ]; then
               # With a signing key, tauri archives and signs the .app
               # itself, and that archive is what the signature covers.
-              # Use a unique name for every build. A cached update manifest
-              # must never fetch a newer archive under the same URL, because
-              # that archive will fail signature verification.
+              # Collect artifacts gives it its fixed release name.
               signed=0
               for archive in "$bundle"/macos/*.app.tar.gz; do
                 [ -f "$archive" ] || continue
@@ -407,9 +405,38 @@ jobs:
             ! -name 'rw.*.dmg' \
             -exec cp {} "$out"/ \;
 
+          test -n "$(ls -A "$out")" || { echo 'no artifacts produced'; exit 1; }
+
+          # Fixed names, so each nightly replaces the last one's files
+          # instead of adding a timestamped set beside them. The version
+          # inside the bundle still changes, which is what the updater
+          # compares. A client holding the previous latest.json during a
+          # publish gets a signature mismatch and simply retries later.
+          label="${{ matrix.label }}"
+          for path in "$out"/*; do
+            base="$(basename "$path")"
+            case "$base" in
+              *.app.tar.gz.sig) name="Lanius-nightly-$label.app.tar.gz.sig" ;;
+              *.app.tar.gz) name="Lanius-nightly-$label.app.tar.gz" ;;
+              *.dmg) name="Lanius-nightly-$label.dmg" ;;
+              *.AppImage.sig) name="Lanius-nightly-$label.AppImage.sig" ;;
+              *.AppImage) name="Lanius-nightly-$label.AppImage" ;;
+              *.deb) name="Lanius-nightly-$label.deb" ;;
+              *.msi.sig) name="Lanius-nightly-$label.msi.sig" ;;
+              *.msi) name="Lanius-nightly-$label.msi" ;;
+              *-setup.exe.sig) name="Lanius-nightly-$label-setup.exe.sig" ;;
+              *-setup.exe) name="Lanius-nightly-$label-setup.exe" ;;
+              *) echo "no release name for $base"; exit 1 ;;
+            esac
+            if [ -e "$out/$name" ]; then
+              echo "two artifacts would both be named $name"
+              exit 1
+            fi
+            mv "$path" "$out/$name"
+          done
+
           echo "--- collected ---"
           ls -la "$out"
-          test -n "$(ls -A "$out")" || { echo 'no artifacts produced'; exit 1; }
 
       - uses: actions/upload-artifact@v7
         with:
@@ -519,31 +546,11 @@ jobs:
           print(json.dumps(manifest, indent=2))
           PY
 
-      - name: Stage the manifest and remember the previous updater bundles
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+      # Held back from the release upload and published last, after every
+      # bundle it points at is in place.
+      - name: Stage the manifest
         run: |
           set -euo pipefail
-          gh release view nightly --json assets --jq '.assets[].name' > previous-release-assets.txt
-          if grep -Fxq latest.json previous-release-assets.txt; then
-            gh release download nightly --pattern latest.json --dir .
-            mv latest.json previous-latest.json
-          fi
-          python3 - <<'PY' > previous-assets.txt
-          import json
-          from pathlib import Path
-          from urllib.parse import urlparse
-
-          previous = Path("previous-latest.json")
-          if previous.exists():
-              manifest = json.loads(previous.read_text(encoding="utf-8"))
-              for platform in manifest.get("platforms", {}).values():
-                  name = Path(urlparse(platform["url"]).path).name
-                  print(name)
-                  print(name + ".sig")
-          PY
-          echo "preserving $(wc -l < previous-assets.txt) previous updater assets"
           if [ -f dist/latest.json ]; then
             mv dist/latest.json latest.json
           fi
@@ -593,10 +600,11 @@ jobs:
             test. Verifying that authorisation is your responsibility.
           prerelease: true
           files: dist/*
+          # The names are fixed, so this replaces the previous nightly.
+          overwrite_files: true
           fail_on_unmatched_files: true
 
-      # Publish the pointer only after every bundle is available. Cached old
-      # manifests still refer to the previous, immutable bundle names.
+      # Publish the pointer only after every bundle is available.
       - name: Publish the update manifest
         if: hashFiles('latest.json') != ''
         env:
@@ -604,9 +612,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: gh release upload nightly latest.json --clobber
 
-      # Keep the current release and the updater bundles named by the last
-      # manifest. A cached manifest can still install its signed bundle, but
-      # older per-commit downloads do not keep piling up on the release.
+      # Only this build's files stay. This also clears the timestamped
+      # files earlier nightlies left behind.
       - name: Drop superseded release assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -621,11 +628,10 @@ jobs:
           current = {path.name for path in Path("dist").iterdir()}
           if Path("latest.json").exists():
               current.add("latest.json")
-          previous = set(Path("previous-assets.txt").read_text().splitlines())
           assets = json.loads(Path("release-assets.json").read_text())["assets"]
           for asset in assets:
               name = asset["name"]
-              if name in current or name in previous:
+              if name in current:
                   continue
               # This also removes the old feed if a build has no signing key.
               print(name)

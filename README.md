@@ -50,6 +50,10 @@ scope.
 | Linux | `Lanius_*_amd64.AppImage` or `Lanius_*_amd64.deb` |
 | Windows | `Lanius_*_x64_en-US.msi` or `Lanius_*_x64-setup.exe` |
 
+Nightly files keep the same names from build to build, such as
+`Lanius-nightly-macos-arm64.dmg`, `Lanius-nightly-linux-x86_64.AppImage` and
+`Lanius-nightly-windows-x86_64-setup.exe`.
+
 On VMware Linux guests with WebKitGTK 2.50, Lanius automatically avoids the
 DMABUF renderer that can leave the process running without a window. If a
 different Linux graphics setup has the same symptom, try launching with
