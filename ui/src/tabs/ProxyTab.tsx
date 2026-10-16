@@ -208,6 +208,16 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
     if (scopeReloadTimer.current !== null) window.clearTimeout(scopeReloadTimer.current);
   }, []);
 
+  // At most one reload per 500 ms while flows keep arriving. Restarting the
+  // timer on every event would starve it under steady traffic.
+  const scheduleReload = () => {
+    if (scopeReloadTimer.current !== null) return;
+    scopeReloadTimer.current = window.setTimeout(() => {
+      scopeReloadTimer.current = null;
+      void reload();
+    }, 500);
+  };
+
   useEffect(() => {
     getInterceptState()
       .then((state) => {
@@ -297,8 +307,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
               const flow = event.data;
               if (historySortRef.current.key !== 'started_at' || !historySortRef.current.desc) {
                 if (historyPageRef.current === 0) historyAnchor.current = undefined;
-                if (scopeReloadTimer.current !== null) window.clearTimeout(scopeReloadTimer.current);
-                scopeReloadTimer.current = window.setTimeout(() => void reload(), 500);
+                scheduleReload();
                 return;
               }
               if (historyPageRef.current === 0) {
@@ -307,8 +316,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                 setNextHistoryCursor(null);
               }
               if (filtersRef.current.inScopeOnly || filtersRef.current.search) {
-                if (scopeReloadTimer.current !== null) window.clearTimeout(scopeReloadTimer.current);
-                scopeReloadTimer.current = window.setTimeout(() => void reload(), 500);
+                scheduleReload();
                 return;
               }
               const existing = flowsRef.current.find((item) => item.id === flow.id);

@@ -20,6 +20,11 @@ from ..request_history import AUTO_MODIFIED, ORIGINAL, request_changed, snapshot
 
 logger = logging.getLogger(__name__)
 
+# A raw TCP record holds the whole stream so far, so writing it on every
+# message costs time quadratic in the message count. While a stream is open,
+# write it at most this often; start, end and error are still written at once.
+TCP_MESSAGE_FLUSH_SECONDS = 1.0
+
 
 def _addr(value: Any) -> str | None:
     if not value:
@@ -161,6 +166,7 @@ class CaptureAddon:
         self.scope = scope
         self._pending: set[asyncio.Task[None]] = set()
         self._last_write: dict[str, asyncio.Task[None]] = {}
+        self._tcp_flushes: dict[str, tuple[asyncio.TimerHandle, tcp.TCPFlow]] = {}
 
     def in_scope(self, flow: http.HTTPFlow) -> bool:
         if self.scope is None:
@@ -193,15 +199,37 @@ class CaptureAddon:
         self._save_tcp(flow, "tcp.start")
 
     def tcp_message(self, flow: tcp.TCPFlow) -> None:
-        self._save_tcp(flow, "tcp.message")
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._save_tcp(flow, "tcp.message")
+            return
+        if flow.id in self._tcp_flushes:
+            return
+        handle = loop.call_later(TCP_MESSAGE_FLUSH_SECONDS, self._flush_tcp, flow)
+        self._tcp_flushes[flow.id] = (handle, flow)
 
     def tcp_end(self, flow: tcp.TCPFlow) -> None:
+        self._cancel_tcp_flush(flow)
         self._save_tcp(flow, "tcp.end")
 
     def tcp_error(self, flow: tcp.TCPFlow) -> None:
+        self._cancel_tcp_flush(flow)
         self._save_tcp(flow, "tcp.error")
 
+    def _flush_tcp(self, flow: tcp.TCPFlow) -> None:
+        self._tcp_flushes.pop(flow.id, None)
+        self._save_tcp(flow, "tcp.message")
+
+    def _cancel_tcp_flush(self, flow: tcp.TCPFlow) -> None:
+        if (pending := self._tcp_flushes.pop(flow.id, None)) is not None:
+            pending[0].cancel()
+
     async def done(self) -> None:
+        # Write what open streams hold before shutdown.
+        for handle, flow in list(self._tcp_flushes.values()):
+            handle.cancel()
+            self._flush_tcp(flow)
         if self._pending:
             await asyncio.gather(*list(self._pending), return_exceptions=True)
 

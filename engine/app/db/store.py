@@ -836,6 +836,27 @@ class FlowStore:
             ).fetchone()
         return _row_to_record(row) if row else None
 
+    def list_ids(self, *, limit: int) -> List[str]:
+        """Flow ids in history order, newest first, without loading bodies."""
+        with self._read_lock:
+            rows = self._read_conn.execute(
+                "SELECT id FROM flows ORDER BY started_at DESC, rowid DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def get_many(self, flow_ids: Sequence[str]) -> List[FlowRecord]:
+        """Records for these ids, in the given order; deleted ones are skipped."""
+        if not flow_ids:
+            return []
+        marks = ",".join("?" * len(flow_ids))
+        with self._read_lock:
+            rows = self._read_conn.execute(
+                f"SELECT {_COLUMNS} FROM flows WHERE id IN ({marks})", tuple(flow_ids)
+            ).fetchall()
+        found = {record.id: record for record in map(_row_to_record, rows)}
+        return [found[flow_id] for flow_id in flow_ids if flow_id in found]
+
     def get_body_bytes(self, flow_id: str, side: str) -> bytes | None:
         if side not in {"request", "response"}:
             raise ValueError("side must be request or response")

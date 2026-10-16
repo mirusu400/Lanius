@@ -346,6 +346,22 @@ describe('ProxyTab', () => {
     ).toContain('needle-live.test'));
   });
 
+  it('keeps refreshing a searched history while flows arrive faster than the reload delay', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'needle');
+    await waitFor(() => expect(calls.some(({ url }) => url.includes('search=needle'))).toBe(true));
+    const before = calls.filter(({ url }) => url.includes('search=needle')).length;
+
+    // One flow every 100 ms for 1.2 s: a restarting debounce would never fire.
+    for (let index = 0; index < 12; index += 1) {
+      MockSocket.instances[0].emit('flow.request', { ...live, id: `burst-${index}` });
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+    }
+    expect(calls.filter(({ url }) => url.includes('search=needle')).length).toBeGreaterThan(before);
+  });
+
   it('pages into older history without holding every flow in the table', async () => {
     paginateHistory = true;
     const user = userEvent.setup();

@@ -92,6 +92,56 @@ def test_capture_publishes_tcp_events() -> None:
     ]
 
 
+def test_open_tcp_stream_is_written_at_most_once_per_interval(monkeypatch) -> None:
+    import asyncio
+
+    from app.addons import capture
+
+    monkeypatch.setattr(capture, "TCP_MESSAGE_FLUSH_SECONDS", 0.05)
+    store = FlowStore()
+    writes: list[str] = []
+    upsert = store.upsert
+    monkeypatch.setattr(store, "upsert", lambda record: (writes.append(record.comment), upsert(record))[1])
+    addon = CaptureAddon(store, EventBroker())
+    flow = make_tcp_flow()
+
+    async def scenario() -> None:
+        for _ in range(50):
+            addon.tcp_message(flow)
+        assert writes == []
+        await asyncio.sleep(0.1)
+        await addon.done()
+        assert len(writes) == 1
+        addon.tcp_message(flow)
+        addon.tcp_end(flow)  # end writes at once and drops the pending flush
+        await addon.done()
+        await asyncio.sleep(0.1)
+
+    asyncio.run(scenario())
+    assert len(writes) == 2
+    assert store.get(flow.id) is not None
+    store.close()
+
+
+def test_shutdown_writes_pending_tcp_stream(monkeypatch) -> None:
+    import asyncio
+
+    from app.addons import capture
+
+    monkeypatch.setattr(capture, "TCP_MESSAGE_FLUSH_SECONDS", 60)
+    store = FlowStore()
+    addon = CaptureAddon(store, EventBroker())
+    flow = make_tcp_flow()
+
+    async def scenario() -> None:
+        addon.tcp_message(flow)
+        await addon.done()
+
+    asyncio.run(scenario())
+    assert store.get(flow.id) is not None
+    store.close()
+
+
 def test_tcp_flows_appear_in_history(client) -> None:
     flow = make_tcp_flow()
     client.app.state.engine.capture.tcp_message(flow)

@@ -1489,3 +1489,25 @@ def test_updates_says_why_it_could_not_ask(client) -> None:
     assert response.status_code == 502
     assert "GitHub" in response.json()["detail"]
     updates.reset_cache()
+
+
+def test_export_streams_flows_across_batches_in_history_order(client) -> None:
+    for index in range(5):
+        seed(client, f"flow-{index}", started_at=index + 1, path=f"/{index}")
+    with mock.patch("app.api.server.EXPORT_BATCH_SIZE", 2):
+        response = client.get("/api/project/export")
+    assert response.status_code == 200
+    exported = response.json()
+    assert [flow["id"] for flow in exported["flows"]] == [f"flow-{index}" for index in range(4, -1, -1)]
+    assert exported["format"] == "lanius-project"
+
+
+def test_export_without_flows_is_plain_json(client) -> None:
+    seed(client, "only")
+    exported = client.get("/api/project/export?include_flows=false").json()
+    assert "flows" not in exported
+    assert exported["format"] == "lanius-project"
+
+
+def test_export_of_empty_project_has_empty_flow_list(client) -> None:
+    assert client.get("/api/project/export").json()["flows"] == []

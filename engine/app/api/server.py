@@ -19,7 +19,8 @@ from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
@@ -79,6 +80,8 @@ logger = logging.getLogger(__name__)
 # and the code generators. There were three lists, and the shortest of
 # them left a real x-goog-api-key on screen.
 SENSITIVE_HEADERS = codegen.SECRET_HEADERS
+# Flows per batch in a streamed JSON export; each batch is decoded off the loop.
+EXPORT_BATCH_SIZE = 200
 
 
 def _display_charset(value: str | None) -> str | None:
@@ -701,7 +704,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # --- project export and import ----------------------------------------
 
     @app.get("/api/project/export")
-    async def export_project(include_flows: bool = True) -> dict[str, Any]:
+    async def export_project(include_flows: bool = True) -> Response:
         """The whole project as one document.
 
         Flows are optional because a long capture dwarfs everything else,
@@ -727,13 +730,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 store.all_egress_ip_observations
             ),
         }
-        if include_flows:
-            flows = await asyncio.to_thread(lambda: store.list(limit=100000))
-            annotations = await asyncio.to_thread(store.all_annotations)
-            data["flows"] = [
-                {**flow.detail(), **annotations.get(flow.id, {})} for flow in flows
-            ]
-        return data
+        if not include_flows:
+            return JSONResponse(jsonable_encoder(data))
+        flow_ids = await asyncio.to_thread(store.list_ids, limit=100_000)
+        annotations = await asyncio.to_thread(store.all_annotations)
+
+        def encode_flows(ids: list[str]) -> str:
+            return ",".join(
+                json.dumps(jsonable_encoder({**flow.detail(), **annotations.get(flow.id, {})}))
+                for flow in store.get_many(ids)
+            )
+
+        async def body() -> AsyncIterator[bytes]:
+            # Stream the flows in batches, decoding bodies off the event loop,
+            # so a large export neither stalls the proxy nor sits in memory.
+            head = json.dumps(jsonable_encoder(data))
+            yield f'{head[:-1]}, "flows": ['.encode()
+            first = True
+            for start in range(0, len(flow_ids), EXPORT_BATCH_SIZE):
+                chunk = await asyncio.to_thread(
+                    encode_flows, flow_ids[start:start + EXPORT_BATCH_SIZE]
+                )
+                if chunk:
+                    yield (chunk if first else "," + chunk).encode()
+                    first = False
+            yield b"]}"
+
+        return StreamingResponse(body(), media_type="application/json")
 
     @app.get("/api/project/backup")
     async def backup_project() -> FileResponse:
@@ -754,6 +777,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             lockdown.set_scope_egress(True)
         scope = await asyncio.to_thread(engine.scope.reload)
         engine.match_replace.reload()
+        engine.scanner.reload()
         await egress_ip.reload()
         await _apply_lockdown_to_plugins(lockdown.enabled)
         if lockdown.scope_egress_effective:
@@ -1241,8 +1265,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         record = await asyncio.to_thread(store.get, flow_id)
         if record is None:
             raise HTTPException(status_code=404, detail="flow not found")
-        data = record.detail(
-            auto_decompress=auto_decompress_enabled(store),
+        auto_decompress = await asyncio.to_thread(auto_decompress_enabled, store)
+        # Decompressing and decoding a large body would stall the proxy.
+        data = await asyncio.to_thread(
+            record.detail,
+            auto_decompress=auto_decompress,
             request_charset_override=_display_charset(request_charset),
             response_charset_override=_display_charset(response_charset),
         )

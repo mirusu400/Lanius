@@ -321,3 +321,17 @@ def test_scanner_issue_api(tmp_path: Path) -> None:
         )
         assert resolved.json()["status"] == "resolved"
         assert client.delete(f"/api/issues/{issue_id}").json()["deleted"] is True
+
+
+def test_passive_setting_is_cached_and_reloaded(tmp_path) -> None:
+    store = FlowStore(tmp_path / "project.sqlite")
+    scanner = ScannerAddon(ContributionRegistry(store), store, EventBroker(), FakeReplay())
+    assert scanner.passive_enabled is True
+    scanner.set_passive_enabled(False)
+    assert scanner.passive_enabled is False
+    # A replaced project database is only seen after reload().
+    store.set_setting("scanner.passive_enabled", "1")
+    assert scanner.passive_enabled is False
+    scanner.reload()
+    assert scanner.passive_enabled is True
+    store.close()

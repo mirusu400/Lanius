@@ -325,14 +325,26 @@ class ScannerAddon:
         self.jobs: dict[str, ScanJob] = {}
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._pending: set[asyncio.Task[Any]] = set()
+        # Read once: the response hook runs on the event loop, and the
+        # setting lookup would wait there behind any long database write.
+        self._passive_enabled: bool | None = None
 
     @property
     def passive_enabled(self) -> bool:
-        return self.store.get_setting(PASSIVE_ENABLED_SETTING, "1") != "0"
+        if self._passive_enabled is None:
+            self._passive_enabled = (
+                self.store.get_setting(PASSIVE_ENABLED_SETTING, "1") != "0"
+            )
+        return self._passive_enabled
 
     def set_passive_enabled(self, enabled: bool) -> None:
         self.store.set_setting(PASSIVE_ENABLED_SETTING, "1" if enabled else "0")
+        self._passive_enabled = enabled
         self.broker.publish("scanner.settings", {"passive_enabled": enabled})
+
+    def reload(self) -> None:
+        """Re-read settings after the project database was replaced."""
+        self._passive_enabled = None
 
     def response(self, flow: http.HTTPFlow) -> None:
         if not self.passive_enabled:
