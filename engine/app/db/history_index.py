@@ -53,6 +53,11 @@ MEDIA_MIGRATION = (
 # Keep request numbers stable across sorting, paging, deletion and restarts.
 # The one-row sequence table deliberately survives History > Clear, so a
 # number that appeared in an audit trail is never assigned to another request.
+#
+# Rows captured before this migration keep request_number NULL and are read
+# as COALESCE(request_number, rowid). Backfilling them would rewrite every
+# row with its bodies and fire the search, endpoint and metrics triggers:
+# minutes for a multi-gigabyte project, long past the desktop startup limit.
 _NUMBER_COLUMNS = _MEDIA_COLUMNS + ", request_number"
 _NUMBER_NEW = _MEDIA_NEW + ", NEW.request_number"
 _NUMBER_INSERT = (
@@ -61,16 +66,16 @@ _NUMBER_INSERT = (
 )
 REQUEST_NUMBER_MIGRATION = (
     "ALTER TABLE flows ADD COLUMN request_number INTEGER",
-    "UPDATE flows SET request_number = rowid",
     "CREATE UNIQUE INDEX idx_flows_request_number ON flows(request_number) "
     "WHERE request_number IS NOT NULL",
     "ALTER TABLE flow_history ADD COLUMN request_number INTEGER",
-    "UPDATE flow_history SET request_number = history_rowid",
     "CREATE TABLE flow_request_sequence ("
     "singleton INTEGER PRIMARY KEY CHECK (singleton = 1), "
     "next_value INTEGER NOT NULL CHECK (next_value >= 1))",
+    # New numbers start above every existing rowid, so they can never
+    # collide with the implicit number of an older row.
     "INSERT INTO flow_request_sequence(singleton, next_value) "
-    "SELECT 1, COALESCE(MAX(request_number), 0) + 1 FROM flows",
+    "SELECT 1, COALESCE(MAX(rowid), 0) + 1 FROM flows",
     "DROP TRIGGER flow_history_insert",
     "DROP TRIGGER flow_history_update",
     f"CREATE TRIGGER flow_history_insert AFTER INSERT ON flows BEGIN {_NUMBER_INSERT} END",

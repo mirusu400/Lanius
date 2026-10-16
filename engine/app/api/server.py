@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
-from .. import __version__, charset
+from .. import __version__, charset, startup_progress
 from ..addons.intercept import InterceptError
 from ..addons.match_replace import MatchReplaceError, preview as preview_match_replace
 from ..addons.replay import ReplayError, build_flow, render_raw
@@ -412,6 +412,7 @@ def redact_headers(
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.ensure_dirs()
+    startup_progress.report("database")
     store = FlowStore(settings.db_path)
     compact_progress = CompactProgress()
     lockdown = LockdownPolicy.from_env(store)
@@ -439,6 +440,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             logger.exception("failed to log event %s", event_type)
 
     broker = EventBroker(on_publish=_log_event)
+    startup_progress.report("engine")
     engine = ProxyEngine(settings, store, broker, lockdown)
     egress_ip = EgressIpMonitor(store, lockdown, engine.product_route_proxy_url)
 
@@ -451,6 +453,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # A proxy that cannot bind must not take the API down with it.
         # Otherwise a port already held by another tool leaves the user with
         # a dead window and no way to change the port from inside the app.
+        startup_progress.report("proxy")
         try:
             await engine.start()
         except ProxyStartError as exc:
@@ -460,6 +463,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async with contextlib.AsyncExitStack() as stack:
             if mcp_app is not None and hasattr(mcp_app, "router"):
                 await stack.enter_async_context(mcp_app.router.lifespan_context(mcp_app))
+            startup_progress.report("api")
             try:
                 yield
             finally:

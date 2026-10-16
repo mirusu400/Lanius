@@ -3,7 +3,7 @@
 //! Owns the window and the Python engine lifecycle: the engine runs as a
 //! sidecar process (codex.md §4) and is shut down when the app exits.
 
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -32,13 +32,104 @@ pub struct ProjectSession(Mutex<Option<projects::Project>>);
 const API_HOST: &str = "127.0.0.1";
 const DEFAULT_API_PORT: u16 = 12954;
 const DEFAULT_PROXY_PORT: u16 = 8080;
+/// How long the engine may go without reaching its next startup stage.
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+/// A schema migration on a multi-gigabyte project can legitimately take
+/// minutes, and the engine cannot report progress from inside one.
+const MIGRATION_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+/// Marks the engine's startup stage lines on stdout (app/startup_progress.py).
+const STARTUP_MARKER: &str = "LANIUS_STARTUP ";
 #[cfg(target_os = "macos")]
 const NETWORK_EXTENSIONS_SETTINGS_URL: &str = "x-apple.systempreferences:com.apple.ExtensionsPreferences?extensionPointIdentifier=com.apple.system_extension.network_extension.extension-point";
 
 /// Handle to the sidecar so we can stop it on exit.
 #[derive(Default)]
 pub struct EngineProcess(Mutex<Option<Child>>);
+
+/// What a starting engine is doing, for the text under the picker's spinner.
+#[derive(Default)]
+pub struct StartupProgress(Mutex<Option<StartupState>>);
+
+struct StartupState {
+    stage: String,
+    version: Option<u32>,
+    target: Option<u32>,
+    started: Instant,
+    /// When the engine last reached a new stage; the timeout counts from here.
+    changed: Instant,
+}
+
+#[derive(Serialize)]
+pub struct StartupProgressReport {
+    stage: String,
+    version: Option<u32>,
+    target: Option<u32>,
+    elapsed_ms: u64,
+}
+
+impl StartupProgress {
+    fn begin(&self, stage: &str) {
+        let now = Instant::now();
+        *self.0.lock().expect("startup lock") = Some(StartupState {
+            stage: stage.to_string(),
+            version: None,
+            target: None,
+            started: now,
+            changed: now,
+        });
+    }
+
+    fn finish(&self) {
+        *self.0.lock().expect("startup lock") = None;
+    }
+
+    /// Apply one stage line from the engine; other output is ignored.
+    fn apply_line(&self, line: &str) {
+        let Some(json) = line.strip_prefix(STARTUP_MARKER) else {
+            return;
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else {
+            return;
+        };
+        let Some(stage) = value.get("stage").and_then(|stage| stage.as_str()) else {
+            return;
+        };
+        let number = |key: &str| {
+            value
+                .get(key)
+                .and_then(|value| value.as_u64())
+                .and_then(|value| u32::try_from(value).ok())
+        };
+        if let Some(state) = self.0.lock().expect("startup lock").as_mut() {
+            state.stage = stage.to_string();
+            state.version = number("version");
+            state.target = number("target");
+            state.changed = Instant::now();
+        }
+    }
+
+    /// Has the current stage run past its limit? Returns the stage if so.
+    fn overdue(&self) -> Option<String> {
+        let guard = self.0.lock().expect("startup lock");
+        let state = guard.as_ref()?;
+        let limit = if state.stage == "migrating" {
+            MIGRATION_TIMEOUT
+        } else {
+            STARTUP_TIMEOUT
+        };
+        (state.changed.elapsed() > limit).then(|| state.stage.clone())
+    }
+
+    fn report(&self) -> Option<StartupProgressReport> {
+        let guard = self.0.lock().expect("startup lock");
+        guard.as_ref().map(|state| StartupProgressReport {
+            stage: state.stage.clone(),
+            version: state.version,
+            target: state.target,
+            elapsed_ms: state.started.elapsed().as_millis() as u64,
+        })
+    }
+}
 
 #[derive(Clone, Serialize)]
 pub struct EngineInfo {
@@ -393,7 +484,8 @@ fn start_engine(
         // Explicit PID lets the engine watch the shell even if a frozen
         // bootloader starts another process between them.
         .env("LANIUS_SUPERVISOR_PID", std::process::id().to_string())
-        .stdout(Stdio::null())
+        .env("LANIUS_STARTUP_PROGRESS", "1")
+        .stdout(Stdio::piped())
         // Kept so a failed start can say why; the startup Doctor shows it too.
         .stderr(doctor::engine_log());
 
@@ -418,12 +510,36 @@ fn start_engine(
         });
     }
 
+    let progress = app.state::<Arc<StartupProgress>>().inner().clone();
+    progress.begin("launching");
+    let result = spawn_and_wait(command, state, &progress);
+    progress.finish();
+    result
+}
+
+fn spawn_and_wait(
+    mut command: Command,
+    state: &EngineProcess,
+    progress: &Arc<StartupProgress>,
+) -> Result<(), String> {
     match command.spawn() {
-        Ok(child) => {
+        Ok(mut child) => {
             let pid = child.id();
+            // Stage lines come first; the rest (uvicorn's access log) is
+            // drained and dropped so the engine never blocks on a full pipe.
+            if let Some(stdout) = child.stdout.take() {
+                let progress = progress.clone();
+                std::thread::spawn(move || {
+                    for line in std::io::BufReader::new(stdout).lines() {
+                        match line {
+                            Ok(line) => progress.apply_line(&line),
+                            Err(_) => break,
+                        }
+                    }
+                });
+            }
             *state.0.lock().expect("engine lock") = Some(child);
-            let deadline = Instant::now() + STARTUP_TIMEOUT;
-            while Instant::now() < deadline {
+            loop {
                 if port_open(api_port()) {
                     log::info!("engine ready on {}", api_port());
                     return Ok(());
@@ -442,12 +558,14 @@ fn start_engine(
                         "engine process {pid} exited during startup"
                     )));
                 }
+                if let Some(stage) = progress.overdue() {
+                    stop_engine(state);
+                    return Err(with_log_tail(format!(
+                        "engine stopped making progress during startup (stage: {stage})"
+                    )));
+                }
                 std::thread::sleep(Duration::from_millis(150));
             }
-            stop_engine(state);
-            Err(with_log_tail(format!(
-                "engine did not become ready within {STARTUP_TIMEOUT:?}"
-            )))
         }
         Err(err) => Err(format!("failed to spawn engine: {err}")),
     }
@@ -788,35 +906,107 @@ fn current_project(session: State<'_, ProjectSession>) -> Option<projects::Proje
     session.0.lock().expect("project lock").clone()
 }
 
-#[tauri::command]
-fn create_project(
-    name: String,
+/// Start a project off the main thread. Opening a large project takes
+/// seconds, and a synchronous command would freeze the window meanwhile.
+async fn begin_project_in_background<F>(
     app: tauri::AppHandle,
-    engine: State<'_, EngineProcess>,
-    session: State<'_, ProjectSession>,
-) -> Result<projects::Project, String> {
-    let project = projects::create(&projects::home()?, &name)?;
-    begin_project(&app, &engine, &session, project)
+    project: F,
+) -> Result<projects::Project, String>
+where
+    F: FnOnce() -> Result<projects::Project, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || {
+        let project = project()?;
+        begin_project(
+            &app,
+            &app.state::<EngineProcess>(),
+            &app.state::<ProjectSession>(),
+            project,
+        )
+    })
+    .await
+    .map_err(|err| err.to_string())?
 }
 
 #[tauri::command]
-fn open_project(
+async fn create_project(name: String, app: tauri::AppHandle) -> Result<projects::Project, String> {
+    begin_project_in_background(app, move || projects::create(&projects::home()?, &name)).await
+}
+
+/// Error prefix the picker turns into an upgrade prompt; JSON follows it.
+const MIGRATION_REQUIRED: &str = "LANIUS_MIGRATION_REQUIRED:";
+/// Reading the schema version can first replay a large WAL.
+const MIGRATION_CHECK_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// The engine's report on a project that needs a schema upgrade, if any.
+///
+/// A failed check is not a reason to refuse the project: opening it will
+/// either work or fail with the engine's own explanation.
+fn pending_migration(
+    app: &tauri::AppHandle,
+    data_dir: &std::path::Path,
+) -> Option<serde_json::Value> {
+    let mut command = engine_command(app)?;
+    command
+        .arg("--migration-status")
+        .env("LANIUS_DATA_DIR", data_dir);
+    let shot = match doctor::run_once(command, MIGRATION_CHECK_TIMEOUT) {
+        Ok(shot) => shot,
+        Err(err) => {
+            log::warn!("could not check for a schema upgrade: {err}");
+            return None;
+        }
+    };
+    if !shot.status.is_some_and(|status| status.success()) {
+        log::warn!("schema upgrade check failed: {}", shot.stderr.trim());
+        return None;
+    }
+    let status: serde_json::Value = serde_json::from_str(shot.stdout.trim()).ok()?;
+    status
+        .get("pending")
+        .and_then(|pending| pending.as_bool())
+        .unwrap_or(false)
+        .then_some(status)
+}
+
+/// Open a saved project. Unless the user already agreed, a project whose
+/// database needs an upgrade is refused with MIGRATION_REQUIRED, so the
+/// picker can say it may take a while and let them cancel.
+#[tauri::command]
+async fn open_project(
     id: String,
+    allow_migration: Option<bool>,
     app: tauri::AppHandle,
-    engine: State<'_, EngineProcess>,
-    session: State<'_, ProjectSession>,
 ) -> Result<projects::Project, String> {
-    let project = projects::open(&projects::home()?, &id)?;
-    begin_project(&app, &engine, &session, project)
+    let handle = app.clone();
+    begin_project_in_background(app, move || {
+        let home = projects::home()?;
+        if !allow_migration.unwrap_or(false) {
+            let project = projects::read_project(&home, &id)?;
+            if let Some(dir) = project.db_path.parent() {
+                let progress = handle.state::<Arc<StartupProgress>>();
+                progress.begin("checking");
+                let pending = pending_migration(&handle, dir);
+                progress.finish();
+                if let Some(status) = pending {
+                    return Err(format!("{MIGRATION_REQUIRED}{status}"));
+                }
+            }
+        }
+        projects::open(&home, &id)
+    })
+    .await
 }
 
 #[tauri::command]
-fn start_temp_project(
-    app: tauri::AppHandle,
-    engine: State<'_, EngineProcess>,
-    session: State<'_, ProjectSession>,
-) -> Result<projects::Project, String> {
-    begin_project(&app, &engine, &session, projects::temporary()?)
+async fn start_temp_project(app: tauri::AppHandle) -> Result<projects::Project, String> {
+    begin_project_in_background(app, projects::temporary).await
+}
+
+/// What the engine is doing while a project starts, or None when idle.
+#[tauri::command]
+fn startup_progress(progress: State<'_, Arc<StartupProgress>>) -> Option<StartupProgressReport> {
+    progress.report()
 }
 
 fn end_project(engine: &EngineProcess, session: &ProjectSession) {
@@ -1134,6 +1324,7 @@ pub fn run() {
             }
         })
         .manage(EngineProcess::default())
+        .manage(Arc::new(StartupProgress::default()))
         .manage(ProjectSession::default())
         .manage(ShutdownState::default())
         .manage(Arc::new(UpdateProgress::default()))
@@ -1152,6 +1343,7 @@ pub fn run() {
             create_project,
             open_project,
             start_temp_project,
+            startup_progress,
             close_project,
             doctor::run_doctor,
             project_export::save_project_file,
@@ -1268,6 +1460,50 @@ mod tests {
     #[test]
     fn an_unknown_theme_defers_rather_than_guessing() {
         assert_eq!(parse_theme(Some("solarized")), None);
+    }
+
+    #[test]
+    fn startup_progress_follows_engine_stage_lines() {
+        let progress = StartupProgress::default();
+        assert!(progress.report().is_none());
+        progress.begin("launching");
+        assert_eq!(progress.report().expect("started").stage, "launching");
+        progress.apply_line("INFO:     Started server process [1]");
+        progress.apply_line("LANIUS_STARTUP not json");
+        assert_eq!(progress.report().expect("started").stage, "launching");
+        progress
+            .apply_line(r#"LANIUS_STARTUP {"stage": "migrating", "version": 16, "target": 16}"#);
+        let report = progress.report().expect("started");
+        assert_eq!(
+            (report.stage.as_str(), report.version, report.target),
+            ("migrating", Some(16), Some(16))
+        );
+        progress.finish();
+        assert!(progress.report().is_none());
+    }
+
+    #[test]
+    fn a_migration_may_outlast_the_ordinary_startup_limit() {
+        let progress = StartupProgress::default();
+        progress.begin("launching");
+        let stale = Instant::now() - STARTUP_TIMEOUT - Duration::from_secs(1);
+        progress
+            .0
+            .lock()
+            .expect("startup lock")
+            .as_mut()
+            .expect("state")
+            .changed = stale;
+        assert_eq!(progress.overdue().as_deref(), Some("launching"));
+        progress.apply_line(r#"LANIUS_STARTUP {"stage": "migrating", "version": 16}"#);
+        progress
+            .0
+            .lock()
+            .expect("startup lock")
+            .as_mut()
+            .expect("state")
+            .changed = stale;
+        assert_eq!(progress.overdue(), None);
     }
 
     #[test]

@@ -114,7 +114,7 @@ async def test_start_raises_when_port_is_taken(tmp_path) -> None:
 def test_parse_args_defaults() -> None:
     from app.main import parse_args
 
-    settings, watch, _doctor = parse_args([])
+    settings, watch, _command = parse_args([])
     assert settings.proxy_port == 8080
     assert settings.api_port == 12954
     assert watch is False
@@ -123,7 +123,7 @@ def test_parse_args_defaults() -> None:
 def test_parse_args_overrides() -> None:
     from app.main import parse_args
 
-    settings, watch, _doctor = parse_args(
+    settings, watch, _command = parse_args(
         ["--proxy-port", "9090", "--api-port", "9091", "--watch-parent"]
     )
     assert settings.proxy_port == 9090
@@ -135,7 +135,7 @@ def test_parse_args_carries_the_shell_session_token(monkeypatch) -> None:
     from app.main import parse_args
 
     monkeypatch.setenv("LANIUS_API_TOKEN", "desktop-session-token")
-    settings, _watch, _doctor = parse_args([])
+    settings, _watch, _command = parse_args([])
     assert settings.api_token == "desktop-session-token"
 
 

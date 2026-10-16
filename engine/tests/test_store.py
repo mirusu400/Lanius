@@ -7,6 +7,7 @@ import threading
 import sqlite3
 import pytest
 
+from app.db import history_index
 from app.db.schema import SCHEMA_VERSION, _MIGRATIONS, migrate
 from app.db.endpoint_index import register_functions as register_endpoint_functions
 from app.db.store import FlowRecord, FlowStore, RequestSnapshot
@@ -94,6 +95,46 @@ def test_history_backfills_old_projects_and_never_reads_body_pages(tmp_path) -> 
     finally:
         store._read_conn.set_authorizer(None)
         store.close()
+
+
+def test_request_number_migration_never_rewrites_captured_rows(tmp_path) -> None:
+    # Rewriting every row would also rewrite its bodies and fire the search
+    # triggers; on a multi-gigabyte project that outlasts desktop startup.
+    path = tmp_path / "v15.sqlite"
+    original = FlowStore(path)
+    for started_at, flow_id in enumerate(("a", "b", "c"), start=1):
+        original.upsert(make_record(flow_id, started_at=started_at))
+    original.delete(["b"])
+    with original._conn:
+        original._conn.execute("UPDATE flows SET request_number = NULL")
+        original._conn.execute("UPDATE flow_history SET request_number = NULL")
+        # Put back the schema-15 history triggers, which predate the column.
+        for statement in history_index.MEDIA_MIGRATION[4:]:
+            original._conn.execute(statement)
+        original._conn.execute("DROP INDEX idx_flows_request_number")
+        original._conn.execute("DROP TABLE flow_request_sequence")
+        original._conn.execute("ALTER TABLE flows DROP COLUMN request_number")
+        original._conn.execute("ALTER TABLE flow_history DROP COLUMN request_number")
+        original._conn.execute("PRAGMA user_version=15")
+    original.close()
+
+    conn = sqlite3.connect(path)
+    def no_flow_rewrites(operation, table, *_):
+        return sqlite3.SQLITE_DENY if operation == sqlite3.SQLITE_UPDATE and table == "flows" else sqlite3.SQLITE_OK
+    conn.set_authorizer(no_flow_rewrites)
+    assert migrate(conn) == SCHEMA_VERSION
+    conn.close()
+
+    store = FlowStore(path)
+    assert store.get("a").request_number == 1
+    assert store.get("c").request_number == 3
+    assert [item["request_number"] for item in store.page_summaries()["items"]] == [3, 1]
+    # A late update to an old row keeps its number; new rows continue above.
+    store.upsert(make_record("a", started_at=1, status_code=500))
+    assert store.get("a").request_number == 1
+    assert store.upsert(make_record("d", started_at=4)) == 4
+    assert [item["request_number"] for item in store.page_summaries()["items"]] == [4, 3, 1]
+    store.close()
 
 
 def test_history_summary_follows_capture_updates_replacements_and_deletion() -> None:

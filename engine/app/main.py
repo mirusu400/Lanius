@@ -4,6 +4,7 @@ Usage::
 
     python -m app.main [--proxy-port 8080] [--api-port 12954]
     python -m app.main --doctor    # preflight report as JSON, then exit
+    python -m app.main --migration-status    # pending schema upgrade as JSON
 """
 
 from __future__ import annotations
@@ -152,7 +153,8 @@ def _kernel32():  # pragma: no cover - trivial, and Windows only
     return ctypes.windll.kernel32  # type: ignore[attr-defined]
 
 
-def parse_args(argv: list[str] | None = None) -> tuple[Settings, bool, bool]:
+def parse_args(argv: list[str] | None = None) -> tuple[Settings, bool, str | None]:
+    """Settings, whether to watch the parent, and a one-shot command if any."""
     parser = argparse.ArgumentParser(prog="lanius-engine")
     defaults = Settings.from_env()
     parser.add_argument("--proxy-host", default=defaults.proxy_host)
@@ -171,6 +173,11 @@ def parse_args(argv: list[str] | None = None) -> tuple[Settings, bool, bool]:
         action="store_true",
         help="print preflight checks as JSON and exit, without opening a project",
     )
+    parser.add_argument(
+        "--migration-status",
+        action="store_true",
+        help="print whether the project database needs a schema upgrade, and exit",
+    )
     args = parser.parse_args(argv)
     settings = Settings(
         proxy_host=args.proxy_host,
@@ -181,15 +188,22 @@ def parse_args(argv: list[str] | None = None) -> tuple[Settings, bool, bool]:
         db_path=args.db_path,
         log_level=args.log_level,
     )
-    return settings, bool(args.watch_parent), bool(args.doctor)
+    command = "doctor" if args.doctor else "migration-status" if args.migration_status else None
+    return settings, bool(args.watch_parent), command
 
 
 def main(argv: list[str] | None = None) -> None:
-    settings, watch, doctor = parse_args(argv)
-    if doctor:
+    settings, watch, command = parse_args(argv)
+    if command == "doctor":
         from . import doctor as preflight
 
         json.dump(preflight.run(settings), sys.stdout)
+        sys.stdout.write("\n")
+        return
+    if command == "migration-status":
+        from .db.schema import migration_status
+
+        json.dump(migration_status(settings.db_path), sys.stdout)
         sys.stdout.write("\n")
         return
     logging.basicConfig(

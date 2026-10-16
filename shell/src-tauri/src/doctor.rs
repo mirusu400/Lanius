@@ -8,7 +8,7 @@
 
 use std::io::Read;
 use std::path::PathBuf;
-use std::process::{Child, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -101,6 +101,55 @@ fn kill(child: &mut Child) {
     let _ = child.kill();
 }
 
+/// What a one-shot engine command printed, and how it ended.
+pub struct OneShot {
+    /// None when it was stopped for running past its time limit.
+    pub status: Option<std::process::ExitStatus>,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+/// Run the engine for a single command (`--doctor`, `--migration-status`)
+/// and collect its output, stopping it if it runs past `timeout`.
+pub fn run_once(mut command: Command, timeout: Duration) -> Result<OneShot, String> {
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    // Own process group, so a timeout also stops whatever a frozen
+    // bootloader started underneath.
+    #[cfg(unix)]
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        command.pre_exec(|| {
+            libc::setpgid(0, 0);
+            Ok(())
+        });
+    }
+    let mut child = command
+        .spawn()
+        .map_err(|err| format!("failed to run engine: {err}"))?;
+    let stdout = read_all(child.stdout.take().expect("piped stdout"));
+    let stderr = read_all(child.stderr.take().expect("piped stderr"));
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(100)),
+            _ => {
+                kill(&mut child);
+                let _ = child.wait();
+                break None;
+            }
+        }
+    };
+    Ok(OneShot {
+        status,
+        stdout: stdout.join().unwrap_or_default(),
+        stderr: stderr.join().unwrap_or_default(),
+    })
+}
+
 fn run(app: &tauri::AppHandle) -> DoctorReport {
     let mut report = DoctorReport {
         engine: None,
@@ -117,57 +166,27 @@ fn run(app: &tauri::AppHandle) -> DoctorReport {
     command
         .arg("--doctor")
         .env("LANIUS_API_PORT", api_port().to_string())
-        .env("LANIUS_PROXY_PORT", proxy_port().to_string())
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .env("LANIUS_PROXY_PORT", proxy_port().to_string());
     if let Ok(home) = projects::home() {
         command.env("LANIUS_DATA_DIR", home);
     }
-    // Own process group, so a timeout also stops whatever a frozen
-    // bootloader started underneath.
-    #[cfg(unix)]
-    unsafe {
-        use std::os::unix::process::CommandExt;
-        command.pre_exec(|| {
-            libc::setpgid(0, 0);
-            Ok(())
-        });
-    }
-
-    let mut child = match command.spawn() {
-        Ok(child) => child,
+    let shot = match run_once(command, DOCTOR_TIMEOUT) {
+        Ok(shot) => shot,
         Err(err) => {
-            report.error = Some(format!("failed to run engine: {err}"));
+            report.error = Some(err);
             return report;
         }
     };
-    let stdout = read_all(child.stdout.take().expect("piped stdout"));
-    let stderr = read_all(child.stderr.take().expect("piped stderr"));
-    let deadline = Instant::now() + DOCTOR_TIMEOUT;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Some(status),
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(100)),
-            _ => {
-                kill(&mut child);
-                let _ = child.wait();
-                break None;
-            }
-        }
-    };
-    let stdout = stdout.join().unwrap_or_default();
-    let stderr = stderr.join().unwrap_or_default();
-    report.output = (!stderr.trim().is_empty()).then(|| {
-        let lines: Vec<&str> = stderr.lines().collect();
+    report.output = (!shot.stderr.trim().is_empty()).then(|| {
+        let lines: Vec<&str> = shot.stderr.lines().collect();
         lines[lines.len().saturating_sub(LOG_TAIL_LINES)..].join("\n")
     });
 
-    match status {
+    match shot.status {
         None => {
             report.error = Some(format!("engine did not finish within {DOCTOR_TIMEOUT:?}"));
         }
-        Some(status) => match serde_json::from_str::<serde_json::Value>(stdout.trim()) {
+        Some(status) => match serde_json::from_str::<serde_json::Value>(shot.stdout.trim()) {
             Ok(value) if status.success() => report.report = Some(value),
             _ => report.error = Some(format!("engine exited with {status} before reporting")),
         },

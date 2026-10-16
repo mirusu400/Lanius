@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
+from typing import Any
 
+from .. import startup_progress
 from .metrics import MIGRATION as METRICS_MIGRATION
 from .endpoint_index import MIGRATION as ENDPOINT_MIGRATION, register_functions
 from .search_index import MIGRATION as SEARCH_MIGRATION, register_functions as register_search_functions
@@ -238,6 +241,35 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
 }
 
 
+def migration_status(path: Path) -> dict[str, Any]:
+    """Which schema a project database is at, without changing it.
+
+    Read through SQLite rather than from the file header: a recent upgrade
+    can still sit in the WAL, where the header on disk does not show it.
+    A missing database is created fresh at the current schema, so it has
+    nothing to upgrade.
+    """
+    path = Path(path)
+    size = sum(
+        candidate.stat().st_size
+        for candidate in (path, path.with_name(path.name + "-wal"))
+        if candidate.exists()
+    )
+    current = SCHEMA_VERSION
+    if path.exists():
+        conn = sqlite3.connect(path)
+        try:
+            current = conn.execute("PRAGMA user_version").fetchone()[0]
+        finally:
+            conn.close()
+    return {
+        "current": current,
+        "target": SCHEMA_VERSION,
+        "pending": 0 < current < SCHEMA_VERSION,
+        "size_bytes": size,
+    }
+
+
 def migrate(conn: sqlite3.Connection) -> int:
     """Apply pending migrations; returns the resulting schema version."""
     register_functions(conn)
@@ -247,6 +279,7 @@ def migrate(conn: sqlite3.Connection) -> int:
     for version in sorted(_MIGRATIONS):
         if version <= current:
             continue
+        startup_progress.report("migrating", version=version, target=SCHEMA_VERSION)
         # A large existing capture can take seconds to backfill. Keep each
         # version atomic so a crash cannot leave half-created summary tables
         # while user_version still points to the older schema.

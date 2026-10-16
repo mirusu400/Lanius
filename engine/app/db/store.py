@@ -331,12 +331,17 @@ _COLUMNS = (
     " request_original, request_auto_modified, auto_modified, modified, request_body_omitted, response_body_omitted,"
     " request_number"
 )
+# Rows from before schema 16 have no stored number; theirs is the rowid.
+_SELECT_COLUMNS = _COLUMNS.replace(
+    " request_number", " COALESCE(request_number, flows.rowid) AS request_number"
+)
 
 _SUMMARY_COLUMNS = (
     "id, type, client_addr, server_addr, local_source_ip, scheme, method, host, port, path, query,"
     " http_version, request_size, started_at, status_code, reason, response_size,"
     " response_mime, completed_at, duration_ms, error, source, comment,"
-    " auto_modified, modified, request_body_omitted, response_body_omitted, request_number,"
+    " auto_modified, modified, request_body_omitted, response_body_omitted,"
+    " COALESCE(request_number, flows.rowid) AS request_number,"
     " flows.rowid AS history_rowid,"
     " COALESCE((SELECT bookmarked FROM flow_annotations WHERE flow_id = flows.id), 0) AS bookmarked,"
     " (SELECT color FROM flow_annotations WHERE flow_id = flows.id) AS annotation_color"
@@ -489,7 +494,8 @@ class FlowStore:
 
     def _upsert_uncommitted(self, record: FlowRecord) -> int:
         existing = self._conn.execute(
-            "SELECT request_number FROM flows WHERE id = ?", (record.id,)
+            "SELECT COALESCE(request_number, rowid) AS request_number FROM flows WHERE id = ?",
+            (record.id,),
         ).fetchone()
         if existing is not None and existing["request_number"] is not None:
             record.request_number = int(existing["request_number"])
@@ -832,7 +838,7 @@ class FlowStore:
     def get(self, flow_id: str) -> FlowRecord | None:
         with self._read_lock:
             row = self._read_conn.execute(
-                f"SELECT {_COLUMNS} FROM flows WHERE id = ?", (flow_id,)
+                f"SELECT {_SELECT_COLUMNS} FROM flows WHERE id = ?", (flow_id,)
             ).fetchone()
         return _row_to_record(row) if row else None
 
@@ -852,7 +858,7 @@ class FlowStore:
         marks = ",".join("?" * len(flow_ids))
         with self._read_lock:
             rows = self._read_conn.execute(
-                f"SELECT {_COLUMNS} FROM flows WHERE id IN ({marks})", tuple(flow_ids)
+                f"SELECT {_SELECT_COLUMNS} FROM flows WHERE id IN ({marks})", tuple(flow_ids)
             ).fetchall()
         found = {record.id: record for record in map(_row_to_record, rows)}
         return [found[flow_id] for flow_id in flow_ids if flow_id in found]
@@ -887,7 +893,7 @@ class FlowStore:
         )
         with self._read_lock:
             rows = self._read_conn.execute(
-                f"SELECT {_COLUMNS} FROM flows {where}"
+                f"SELECT {_SELECT_COLUMNS} FROM flows {where}"
                 " ORDER BY started_at DESC, rowid DESC LIMIT ? OFFSET ?",
                 (*params, limit, offset),
             ).fetchall()

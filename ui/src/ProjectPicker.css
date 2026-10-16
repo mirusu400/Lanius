@@ -104,3 +104,29 @@
 @media (max-width: 640px) {
   .project-picker-grid { grid-template-columns: 1fr; }
 }
+
+/* Shown while the engine starts; large projects can take a while. */
+.project-picker-opening {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.project-picker-opening-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 460px;
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-alt);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .18);
+}
+.project-picker-opening-card .spinner { flex: none; }
+.project-picker-opening-card > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.project-picker-opening-card p { margin: 4px 0 0; }

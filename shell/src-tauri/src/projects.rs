@@ -116,7 +116,7 @@ fn project_dir(root: &Path, id: &str) -> Result<PathBuf, String> {
     Ok(root.join("projects").join(id))
 }
 
-fn read_project(root: &Path, id: &str) -> Result<Project, String> {
+pub(crate) fn read_project(root: &Path, id: &str) -> Result<Project, String> {
     if id == "legacy" {
         let db = root.join("lanius.sqlite");
         if !db.is_file() {
