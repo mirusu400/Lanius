@@ -61,6 +61,7 @@ but are left out of the text search index to keep capture responsive.
 ## Settings that travel with a project
 
 Scope rules, Match &amp; Replace rules, upstream proxy chains, upstream CA
-certificates and the Lockdown project switch are stored in the project
-database, so they are included in exports. Appearance, shortcuts and other
+certificates, upstream certificate exceptions and the Lockdown project switch
+are stored in the project database, so they are included in exports. Importing
+a project keeps the current CA trust and certificate exceptions. Appearance, shortcuts and other
 machine-level choices are not. See [settings.md](settings.md).

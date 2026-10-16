@@ -5935,6 +5935,40 @@ pre.response-preview-text {
   resize: vertical;
 }
 
+.tls-exceptions {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 12px;
+  max-width: 560px;
+}
+
+.tls-exceptions li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Why a flow has no response, shown above its request and response. */
+.upstream-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.upstream-error > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.upstream-error > button { flex: none; }
+
 .tls-custom .row {
   display: flex;
   gap: 6px;

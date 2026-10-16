@@ -59,6 +59,7 @@ from ..plugin_samples import bundled_sample_archive, bundled_samples
 from .. import codegen
 from ..build_info import build_info
 from ..lockdown import BLOCKED_DETAIL, PROJECT_SETTING, SCOPE_EGRESS_SETTING, LockdownBlocked, LockdownPolicy
+from ..tls_exceptions import TLS_EXCEPTIONS_SETTING
 from ..tls_trust import TRUSTED_CA_SETTING
 from .. import updates
 from ..addons.scope import ScopeError, rule_from_url
@@ -804,7 +805,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await _apply_lockdown_to_plugins(True)
             await asyncio.to_thread(
                 store.restore_database, prepared.path,
-                preserve_settings=(TRUSTED_CA_SETTING,),
+                preserve_settings=(TRUSTED_CA_SETTING, TLS_EXCEPTIONS_SETTING),
                 keep_enabled=(PROJECT_SETTING, SCOPE_EGRESS_SETTING),
             )
             can_resume = False
@@ -881,16 +882,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             async with project_import_lock:
                 was_locked = lockdown.project_enabled
                 was_scope_egress = lockdown.scope_egress_effective
-                trusted_ca = store.get_setting(TRUSTED_CA_SETTING)
+                # Trust decisions are never imported: a shared project must not
+                # add a CA or switch off verification for a host on its own.
+                kept = {
+                    key: store.get_setting(key)
+                    for key in (TRUSTED_CA_SETTING, TLS_EXCEPTIONS_SETTING)
+                }
                 await engine.fuzzer.stop_all()
                 await egress_ip.stop()
                 try:
                     counts = await asyncio.to_thread(store.import_project, payload)
                     engine.fuzzer.reload()
-                    if trusted_ca is None:
-                        store.delete_setting(TRUSTED_CA_SETTING)
-                    else:
-                        store.set_setting(TRUSTED_CA_SETTING, trusted_ca)
+                    for key, value in kept.items():
+                        if value is None:
+                            store.delete_setting(key)
+                        else:
+                            store.set_setting(key, value)
                     await apply_imported_project(was_locked, was_scope_egress)
                     broker.publish("project.imported", counts)
                     return {"ok": True, **counts}
@@ -1040,6 +1047,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="ca_pem must be a string")
         try:
             return await engine.set_tls_trust(pem)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except (OSError, ProxyStartError) as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/tls/exceptions")
+    async def tls_exceptions_state() -> dict[str, Any]:
+        return {"hosts": engine.tls_exceptions()}
+
+    @app.put("/api/tls/exceptions")
+    async def set_tls_exceptions(payload: dict[str, Any]) -> dict[str, Any]:
+        hosts = payload.get("hosts")
+        if not isinstance(hosts, list):
+            raise HTTPException(status_code=422, detail="hosts must be a list")
+        try:
+            return await engine.set_tls_exceptions(hosts)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except (OSError, ProxyStartError) as exc:

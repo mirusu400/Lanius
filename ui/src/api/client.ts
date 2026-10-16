@@ -1069,6 +1069,24 @@ export function setTlsTrust(caPem: string): Promise<import('./types').TlsTrustSt
   });
 }
 
+export function getTlsExceptions(): Promise<import('./types').TlsExceptionsState> {
+  return request('/api/tls/exceptions');
+}
+
+export function setTlsExceptions(hosts: string[]): Promise<import('./types').TlsExceptionsState> {
+  return request('/api/tls/exceptions', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hosts }),
+  });
+}
+
+/** Add one host to the project's upstream certificate exceptions. */
+export async function addTlsException(host: string): Promise<import('./types').TlsExceptionsState> {
+  const { hosts } = await getTlsExceptions();
+  return setTlsExceptions([...hosts, host]);
+}
+
 export function listProcesses(visibleOnly = true): Promise<{
   items: ProcessInfo[];
   count: number;

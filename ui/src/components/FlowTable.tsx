@@ -133,7 +133,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
               <td className="mono truncate" title={formatUrl(flow)}>
                 <MarkedText text={`${flow.path || ''}${flow.query ? `?${flow.query}` : ''}`} query={searchQuery} />
               </td>
-              <td className={`mono ${statusClass(flow.status_code)}`}>
+              <td className={`mono ${statusClass(flow.status_code)}`} title={flow.error ?? undefined}>
                 {flow.status_code ?? (flow.error ? 'ERR' : '…')}
               </td>
               <td

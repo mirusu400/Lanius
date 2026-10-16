@@ -24,6 +24,7 @@ import { ProjectCompactSection } from "./settings/ProjectCompactSection";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { TlsSection } from "./settings/TlsSection";
 import { TlsTrustSection } from "./settings/TlsTrustSection";
+import { TlsExceptionsSection } from "./settings/TlsExceptionsSection";
 import { UpdatesSection } from "./settings/UpdatesSection";
 import { UpstreamSection } from "./settings/UpstreamSection";
 import { SettingsSearch } from "./settings/SettingsSearch";
@@ -127,6 +128,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
     upstream: <UpstreamSection />,
     'egress-ip': <EgressIpSection />,
     'tls-trust': <TlsTrustSection />,
+    'tls-exceptions': <TlsExceptionsSection />,
     'body-display': <BodyDisplaySection />,
     'match-replace': <MatchReplaceSection />,
     engine: <EngineSection />,

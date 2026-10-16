@@ -232,6 +232,10 @@ const en: DocPage[] = [
             kind: 'text',
             body: 'Windows Trusted Root Certification Authorities, Linux system CA trust and macOS Keychain trust are used automatically. Restart Lanius after installing a Windows or Linux root. On other systems, or for project-only trust, add the public CA in Settings > Proxy > Upstream CA certificates. Hostname and certificate validity checks stay enabled.',
           },
+          {
+            kind: 'text',
+            body: 'A trusted CA cannot fix a hostname mismatch. For a host you are authorized to test whose certificate is known to be wrong, add the exact host in Settings > Proxy > Upstream certificate exceptions, or use Allow this host on the failed request. Only that host skips verification in this project, and project imports never add exceptions.',
+          },
         ],
       },
       {
@@ -698,6 +702,10 @@ const ko: DocPage[] = [
           {
             kind: 'text',
             body: 'Windows의 신뢰할 수 있는 루트 인증 기관, Linux 시스템 CA 신뢰 저장소와 macOS 키체인 신뢰는 자동으로 사용합니다. Windows 또는 Linux 루트를 설치한 뒤에는 Lanius를 다시 시작하세요. 다른 OS이거나 프로젝트에만 신뢰를 추가하려면 Settings > 프록시 > 서버 연결용 CA 인증서에서 공개 CA를 등록하세요. 호스트 이름과 인증서 유효기간 검증은 계속 유지됩니다.',
+          },
+          {
+            kind: 'text',
+            body: '호스트 이름 불일치는 CA를 신뢰해도 해결되지 않습니다. 테스트 권한이 있고 인증서가 잘못된 것으로 알려진 호스트라면 Settings > 프록시 > 서버 인증서 검증 예외에 정확한 호스트를 추가하거나, 실패한 요청에서 이 호스트 허용을 누르세요. 이 프로젝트에서 해당 호스트만 검증을 건너뛰며, 프로젝트를 가져와도 예외는 추가되지 않습니다.',
           },
         ],
       },

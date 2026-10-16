@@ -161,6 +161,16 @@ but importing a project keeps the current CA trust: new trust anchors must be
 registered explicitly. Private keys, leaf certificates and expired CAs are
 rejected.
 
+**Settings > Proxy > Upstream certificate exceptions** is for a host whose
+certificate is known to be wrong, such as a hostname mismatch, that you are
+authorized to test. A trusted CA cannot fix a mismatch. List the exact hostname
+or IP address (no wildcards), or use **Allow this host** on the failed request
+in HTTP history, and Lanius accepts any certificate from that host in this
+project; every other host stays verified. When verification fails, the browser
+gets a Lanius page that names the certificate error instead of a bare 502, and
+the request detail shows the same error. Exceptions are saved in the project
+database, but importing a project never adds them.
+
 ### Where the proxy listens
 
 Port 8080 is a popular default and another tool may already have it. Open

@@ -790,6 +790,11 @@ export interface TlsState {
   available: TlsProfileOption[];
 }
 
+/** Exact hosts whose upstream certificate is deliberately not verified. */
+export interface TlsExceptionsState {
+  hosts: string[];
+}
+
 export interface TlsTrustState {
   system_trust: 'macos' | 'windows' | 'linux' | 'certifi';
   certificates: {

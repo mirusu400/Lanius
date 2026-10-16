@@ -47,6 +47,14 @@ from .tls import (
     validate_ciphers,
 )
 from .upstream import UpstreamBridge
+from . import error_page
+from .tls_exceptions import (
+    TLS_EXCEPTIONS_SETTING,
+    UpstreamTlsExceptionsAddon,
+    dump_setting as dump_tls_exceptions,
+    normalize_hosts as normalize_tls_exceptions,
+    parse_setting as parse_tls_exceptions,
+)
 from .tls_trust import (
     TRUSTED_CA_SETTING,
     linux_ca_dir,
@@ -419,6 +427,11 @@ class ProxyEngine:
             master.addons.add(MacOSSystemTrustAddon(
                 self.store.get_setting(TRUSTED_CA_SETTING) or ""
             ))
+        # After every trust addon, so a per-host exception is the last word
+        # for exactly those hosts and changes nothing for any other.
+        master.addons.add(UpstreamTlsExceptionsAddon(self.tls_exceptions()))
+        # Say "Lanius rejected the certificate" instead of a bare 502.
+        error_page.install()
         # mitmproxy's errorcheck addon calls sys.exit() on startup errors, which
         # would tear down the host application. We surface errors ourselves.
         if (errorcheck := master.addons.get("errorcheck")) is not None:
@@ -667,20 +680,54 @@ class ProxyEngine:
             return self.tls_trust_state()
         # Prepare the file before changing any setting or active connection.
         upstream_ca_file(self.settings.data_dir, normalized)
+        await self._restart_with_setting(TRUSTED_CA_SETTING, normalized, previous)
+        state = self.tls_trust_state()
+        self.broker.publish("engine.tls_trust_changed", state)
+        return state
+
+    def tls_exceptions(self) -> list[str]:
+        """Hosts whose upstream certificate is deliberately not verified."""
+        return parse_tls_exceptions(self.store.get_setting(TLS_EXCEPTIONS_SETTING))
+
+    async def set_tls_exceptions(self, hosts: list[str]) -> dict[str, Any]:
+        normalized = normalize_tls_exceptions(hosts)
+        previous = self.tls_exceptions()
+        if normalized == previous:
+            return {"hosts": normalized}
+        # A restart also closes pooled upstream connections, so a removed
+        # exception cannot live on in a connection that skipped verification.
+        await self._restart_with_setting(
+            TLS_EXCEPTIONS_SETTING,
+            dump_tls_exceptions(normalized) if normalized else "",
+            dump_tls_exceptions(previous) if previous else "",
+        )
+        logger.warning(
+            "upstream certificate verification exceptions: %s",
+            ", ".join(normalized) or "none",
+        )
+        state = {"hosts": normalized}
+        self.broker.publish("engine.tls_exceptions_changed", state)
+        return state
+
+    async def _restart_with_setting(self, key: str, value: str, previous: str) -> None:
+        """Save a setting the proxy reads at start, restarting around it.
+
+        Restores the previous value if the proxy cannot start with the new one.
+        """
         was_running = self.running
         await self.fuzzer.stop_all()
         await self.replay.cancel_active()
         if was_running:
             await self.stop()
 
-        def save(value: str) -> None:
-            if value:
-                self.store.set_setting(TRUSTED_CA_SETTING, value)
+        def save(setting: str) -> None:
+            if setting:
+                self.store.set_setting(key, setting)
             else:
-                self.store.delete_setting(TRUSTED_CA_SETTING)
+                self.store.delete_setting(key)
 
         try:
-            save(normalized)
+            save(value)
             if was_running:
                 await self.start()
         except Exception:
@@ -689,9 +736,6 @@ class ProxyEngine:
                 with contextlib.suppress(Exception):
                     await self.start()
             raise
-        state = self.tls_trust_state()
-        self.broker.publish("engine.tls_trust_changed", state)
-        return state
 
     def local_capture_spec(self) -> str | None:
         """The saved local-capture target.

@@ -6,6 +6,7 @@ import { formatUrl, formatBytes } from '../tabs/proxyModel';
 import { sendToReplay } from '../tabs/replayStore';
 import { sendToFuzzer } from '../tabs/fuzzerStore';
 import { ContextMenu, useContextMenu } from './ContextMenu';
+import { UpstreamError } from './UpstreamError';
 import { requestMenuItems } from './requestMenu';
 import { useAddRequestScopeRule } from './requestScope';
 import { Split } from './Split';
@@ -642,6 +643,12 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
         </label>
       </div>
       {actionError && <div className="banner error">{actionError}</div>}
+      <UpstreamError
+        key={flow.id}
+        error={flow.error}
+        host={flow.host}
+        hasResponse={flow.status_code != null}
+      />
       {/* Stacked rather than tabbed: comparing what was sent with what
           came back is the usual reason to open a flow at all. */}
       <Split
