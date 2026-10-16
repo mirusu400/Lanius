@@ -26,6 +26,7 @@ import { matchCount } from './searchHighlight';
 import { MarkedText } from './MarkedText';
 import { useShortcuts } from '../useShortcut';
 import { UndoableInput } from './UndoableText';
+import { copyTextToClipboard } from '../clipboard';
 
 interface Props {
   flow: FlowSummary | null;
@@ -510,7 +511,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     before: [{
       label: t('editor.copy'),
       disabled: !menu.target?.selection,
-      onSelect: () => void navigator.clipboard?.writeText(menu.target?.selection ?? ''),
+      onSelect: () => copyTextToClipboard(menu.target?.selection ?? ''),
     }],
   });
 

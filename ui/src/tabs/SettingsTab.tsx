@@ -13,6 +13,7 @@ import { CaptureStorageSection } from "./settings/CaptureStorageSection";
 import { CaSection } from "./settings/CaSection";
 import { CaptureSection } from "./settings/CaptureSection";
 import { EngineSection } from "./settings/EngineSection";
+import { EgressIpSection } from "./settings/EgressIpSection";
 import { LanguageSection } from "./settings/LanguageSection";
 import { LockdownSection } from "./settings/LockdownSection";
 import { ListenerSection } from "./settings/ListenerSection";
@@ -124,6 +125,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
   const sections: Record<SettingsSectionId, ReactNode> = {
     listener: <ListenerSection />,
     upstream: <UpstreamSection />,
+    'egress-ip': <EgressIpSection />,
     'tls-trust': <TlsTrustSection />,
     'body-display': <BodyDisplaySection />,
     'match-replace': <MatchReplaceSection />,

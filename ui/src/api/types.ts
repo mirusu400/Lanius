@@ -2,6 +2,7 @@
 
 export interface FlowSummary {
   id: string;
+  request_number?: number | null;
   type: string;
   client_addr: string | null;
   server_addr: string | null;
@@ -757,6 +758,29 @@ export interface UpstreamState {
   enabled: boolean;
   hops: string[];
   url: string | null;
+}
+
+export interface EgressIpObservation {
+  id: number;
+  family: 4 | 6;
+  ip: string;
+  first_seen_at: number;
+  last_seen_at: number;
+  check_count: number;
+  observer_url: string;
+}
+
+export interface EgressIpState {
+  enabled: boolean;
+  interval_seconds: 60 | 180 | 300;
+  ipv4_url: string;
+  ipv6_url: string;
+  blocked_by_lockdown: boolean;
+  last_checked_at: number | null;
+  last_success_at: number | null;
+  errors: { ipv4: string | null; ipv6: string | null };
+  current: { ipv4: EgressIpObservation | null; ipv6: EgressIpObservation | null };
+  history: EgressIpObservation[];
 }
 
 export interface TlsState {

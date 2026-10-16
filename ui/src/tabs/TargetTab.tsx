@@ -40,6 +40,7 @@ import { usePluginActions } from '../components/usePluginActions';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { sendToReplay } from './replayStore';
 import { sendToFuzzer } from './fuzzerStore';
+import { copyTextToClipboard } from '../clipboard';
 import { formatUrl } from './proxyModel';
 import {
   buildTree,
@@ -692,7 +693,7 @@ function treeMenuItems(
   pluginActions?: MenuItem,
 ): MenuItem[] {
   const copy = (text: string) => {
-    void navigator.clipboard?.writeText(text);
+    copyTextToClipboard(text);
   };
 
   if (target.kind === 'node') {

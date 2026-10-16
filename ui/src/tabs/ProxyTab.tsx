@@ -40,6 +40,7 @@ import { sendToReplay } from './replayStore';
 import { sendToFuzzer } from './fuzzerStore';
 import { useAddRequestScopeRule } from '../components/requestScope';
 import { FlowDetailView } from '../components/FlowDetail';
+import { copyTextToClipboard } from '../clipboard';
 import { FilterBar } from '../components/FilterBar';
 import { InterceptPanel } from '../components/InterceptPanel';
 import { WebSocketPanel } from '../components/WebSocketPanel';
@@ -70,6 +71,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   const [historyPageInput, setHistoryPageInput] = useState('1');
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [historySort, setHistorySort] = useState<{ key: HistorySortKey; desc: boolean }>({ key: 'started_at', desc: true });
   const historySortRef = useRef(historySort);
   historySortRef.current = historySort;
@@ -113,8 +115,9 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   const [loading, setLoading] = useState(true);
   useReportBusy('proxy', loading);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async ({ showSearchProgress = false } = {}) => {
     const generation = ++requestGeneration.current;
+    setSearchLoading(showSearchProgress && Boolean(filtersRef.current.search));
     setHistoryLoading(true);
     try {
       const page = await listFlowPage(
@@ -138,6 +141,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
       if (generation === requestGeneration.current) {
         setLoading(false);
         setHistoryLoading(false);
+        setSearchLoading(false);
       }
     }
   }, [historySort]);
@@ -161,7 +165,10 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
       return;
     }
     requestGeneration.current += 1;
-    const timer = window.setTimeout(() => void reload(), 300);
+    const timer = window.setTimeout(
+      () => void reload({ showSearchProgress: true }),
+      300,
+    );
     return () => window.clearTimeout(timer);
   }, [filters, historyPage, reload]);
 
@@ -502,7 +509,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
             initial={0.58}
             className="proxy-split"
             first={
-              <Busy busy={Boolean(filters.search) && historyLoading} label={t('proxy.searching')}>
+              <Busy busy={searchLoading} label={t('proxy.searching')}>
                 <FlowTable
                   flows={flows}
                   searchQuery={filters.search || ''}
@@ -581,9 +588,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                     addScopeRule: (flow, kind, target) => {
                       void addRequestScopeRule(flowUrl(flow), kind, target);
                     },
-                    copy: (text) => {
-                      void navigator.clipboard?.writeText(text);
-                    },
+                    copy: copyTextToClipboard,
                     deleteFlow: (flow) => setPendingDelete(flow),
                     toggleBookmark: (flow) => void updateAnnotation(flow, { bookmarked: !flow.bookmarked }),
                     setColor: (flow, color) => void updateAnnotation(flow, { annotation_color: color }),

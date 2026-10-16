@@ -6,6 +6,7 @@
 import type { Translator } from '../i18n';
 import type { MenuItem } from './ContextMenu';
 import type { ScopeKind, ScopeTarget } from './requestScope';
+import { copyTextToClipboard } from '../clipboard';
 
 export interface RequestMenuOptions {
   url: string | null;
@@ -48,7 +49,7 @@ export function requestMenuItems(t: Translator, options: RequestMenuOptions): Me
         if (copyUrlAction) { copyUrlAction(); return; }
         if (url) {
           if (copyUrl) copyUrl(url);
-          else void navigator.clipboard?.writeText(url);
+          else copyTextToClipboard(url);
         }
       },
     },

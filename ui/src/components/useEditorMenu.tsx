@@ -9,6 +9,12 @@ import { useRef, useState, type RefObject } from 'react';
 
 import { ContextMenu, useContextMenu, type MenuItem } from './ContextMenu';
 import { useT } from '../i18n';
+import {
+  copyTextToClipboard,
+  notifyClipboardError,
+  readClipboardText,
+  writeClipboardText,
+} from '../clipboard';
 
 export interface EditorMenuExtra {
   label: string;
@@ -58,30 +64,36 @@ export function useEditorMenu(
     {
       label: t('editor.copy'),
       disabled: !hasSelection,
-      onSelect: () => void navigator.clipboard?.writeText(selection.text),
+      onSelect: () => copyTextToClipboard(selection.text),
     },
     {
       label: t('editor.cut'),
       disabled: !hasSelection,
       onSelect: withEditor((editor) => {
-        void navigator.clipboard?.writeText(selection.text);
-        setNativeValue(
-          editor,
-          editor.value.slice(0, selection.start) + editor.value.slice(selection.end),
-        );
+        void writeClipboardText(selection.text)
+          .then(() => {
+            setNativeValue(
+              editor,
+              editor.value.slice(0, selection.start) + editor.value.slice(selection.end),
+            );
+          })
+          .catch(notifyClipboardError);
       }),
     },
     {
       label: t('editor.paste'),
       onSelect: withEditor(async (editor) => {
-        const text = await navigator.clipboard?.readText();
-        if (typeof text !== 'string') return;
-        setNativeValue(
-          editor,
-          editor.value.slice(0, selection.start) +
-            text +
-            editor.value.slice(selection.end),
-        );
+        try {
+          const text = await readClipboardText();
+          setNativeValue(
+            editor,
+            editor.value.slice(0, selection.start) +
+              text +
+              editor.value.slice(selection.end),
+          );
+        } catch (error) {
+          notifyClipboardError(error);
+        }
       }),
     },
     {

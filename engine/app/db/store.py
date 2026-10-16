@@ -32,6 +32,7 @@ from ..media_storage import MEDIA_BODY_LIMIT_SETTING, prepare_record, read_limit
 logger = logging.getLogger(__name__)
 
 ANNOTATION_COLORS = frozenset({"red", "orange", "yellow", "green", "blue", "purple"})
+DEFAULT_ANNOTATION_COLOR = "yellow"
 COMPACT_DELETE_BATCH_SIZE = 250
 
 from .schema import migrate
@@ -109,6 +110,7 @@ class FlowRecord:
     """A captured flow (request, and optionally response)."""
 
     id: str
+    request_number: int | None = None
     type: str = "http"
     client_addr: str | None = None
     server_addr: str | None = None
@@ -326,14 +328,16 @@ _COLUMNS = (
     " http_version, request_headers, request_body, request_size, started_at,"
     " status_code, reason, response_headers, response_body, response_size,"
     " response_mime, completed_at, duration_ms, error, source, comment,"
-    " request_original, request_auto_modified, auto_modified, modified, request_body_omitted, response_body_omitted"
+    " request_original, request_auto_modified, auto_modified, modified, request_body_omitted, response_body_omitted,"
+    " request_number"
 )
 
 _SUMMARY_COLUMNS = (
     "id, type, client_addr, server_addr, local_source_ip, scheme, method, host, port, path, query,"
     " http_version, request_size, started_at, status_code, reason, response_size,"
     " response_mime, completed_at, duration_ms, error, source, comment,"
-    " auto_modified, modified, request_body_omitted, response_body_omitted, flows.rowid AS history_rowid,"
+    " auto_modified, modified, request_body_omitted, response_body_omitted, request_number,"
+    " flows.rowid AS history_rowid,"
     " COALESCE((SELECT bookmarked FROM flow_annotations WHERE flow_id = flows.id), 0) AS bookmarked,"
     " (SELECT color FROM flow_annotations WHERE flow_id = flows.id) AS annotation_color"
 )
@@ -471,16 +475,45 @@ class FlowStore:
             self.media_body_limit_mb = read_limit(self.get_setting(MEDIA_BODY_LIMIT_SETTING))
 
     # --- writes -----------------------------------------------------------
-    def upsert(self, record: FlowRecord) -> None:
+    def upsert(self, record: FlowRecord) -> int:
         with self._lock:
-            self._upsert_uncommitted(self.prepare_capture_record(record))
+            request_number = self._upsert_uncommitted(
+                self.prepare_capture_record(record)
+            )
             self._conn.commit()
+            return request_number
 
     def prepare_capture_record(self, record: FlowRecord) -> FlowRecord:
         """Use cached policy in capture hooks; no SQLite work on their loop."""
         return prepare_record(record, self.media_body_limit_mb)
 
-    def _upsert_uncommitted(self, record: FlowRecord) -> None:
+    def _upsert_uncommitted(self, record: FlowRecord) -> int:
+        existing = self._conn.execute(
+            "SELECT request_number FROM flows WHERE id = ?", (record.id,)
+        ).fetchone()
+        if existing is not None and existing["request_number"] is not None:
+            record.request_number = int(existing["request_number"])
+        elif record.request_number is None:
+            row = self._conn.execute(
+                "SELECT next_value FROM flow_request_sequence WHERE singleton = 1"
+            ).fetchone()
+            record.request_number = int(row["next_value"])
+            self._conn.execute(
+                "UPDATE flow_request_sequence SET next_value = next_value + 1 "
+                "WHERE singleton = 1"
+            )
+        else:
+            if (
+                isinstance(record.request_number, bool)
+                or not isinstance(record.request_number, int)
+                or record.request_number < 1
+            ):
+                raise ValueError("request_number must be a positive integer")
+            self._conn.execute(
+                "UPDATE flow_request_sequence "
+                "SET next_value = MAX(next_value, ?) WHERE singleton = 1",
+                (record.request_number + 1,),
+            )
         values = (
             record.id,
             record.type,
@@ -515,6 +548,7 @@ class FlowStore:
             int(record.modified),
             int(record.request_body_omitted),
             int(record.response_body_omitted),
+            record.request_number,
         )
         placeholders = ", ".join(["?"] * len(values))
         updates = ", ".join(
@@ -528,6 +562,8 @@ class FlowStore:
             f" ON CONFLICT(id) DO UPDATE SET {updates}",
             values,
         )
+        assert record.request_number is not None
+        return record.request_number
 
     def log_event(self, ts: float, level: str, message: str) -> None:
         with self._lock:
@@ -580,8 +616,16 @@ class FlowStore:
             row = self._conn.execute(
                 "SELECT bookmarked, color FROM flow_annotations WHERE flow_id = ?", (flow_id,)
             ).fetchone()
-            bookmarked = changes.get("bookmarked", bool(row["bookmarked"]) if row else False)
+            was_bookmarked = bool(row["bookmarked"]) if row else False
+            bookmarked = changes.get("bookmarked", was_bookmarked)
             color = changes.get("annotation_color", row["color"] if row else None)
+            if (
+                bookmarked
+                and not was_bookmarked
+                and "annotation_color" not in changes
+                and color is None
+            ):
+                color = DEFAULT_ANNOTATION_COLOR
             if bookmarked or color:
                 self._conn.execute(
                     "INSERT INTO flow_annotations (flow_id, bookmarked, color) VALUES (?, ?, ?)"
@@ -1170,6 +1214,78 @@ class FlowStore:
             if key == MEDIA_BODY_LIMIT_SETTING:
                 self.media_body_limit_mb = read_limit(value)
 
+    # --- observed public egress addresses -------------------------------
+    def record_egress_ip_observation(
+        self,
+        *,
+        family: int,
+        ip: str,
+        observed_at: float,
+        observer_url: str,
+    ) -> dict[str, Any]:
+        """Extend the current IP period or create one when the IP changes."""
+        with self._lock:
+            previous = self._conn.execute(
+                "SELECT * FROM egress_ip_observations WHERE family=? ORDER BY id DESC LIMIT 1",
+                (family,),
+            ).fetchone()
+            if previous is not None and previous["ip"] == ip:
+                self._conn.execute(
+                    """UPDATE egress_ip_observations
+                       SET last_seen_at=?, check_count=check_count+1, observer_url=?
+                       WHERE id=?""",
+                    (observed_at, observer_url, previous["id"]),
+                )
+                row_id = int(previous["id"])
+            else:
+                cursor = self._conn.execute(
+                    """INSERT INTO egress_ip_observations
+                       (family, ip, first_seen_at, last_seen_at, check_count, observer_url)
+                       VALUES (?, ?, ?, ?, 1, ?)""",
+                    (family, ip, observed_at, observed_at, observer_url),
+                )
+                row_id = int(cursor.lastrowid or 0)
+            self._conn.commit()
+            row = self._conn.execute(
+                "SELECT * FROM egress_ip_observations WHERE id=?", (row_id,)
+            ).fetchone()
+        return dict(row)
+
+    def list_egress_ip_observations(
+        self, *, limit: int = 1000, family: int | None = None
+    ) -> List[dict[str, Any]]:
+        if family not in (None, 4, 6):
+            raise ValueError("family must be 4 or 6")
+        limit = max(1, min(int(limit), 100_000))
+        with self._read_lock:
+            if family is None:
+                rows = self._read_conn.execute(
+                    "SELECT * FROM egress_ip_observations ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            else:
+                rows = self._read_conn.execute(
+                    """SELECT * FROM egress_ip_observations
+                       WHERE family=? ORDER BY id DESC LIMIT ?""",
+                    (family, limit),
+                ).fetchall()
+        return [dict(row) for row in rows]
+
+    def latest_egress_ip_observation(self, family: int) -> dict[str, Any] | None:
+        with self._read_lock:
+            row = self._read_conn.execute(
+                "SELECT * FROM egress_ip_observations WHERE family=? ORDER BY id DESC LIMIT 1",
+                (family,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def all_egress_ip_observations(self) -> List[dict[str, Any]]:
+        with self._read_lock:
+            rows = self._read_conn.execute(
+                "SELECT * FROM egress_ip_observations ORDER BY id"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     # --- workspace (Replay/Decoder/Fuzzer state) ----------------------
     def save_fuzzer_run(self, run: dict[str, Any]) -> None:
         with self._lock:
@@ -1313,6 +1429,7 @@ class FlowStore:
         flows = data.get("flows") or []
         issues = data.get("issues") or []
         fuzzer_runs = data.get("fuzzer_runs") or []
+        egress_ip_observations = data.get("egress_ip_observations") or []
 
         imported_flows = 0
         imported_issues = 0
@@ -1323,8 +1440,12 @@ class FlowStore:
                 self._conn.execute("DELETE FROM issues")
                 self._conn.execute("DELETE FROM fuzzer_results")
                 self._conn.execute("DELETE FROM fuzzer_runs")
+                self._conn.execute("DELETE FROM egress_ip_observations")
                 if flows:
                     self._conn.execute("DELETE FROM flows")
+                    self._conn.execute(
+                        "UPDATE flow_request_sequence SET next_value = 1 WHERE singleton = 1"
+                    )
 
                 for rule in scope:
                     self._conn.execute(
@@ -1374,6 +1495,23 @@ class FlowStore:
                         "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
                         (key, str(value)),
                     )
+                for item in egress_ip_observations:
+                    try:
+                        family = int(item["family"])
+                        if family not in (4, 6):
+                            raise ValueError("invalid address family")
+                        first_seen = float(item["first_seen_at"])
+                        last_seen = float(item["last_seen_at"])
+                        checks = max(1, int(item.get("check_count", 1)))
+                        self._conn.execute(
+                            """INSERT INTO egress_ip_observations
+                               (family, ip, first_seen_at, last_seen_at, check_count, observer_url)
+                               VALUES (?, ?, ?, ?, ?, ?)""",
+                            (family, str(item["ip"]), first_seen, last_seen, checks,
+                             str(item["observer_url"])),
+                        )
+                    except (KeyError, TypeError, ValueError):
+                        logger.warning("skipping an unreadable public IP observation")
                 for flow in flows:
                     try:
                         self._upsert_uncommitted(_record_from_export(flow))
@@ -1421,6 +1559,7 @@ class FlowStore:
             "settings": len(settings),
             "flows": imported_flows,
             "issues": imported_issues,
+            "egress_ip_observations": len(egress_ip_observations),
         }
 
     def delete_setting(self, key: str) -> None:
@@ -2122,6 +2261,7 @@ def _folder_bounds(prefix: str) -> tuple[str, str]:
 def _row_to_record(row: sqlite3.Row) -> FlowRecord:
     return FlowRecord(
         id=row["id"],
+        request_number=row["request_number"],
         type=row["type"],
         client_addr=row["client_addr"],
         server_addr=row["server_addr"],

@@ -85,6 +85,7 @@ def prepare_database(path: str | Path) -> PreparedDatabase:
                     for key, table in {
                         "flows": "flow_history", "scope": "scope_rules", "workspace": "workspace",
                         "settings": "settings", "issues": "issues", "websockets": "websocket_messages",
+                        "egress_ip_observations": "egress_ip_observations",
                     }.items()
                 }
         return prepared

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../i18n';
 import { subscribeRequestTransfers } from '../requestTransfers';
+import { subscribeClipboardErrors } from '../clipboard';
 import './Toast.css';
 
 export type ToastTone = 'info' | 'success' | 'error';
@@ -42,6 +43,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => subscribeRequestTransfers((tool) => {
     showToast({ message: t('toast.requestTransferred', { tool }), tone: 'success' });
+  }), [showToast, t]);
+
+  useEffect(() => subscribeClipboardErrors((message) => {
+    showToast({ message: t('clipboard.failed', { message }), tone: 'error' });
   }), [showToast, t]);
 
   useEffect(() => () => {

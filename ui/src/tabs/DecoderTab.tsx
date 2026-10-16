@@ -18,6 +18,7 @@ import {
   subscribe,
 } from './decoderStore';
 import { UndoableInput, UndoableTextarea } from '../components/UndoableText';
+import { copyTextToClipboard } from '../clipboard';
 
 interface StepOutput {
   codec: string;
@@ -225,7 +226,7 @@ export function DecoderTab() {
               <span className="muted">{t('decoder.binaryHint')}</span>
             )}
             <button
-              onClick={() => void navigator.clipboard?.writeText(finalValue)}
+              onClick={() => copyTextToClipboard(finalValue)}
               disabled={!finalValue}
             >
               {t('decoder.copy')}

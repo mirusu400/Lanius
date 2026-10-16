@@ -53,6 +53,7 @@ def flow_summary(record: FlowRecord | dict[str, Any]) -> dict[str, Any]:
     port_suffix = "" if port is None or (scheme, port) in {("http", 80), ("https", 443)} else f":{port}"
     return {
         "id": get("id"),
+        "request_number": get("request_number"),
         "type": get("type"),
         "method": get("method"),
         "url": f"{scheme}://{get('host')}{port_suffix}{get('path') or ''}"
@@ -101,9 +102,13 @@ def storage_instructions(store: FlowStore) -> str:
         "For ordinary flow lookup use list_flows/get_flow, and use MCP tools for "
         "Lanius actions. If you have access to the same filesystem and need "
         "bulk aggregation or time-range analysis, query SQLite read-only "
-        "(sqlite3 -readonly). The flows table has id, started_at (Unix seconds), "
-        "scheme, host, port, method, path, query, status_code, response_size, "
-        "and duration_ms. Query only needed columns and never modify the DB. "
+        "(sqlite3 -readonly). The flows table has id, request_number, "
+        "started_at (Unix seconds), scheme, host, port, method, path, query, "
+        "status_code, response_size, "
+        "and duration_ms. The egress_ip_observations table records public IP "
+        "address periods with family, ip, first_seen_at and last_seen_at "
+        "(Unix seconds), check_count and observer_url. Query only needed "
+        "columns and never modify the DB. "
         "Direct SQL exposes raw headers and bodies and bypasses MCP redaction."
     )
 
@@ -160,6 +165,25 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
 
     @server.tool(
         description=(
+            "List observed public egress IP address periods, newest first. "
+            "Optionally filter to IPv4 or IPv6."
+        )
+    )
+    async def list_egress_ip_history(
+        family: int | None = None, limit: int = 100
+    ) -> dict[str, Any]:
+        try:
+            history = await asyncio.to_thread(
+                store.list_egress_ip_observations,
+                family=family,
+                limit=max(1, min(limit, 1000)),
+            )
+        except ValueError as exc:
+            return {"error": str(exc)}
+        return {"count": len(history), "history": history}
+
+    @server.tool(
+        description=(
             "Get one flow with headers and bodies. Sensitive headers are "
             "redacted unless reveal_secrets is true."
         )
@@ -176,7 +200,7 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
             "Bookmark or unbookmark a captured flow by ID. Use the ID returned "
             "by send_request/replay_flow, or find a proxied PoC with list_flows. "
             "Optionally set a red, orange, yellow, green, blue or purple highlight. "
-            "Omit color to preserve the current highlight."
+            "A new bookmark defaults to yellow; an existing highlight is preserved."
         )
     )
     async def bookmark_flow(

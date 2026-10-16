@@ -7,7 +7,7 @@ import type { FlowSummary } from '../api/types';
 import { FlowTable } from './FlowTable';
 
 const flow: FlowSummary = {
-  id: 'one', type: 'http', client_addr: null, server_addr: null,
+  id: 'one', request_number: 17, type: 'http', client_addr: null, server_addr: null,
   local_source_ip: '192.0.2.12',
   scheme: 'https', method: 'GET', host: 'example.test', port: 443,
   path: '/', query: null, http_version: 'HTTP/1.1', request_size: 0,
@@ -15,6 +15,13 @@ const flow: FlowSummary = {
   response_mime: null, completed_at: 2, duration_ms: 1, error: null,
   source: 'proxy', comment: null,
 };
+
+it('shows the stable request number in the first column', () => {
+  render(<FlowTable flows={[flow]} selectedId={null} onSelect={() => undefined} />);
+  const row = screen.getByText('example.test').closest('tr')!;
+  expect(row.cells[0].textContent).toBe('17');
+  expect(row.cells[1].querySelector('.history-bookmark')).toBeTruthy();
+});
 
 afterEach(() => {
   cleanup();

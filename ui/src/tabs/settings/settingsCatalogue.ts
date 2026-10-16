@@ -18,6 +18,7 @@ interface SectionEntry {
 export const SETTINGS_SECTIONS = [
   { id: 'listener', group: 'proxy', title: 'listener.section', prefixes: ['listener.'], aliases: 'port bind address 포트 바인딩 주소 리스너' },
   { id: 'upstream', group: 'proxy', title: 'upstream.section', prefixes: ['upstream.'], aliases: 'SOCKS5 HTTP HTTPS chain hops 상위 프록시 체인 경유' },
+  { id: 'egress-ip', group: 'proxy', title: 'egressIp.section', prefixes: ['egressIp.'], aliases: 'public external source egress IP VPN polling 공인 외부 출발 아이피 주소 관측 기록' },
   { id: 'tls-trust', group: 'proxy', title: 'tlsTrust.section', prefixes: ['tlsTrust.'], aliases: 'certificate cert CA VPN PEM Keychain 인증서 신뢰 키체인' },
   { id: 'body-display', group: 'proxy', title: 'bodyDisplay.section', prefixes: ['bodyDisplay.'], aliases: 'gzip deflate Brotli Zstandard 압축 해제' },
   { id: 'match-replace', group: 'proxy', title: 'matchReplace.title', prefixes: ['matchReplace.'], aliases: 'regex rewrite replace 정규식 치환 변경 규칙' },

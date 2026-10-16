@@ -15,6 +15,7 @@ import { Split } from './Split';
 import { useCodegenMenu } from './useCodegenMenu';
 import { requestMenuItems } from './requestMenu';
 import { useAddRequestScopeRule } from './requestScope';
+import { copyTextToClipboard } from '../clipboard';
 
 const PAGE_SIZE = 200;
 
@@ -133,7 +134,7 @@ export function EndpointExplorer({
       void addRequestScopeRule(formatUrl(detail), kind, target, () => void onChanged());
     })(),
     copyUrlAction: withDetail(menu.target, (detail) => {
-      void navigator.clipboard?.writeText(formatUrl(detail));
+      copyTextToClipboard(formatUrl(detail));
     }),
     copyAs: codegen.buildMenu({ flow_id: menu.target.id }),
     after: [{ label: t('menu.deleteFlow'), separator: true, danger: true, onSelect: () => setPendingDelete(menu.target) }],

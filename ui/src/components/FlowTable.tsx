@@ -47,8 +47,8 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
     rows.current.get(id)?.focus();
     rows.current.get(id)?.scrollIntoView?.({ block: 'nearest' });
   };
-  const baseColumns = useResizableColumns('lanius.columns.history', [48, 84, 70, 180, 260, 66, 82, 78, 84]);
-  const sourceColumns = useResizableColumns('lanius.columns.history.source', [48, 84, 70, 180, 260, 66, 82, 78, 84, 135]);
+  const baseColumns = useResizableColumns('lanius.columns.history', [64, 48, 84, 70, 180, 260, 66, 82, 78, 84]);
+  const sourceColumns = useResizableColumns('lanius.columns.history.source', [64, 48, 84, 70, 180, 260, 66, 82, 78, 84, 135]);
   const columns = showSourceIp ? sourceColumns : baseColumns;
   const headers = [
     t('flow.time'), t('flow.method'), t('flow.host'), t('flow.url'),
@@ -60,8 +60,15 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
         <thead>
           <tr>
             <ResizableHeader
-              label="★"
+              label="#"
               index={0}
+              columns={columns}
+              className="history-number-header"
+              resizeLabel={t('table.resizeColumn', { column: t('flow.requestNumber') })}
+            />
+            <ResizableHeader
+              label="★"
+              index={1}
               columns={columns}
               className="history-bookmark-header"
               resizeLabel={t('table.resizeColumn', { column: t('history.marks') })}
@@ -70,7 +77,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
               <ResizableHeader
                 key={index}
                 label={label}
-                index={index + 1}
+                index={index + 2}
                 columns={columns}
                 className={index === 5 ? 'modified-header' : undefined}
                 resizeLabel={t('table.resizeColumn', { column: label })}
@@ -78,7 +85,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
                 sortDirection={sortBy === SORT_KEYS[index] ? (sortDesc ? 'descending' : 'ascending') : undefined}
               />
             ))}
-            {showSourceIp && <ResizableHeader label={t('flow.localSourceIp')} index={9} columns={columns}
+            {showSourceIp && <ResizableHeader label={t('flow.localSourceIp')} index={10} columns={columns}
               resizeLabel={t('table.resizeColumn', { column: t('flow.localSourceIp') })} />}
             <ResizableFillHeader />
           </tr>
@@ -86,7 +93,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
         <tbody>
           {flows.length === 0 && (
             <tr>
-              <td colSpan={showSourceIp ? 10 : 9} className="empty">
+              <td colSpan={showSourceIp ? 11 : 10} className="empty">
                 {t('proxy.emptyTable')}
               </td>
               <ResizableFillCell />
@@ -109,6 +116,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
                 onContextMenu?.(event, flow);
               }}
             >
+              <td className="mono num history-number-cell">{flow.request_number ?? '—'}</td>
               <td className="history-bookmark-cell">
                 <button
                   type="button"

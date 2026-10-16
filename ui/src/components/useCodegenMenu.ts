@@ -12,6 +12,7 @@ import { listCodegenFormats, openCsrfPoc, renderCode } from '../api/client';
 import type { MenuItem } from './ContextMenu';
 import { errorMessage, type Message } from '../i18n/message';
 import { useT } from '../i18n';
+import { notifyClipboardError, writeClipboardText } from '../clipboard';
 
 export interface CodegenTarget {
   flow_id?: string;
@@ -61,10 +62,11 @@ export function useCodegenMenu(onError?: (message: Message) => void) {
     async (kind: string, target: CodegenTarget) => {
       try {
         const { text } = await renderCode({ kind, ...target });
-        await navigator.clipboard?.writeText(text);
+        await writeClipboardText(text);
         setCopied(kind);
       } catch (error) {
-        onError?.(errorMessage(error));
+        if (onError) onError(errorMessage(error));
+        else notifyClipboardError(error);
       }
     },
     [onError],

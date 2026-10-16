@@ -27,7 +27,11 @@ Lockdown on but never off; only the project checkbox can disable it.
 
 Blocked product operations include GitHub update checks and installation,
 remote SecLists downloads, plugin catalogue refreshes and installs, and user
-plugins. Plugins are suspended rather than disabled: their enabled flags stay
+plugins. Public-IP observation polling is also stopped before DNS or socket
+creation, any in-flight observation is discarded, and no observation row is
+saved while Lockdown Mode is effective. Its enabled setting may remain in the
+project so polling can resume after Lockdown Mode is turned off. Plugins are
+suspended rather than disabled: their enabled flags stay
 on disk, so turning Lockdown Mode off loads the same set again. Installing the
 bundled Request Marker sample remains available because it copies only local
 application resources; the installed sample is still prevented from executing.

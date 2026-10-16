@@ -128,6 +128,7 @@ def test_list_and_filter_flows(client) -> None:
     assert len(items) == 2
     assert client.get("/api/flows?method=POST").json()["items"][0]["id"] == "b"
     assert client.get("/api/flows?host=a.com").json()["count"] == 1
+    assert [item["request_number"] for item in items] == [2, 1]
 
 
 def test_history_annotations_survive_capture_and_project_roundtrip(client) -> None:
@@ -171,7 +172,10 @@ def test_history_annotation_validation_and_delete_cleanup(client) -> None:
     for payload in ({"bookmarked": "yes"}, {"annotation_color": "pink"}, {}, {"unknown": 1}):
         assert client.patch("/api/flows/marked/annotation", json=payload).status_code == 422
     assert client.patch("/api/flows/missing/annotation", json={"bookmarked": True}).status_code == 404
-    assert client.patch("/api/flows/marked/annotation", json={"bookmarked": True}).status_code == 200
+    bookmarked = client.patch(
+        "/api/flows/marked/annotation", json={"bookmarked": True}
+    )
+    assert bookmarked.json()["annotation_color"] == "yellow"
     client.app.state.store.delete(["marked"])
     assert client.app.state.store.all_annotations() == {}
 
@@ -859,7 +863,7 @@ def test_imported_scope_takes_effect_immediately(client) -> None:
     client.post("/api/project/import", json=exported)
 
     rules = client.get("/api/scope").json()["rules"]
-    assert [r["host"] for r in rules] == ["scoped.example"]
+    assert [r["host"] for r in rules] == ["*.googleapis.com", "scoped.example"]
 
 
 def test_import_refuses_a_document_that_is_not_a_project(client) -> None:
@@ -915,7 +919,10 @@ def test_import_sqlite_restores_complete_capture_and_reloads_live_scope(client, 
     assert client.get("/api/websockets/messages/ws/raw").content == b"\xff\x01frame"
     assert client.get("/api/flows?bookmarked_only=true").json()["items"][0]["id"] == "raw"
     assert client.get("/api/workspace/decoder").json()["value"][0]["input"] == "saved payload"
-    assert [rule["host"] for rule in client.get("/api/scope").json()["rules"]] == ["imported.test"]
+    assert [rule["host"] for rule in client.get("/api/scope").json()["rules"]] == [
+        "*.googleapis.com",
+        "imported.test",
+    ]
 
 
 @pytest.mark.parametrize("data", [b"SQLite format 3\x00truncated", None])
@@ -1148,11 +1155,13 @@ def test_mcp_reports_where_to_connect_and_what_it_offers(client) -> None:
     # an agent is actually given.
     names = [tool["name"] for tool in body["tools"]]
     assert "list_flows" in names
+    assert "list_egress_ip_history" in names
     assert "send_request" in names
     # Tools that act, rather than look, are flagged so the UI can say so.
     writes = {tool["name"] for tool in body["tools"] if tool["writes"]}
     assert "send_request" in writes
     assert "list_flows" not in writes
+    assert "list_egress_ip_history" not in writes
 
 
 def test_turning_mcp_off_actually_refuses_agents(client) -> None:

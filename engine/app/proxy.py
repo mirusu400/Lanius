@@ -515,6 +515,14 @@ class ProxyEngine:
             "url": self.upstream_hops[0] if len(self.upstream_hops) == 1 else None,
         }
 
+    def product_route_proxy_url(self) -> str | None:
+        """Proxy URL for product traffic that must follow the user route."""
+        if self._upstream_bridge is not None:
+            return self._upstream_bridge.url
+        if self._needs_upstream_bridge():
+            raise RuntimeError("upstream proxy route is not ready")
+        return self.upstream_hops[0] if self.upstream_hops else None
+
     async def set_upstream(self, hops: list[str] | str | None) -> dict[str, Any]:
         """Apply an ordered proxy chain to the regular listener."""
         if isinstance(hops, str):

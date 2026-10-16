@@ -1034,6 +1034,53 @@ pre.body,
   flex: 1;
 }
 
+.egress-ip-history-dialog {
+  width: min(1050px, 90vw);
+}
+
+.egress-ip-history-help {
+  margin-top: 0;
+}
+
+.egress-ip-history-table-wrap {
+  max-height: 55vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.egress-ip-history-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.egress-ip-history-table th,
+.egress-ip-history-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.egress-ip-history-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-alt);
+}
+
+.egress-ip-history-table td:last-child {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.egress-ip-history-table td.empty {
+  padding: 28px 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .closing-dialog {
   width: 360px;
 }
@@ -1574,6 +1621,8 @@ table.resizable-table th {
 }
 .flow-table .history-bookmark-cell,
 .flow-table .history-bookmark-header { text-align: center; }
+.flow-table .history-number-cell,
+.flow-table .history-number-header { text-align: right; }
 .history-bookmark {
   border: 0;
   background: transparent;

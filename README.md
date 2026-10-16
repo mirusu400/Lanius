@@ -290,6 +290,10 @@ not skip surviving records. A direct page-number jump still uses an offset,
 which can move after deletions. The scope filter applies before paging, so a
 rare old in-scope request remains reachable. API and MCP clients can pass the
 returned `anchor` and `next_cursor` on later flow pages.
+Each row also has a stable request number that keeps its identity across
+sorting, paging and restarts. Bookmarking applies the yellow highlight by
+default; choose another highlight or **No color** from the context menu when
+needed.
 Drag a table column header's right edge to resize it in History and other
 headed data tables. Column widths are remembered on this machine.
 Drag the divider between side-by-side panes to resize them in Proxy,
@@ -378,6 +382,8 @@ application under test. Scope rules persist across restarts, and you can tell
 Lanius to stop recording out of scope traffic entirely. In Lockdown settings,
 the separate scope egress option can prevent that traffic from being sent at
 all while Lockdown is active.
+New and existing projects receive an enabled `*.googleapis.com` exclude rule
+once by default. It can be edited, disabled or deleted like any other rule.
 The Scope field accepts full URLs or scheme-free host patterns. A plain domain
 matches any host containing that text, on both HTTP and HTTPS. In the default
 mode, `*` matches any number of characters and `?` matches one character.

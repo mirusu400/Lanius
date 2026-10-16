@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { clearPluginLogs, getPluginLogs } from '../api/client';
 import type { PluginLogEntry } from '../api/types';
 import { useT } from '../i18n';
+import { writeClipboardText } from '../clipboard';
 import { UndoableInput } from './UndoableText';
 
 const POLL_INTERVAL_MS = 750;
@@ -90,7 +91,7 @@ export function PluginLogConsole({ plugin }: { plugin: string }) {
       `${new Date(entry.timestamp * 1000).toISOString()} ${entry.source} ${entry.level} ${entry.message}`
     )).join('\n');
     try {
-      await navigator.clipboard.writeText(text);
+      await writeClipboardText(text);
       setError(null);
     } catch (reason) {
       setError((reason as Error).message);

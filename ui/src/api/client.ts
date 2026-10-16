@@ -1004,6 +1004,26 @@ export function setUpstream(hops: string[]): Promise<import('./types').UpstreamS
   });
 }
 
+export function getEgressIpState(historyLimit?: number): Promise<import('./types').EgressIpState> {
+  const query = historyLimit === undefined
+    ? ''
+    : `?history_limit=${Math.max(1, Math.min(1000, Math.trunc(historyLimit)))}`;
+  return request(`/api/egress-ip${query}`);
+}
+
+export function setEgressIpState(settings: {
+  enabled: boolean;
+  interval_seconds: 60 | 180 | 300;
+  ipv4_url: string;
+  ipv6_url: string;
+}): Promise<import('./types').EgressIpState> {
+  return request('/api/egress-ip', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+}
+
 export function setListener(
   host: string,
   port: number,

@@ -70,6 +70,7 @@ async def test_addon_persists_and_publishes() -> None:
     assert first["type"] == "flow.request"
     assert second["type"] == "flow.response"
     assert second["data"]["host"] == "example.com"
+    assert first["data"]["request_number"] == second["data"]["request_number"] == 1
     store.close()
 
 

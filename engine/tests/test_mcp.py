@@ -139,6 +139,7 @@ async def test_list_tools_exposes_the_expected_surface(store) -> None:
     names = {t.name for t in await server.list_tools()}
     assert {
         "list_flows",
+        "list_egress_ip_history",
         "get_flow",
         "bookmark_flow",
         "list_sites",
@@ -153,6 +154,37 @@ async def test_list_tools_exposes_the_expected_surface(store) -> None:
         "replay_flow",
         "decode_value",
     } <= names
+
+
+@pytest.mark.asyncio
+async def test_list_egress_ip_history_tool_filters_family_and_limits(store) -> None:
+    store.record_egress_ip_observation(
+        family=4,
+        ip="8.8.8.8",
+        observed_at=1,
+        observer_url="https://observer.example/v4",
+    )
+    store.record_egress_ip_observation(
+        family=6,
+        ip="2001:4860:4860::8888",
+        observed_at=2,
+        observer_url="https://observer.example/v6",
+    )
+    store.record_egress_ip_observation(
+        family=4,
+        ip="1.1.1.1",
+        observed_at=3,
+        observer_url="https://observer.example/v4",
+    )
+    server = build_server(store)
+
+    latest = await call(server, "list_egress_ip_history", limit=1)
+    assert latest["count"] == 1
+    assert latest["history"][0]["ip"] == "1.1.1.1"
+
+    ipv4 = await call(server, "list_egress_ip_history", family=4)
+    assert [item["ip"] for item in ipv4["history"]] == ["1.1.1.1", "8.8.8.8"]
+    assert "error" in await call(server, "list_egress_ip_history", family=5)
 
 
 @pytest.mark.asyncio
@@ -191,6 +223,9 @@ async def test_bookmark_flow_tool_and_filtered_lookup(store) -> None:
         "id": "poc", "bookmarked": False, "annotation_color": "red"
     }
     assert (await call(server, "list_flows", bookmarked_only=True))["flows"] == []
+    assert await call(server, "bookmark_flow", flow_id="other") == {
+        "id": "other", "bookmarked": True, "annotation_color": "yellow"
+    }
     assert "error" in await call(server, "bookmark_flow", flow_id="ghost")
     assert "error" in await call(server, "bookmark_flow", flow_id="poc", color="pink")
 
@@ -293,7 +328,7 @@ async def test_scope_tools_against_a_live_engine(live) -> None:
     )
     assert added["host"] == "target.test"
     scope = await call(server, "get_scope")
-    assert scope["rules"][0]["host"] == "target.test"
+    assert any(item["host"] == "target.test" for item in scope["rules"])
     assert engine.scope.contains("https", "target.test", 443, "/app/x") is True
 
 

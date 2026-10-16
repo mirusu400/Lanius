@@ -214,13 +214,16 @@ class CaptureAddon:
         except Exception:  # pragma: no cover - defensive
             logger.exception("failed to convert flow %s", flow.id)
             return
-        self.broker.publish(event_type, record.summary())
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            self.store.upsert(record)
+            try:
+                self.store.upsert(record)
+                self.broker.publish(event_type, record.summary())
+            except Exception:  # pragma: no cover - defensive
+                logger.exception("failed to persist flow %s", record.id)
             return
-        self._queue_persist(loop, record)
+        self._queue_persist(loop, record, event_type)
 
     def _save_tcp(self, flow: tcp.TCPFlow, event_type: str) -> None:
         try:
@@ -232,20 +235,23 @@ class CaptureAddon:
             "tcp", record.host, record.port, "/"
         ):
             return
-        self.broker.publish(event_type, record.summary())
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            self.store.upsert(record)
+            try:
+                self.store.upsert(record)
+                self.broker.publish(event_type, record.summary())
+            except Exception:  # pragma: no cover - defensive
+                logger.exception("failed to persist flow %s", record.id)
             return
-        self._queue_persist(loop, record)
+        self._queue_persist(loop, record, event_type)
 
     def _queue_persist(
-        self, loop: asyncio.AbstractEventLoop, record: FlowRecord
+        self, loop: asyncio.AbstractEventLoop, record: FlowRecord, event_type: str
     ) -> None:
         """Keep writes for one flow ordered while allowing different flows in parallel."""
         previous = self._last_write.get(record.id)
-        task = loop.create_task(self._persist_after(record, previous))
+        task = loop.create_task(self._persist_after(record, previous, event_type))
         self._last_write[record.id] = task
         self._pending.add(task)
 
@@ -257,14 +263,20 @@ class CaptureAddon:
         task.add_done_callback(finished)
 
     async def _persist_after(
-        self, record: FlowRecord, previous: asyncio.Task[None] | None
+        self,
+        record: FlowRecord,
+        previous: asyncio.Task[None] | None,
+        event_type: str,
     ) -> None:
         if previous is not None:
             await previous
-        await self._persist(record)
+        if await self._persist(record):
+            self.broker.publish(event_type, record.summary())
 
-    async def _persist(self, record: FlowRecord) -> None:
+    async def _persist(self, record: FlowRecord) -> bool:
         try:
             await asyncio.to_thread(self.store.upsert, record)
+            return True
         except Exception:  # pragma: no cover - defensive
             logger.exception("failed to persist flow %s", record.id)
+            return False

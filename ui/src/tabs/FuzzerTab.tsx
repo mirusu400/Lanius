@@ -40,6 +40,7 @@ import { formatUrl } from './proxyModel';
 import { usePluginActions } from '../components/usePluginActions';
 import { sendTextToReplay, sendToReplay } from './replayStore';
 import { getFlow } from '../api/client';
+import { copyTextToClipboard } from '../clipboard';
 import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 import { useShortcut } from '../useShortcut';
@@ -572,9 +573,7 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
                       label: t('menu.copyPayload'),
                       separator: true,
                       onSelect: () => {
-                        void navigator.clipboard?.writeText(
-                          (menu.target?.payloads ?? []).join(', '),
-                        );
+                        copyTextToClipboard((menu.target?.payloads ?? []).join(', '));
                       },
                     },
                   ]

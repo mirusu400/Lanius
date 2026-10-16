@@ -37,6 +37,7 @@ import { useReportBusy } from '../components/busy';
 import { usePluginActions } from '../components/usePluginActions';
 import { UndoableInput } from '../components/UndoableText';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
+import { writeClipboardText } from '../clipboard';
 
 type Surface = 'installed' | 'catalogue';
 type DetailTab = 'overview' | 'settings' | 'logs' | 'performance' | 'views';
@@ -361,7 +362,7 @@ export function PluginsTab() {
 
   const copyDirectory = async () => {
     try {
-      await navigator.clipboard.writeText(directory);
+      await writeClipboardText(directory);
       setError(null);
     } catch (reason) {
       setError(rawMsg((reason as Error).message));

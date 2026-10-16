@@ -7,6 +7,7 @@ from contextlib import closing
 import pytest
 
 from app.db.database_import import prepare_database
+from app.db.history_index import MEDIA_MIGRATION
 from app.db.schema import SCHEMA_VERSION
 from app.db.store import FlowRecord, FlowStore
 from app.lockdown import PROJECT_SETTING
@@ -69,6 +70,9 @@ def test_older_backup_is_upgraded_on_a_copy(tmp_path, version):
         for trigger in ("flow_history_insert", "flow_history_delete", "flow_history_update"):
             source._conn.execute(f"DROP TRIGGER {trigger}")
         source._conn.execute("DROP TABLE flow_history")
+        source._conn.execute("DROP INDEX idx_flows_request_number")
+        source._conn.execute("DROP TABLE flow_request_sequence")
+        source._conn.execute("ALTER TABLE flows DROP COLUMN request_number")
         source._conn.execute("ALTER TABLE flows DROP COLUMN request_body_omitted")
         source._conn.execute("ALTER TABLE flows DROP COLUMN response_body_omitted")
         if version == 12:
@@ -114,6 +118,14 @@ def test_rejects_legacy_backup_with_colliding_fuzzer_table(tmp_path):
     path = tmp_path / "colliding.sqlite"
     source = make_backup(path)
     with source._conn:
+        source._conn.execute("DROP TRIGGER flow_history_insert")
+        source._conn.execute("DROP TRIGGER flow_history_update")
+        source._conn.execute("DROP INDEX idx_flows_request_number")
+        source._conn.execute("DROP TABLE flow_request_sequence")
+        source._conn.execute("ALTER TABLE flows DROP COLUMN request_number")
+        source._conn.execute("ALTER TABLE flow_history DROP COLUMN request_number")
+        for statement in MEDIA_MIGRATION[-2:]:
+            source._conn.execute(statement)
         source._conn.execute("DROP TABLE fuzzer_results")
         source._conn.execute("DROP TABLE fuzzer_runs")
         source._conn.execute("CREATE TABLE fuzzer_runs (id TEXT PRIMARY KEY, started_at REAL)")

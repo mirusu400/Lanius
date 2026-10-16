@@ -73,6 +73,9 @@ def test_history_backfills_old_projects_and_never_reads_body_pages(tmp_path) -> 
         for trigger in ("flow_history_insert", "flow_history_delete", "flow_history_update"):
             original._conn.execute(f"DROP TRIGGER {trigger}")
         original._conn.execute("DROP TABLE flow_history")
+        original._conn.execute("DROP INDEX idx_flows_request_number")
+        original._conn.execute("DROP TABLE flow_request_sequence")
+        original._conn.execute("ALTER TABLE flows DROP COLUMN request_number")
         original._conn.execute("ALTER TABLE flows DROP COLUMN request_body_omitted")
         original._conn.execute("ALTER TABLE flows DROP COLUMN response_body_omitted")
         original._conn.execute("PRAGMA user_version=11")
@@ -111,6 +114,30 @@ def test_history_summary_follows_capture_updates_replacements_and_deletion() -> 
     store.close()
 
 
+def test_request_numbers_are_stable_and_never_reused() -> None:
+    store = FlowStore()
+    first = make_record("a", started_at=1)
+    second = make_record("b", started_at=2)
+    store.upsert(first)
+    store.upsert(second)
+    store.upsert(make_record("a", started_at=1, status_code=201))
+
+    assert first.request_number == 1
+    assert second.request_number == 2
+    assert store.get("a").request_number == 1
+    assert [item["request_number"] for item in store.page_summaries()["items"]] == [2, 1]
+
+    store.delete(["b"])
+    third = make_record("c", started_at=3)
+    store.upsert(third)
+    assert third.request_number == 3
+    store.clear()
+    fourth = make_record("d", started_at=4)
+    store.upsert(fourth)
+    assert fourth.request_number == 4
+    store.close()
+
+
 def test_migrate_upgrades_a_v1_database(tmp_path) -> None:
     """An existing v1 project file must gain the v2 tables, not be recreated."""
     path = tmp_path / "old.sqlite"
@@ -130,6 +157,10 @@ def test_migrate_upgrades_a_v1_database(tmp_path) -> None:
     }
     assert {"scope_rules", "settings"} <= tables
     assert conn.execute("SELECT id FROM flows").fetchone()[0] == "legacy"
+    default_rule = conn.execute(
+        "SELECT kind, host FROM scope_rules WHERE host='*.googleapis.com'"
+    ).fetchone()
+    assert default_rule == ("exclude", "*.googleapis.com")
     conn.close()
 
 

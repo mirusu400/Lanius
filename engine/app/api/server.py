@@ -64,6 +64,7 @@ from ..addons.scope import ScopeError, rule_from_url
 from .. import browser, ca_trust
 from ..config import Settings
 from ..content_encoding import AUTO_DECOMPRESS_SETTING, auto_decompress_enabled
+from ..egress_ip import EgressIpConfig, EgressIpMonitor
 from ..media_storage import MEDIA_BODY_LIMIT_SETTING, MAX_MEDIA_BODY_LIMIT_MB
 from ..db.store import ANNOTATION_COLORS, FlowStore
 from ..db.database_import import SQLITE_HEADER, PreparedDatabase, prepare_database
@@ -137,6 +138,13 @@ class CaptureStoragePatch(BaseModel):
 
 class LockdownPatch(BaseModel):
     enabled: bool
+
+
+class EgressIpPatch(BaseModel):
+    enabled: bool
+    interval_seconds: int = Field(strict=True)
+    ipv4_url: str
+    ipv6_url: str
 
 
 class WebSocketRulesPatch(BaseModel):
@@ -429,6 +437,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     broker = EventBroker(on_publish=_log_event)
     engine = ProxyEngine(settings, store, broker, lockdown)
+    egress_ip = EgressIpMonitor(store, lockdown, engine.product_route_proxy_url)
 
     # Built below, then started by the lifespan (its session manager needs a
     # running task group before it can serve requests).
@@ -444,12 +453,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ProxyStartError as exc:
             engine.start_error = str(exc)
             logger.error("proxy did not start: %s", exc)
+        await egress_ip.start()
         async with contextlib.AsyncExitStack() as stack:
             if mcp_app is not None and hasattr(mcp_app, "router"):
                 await stack.enter_async_context(mcp_app.router.lifespan_context(mcp_app))
             try:
                 yield
             finally:
+                await egress_ip.stop()
                 await engine.stop()
                 store.close()
 
@@ -566,6 +577,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.broker = broker
     app.state.engine = engine
     app.state.lockdown = lockdown
+    app.state.egress_ip = egress_ip
 
     async def _apply_lockdown_to_plugins(locked: bool) -> None:
         """Plugins are arbitrary Python, so they follow the mode both ways."""
@@ -582,10 +594,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def set_project_lockdown(body: LockdownPatch) -> dict[str, Any]:
         was_scope_egress = lockdown.scope_egress_effective
         result = lockdown.set_project(body.enabled)
+        egress_ip.policy_changed()
         await _apply_lockdown_to_plugins(result["effective"])
         if was_scope_egress != result["scope_egress_effective"]:
             await engine.restart_for_scope_egress()
         return result
+
+    @app.get("/api/egress-ip")
+    async def egress_ip_state(
+        history_limit: int = Query(20, ge=1, le=1000),
+    ) -> dict[str, object]:
+        return await asyncio.to_thread(egress_ip.state, history_limit=history_limit)
+
+    @app.put("/api/egress-ip")
+    async def set_egress_ip(payload: EgressIpPatch) -> dict[str, object]:
+        try:
+            await egress_ip.configure(EgressIpConfig(
+                enabled=payload.enabled,
+                interval_seconds=payload.interval_seconds,
+                ipv4_url=payload.ipv4_url,
+                ipv6_url=payload.ipv6_url,
+            ))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return await asyncio.to_thread(egress_ip.state)
 
     @app.put("/api/lockdown/scope-egress")
     async def set_scope_egress(body: LockdownPatch) -> dict[str, Any]:
@@ -691,6 +723,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "settings": await asyncio.to_thread(store.all_settings),
             "issues": await asyncio.to_thread(store.all_issues),
             "fuzzer_runs": await asyncio.to_thread(store.list_fuzzer_runs),
+            "egress_ip_observations": await asyncio.to_thread(
+                store.all_egress_ip_observations
+            ),
         }
         if include_flows:
             flows = await asyncio.to_thread(lambda: store.list(limit=100000))
@@ -719,6 +754,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             lockdown.set_scope_egress(True)
         scope = await asyncio.to_thread(engine.scope.reload)
         engine.match_replace.reload()
+        await egress_ip.reload()
         await _apply_lockdown_to_plugins(lockdown.enabled)
         if lockdown.scope_egress_effective:
             await engine.restart_for_scope_egress()
@@ -730,6 +766,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         was_running = engine.running
         await engine.fuzzer.stop_all()
         await engine.replay.cancel_active()
+        await egress_ip.stop()
         await engine.stop()
         warnings = []
         can_resume = True
@@ -759,6 +796,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     # Restoration already committed. Return success so the UI
                     # reloads imported tabs instead of autosaving stale drafts.
                     warnings.append(f"Project restored, but the proxy could not restart: {exc}")
+            await egress_ip.reload()
+            await egress_ip.start()
         broker.publish("project.imported", prepared.counts)
         return {"ok": True, **prepared.counts, "warnings": warnings}
 
@@ -816,15 +855,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 was_scope_egress = lockdown.scope_egress_effective
                 trusted_ca = store.get_setting(TRUSTED_CA_SETTING)
                 await engine.fuzzer.stop_all()
-                counts = await asyncio.to_thread(store.import_project, payload)
-                engine.fuzzer.reload()
-                if trusted_ca is None:
-                    store.delete_setting(TRUSTED_CA_SETTING)
-                else:
-                    store.set_setting(TRUSTED_CA_SETTING, trusted_ca)
-                await apply_imported_project(was_locked, was_scope_egress)
-                broker.publish("project.imported", counts)
-                return {"ok": True, **counts}
+                await egress_ip.stop()
+                try:
+                    counts = await asyncio.to_thread(store.import_project, payload)
+                    engine.fuzzer.reload()
+                    if trusted_ca is None:
+                        store.delete_setting(TRUSTED_CA_SETTING)
+                    else:
+                        store.set_setting(TRUSTED_CA_SETTING, trusted_ca)
+                    await apply_imported_project(was_locked, was_scope_egress)
+                    broker.publish("project.imported", counts)
+                    return {"ok": True, **counts}
+                finally:
+                    await egress_ip.reload()
+                    await egress_ip.start()
         except (ValueError, sqlite3.DatabaseError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         finally:
@@ -1106,12 +1150,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             or (isinstance(hops, list) and all(isinstance(hop, str) for hop in hops))
         ):
             raise HTTPException(status_code=422, detail="hops must be a list of proxy URLs")
+        egress_ip.route_changed()
         try:
             return await engine.set_upstream(hops)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except ProxyStartError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        finally:
+            egress_ip.route_changed()
 
     @app.post("/api/listener")
     async def set_listener(payload: dict[str, Any]) -> dict[str, Any]:

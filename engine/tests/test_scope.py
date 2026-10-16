@@ -130,9 +130,12 @@ def manager(tmp_path):
     store.close()
 
 
-def test_manager_starts_empty(manager) -> None:
-    assert manager.scope.rules == []
+def test_manager_starts_with_default_googleapis_exclusion(manager) -> None:
+    assert [(item.kind, item.host) for item in manager.scope.rules] == [
+        ("exclude", "*.googleapis.com")
+    ]
     assert manager.contains("https", "any.com", 443, "/") is True
+    assert manager.contains("https", "storage.googleapis.com", 443, "/") is False
 
 
 def test_manager_persists_rules(tmp_path) -> None:
@@ -143,7 +146,7 @@ def test_manager_persists_rules(tmp_path) -> None:
 
     reopened = FlowStore(tmp_path / "p.sqlite")
     restored = ScopeManager(reopened)
-    assert len(restored.scope.rules) == 1
+    assert len(restored.scope.rules) == 2
     assert restored.contains("https", "t.com", 443, "/api/x") is True
     assert restored.contains("https", "t.com", 443, "/x") is False
     reopened.close()
@@ -157,7 +160,7 @@ def test_manager_update_and_delete(manager) -> None:
     assert manager.contains("https", "other.com", 443, "/") is True
 
     manager.delete_rule(added.id)
-    assert manager.scope.rules == []
+    assert [item.host for item in manager.scope.rules] == ["*.googleapis.com"]
 
 
 def test_manager_rejects_unknown_rule_ids(manager) -> None:
@@ -172,7 +175,8 @@ def test_manager_validates_updates_before_saving(manager) -> None:
     with pytest.raises(ScopeError):
         manager.update_rule(added.id, match_type="fuzzy")
     # unchanged
-    assert manager.scope.rules[0].match_type == "glob"
+    current = next(item for item in manager.scope.rules if item.id == added.id)
+    assert current.match_type == "glob"
 
 
 def test_restrict_capture_is_persisted(tmp_path) -> None:
@@ -204,5 +208,5 @@ def test_manager_publishes_changes(tmp_path) -> None:
     manager.add_rule(host="t.com")
     event = queue.get_nowait()
     assert event["type"] == "scope.changed"
-    assert event["data"]["rules"][0]["host"] == "t.com"
+    assert any(item["host"] == "t.com" for item in event["data"]["rules"])
     store.close()

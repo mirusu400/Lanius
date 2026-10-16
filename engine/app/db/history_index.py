@@ -49,3 +49,31 @@ MEDIA_MIGRATION = (
     "CREATE TRIGGER flow_history_update AFTER UPDATE ON flows BEGIN "
     f"DELETE FROM flow_history WHERE rowid = OLD.rowid; {_MEDIA_INSERT} END",
 )
+
+# Keep request numbers stable across sorting, paging, deletion and restarts.
+# The one-row sequence table deliberately survives History > Clear, so a
+# number that appeared in an audit trail is never assigned to another request.
+_NUMBER_COLUMNS = _MEDIA_COLUMNS + ", request_number"
+_NUMBER_NEW = _MEDIA_NEW + ", NEW.request_number"
+_NUMBER_INSERT = (
+    f"INSERT INTO flow_history(rowid, {_NUMBER_COLUMNS}) "
+    f"VALUES (NEW.rowid, {_NUMBER_NEW});"
+)
+REQUEST_NUMBER_MIGRATION = (
+    "ALTER TABLE flows ADD COLUMN request_number INTEGER",
+    "UPDATE flows SET request_number = rowid",
+    "CREATE UNIQUE INDEX idx_flows_request_number ON flows(request_number) "
+    "WHERE request_number IS NOT NULL",
+    "ALTER TABLE flow_history ADD COLUMN request_number INTEGER",
+    "UPDATE flow_history SET request_number = history_rowid",
+    "CREATE TABLE flow_request_sequence ("
+    "singleton INTEGER PRIMARY KEY CHECK (singleton = 1), "
+    "next_value INTEGER NOT NULL CHECK (next_value >= 1))",
+    "INSERT INTO flow_request_sequence(singleton, next_value) "
+    "SELECT 1, COALESCE(MAX(request_number), 0) + 1 FROM flows",
+    "DROP TRIGGER flow_history_insert",
+    "DROP TRIGGER flow_history_update",
+    f"CREATE TRIGGER flow_history_insert AFTER INSERT ON flows BEGIN {_NUMBER_INSERT} END",
+    "CREATE TRIGGER flow_history_update AFTER UPDATE ON flows BEGIN "
+    f"DELETE FROM flow_history WHERE rowid = OLD.rowid; {_NUMBER_INSERT} END",
+)

@@ -1107,6 +1107,7 @@ pub fn run() {
     linux_webkit::configure_before_webview();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .menu(shutdown::menu)
         .on_menu_event(|app, event| {

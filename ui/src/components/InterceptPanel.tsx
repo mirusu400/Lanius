@@ -20,6 +20,7 @@ import { FixedSidebarSplit } from './FixedSidebarSplit';
 import { matchesFilters } from '../tabs/proxyModel';
 import { useShortcuts } from '../useShortcut';
 import { UndoableInput } from './UndoableText';
+import { copyTextToClipboard } from '../clipboard';
 
 interface Props {
   rules: InterceptRules;
@@ -468,7 +469,7 @@ export function InterceptPanel({
           addScopeRule: (flow, kind, target) => {
             void addRequestScopeRule(flowUrl(flow), kind, target);
           },
-          copy: (text) => { void navigator.clipboard?.writeText(text); },
+          copy: copyTextToClipboard,
         }, codegen.buildMenu({
           url: flowUrl(menuTarget.flow),
           method: menuTarget.request.method,

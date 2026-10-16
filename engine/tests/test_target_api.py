@@ -51,9 +51,11 @@ def seed(client, **kwargs) -> None:
 # --- scope CRUD -----------------------------------------------------------
 
 
-def test_scope_starts_empty(client) -> None:
+def test_scope_starts_with_default_googleapis_exclusion(client) -> None:
     data = client.get("/api/scope").json()
-    assert data["rules"] == []
+    assert [(rule["kind"], rule["host"]) for rule in data["rules"]] == [
+        ("exclude", "*.googleapis.com")
+    ]
     assert data["restrict_capture"] is False
 
 
@@ -62,10 +64,14 @@ def test_add_list_and_delete_a_rule(client) -> None:
         "/api/scope/rules", json={"host": "t.com", "path": "/api/*"}
     ).json()
     assert rule["id"] is not None
-    assert client.get("/api/scope").json()["rules"][0]["host"] == "t.com"
+    assert any(
+        item["host"] == "t.com" for item in client.get("/api/scope").json()["rules"]
+    )
 
     assert client.delete(f"/api/scope/rules/{rule['id']}").status_code == 200
-    assert client.get("/api/scope").json()["rules"] == []
+    assert [item["host"] for item in client.get("/api/scope").json()["rules"]] == [
+        "*.googleapis.com"
+    ]
 
 
 def test_add_rule_from_url(client) -> None:
@@ -92,7 +98,9 @@ def test_patch_rule_toggles_enabled(client) -> None:
     scope = client.patch(
         f"/api/scope/rules/{rule['id']}", json={"enabled": False}
     ).json()
-    assert scope["rules"][0]["enabled"] is False
+    assert next(item for item in scope["rules"] if item["id"] == rule["id"])[
+        "enabled"
+    ] is False
 
 
 def test_patch_unknown_rule_404(client) -> None:
@@ -131,7 +139,7 @@ def test_scope_rules_survive_a_restart(tmp_path) -> None:
     )
     with TestClient(create_app(settings2)) as second:
         rules = second.get("/api/scope").json()["rules"]
-        assert [r["host"] for r in rules] == ["keeps.com"]
+        assert [r["host"] for r in rules] == ["*.googleapis.com", "keeps.com"]
 
 
 # --- capture restriction --------------------------------------------------

@@ -7,9 +7,13 @@ import sqlite3
 from .metrics import MIGRATION as METRICS_MIGRATION
 from .endpoint_index import MIGRATION as ENDPOINT_MIGRATION, register_functions
 from .search_index import MIGRATION as SEARCH_MIGRATION, register_functions as register_search_functions
-from .history_index import MIGRATION as HISTORY_MIGRATION, MEDIA_MIGRATION
+from .history_index import (
+    MEDIA_MIGRATION,
+    MIGRATION as HISTORY_MIGRATION,
+    REQUEST_NUMBER_MIGRATION,
+)
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 16
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -207,6 +211,29 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
             flow_id TEXT,
             PRIMARY KEY (run_id, result_index)
         )""",
+    ),
+    15: (
+        """CREATE TABLE IF NOT EXISTS egress_ip_observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            family INTEGER NOT NULL CHECK (family IN (4, 6)),
+            ip TEXT NOT NULL,
+            first_seen_at REAL NOT NULL,
+            last_seen_at REAL NOT NULL,
+            check_count INTEGER NOT NULL DEFAULT 1 CHECK (check_count >= 1),
+            observer_url TEXT NOT NULL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_egress_ip_family_id ON egress_ip_observations(family, id DESC)",
+    ),
+    16: REQUEST_NUMBER_MIGRATION + (
+        """INSERT INTO scope_rules
+           (kind, host, path, protocol, port, match_type, enabled)
+           SELECT 'exclude', '*.googleapis.com', '*', 'any', NULL, 'glob', 1
+           WHERE NOT EXISTS (
+               SELECT 1 FROM scope_rules
+               WHERE kind='exclude' AND host='*.googleapis.com'
+                 AND path='*' AND protocol='any' AND port IS NULL
+                 AND match_type='glob'
+           )""",
     ),
 }
 

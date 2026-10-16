@@ -55,6 +55,34 @@ yet. SOCKS5 routing covers TCP connections; UDP relay is not part of the
 browser listener. Multi-hop and SOCKS5 routing use a bundled GOST bridge on a
 loopback port.
 
+## Observed public IP
+
+**Settings > Proxy > Observed public IP** can keep an audit trail of the
+public address seen outside this machine. It is disabled by default. When
+enabled, Lanius checks IPv4 and IPv6 separately every one, three, or five
+minutes. The default observers are `https://api.ipify.org` for IPv4 and
+`https://api6.ipify.org` for IPv6; each can be replaced with a custom HTTPS
+endpoint. A custom endpoint may return a plain IP address or JSON containing
+an `ip`, `ip_addr`, or `address` field.
+
+The first successful observation and each address change create a project
+database row. An unchanged address only advances that row's last-seen time and
+check count, so routine polling does not fill the database with duplicate
+rows. The audit trail is included in project exports and SQLite backups. These
+requests follow the configured upstream route but are not added to Proxy
+History. An observed public IP proves what the observer saw; another target
+may still see a different route or address.
+
+Use **View IP history** to inspect each address period, including its first and
+last observation time, check count and observer URL. Agents can read the same
+records with the `list_egress_ip_history` MCP tool and optionally filter by IP
+family.
+
+Lockdown Mode stops the poll before DNS or connection setup and prevents an
+in-flight result from being written. No public-IP observation is saved while
+global or project Lockdown Mode is effective. Polling resumes automatically
+after Lockdown Mode is turned off if the feature remains enabled.
+
 ## Looking like a browser
 
 Lanius terminates TLS, so the server fingerprints the proxy rather than your

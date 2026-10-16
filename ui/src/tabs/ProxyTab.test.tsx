@@ -15,6 +15,7 @@ import type { FlowSummary } from '../api/types';
 
 const seeded: FlowSummary = {
   id: 'seed-1',
+  request_number: 41,
   type: 'http',
   client_addr: '127.0.0.1:1',
   server_addr: '1.1.1.1:80',
@@ -108,6 +109,19 @@ beforeEach(() => {
         if (clearResponse) return clearResponse;
         return jsonResponse({ ok: true });
       }
+      if (url.endsWith('/annotation') && init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body)) as {
+          bookmarked?: boolean;
+          annotation_color?: string | null;
+        };
+        return jsonResponse({
+          id: 'seed-1',
+          bookmarked: body.bookmarked ?? false,
+          annotation_color: Object.hasOwn(body, 'annotation_color')
+            ? body.annotation_color
+            : (body.bookmarked ? 'yellow' : null),
+        });
+      }
       if (url.includes('/api/status')) {
         return jsonResponse({
           version: '0.1.0',
@@ -179,6 +193,17 @@ describe('ProxyTab', () => {
     render(<ProxyTab />);
     expect(await screen.findByText('seeded.test')).toBeTruthy();
     expect(screen.getByText('/seeded')).toBeTruthy();
+    expect(screen.getByText('41')).toBeTruthy();
+  });
+
+  it('applies the default highlight when a request is bookmarked', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    const row = (await screen.findByText('/seeded')).closest('tr')!;
+    await user.click(within(row).getByRole('button', { name: t('history.addBookmark') }));
+    await waitFor(() => expect(row.classList.contains('annotation-yellow')).toBe(true));
+    const call = calls.find((item) => item.url.endsWith('/annotation'));
+    expect(call?.body).toEqual({ bookmarked: true });
   });
 
   it('keeps an intercept draft when switching between Proxy subtabs', async () => {
@@ -284,6 +309,41 @@ describe('ProxyTab', () => {
     finishSearch(jsonResponse({ items: [{ ...seeded, id: 'match', host: 'needle.test' }], count: 1 }));
     await waitFor(() => expect(document.querySelector('.flow-table tbody tr')?.textContent).toContain('needle.test'));
     await waitFor(() => expect(screen.queryByRole('status', { name: t('proxy.searching') })).toBeNull());
+  });
+
+  it('does not show search progress for a background reload caused by a new flow', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+
+    let finishSearch!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finishSearch = resolve; });
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'needle');
+    await screen.findByRole('status', { name: t('proxy.searching') });
+    finishSearch(jsonResponse({
+      items: [{ ...seeded, id: 'match', host: 'needle.test' }],
+      count: 1,
+    }));
+    await waitFor(() => expect(
+      document.querySelector('.flow-table tbody tr')?.textContent,
+    ).toContain('needle.test'));
+    await waitFor(() => expect(
+      screen.queryByRole('status', { name: t('proxy.searching') }),
+    ).toBeNull());
+
+    let finishBackground!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finishBackground = resolve; });
+    MockSocket.instances[0].emit('flow.request', { ...live, host: 'needle-live.test' });
+    await new Promise((resolve) => window.setTimeout(resolve, 800));
+    expect(screen.queryByRole('status', { name: t('proxy.searching') })).toBeNull();
+
+    finishBackground(jsonResponse({
+      items: [{ ...seeded, id: 'background', host: 'needle-live.test' }],
+      count: 1,
+    }));
+    await waitFor(() => expect(
+      document.querySelector('.flow-table tbody tr')?.textContent,
+    ).toContain('needle-live.test'));
   });
 
   it('pages into older history without holding every flow in the table', async () => {
