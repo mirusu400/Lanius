@@ -207,6 +207,58 @@ fn open_network_extensions_settings() -> Result<(), String> {
     }
 }
 
+/// A web link the system browser may be asked to open.
+///
+/// Only plain http(s) URLs: anything else (file:, a custom scheme, an
+/// argument-looking string) could make the OS opener run something.
+fn external_url(url: &str) -> Result<&str, String> {
+    let lower = url.to_ascii_lowercase();
+    let valid = (lower.starts_with("https://") || lower.starts_with("http://"))
+        && url.len() <= 2048
+        && !url
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || c == '"');
+    if valid {
+        Ok(url)
+    } else {
+        Err("only http and https links can be opened".to_string())
+    }
+}
+
+/// Open a link in the system browser. The webview does not do this for
+/// `target="_blank"` links on its own, so they would otherwise do nothing.
+/// The browser makes the connection, not Lanius, and only on a user's click.
+#[tauri::command]
+fn open_external(url: String) -> Result<(), String> {
+    let url = external_url(&url)?;
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("/usr/bin/open");
+        command.arg(url);
+        command
+    };
+    #[cfg(windows)]
+    let mut command = {
+        // Not `cmd /c start`, which would parse the URL as shell syntax.
+        let mut command = Command::new("rundll32");
+        command.args(["url.dll,FileProtocolHandler", url]);
+        command
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(url);
+        command
+    };
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| format!("could not open the browser: {err}"))
+}
+
 /// Locate the bundled engine binary, or fall back to the dev checkout.
 /// A port from the environment, falling back to the default. An
 /// unparseable value is ignored rather than taken as 0.
@@ -1338,6 +1390,7 @@ pub fn run() {
             set_api_port,
             set_window_theme,
             open_network_extensions_settings,
+            open_external,
             list_projects,
             current_project,
             create_project,
@@ -1504,6 +1557,27 @@ mod tests {
             .expect("state")
             .changed = stale;
         assert_eq!(progress.overdue(), None);
+    }
+
+    #[test]
+    fn only_plain_web_links_are_opened_externally() {
+        for url in [
+            "https://github.com/mirusu400/Lanius/releases",
+            "http://mitm.it/",
+            "HTTPS://example.test/a?b=c#d",
+        ] {
+            assert_eq!(external_url(url), Ok(url));
+        }
+        for url in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "-a Calculator",
+            "https://example.test/ a",
+            "https://example.test/\"x",
+            "x-apple.systempreferences:com.apple",
+        ] {
+            assert!(external_url(url).is_err(), "{url}");
+        }
     }
 
     #[test]

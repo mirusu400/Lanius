@@ -6,10 +6,14 @@ import { I18nProvider } from './i18n'
 import { apply, load } from './appearance'
 import { syncApiBaseWithShell } from './api/client'
 import { ToastProvider } from './components/Toast'
+import { installExternalLinks } from './externalLinks'
 
 // Before the first paint: otherwise the window flashes the default theme
 // and then snaps to the chosen one on launch.
 apply(load())
+
+// The desktop webview would otherwise ignore target="_blank" links.
+installExternalLinks()
 
 // The shell may have saved a non-default API/MCP port. Resolve it before
 // any tab starts polling or opens a WebSocket.
