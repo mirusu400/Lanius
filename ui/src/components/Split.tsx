@@ -34,6 +34,7 @@ export function Split({
   first,
   second,
   className,
+  secondHidden = false,
 }: {
   direction: 'horizontal' | 'vertical';
   /** Where to remember the position. */
@@ -42,6 +43,9 @@ export function Split({
   first: React.ReactNode;
   second: React.ReactNode;
   className?: string;
+  /** Collapse to the first pane alone. Unlike rendering it without the
+   * Split, this keeps the first pane mounted, with its state. */
+  secondHidden?: boolean;
 }) {
   const [fraction, setFraction] = useState(() => load(storageKey, initial));
   const [dragging, setDragging] = useState(false);
@@ -100,10 +104,10 @@ export function Split({
 
   return (
     <div className={classes} ref={container}>
-      <div className="split-pane" style={{ flexBasis: `${fraction * 100}%` }}>
+      <div className="split-pane" style={secondHidden ? { flex: 1 } : { flexBasis: `${fraction * 100}%` }}>
         {first}
       </div>
-      <div
+      {!secondHidden && <div
         className={dragging ? 'split-handle dragging' : 'split-handle'}
         role="separator"
         tabIndex={0}
@@ -117,8 +121,8 @@ export function Split({
         }}
         onDoubleClick={() => setFraction(initial)}
         onKeyDown={onKeyDown}
-      />
-      <div className="split-pane">{second}</div>
+      />}
+      {!secondHidden && <div className="split-pane">{second}</div>}
     </div>
   );
 }

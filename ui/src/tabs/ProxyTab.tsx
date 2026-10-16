@@ -531,7 +531,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                 />
               </Busy>
             }
-            second={<FlowDetailView flow={selectedFlow} searchQuery={filters.search || ''} />}
+            second={<FlowDetailView flow={selectedFlow} searchQuery={filters.search || ''} inspector />}
           />
           <div className="history-pages">
             <button disabled={historyPage === 0 || historyLoading} onClick={() => {

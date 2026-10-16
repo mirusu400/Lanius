@@ -10,6 +10,8 @@ import { UpstreamError } from './UpstreamError';
 import { requestMenuItems } from './requestMenu';
 import { useAddRequestScopeRule } from './requestScope';
 import { Split } from './Split';
+import { InspectorPanel } from './InspectorPanel';
+import { useInspectorOpen, useInspectorSelection } from './useInspector';
 import { useCodegenMenu } from './useCodegenMenu';
 import { usePluginActions } from './usePluginActions';
 import { rawRequest, rawRequestVariant, rawResponse } from './rawHttp';
@@ -35,6 +37,8 @@ interface Props {
   onSentToReplay?: () => void;
   splitStorageKey?: string;
   initialSplit?: number;
+  /** Offer the Inspector beside the exchange. */
+  inspector?: boolean;
 }
 
 /** How one half of the exchange is shown.
@@ -347,7 +351,7 @@ function Half({
   );
 }
 
-export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitStorageKey = 'lanius.split.detail', initialSplit = 0.5 }: Props) {
+export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitStorageKey = 'lanius.split.detail', initialSplit = 0.5, inspector = false }: Props) {
   const t = useT();
   const addRequestScopeRule = useAddRequestScopeRule();
   const [detail, setDetail] = useState<FlowDetail | null>(null);
@@ -380,6 +384,9 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const isRequestActive = useCallback(() => activeHalf.current === 'request', []);
   const isResponseActive = useCallback(() => activeHalf.current === 'response', []);
   const currentFlowId = flow?.id ?? null;
+  const [inspectorOpen, toggleInspector] = useInspectorOpen();
+  const exchangeRef = useRef<HTMLDivElement | null>(null);
+  const [selection] = useInspectorSelection(exchangeRef, currentFlowId);
   const requestCharsetOverride = charsetChoices.flowId === currentFlowId
     ? charsetChoices.request
     : '';
@@ -641,6 +648,18 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
           />
           {t('detail.revealSecrets')}
         </label>
+        {inspector && (
+          <button
+            type="button"
+            className={inspectorOpen ? 'inspector-toggle active' : 'inspector-toggle'}
+            aria-pressed={inspectorOpen}
+            aria-label={t('inspector.toggleLabel')}
+            title={t('inspector.toggleLabel')}
+            onClick={toggleInspector}
+          >
+            {t('inspector.toggle')}
+          </button>
+        )}
       </div>
       {actionError && <div className="banner error">{actionError}</div>}
       <UpstreamError
@@ -652,11 +671,28 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       {/* Stacked rather than tabbed: comparing what was sent with what
           came back is the usual reason to open a flow at all. */}
       <Split
-        direction="vertical"
-        storageKey={splitStorageKey}
-        initial={initialSplit}
-        first={request}
-        second={response}
+        direction="horizontal"
+        storageKey={`${splitStorageKey}.inspector`}
+        initial={0.72}
+        secondHidden={!inspector || !inspectorOpen}
+        first={
+          <div className="inspector-host" ref={exchangeRef}>
+            <Split
+              direction="vertical"
+              storageKey={splitStorageKey}
+              initial={initialSplit}
+              first={request}
+              second={response}
+            />
+          </div>
+        }
+        second={
+          <InspectorPanel
+            selection={selection}
+            request={isTcp ? '' : rawRequest(flow, detail)}
+            onEditInReplay={isTcp ? undefined : () => sendRequest(flow, detail, openInReplay)}
+          />
+        }
       />
       <ContextMenu
         position={menu.position}

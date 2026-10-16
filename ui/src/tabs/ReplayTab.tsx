@@ -27,6 +27,13 @@ import { useCodegenMenu } from '../components/useCodegenMenu';
 import { RequestEditor } from '../components/RequestEditor';
 import { Split } from '../components/Split';
 import { ResponseInspector } from '../components/ResponseInspector';
+import { InspectorPanel } from '../components/InspectorPanel';
+import {
+  useInspectorOpen,
+  useInspectorSelection,
+  type InspectorSelection,
+} from '../components/useInspector';
+import { replaceSelection } from '../components/inspectorModel';
 import { formatMessageBody, minify, splitMessage } from '../components/bodyFormat';
 import { useEditorMenu } from '../components/useEditorMenu';
 import { requestMenuItems } from '../components/requestMenu';
@@ -155,6 +162,27 @@ export function ReplayTabView() {
     }),
   );
 
+  const [inspectorOpen, toggleInspector] = useInspectorOpen();
+  const exchangeRef = useRef<HTMLDivElement | null>(null);
+  // A selection belongs to the request it was made in.
+  const [selection, setSelection] = useInspectorSelection(exchangeRef, activeId, editorMenu.ref);
+
+  const applyInspected = (selected: InspectorSelection, value: string): boolean => {
+    if (!active || selected.start === undefined || selected.end === undefined) return false;
+    const replaced = replaceSelection(
+      active.text,
+      { text: selected.text, start: selected.start, end: selected.end },
+      value,
+    );
+    if (!replaced) return false;
+    editReplayTab(active.id, { text: replaced.text });
+    const next = { text: value.replace(/\r\n/g, '\n'), start: selected.start, end: replaced.end };
+    setSelection(next);
+    // Show what was replaced, so the change is visible in the request.
+    requestAnimationFrame(() => editorMenu.ref.current?.setSelectionRange(next.start, next.end));
+    return true;
+  };
+
   const send = async () => {
     if (!active || active.sending || sendingIds.current.has(active.id)) return;
     const requestId = active.id;
@@ -192,6 +220,38 @@ export function ReplayTabView() {
   }, Boolean(active));
   useShortcut('replay.previous', () => selectRelativeTab(-1), Boolean(active && tabs.length > 1));
   useShortcut('replay.next', () => selectRelativeTab(1), Boolean(active && tabs.length > 1));
+
+  // The request and response, with the Inspector following selections
+  // anywhere inside them.
+  const exchange = active && (
+    <div className="inspector-host" ref={exchangeRef}>
+      <Split
+        direction="horizontal"
+        storageKey="lanius.split.replay"
+        className="replay-split"
+        first={<RequestEditor
+          editorRef={editorMenu.ref}
+          historyKey={active.id}
+          className="replay-editor mono"
+          label={t('replay.request')}
+          value={active.text}
+          onChange={(text) => editReplayTab(active.id, { text })}
+          onContextMenu={editorMenu.open}
+        />}
+        second={<ResponseInspector
+          flowId={active.response?.id ?? null}
+          bodyOmitted={active.response?.body_omitted}
+          bodySize={active.response?.size}
+          raw={active.response
+            ? renderResponseText(active.response, (count) =>
+                t('replay.bodyTruncated', { count: String(count) }),
+              )
+            : undefined}
+          empty={t('replay.noResponse')}
+        />}
+      />
+    </div>
+  );
 
   return (
     <div className="replay-tab">
@@ -293,6 +353,16 @@ export function ReplayTabView() {
               </div>
             )}
             <button
+              type="button"
+              className={inspectorOpen ? 'inspector-toggle active' : 'inspector-toggle'}
+              aria-pressed={inspectorOpen}
+              aria-label={t('inspector.toggleLabel')}
+              title={t('inspector.toggleLabel')}
+              onClick={toggleInspector}
+            >
+              {t('inspector.toggle')}
+            </button>
+            <button
               className="send"
               onClick={send}
               disabled={active.sending}
@@ -314,27 +384,15 @@ export function ReplayTabView() {
           )}
           <Split
             direction="horizontal"
-            storageKey="lanius.split.replay"
+            storageKey="lanius.split.replay.inspector"
+            initial={0.75}
             className="replay-split"
-            first={<RequestEditor
-              editorRef={editorMenu.ref}
-              historyKey={active.id}
-              className="replay-editor mono"
-              label={t('replay.request')}
-              value={active.text}
-              onChange={(text) => editReplayTab(active.id, { text })}
-              onContextMenu={editorMenu.open}
-            />}
-            second={<ResponseInspector
-              flowId={active.response?.id ?? null}
-              bodyOmitted={active.response?.body_omitted}
-              bodySize={active.response?.size}
-              raw={active.response
-                ? renderResponseText(active.response, (count) =>
-                    t('replay.bodyTruncated', { count: String(count) }),
-                  )
-                : undefined}
-              empty={t('replay.noResponse')}
+            secondHidden={!inspectorOpen}
+            first={exchange}
+            second={<InspectorPanel
+              selection={selection}
+              request={active.text}
+              onApply={selection?.start !== undefined ? applyInspected : undefined}
             />}
           />
           {editorMenu.element}

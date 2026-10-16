@@ -6248,3 +6248,154 @@ pre.response-preview-text {
   font-size: 0.92em;
   margin: 4px 0;
 }
+
+/* --- Inspector ------------------------------------------------------ */
+
+.inspector-host {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.inspector-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 10px;
+}
+
+.inspector-toggle.active {
+  background: var(--accent-wash);
+  border-color: var(--accent-dim);
+  color: var(--fg);
+}
+
+.inspector {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.inspector-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.inspector-title {
+  font-weight: 600;
+}
+
+.inspector-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+}
+
+.inspector-body h4 {
+  color: var(--muted);
+  font-size: 0.85em;
+  font-weight: 600;
+  margin: 4px 0 0;
+}
+
+.inspector-original,
+.inspector-hex {
+  background: var(--bg-sunken);
+  border-radius: 3px;
+  margin: 0;
+  overflow: auto;
+  padding: 6px;
+}
+
+/* The selection itself is context, not the subject: keep it short. */
+.inspector-original {
+  max-height: 6em;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.inspector-hex {
+  white-space: pre;
+}
+
+.inspector-layers,
+.inspector-charset,
+.inspector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.inspector-charset label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.inspector-charset select {
+  max-width: 100%;
+}
+
+.inspector-reasons {
+  font-size: 0.85em;
+}
+
+.pill.confidence-high {
+  border-color: var(--ok-border);
+  color: var(--ok-soft);
+}
+
+.pill.confidence-low {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.inspector-decoded {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  flex: 1;
+  min-height: 8em;
+  overflow-wrap: anywhere;
+  padding: 6px;
+  resize: none;
+  white-space: pre-wrap;
+}
+
+.inspector-decoded[readonly] {
+  color: var(--muted);
+}
+
+.inspector-actions {
+  justify-content: flex-end;
+}
+
+.inspector-actions .primary {
+  background: var(--accent);
+  border: none;
+  border-radius: 3px;
+  color: var(--on-accent);
+  font-weight: 600;
+  padding: 4px 14px;
+}
+
+.inspector-actions .primary:disabled {
+  opacity: 0.5;
+}

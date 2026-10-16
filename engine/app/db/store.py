@@ -872,6 +872,50 @@ class FlowStore:
             ).fetchone()
         return bytes(row[0]) if row is not None and row[0] is not None and not row[1] else None
 
+    def page_charset(self, url: str) -> str | None:
+        """The charset of the most recent response captured for this URL.
+
+        Browsers encode a submitted form in the charset of the page that
+        holds it, so this is what the Inspector asks about a Referer.
+        None when the page was not captured or says nothing either way.
+        """
+        from urllib.parse import urlsplit
+
+        try:
+            parts = urlsplit(url)
+            port = parts.port or {"http": 80, "https": 443}.get(parts.scheme)
+        except ValueError:
+            return None
+        if not parts.hostname:
+            return None
+        with self._read_lock:
+            # The exact page first, then the same path with another query.
+            row = self._read_conn.execute(
+                "SELECT response_headers, response_body, response_body_omitted FROM flows"
+                " WHERE scheme = ? AND host = ? AND port IS ? AND path = ?"
+                " AND response_headers IS NOT NULL"
+                " ORDER BY (COALESCE(query, '') = ?) DESC, started_at DESC LIMIT 1",
+                (parts.scheme, parts.hostname, port, parts.path or "/", parts.query),
+            ).fetchone()
+        if row is None:
+            return None
+        headers = _load_headers(row[0])
+        body = None if row[2] else row[1]
+        display, _, _, _ = body_for_display(headers, body, enabled=True)
+        content_type = _content_type(headers)
+        found = charset.charset_of(content_type, display)
+        declared = charset.charset_from_headers(content_type) is not None
+        if declared or found != charset.DEFAULT_CHARSET:
+            return found
+        if display and not display.isascii():
+            # Undeclared, but the page itself is valid UTF-8 text.
+            try:
+                display.decode(charset.DEFAULT_CHARSET)
+            except UnicodeDecodeError:
+                return None
+            return found
+        return None
+
     def list(
         self,
         *,

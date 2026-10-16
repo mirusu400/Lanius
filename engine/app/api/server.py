@@ -57,6 +57,7 @@ from ..plugin_packages import (
 from ..plugin_catalogue import PluginCatalogueError
 from ..plugin_samples import bundled_sample_archive, bundled_samples
 from .. import codegen
+from .. import inspector
 from ..build_info import build_info
 from ..lockdown import BLOCKED_DETAIL, PROJECT_SETTING, SCOPE_EGRESS_SETTING, LockdownBlocked, LockdownPolicy
 from ..tls_exceptions import TLS_EXCEPTIONS_SETTING
@@ -334,6 +335,24 @@ class ChainStepBody(BaseModel):
 class DecodeBody(BaseModel):
     value: str
     steps: list[ChainStepBody] = []
+
+
+class InspectBody(BaseModel):
+    value: str
+    # The edited text, for /api/inspect/apply.
+    text: str | None = None
+    charset: str | None = None
+    # Where the value came from: the raw request it was selected in, and
+    # whether that part is form-encoded (so "+" means a space).
+    request: str = ""
+    form: bool = False
+    locale: str = ""
+    preferred: str = ""
+
+
+# A selection is a value, not a capture; anything this large is a whole
+# body, which the Inspector has no business re-encoding in one request.
+INSPECT_LIMIT = 1_000_000
 
 
 class CompareBody(BaseModel):
@@ -2054,6 +2073,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "steps": outputs,
             "output": outputs[-1]["value"] if outputs else body.value,
         }
+
+    def _inspect_context(body: InspectBody) -> inspector.Context:
+        if len(body.value) > INSPECT_LIMIT or len(body.request) > 4 * INSPECT_LIMIT:
+            raise HTTPException(status_code=413, detail="INSPECT_TOO_LARGE")
+        return inspector.Context(
+            request=body.request,
+            form=body.form,
+            locale=body.locale,
+            preferred=body.preferred,
+            referer_charset=store.page_charset,
+        )
+
+    @app.post("/api/inspect")
+    async def inspect_value(body: InspectBody) -> dict[str, Any]:
+        ctx = _inspect_context(body)
+        return await asyncio.to_thread(inspector.inspect, body.value, ctx, body.charset)
+
+    @app.post("/api/inspect/apply")
+    async def inspect_apply(body: InspectBody) -> dict[str, Any]:
+        if body.text is None:
+            raise HTTPException(status_code=422, detail="text is required")
+        ctx = _inspect_context(body)
+        try:
+            value = await asyncio.to_thread(
+                inspector.write, body.value, body.text, ctx, body.charset
+            )
+        except inspector.InspectError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"value": value}
 
     @app.post("/api/compare")
     async def compare_texts(body: CompareBody) -> dict[str, Any]:

@@ -612,6 +612,53 @@ export function listCodecs(): Promise<{ codecs: string[]; hashes: string[] }> {
   return request('/api/codecs');
 }
 
+export interface InspectRequest {
+  value: string;
+  /** The edited text; only for applyInspect. */
+  text?: string;
+  /** The charset to read and write with, instead of the detected one. */
+  charset?: string | null;
+  /** The raw request the value was selected from, for context. */
+  request?: string;
+  /** The value is form-encoded, so "+" is a space. */
+  form?: boolean;
+  locale?: string;
+  /** The charset previously chosen for this host. */
+  preferred?: string;
+}
+
+export interface InspectCharset {
+  name: string;
+  label: string;
+  confidence: 'high' | 'medium' | 'low';
+  reasons: { code: string; detail?: string }[];
+  candidates: { name: string; label: string; text: string; score: number }[];
+}
+
+export interface InspectResult {
+  layers: { kind: string; charset?: string; label?: string }[];
+  text: string | null;
+  hex: string | null;
+  editable: boolean;
+  charset: InspectCharset | null;
+}
+
+export function inspectValue(body: InspectRequest): Promise<InspectResult> {
+  return request('/api/inspect', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
+export function applyInspect(body: InspectRequest & { text: string }): Promise<{ value: string }> {
+  return request('/api/inspect/apply', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
 export function decodeChain(
   value: string,
   steps: ChainStep[],
