@@ -3,20 +3,20 @@
 Usage::
 
     python -m app.main [--proxy-port 8080] [--api-port 12954]
+    python -m app.main --doctor    # preflight report as JSON, then exit
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import signal
+import sys
 import threading
 import time
 
-import uvicorn
-
-from .api import create_app
 from .config import Settings
 
 logger = logging.getLogger(__name__)
@@ -152,7 +152,7 @@ def _kernel32():  # pragma: no cover - trivial, and Windows only
     return ctypes.windll.kernel32  # type: ignore[attr-defined]
 
 
-def parse_args(argv: list[str] | None = None) -> tuple[Settings, bool]:
+def parse_args(argv: list[str] | None = None) -> tuple[Settings, bool, bool]:
     parser = argparse.ArgumentParser(prog="lanius-engine")
     defaults = Settings.from_env()
     parser.add_argument("--proxy-host", default=defaults.proxy_host)
@@ -166,6 +166,11 @@ def parse_args(argv: list[str] | None = None) -> tuple[Settings, bool]:
         action="store_true",
         help="exit when the launching process does (used by the desktop shell)",
     )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="print preflight checks as JSON and exit, without opening a project",
+    )
     args = parser.parse_args(argv)
     settings = Settings(
         proxy_host=args.proxy_host,
@@ -176,11 +181,17 @@ def parse_args(argv: list[str] | None = None) -> tuple[Settings, bool]:
         db_path=args.db_path,
         log_level=args.log_level,
     )
-    return settings, bool(args.watch_parent)
+    return settings, bool(args.watch_parent), bool(args.doctor)
 
 
 def main(argv: list[str] | None = None) -> None:
-    settings, watch = parse_args(argv)
+    settings, watch, doctor = parse_args(argv)
+    if doctor:
+        from . import doctor as preflight
+
+        json.dump(preflight.run(settings), sys.stdout)
+        sys.stdout.write("\n")
+        return
     logging.basicConfig(
         level=settings.log_level.upper(),
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
@@ -191,6 +202,11 @@ def main(argv: list[str] | None = None) -> None:
             logger.warning("no supervisor to watch; continuing unsupervised")
         else:
             watch_parent(supervisor)
+    # Imported here so --doctor can still report on a broken mitmproxy install.
+    import uvicorn
+
+    from .api import create_app
+
     app = create_app(settings)
     uvicorn.run(
         app,

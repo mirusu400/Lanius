@@ -10,6 +10,7 @@ import {
 } from './projects';
 import './ProjectPicker.css';
 import { UndoableInput } from './components/UndoableText';
+import { StartupDoctor } from './StartupDoctor';
 
 export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }) {
   const t = useT();
@@ -22,6 +23,7 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
   const [port, setPort] = useState(currentPort);
   const [portNote, setPortNote] = useState(false);
   const [lockdownGlobal, setLockdownGlobal] = useState<GlobalLockdownStatus | null>(null);
+  const [doctorOpen, setDoctorOpen] = useState(false);
 
   useEffect(() => {
     void listProjects()
@@ -86,7 +88,7 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
         <h1>{t('startup.title')}</h1>
         <p className="muted">{t('startup.intro')}</p>
 
-        {error && <div className="banner error" role="alert">{error}</div>}
+        {error && <div className="banner error project-picker-error" role="alert">{error}</div>}
 
         <label className="project-picker-lockdown lockdown-label">
           <input
@@ -115,6 +117,14 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
           </button>
           <span className="muted">{portNote ? t('startup.portApplied') : t('startup.portHelp')}</span>
         </div>
+
+        <div className="project-picker-doctor">
+          <button type="button" disabled={busy} aria-expanded={doctorOpen} onClick={() => setDoctorOpen((open) => !open)}>
+            {t('startup.doctor')}
+          </button>
+          <span className="muted">{t('startup.doctorHelp')}</span>
+        </div>
+        {doctorOpen && <StartupDoctor />}
 
         <div className="project-picker-grid">
           <section className="project-picker-card">

@@ -16,9 +16,27 @@ function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> 
   return internals.invoke(command, args);
 }
 
+export interface StartupDoctorCheck {
+  id: string;
+  status: 'ok' | 'warn' | 'error';
+  detail: string;
+  holder?: string | null;
+  trace?: string;
+}
+
+/** The engine's preflight report, run by the shell before any project opens. */
+export interface StartupDoctorReport {
+  engine: string | null;
+  report: { engine_version: string; platform: string; checks: StartupDoctorCheck[] } | null;
+  error: string | null;
+  output: string | null;
+  last_log: string | null;
+}
+
 export const listProjects = () => invoke<Project[]>('list_projects');
 export const currentProject = () => invoke<Project | null>('current_project');
 export const createProject = (name: string) => invoke<Project>('create_project', { name });
 export const openProject = (id: string) => invoke<Project>('open_project', { id });
 export const startTempProject = () => invoke<Project>('start_temp_project');
 export const closeProject = () => invoke<void>('close_project');
+export const runStartupDoctor = () => invoke<StartupDoctorReport>('run_doctor');

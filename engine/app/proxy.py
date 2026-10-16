@@ -35,6 +35,7 @@ from .addons.scope import ScopeManager
 from .addons.scope_egress import ScopeEgressEarlyAddon, ScopeEgressGuardAddon
 from .addons.system_trust import MacOSSystemTrustAddon
 from .config import Settings
+from .doctor import probe_listen
 from .lockdown import LockdownPolicy
 from .db.store import FlowStore
 from .events import EventBroker
@@ -822,28 +823,14 @@ class ProxyEngine:
         self.broker.publish("engine.local_capture_blocked", state)
 
     def _check_port_available(self) -> None:
-        """Fail fast with a clear message when the listen port is taken.
-
-        A route change restarts the listener on the same port. On POSIX,
-        SO_REUSEADDR permits that while old connections are in TIME_WAIT;
-        listen() still refuses a second live listener. Windows needs its
-        exclusive-address option instead of SO_REUSEADDR.
-        """
-        probe = socket.socket()
+        """Fail fast with a clear message when the listen port is taken."""
         try:
-            if sys.platform == "win32":  # pragma: no cover - platform specific
-                probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-            else:
-                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            probe.bind((self.settings.proxy_host, self.settings.proxy_port))
-            probe.listen(1)
+            probe_listen(self.settings.proxy_host, self.settings.proxy_port)
         except OSError as exc:
             raise ProxyStartError(
                 f"proxy port {self.settings.proxy_host}:"
                 f"{self.settings.proxy_port} is unavailable: {exc}"
             ) from exc
-        finally:
-            probe.close()
 
     async def _await_bind(self) -> None:
         """Block until mitmproxy actually accepts connections, or fail loudly.

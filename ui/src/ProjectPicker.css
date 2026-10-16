@@ -38,6 +38,33 @@
 }
 .project-picker-port input { width: 100px; }
 
+/* Startup errors can carry the end of the engine log. */
+.project-picker-error { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.project-picker-doctor {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+.project-picker .startup-doctor { margin-top: 16px; }
+.startup-doctor details { margin-top: 10px; }
+.startup-doctor summary { cursor: pointer; }
+.startup-doctor .startup-doctor-meta { margin: 10px 0 0; overflow-wrap: anywhere; }
+.startup-doctor-log {
+  max-height: 260px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: .85em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .project-picker-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

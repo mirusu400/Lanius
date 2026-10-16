@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
+mod doctor;
 #[cfg(any(target_os = "linux", test))]
 mod linux_webkit;
 mod project_export;
@@ -393,7 +394,8 @@ fn start_engine(
         // bootloader starts another process between them.
         .env("LANIUS_SUPERVISOR_PID", std::process::id().to_string())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        // Kept so a failed start can say why; the startup Doctor shows it too.
+        .stderr(doctor::engine_log());
 
     // Plugin files are installed once per machine. Which plugins are
     // enabled remains a setting in each project's own database.
@@ -436,16 +438,32 @@ fn start_engine(
                     .is_some()
                 {
                     stop_engine(state);
-                    return Err(format!("engine process {pid} exited during startup"));
+                    return Err(with_log_tail(format!(
+                        "engine process {pid} exited during startup"
+                    )));
                 }
                 std::thread::sleep(Duration::from_millis(150));
             }
             stop_engine(state);
-            Err(format!(
+            Err(with_log_tail(format!(
                 "engine did not become ready within {STARTUP_TIMEOUT:?}"
-            ))
+            )))
         }
         Err(err) => Err(format!("failed to spawn engine: {err}")),
+    }
+}
+
+/// Lines of the engine log appended to a startup error.
+const STARTUP_ERROR_LOG_LINES: usize = 12;
+
+/// Add the end of the engine log, which usually names the real cause.
+fn with_log_tail(message: String) -> String {
+    match doctor::engine_log_path()
+        .ok()
+        .and_then(|path| doctor::tail(&path, STARTUP_ERROR_LOG_LINES))
+    {
+        Some(tail) => format!("{message}\n\n{tail}"),
+        None => message,
     }
 }
 
@@ -1135,6 +1153,7 @@ pub fn run() {
             open_project,
             start_temp_project,
             close_project,
+            doctor::run_doctor,
             project_export::save_project_file,
             close_ready,
             cancel_close,

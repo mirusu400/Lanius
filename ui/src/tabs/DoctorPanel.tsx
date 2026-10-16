@@ -151,7 +151,7 @@ export function DoctorPanel({ onOpenSettings }: {
   );
 }
 
-function CheckRow({ title, state, detail, action, label }: {
+export function CheckRow({ title, state, detail, action, label }: {
   title: string;
   state: 'ok' | 'warn' | 'bad' | 'neutral';
   detail: string;
