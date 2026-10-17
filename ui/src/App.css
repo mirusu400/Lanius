@@ -1359,6 +1359,16 @@ pre.body,
   stroke-dasharray: 20 82;
 }
 
+/* A known amount fills clockwise from the top instead of turning. */
+.spinner.determinate svg {
+  animation: none;
+  transform: rotate(-90deg);
+}
+
+.spinner.determinate .spinner-arc {
+  transition: stroke-dasharray 0.4s ease-out;
+}
+
 @keyframes spinner-rotate {
   to {
     transform: rotate(360deg);
@@ -1373,6 +1383,9 @@ pre.body,
   }
   .spinner-arc {
     stroke-dasharray: none;
+  }
+  .spinner.determinate .spinner-arc {
+    transition: none;
   }
   @keyframes spinner-fade {
     0%, 100% { opacity: 0.25; }
@@ -6223,20 +6236,65 @@ pre.response-preview-text {
 .compact-table td:not(:first-child) { white-space: nowrap; }
 .compact-footer { justify-content: space-between; }
 
-.compact-progress {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 12px 0;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg-alt);
+.compact-progress-dialog {
+  width: min(420px, 90vw);
 }
 
-.compact-progress progress {
-  width: min(100%, 420px);
+/* The same translucent shield as the Lockdown transition: the project
+   stays visible underneath, but nothing in it can be used. */
+.compact-progress-dialog::backdrop {
+  background: color-mix(in srgb, var(--bg) 68%, transparent);
+}
+
+.compact-progress-dialog .dialog-body {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 28px 24px;
+  text-align: center;
+}
+
+.compact-progress-dialog h3,
+.compact-progress-dialog p {
+  margin: 0;
+}
+
+.compact-progress-ring {
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+}
+
+.compact-progress-ring > * {
+  grid-area: 1 / 1;
+}
+
+.compact-progress-ring .spinner {
+  height: 112px;
+  width: 112px;
+}
+
+.compact-progress-ring .spinner circle {
+  stroke-width: 2.4;
+}
+
+.compact-progress-percent {
+  display: flex;
+  flex-direction: column;
+  font-size: 1.6em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.compact-progress-percent small {
+  color: var(--muted);
+  font-size: 0.45em;
+  font-weight: normal;
+}
+
+.compact-progress-times {
+  font-variant-numeric: tabular-nums;
 }
 
 .rule-list input.invalid {

@@ -49,16 +49,34 @@ export function useDelayedBusy(
   return visible;
 }
 
-/** The circle itself. */
-export function Spinner({ label }: { label?: string }) {
+/** Circumference of the r=13 circle the arc is drawn on. */
+const ARC_LENGTH = 2 * Math.PI * 13;
+
+/** The circle itself. With a value (0-100) it fills instead of turning. */
+export function Spinner({ label, value }: { label?: string; value?: number }) {
   const t = useT();
   const text = label ?? t('common.loading');
+  const determinate = value !== undefined;
+  const filled = determinate ? ARC_LENGTH * Math.min(100, Math.max(0, value)) / 100 : 0;
   return (
-    <span className="spinner" role="status" aria-label={text}>
+    <span
+      className={determinate ? 'spinner determinate' : 'spinner'}
+      role={determinate ? 'progressbar' : 'status'}
+      aria-label={text}
+      aria-valuemin={determinate ? 0 : undefined}
+      aria-valuemax={determinate ? 100 : undefined}
+      aria-valuenow={determinate ? Math.round(value) : undefined}
+    >
       <svg viewBox="0 0 32 32" aria-hidden="true">
         {/* The track makes the moving arc legible on any background. */}
         <circle className="spinner-track" cx="16" cy="16" r="13" />
-        <circle className="spinner-arc" cx="16" cy="16" r="13" />
+        <circle
+          className="spinner-arc"
+          cx="16"
+          cy="16"
+          r="13"
+          style={determinate ? { strokeDasharray: `${filled} ${ARC_LENGTH}` } : undefined}
+        />
       </svg>
     </span>
   );

@@ -5,11 +5,13 @@ import {
   compactProject,
   getCompactProgress,
   getCompactOverview,
+  getRunningCompact,
   type CompactOverview,
   type CompactProgress,
   type CompactSite,
 } from '../../api/client';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { CompactProgressDialog } from './CompactProgressDialog';
 import { useT } from '../../i18n';
 import { formatBytes } from '../dashboardModel';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../../components/ResizableColumns';
@@ -26,8 +28,9 @@ export function ProjectCompactSection() {
   const [busy, setBusy] = useState(false);
   const [operationId, setOperationId] = useState<string | null>(null);
   const [progress, setProgress] = useState<CompactProgress | null>(null);
-  const [startedAt, setStartedAt] = useState(0);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // Following a cleanup this window did not start (it was reloaded, or
+  // Settings was reopened), so no POST of ours will report the end.
+  const [attached, setAttached] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -41,18 +44,46 @@ export function ProjectCompactSection() {
   }, [refresh]);
 
   useEffect(() => {
+    let active = true;
+    void getRunningCompact().then((running) => {
+      if (!active || !running.active) return;
+      setAttached(true);
+      setProgress(running);
+      setOperationId(running.operation_id);
+      setBusy(true);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     if (!operationId) return;
     let active = true;
     let pending = false;
+    let failures = 0;
+    const release = async (message: string | null) => {
+      setAttached(false);
+      setOperationId(null);
+      setBusy(false);
+      if (message) setError(message);
+      await refresh().catch(() => undefined);
+    };
     const poll = async () => {
-      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
       if (pending) return;
       pending = true;
       try {
         const snapshot = await getCompactProgress(operationId);
-        if (active) setProgress(snapshot);
+        if (!active) return;
+        failures = 0;
+        setProgress(snapshot);
+        if (attached && !snapshot.active) {
+          await release(snapshot.phase === 'failed' ? t('compact.phase.failed') : null);
+        }
       } catch {
-        // The POST may not have registered yet; its own response reports errors.
+        // The POST may not have registered yet; its own response reports
+        // errors. A followed cleanup has no POST, so if the engine stops
+        // knowing about it (it restarted) the shield must not stay forever.
+        failures += 1;
+        if (active && attached && failures >= 3) await release(t('compact.phase.failed'));
       } finally {
         pending = false;
       }
@@ -60,7 +91,7 @@ export function ProjectCompactSection() {
     void poll();
     const timer = window.setInterval(() => void poll(), 700);
     return () => { active = false; window.clearInterval(timer); };
-  }, [operationId, startedAt]);
+  }, [operationId, attached, refresh, t]);
 
   const selectedSites = useMemo(
     () => overview?.sites.filter((site) => selected.has(siteKey(site))) ?? [],
@@ -76,8 +107,6 @@ export function ProjectCompactSection() {
     const id = crypto.randomUUID();
     setConfirmDelete(false);
     setBusy(true);
-    setStartedAt(Date.now());
-    setElapsedSeconds(0);
     setProgress(null);
     setOperationId(id);
     setError(null);
@@ -100,10 +129,6 @@ export function ProjectCompactSection() {
       setBusy(false);
     }
   };
-
-  const deletionPercent = progress?.phase === 'deleting' && progress.total_flows > 0
-    ? Math.min(100, Math.round(progress.processed_flows / progress.total_flows * 100))
-    : null;
 
   const toggle = (key: string) => {
     setSelected((current) => {
@@ -194,26 +219,7 @@ export function ProjectCompactSection() {
         </button>
       </div>
 
-      {busy && (
-        <div className="compact-progress" role="status" aria-live="polite">
-          <strong>{t(`compact.phase.${progress?.phase ?? 'preparing'}`)}</strong>
-          {deletionPercent !== null && (
-            <>
-              <progress value={progress?.processed_flows ?? 0} max={progress?.total_flows ?? 1} />
-              <span>{t('compact.deletionProgress', {
-                percent: deletionPercent,
-                processed: progress?.processed_flows ?? 0,
-                total: progress?.total_flows ?? 0,
-              })}</span>
-            </>
-          )}
-          {deletionPercent === null && <progress aria-label={t('compact.working')} />}
-          {progress && ['optimizing', 'vacuuming', 'checkpointing'].includes(progress.phase) && (
-            <span className="muted">{t('compact.longStep')}</span>
-          )}
-          <span className="muted" aria-live="off">{t('compact.elapsed', { seconds: elapsedSeconds })}</span>
-        </div>
-      )}
+      <CompactProgressDialog open={busy} progress={progress} />
 
       {result && <p className="muted" role="status">{result}</p>}
       {error && <div className="banner error" role="alert">{error}</div>}

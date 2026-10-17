@@ -1224,6 +1224,15 @@ export interface CompactProgress {
   phase: 'preparing' | 'deleting' | 'optimizing' | 'vacuuming' | 'checkpointing' | 'refreshing' | 'done' | 'failed';
   processed_flows: number;
   total_flows: number;
+  /** False once the cleanup has finished or failed. */
+  active: boolean;
+  elapsed_seconds: number;
+  /** Never decreases; only the deletion count and VACUUM copy are measured. */
+  percent: number;
+  /** Null until there is a basis for it, or when a phase overran its estimate. */
+  eta_seconds: number | null;
+  /** Whether the current phase's progress is inferred from past timings. */
+  estimated: boolean;
 }
 
 export function getCompactOverview(): Promise<CompactOverview> {
@@ -1243,6 +1252,11 @@ export function compactProject(sites: CompactSite[], operationId: string): Promi
 
 export function getCompactProgress(operationId: string): Promise<CompactProgress> {
   return request(`/api/project/compact/progress/${encodeURIComponent(operationId)}`);
+}
+
+/** The cleanup already running, so a reloaded window can show it again. */
+export function getRunningCompact(): Promise<CompactProgress | { active: false }> {
+  return request('/api/project/compact/progress');
 }
 
 /** What the copy-as menus can offer, including plugin formats. */

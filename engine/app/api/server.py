@@ -10,7 +10,6 @@ import re
 import secrets
 import sqlite3
 import tempfile
-import threading
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -25,6 +24,7 @@ from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
 from .. import __version__, charset, startup_progress
+from ..compact_progress import CompactProgress, CompactRates
 from ..addons.intercept import InterceptError
 from ..addons.match_replace import MatchReplaceError, preview as preview_match_replace
 from ..addons.replay import ReplayError, build_flow, render_raw
@@ -221,48 +221,6 @@ class CompactProjectBody(BaseModel):
     operation_id: UUID | None = None
 
 
-class CompactProgress:
-    """One active cleanup per project; snapshots never wait for the database."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._snapshot: dict[str, Any] | None = None
-        self._active = False
-
-    def start(self, operation_id: str, total_flows: int) -> bool:
-        with self._lock:
-            if self._active:
-                return False
-            self._active = True
-            self._snapshot = {
-                "operation_id": operation_id,
-                "phase": "preparing",
-                "processed_flows": 0,
-                "total_flows": total_flows,
-            }
-            return True
-
-    def update(self, phase: str, processed_flows: int | None = None) -> None:
-        with self._lock:
-            if self._snapshot is None:
-                return
-            self._snapshot["phase"] = phase
-            if processed_flows is not None:
-                self._snapshot["processed_flows"] = processed_flows
-
-    def finish(self, succeeded: bool) -> None:
-        with self._lock:
-            if self._snapshot is not None:
-                self._snapshot["phase"] = "done" if succeeded else "failed"
-            self._active = False
-
-    def get(self, operation_id: str) -> dict[str, Any] | None:
-        with self._lock:
-            if self._snapshot is None or self._snapshot["operation_id"] != operation_id:
-                return None
-            return self._snapshot.copy()
-
-
 class ScopeRuleBody(BaseModel):
     kind: str = "include"
     host: str = "*"
@@ -434,7 +392,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings.ensure_dirs()
     startup_progress.report("database")
     store = FlowStore(settings.db_path)
-    compact_progress = CompactProgress()
+    compact_progress = CompactProgress(
+        wal_path=None if store.path == ":memory:" else Path(f"{store.path}-wal"),
+        rates=CompactRates(settings.data_dir / "compact-rates.json"),
+    )
     lockdown = LockdownPolicy.from_env(store)
 
     # Notable (non per-flow) events are persisted for the Logger tab.
@@ -971,6 +932,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             }
             if not selected.keys() <= available.keys():
                 raise HTTPException(status_code=422, detail="a selected site no longer exists")
+            selected_bytes = sum(
+                site["content_bytes"] or 0
+                for site in before["sites"]
+                if (site["scheme"], site["host"], site["port"]) in selected
+            )
+            compact_progress.plan(
+                db_bytes=before["db_bytes"],
+                live_bytes=before["db_bytes"] - before["reclaimable_bytes"] - selected_bytes,
+            )
             compact_progress.update("deleting" if selected else "optimizing")
             try:
                 deleted = await asyncio.to_thread(
@@ -1002,6 +972,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             }
         finally:
             compact_progress.finish(succeeded)
+
+    @app.get("/api/project/compact/progress")
+    async def compact_project_running() -> dict[str, Any]:
+        """The cleanup in progress, if any, so a reloaded window can follow it."""
+        return compact_progress.current() or {"active": False}
 
     @app.get("/api/project/compact/progress/{operation_id}")
     async def compact_project_progress(operation_id: UUID) -> dict[str, Any]:

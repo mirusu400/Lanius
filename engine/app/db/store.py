@@ -724,7 +724,7 @@ class FlowStore:
                     deleted += cursor.rowcount
         return deleted
 
-    def reclaim_space(self, on_phase: Callable[[str], None] | None = None) -> None:
+    def reclaim_space(self, on_phase: Callable[..., None] | None = None) -> None:
         """Hand freed pages back to the filesystem.
 
         Deleting rows only marks pages reusable, so the file does not
@@ -742,8 +742,14 @@ class FlowStore:
                 on_phase("optimizing")
             self._conn.execute("INSERT INTO flow_search(flow_search) VALUES ('optimize')")
             self._conn.commit()
+            # Start the VACUUM with an empty log. Its rebuilt file is then
+            # the only thing the log grows by, which is what progress reads.
+            self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             if on_phase:
-                on_phase("vacuuming")
+                page_size = int(self._conn.execute("PRAGMA page_size").fetchone()[0])
+                pages = int(self._conn.execute("PRAGMA page_count").fetchone()[0])
+                free = int(self._conn.execute("PRAGMA freelist_count").fetchone()[0])
+                on_phase("vacuuming", live_bytes=(pages - free) * page_size)
             self._conn.execute("VACUUM")
             if on_phase:
                 on_phase("checkpointing")
@@ -1269,10 +1275,25 @@ class FlowStore:
 
     # --- settings ---------------------------------------------------------
     def get_setting(self, key: str, default: str | None = None) -> str | None:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT value FROM settings WHERE key = ?", (key,)
-            ).fetchone()
+        """Read committed settings without queueing behind a long write.
+
+        Settings are read on the event loop (plugin watcher, request
+        checks). Waiting there for the writer lock froze the whole API
+        while a cleanup VACUUM held it for minutes. A thread already
+        inside a write still reads through the writer, so it sees its
+        own uncommitted changes.
+        """
+        read_conn = getattr(self, "_read_conn", None)
+        if read_conn is None or read_conn is self._conn or self._lock._is_owned():  # type: ignore[attr-defined]
+            with self._lock:
+                row = self._conn.execute(
+                    "SELECT value FROM settings WHERE key = ?", (key,)
+                ).fetchone()
+        else:
+            with self._read_lock:
+                row = read_conn.execute(
+                    "SELECT value FROM settings WHERE key = ?", (key,)
+                ).fetchone()
         return row["value"] if row else default
 
     def set_setting(self, key: str, value: str) -> None:

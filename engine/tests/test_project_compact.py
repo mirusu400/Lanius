@@ -168,11 +168,52 @@ def test_progress_is_visible_during_compaction_and_rejects_overlap(
             assert progress.json()["phase"] == "vacuuming"
             assert progress.json()["processed_flows"] == 1
             assert progress.json()["total_flows"] == 1
+            assert progress.json()["active"] is True
+            assert 0 < progress.json()["percent"] < 100
+            running = client.get("/api/project/compact/progress").json()
+            assert running["operation_id"] == operation_id
             assert client.post("/api/project/compact", json={"sites": []}).status_code == 409
             release.set()
             assert future.result(timeout=10).status_code == 200
     finally:
         release.set()
 
-    assert client.get(f"/api/project/compact/progress/{operation_id}").json()["phase"] == "done"
+    finished = client.get(f"/api/project/compact/progress/{operation_id}").json()
+    assert finished["phase"] == "done"
+    assert finished["percent"] == 100
+    assert client.get("/api/project/compact/progress").json() == {"active": False}
     assert client.get(f"/api/project/compact/progress/{uuid4()}").status_code == 404
+
+
+def test_settings_stay_readable_while_a_cleanup_holds_the_writer(client: TestClient) -> None:
+    """The event loop reads settings; a VACUUM must not freeze the whole API."""
+    store = client.app.state.store
+    store.set_setting("probe", "value")
+    held = threading.Event()
+    release = threading.Event()
+
+    def hold_writer() -> None:
+        with store._lock:
+            held.set()
+            release.wait(timeout=10)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        holder = pool.submit(hold_writer)
+        assert held.wait(timeout=10)
+        try:
+            reader = pool.submit(store.get_setting, "probe")
+            assert reader.result(timeout=2) == "value"
+        finally:
+            release.set()
+        holder.result(timeout=10)
+
+
+def test_writer_still_reads_its_own_uncommitted_setting(client: TestClient) -> None:
+    store = client.app.state.store
+    with store._lock:
+        store._conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('pending', 'mine')"
+        )
+        assert store.get_setting("pending") == "mine"
+        store._conn.rollback()
+    assert store.get_setting("pending") is None
