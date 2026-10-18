@@ -11,7 +11,8 @@ used to choose the implementation order.
 |---|---|
 | Runtime | Legacy mitmproxy addons and SDK plugins; deterministic ordering; complete hot-load lifecycle; transactional rollback; package module cleanup; manual reload; optional file watching; startup safe mode |
 | Discovery | Metadata and hook discovery without importing disabled loose-file plugins; package manifests expose metadata and compatibility before activation |
-| SDK | Versioned `lanius_sdk` 1.2 with owner-scoped disposable registrations |
+| SDK | Versioned `lanius_sdk` 1.3 with owner-scoped disposable registrations |
+| MCP | Typed plugin-owned HTTP MCP tools with schema validation, lifecycle cleanup, diagnostics, and suspension guards |
 | Contributions | Context actions, codecs, Fuzzer payload generators and processors, typed settings, user/project storage, managed tasks, logging, bounded read-only flow pages, passive scanner checks, and active scanner checks with request-level input probes |
 | Product surfaces | Plugin actions in Proxy history, Target, request/response details, Replay, Fuzzer, and the global Plugins toolbar |
 | Package data | Read-only, path-confined `resources/` access with per-read size limits |
@@ -44,7 +45,7 @@ limits, but ordinary mitmproxy hooks remain synchronous in-process callbacks.
 | Phase | Status | Notes |
 |---|---|---|
 | P0 loader hardening | Complete for lifecycle, rollback, ordering, metadata, reload, and safe mode | Raw traffic-hook timing and process containment remain future runtime work |
-| P1 stable SDK | Complete for the v1.2 contribution set | Bounded read-only History pages are available; general HTTP send, scope, site-map, and tool facades are not exposed yet |
+| P1 stable SDK | Complete for the v1.3 contribution set | Bounded read-only History pages and plugin-owned MCP tools are available; general HTTP send, scope, and site-map facades are not exposed yet |
 | P2 packages and UI | Complete for signed local packages, resources, sandboxed views, and action RPC | Custom message editors, columns, hotkeys, and richer host widgets are not available |
 | P3 scanner and issues | Complete for bounded passive/active checks and persisted findings | Out-of-band testing and external scanner adapters are not included |
 | P4 catalogue | Complete for signed-source lifecycle and recovery | There is no hosted public registry, review service, rating, or automatic update policy |
@@ -56,6 +57,10 @@ logs, counts handled requests, and exposes a sandboxed statistics/reset view.
 Installation is local and remains available in Lockdown Mode, while execution
 continues to be suspended there. The sample is installed disabled so enabling
 trusted code remains an explicit user action.
+
+The bundled **MCP Notes** package demonstrates SDK 1.3 read/write MCP tools
+backed by project-scoped storage. Its tools share the engine's HTTP endpoint
+and disappear when the plugin is disabled or suspended.
 
 ## Recommended next increments
 

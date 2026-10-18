@@ -21,6 +21,11 @@ exposes the interception and replay tools. **Settings > AI agents** shows the
 endpoint, lists every tool with whether it only reads or actually acts, and
 has a configuration you can copy straight into your client.
 
+Enabled plugins can add tools to this HTTP endpoint through SDK 1.3. Settings
+shows the owning plugin and its declared read/write behavior. See
+[Plugin MCP Tools](plugin-mcp.md) for the bundled MCP Notes sample and authoring
+instructions. The standalone stdio process does not load plugins.
+
 ## Choosing MCP or SQLite
 
 When an agent connects, Lanius tells it the database path for that MCP server
@@ -42,8 +47,10 @@ tools for changes. The in-memory test database has no file to query.
 
 ## Secrets and safety
 
-Secrets are redacted in every response unless the agent explicitly asks for
-them, so tokens do not leak into a transcript by accident.
+Built-in flow tools redact sensitive headers unless the agent explicitly asks
+to reveal them. Plugin tool results are author-provided JSON and do not inherit
+that masking; only enable trusted plugins. Lockdown Mode and safe mode suspend
+plugin tools while built-in tools retain their existing traffic policies.
 
 An agent with these tools can send traffic through your proxy, change your
 scope and release held requests. Untick **Allow agents to connect** and

@@ -3,13 +3,17 @@
  * MCP existed in the engine but nowhere in the interface, so nobody could
  * tell it was there, what it let an agent do, or how to switch it off.
  */
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { McpSection } from './settings/McpSection';
 import { setApiBase } from '../api/client';
+import { connectStream } from '../api/stream';
+import type { McpState } from '../api/types';
 import { renderWithI18n as render, t } from '../test-utils';
+
+vi.mock('../api/stream', () => ({ connectStream: vi.fn(() => () => {}) }));
 
 const TOOLS = [
   { name: 'list_flows', description: 'List captured flows, newest first.', writes: false },
@@ -18,7 +22,7 @@ const TOOLS = [
   { name: 'add_scope_rule', description: 'Add a scope rule.', writes: true },
 ];
 
-let mcp = {
+let mcp: McpState = {
   available: true,
   enabled: true,
   url: 'http://127.0.0.1:12954/mcp/mcp',
@@ -123,6 +127,41 @@ const mcpSection = () => {
 };
 
 describe('MCP settings', () => {
+  it('does not let a delayed catalogue refresh undo the displayed MCP off switch', async () => {
+    const user = userEvent.setup();
+    render(<McpSection />);
+    await screen.findByText(t('mcp.section'));
+    const before = { ...mcp };
+    let resolveRefresh!: (response: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      resolveRefresh = resolve;
+    }));
+    const handlers = vi.mocked(connectStream).mock.calls.at(-1)![0];
+    handlers.onEvent({ type: 'mcp.tools_changed', data: {} });
+    await user.click(mcpSection().getByLabelText(t('mcp.enable')));
+    expect(await screen.findByText(t('mcp.disabled'))).toBeTruthy();
+    await act(async () => { resolveRefresh(jsonResponse(before)); });
+    expect(mcpSection().getByText(t('mcp.disabled'))).toBeTruthy();
+    expect((mcpSection().getByLabelText(t('mcp.enable')) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('refreshes plugin tools and ownership when the live catalogue changes', async () => {
+    render(<McpSection />);
+    await waitFor(() => expect(screen.getByText('list_flows')).toBeTruthy());
+    const handlers = vi.mocked(connectStream).mock.calls.at(-1)![0];
+    mcp = { ...mcp, tools: [...TOOLS, {
+      name: 'notes.read_note', description: 'Read a project note', writes: false, plugin: 'notes',
+    }] };
+    handlers.onEvent({ type: 'mcp.tools_changed', data: {} });
+    expect(await screen.findByText('notes.read_note')).toBeTruthy();
+    const row = screen.getByText('notes.read_note').closest('li')!;
+    expect(within(row).getByText('notes')).toBeTruthy();
+    expect(within(row).getByText(t('mcp.readOnly'))).toBeTruthy();
+    mcp = { ...mcp, tools: TOOLS };
+    handlers.onEvent({ type: 'mcp.tools_changed', data: {} });
+    await waitFor(() => expect(screen.queryByText('notes.read_note')).toBeNull());
+  });
+
   it('shows where an agent connects', async () => {
     render(<McpSection />);
     await waitFor(() => expect(screen.getByText(t('mcp.section'))).toBeTruthy());

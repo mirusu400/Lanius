@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import socket
+import json
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,6 +16,7 @@ from app.config import Settings
 from app.db.store import FlowStore
 from app.plugin_packages import PluginPackageManager
 from app.plugin_samples import bundled_sample_archive, bundled_samples
+from app.mcp import build_server
 
 
 class FakeAddons:
@@ -42,6 +45,34 @@ def settings_for(tmp_path) -> Settings:
         confdir=tmp_path / "mitm",
         plugins_dir=tmp_path / "plugins",
     )
+
+
+@pytest.mark.asyncio
+async def test_mcp_notes_package_tools_persist_across_reload(tmp_path) -> None:
+    packages = PluginPackageManager(tmp_path / "plugins")
+    packages.install(bundled_sample_archive("lanius.mcp-notes"))
+    store = FlowStore(tmp_path / "notes.sqlite")
+    manager = PluginManager(tmp_path / "plugins", store=store, packages=packages)
+    manager.discover()
+    manager.enable("lanius.mcp-notes")
+    server = build_server(store, SimpleNamespace(plugins=manager, broker=None))
+    try:
+        written = await server.call_tool("lanius.mcp-notes.write_note", {
+            "text": "Review the login flow",
+        })
+        assert json.loads(written.content[0].text) == {"key": "default", "saved": True}
+        manager.reload("lanius.mcp-notes")
+        read = await server.call_tool("lanius.mcp-notes.read_note", {})
+        assert json.loads(read.content[0].text) == {
+            "key": "default", "text": "Review the login flow",
+        }
+        manager.disable("lanius.mcp-notes")
+        assert not any(tool.name.startswith("lanius.mcp-notes.") for tool in await server.list_tools())
+    finally:
+        await server.close_plugin_tools()
+        if manager.get("lanius.mcp-notes").loaded:
+            manager.disable("lanius.mcp-notes")
+        store.close()
 
 
 @pytest.mark.asyncio

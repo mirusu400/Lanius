@@ -1,6 +1,6 @@
 /** The MCP endpoint that lets an agent read the capture. */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   getMcpState,
   isDesktop,
@@ -8,6 +8,7 @@ import {
   setMcpEnabled,
 } from '../../api/client';
 import type { McpState } from '../../api/types';
+import { connectStream } from '../../api/stream';
 import {
   msg,
   rawMsg,
@@ -25,24 +26,42 @@ export function McpSection() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Message | null>(null);
   const [error, setError] = useState<Message | null>(null);
+  const generation = useRef(0);
 
   useEffect(() => {
-    getMcpState()
-      .then((next) => {
-        setState({ ...next, tools: next.tools ?? [] });
-        setPort(String(next.port));
-      })
-      .catch((err) => setError(rawMsg((err as Error).message)));
+    let live = true;
+    const refresh = () => {
+      const request = ++generation.current;
+      void getMcpState()
+        .then((next) => {
+          if (!live || request !== generation.current) return;
+          setState({ ...next, tools: next.tools ?? [] });
+          setPort((current) => current || String(next.port));
+        })
+        .catch((err) => {
+          if (live && request === generation.current) setError(rawMsg((err as Error).message));
+        });
+    };
+    refresh();
+    const disconnect = connectStream({
+      onEvent: (event) => {
+        if (event.type === 'mcp.tools_changed') refresh();
+      },
+      onState: (connection) => { if (connection === 'open') refresh(); },
+    });
+    return () => { live = false; disconnect(); };
   }, []);
 
   if (!state) return null;
 
   const toggle = async (enabled: boolean) => {
+    ++generation.current;
     setBusy(true);
     setError(null);
     setNote(null);
     try {
       const next = await setMcpEnabled(enabled);
+      ++generation.current;
       setState({ ...next, tools: next.tools ?? [] });
     } catch (err) {
       setError(rawMsg((err as Error).message));
@@ -59,10 +78,12 @@ export function McpSection() {
     }
     setBusy(true);
     setNote(null);
+    ++generation.current;
     setError(null);
     try {
       await setDesktopApiPort(wanted);
       const next = await getMcpState();
+      ++generation.current;
       setState({ ...next, tools: next.tools ?? [] });
       setPort(String(next.port));
       setNote(msg('mcp.portApplied', { port: next.port }));
@@ -187,6 +208,7 @@ export function McpSection() {
                 {state.tools.map((tool) => (
                   <li key={tool.name}>
                     <code>{tool.name}</code>
+                    {tool.plugin && <span className="pill">{tool.plugin}</span>}
                     <span className={tool.writes ? 'pill warn' : 'pill'}>
                       {tool.writes ? t('mcp.writes') : t('mcp.readOnly')}
                     </span>

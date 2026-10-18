@@ -302,6 +302,7 @@ class PluginManager:
         self.registry = registry or ContributionRegistry(
             store, user_values_path, scope_predicate=scope_predicate,
         )
+        self.registry.plugins_suspended = lambda: self.suspended
         install_output_routers()
         self.packages = packages
         self.runtime_started = False

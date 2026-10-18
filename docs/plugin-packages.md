@@ -123,6 +123,10 @@ bundled files into the normal plugin directory and leaves the plugin disabled.
 Because no network access is involved, installation is allowed in Lockdown
 Mode; plugin execution remains suspended until Lockdown is left.
 
+The bundled **MCP Notes** package demonstrates SDK 1.3 tools for reading and
+writing local project notes through the running engine's HTTP MCP endpoint.
+See [Plugin MCP Tools](plugin-mcp.md) for installation and authoring examples.
+
 ## Development mode
 
 Set `LANIUS_PLUGIN_DEV_MODE=1` before starting the engine. The Plugins screen

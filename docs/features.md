@@ -43,6 +43,7 @@ flight, change it, and send it again. Each feature has its own page:
 - [Plugin Catalogues](plugin-catalogues.md): signed catalogues, updates,
   rollbacks and revocations.
 - [Plugin Scanner](plugin-scanner.md): passive and active checks.
+- [Plugin MCP Tools](plugin-mcp.md): add agent tools with the plugin SDK.
 
 The [README](https://github.com/mirusu400/Lanius) covers download and getting
 started.

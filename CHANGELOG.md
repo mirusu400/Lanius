@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add SDK 1.3 plugin-owned HTTP MCP tools with typed inputs, reload cleanup,
+  execution limits, Lockdown/safe-mode guards, Settings ownership badges, and
+  a bundled MCP Notes example. See [Plugin MCP Tools](docs/plugin-mcp.md).
+
 ## [0.4.0] — Persistent testing workflows and platform reliability
 
 See the [v0.4.0 release notes](docs/releases/v0.4.0.md) for downloads and installation notes. Changes since v0.3.0:

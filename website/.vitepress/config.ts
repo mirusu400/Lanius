@@ -98,6 +98,7 @@ export default defineConfig({
             { text: 'Plugin Packages', link: '/plugin-packages' },
             { text: 'Plugin Catalogues', link: '/plugin-catalogues' },
             { text: 'Plugin Scanner', link: '/plugin-scanner' },
+            { text: 'Plugin MCP Tools', link: '/plugin-mcp' },
           ],
         },
         {

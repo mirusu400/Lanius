@@ -548,8 +548,11 @@ different client through the proxy can be found with `list_flows` first. The
 tool updates HTTP History immediately over the built-in HTTP MCP connection;
 `list_flows` can also filter with `bookmarked_only` and `annotation_color`.
 
-Secrets are redacted in every response unless the agent explicitly asks for
-them, so tokens do not leak into a transcript by accident.
+Built-in flow tools redact sensitive headers unless the agent explicitly asks
+to reveal them. SDK 1.3 plugins can add tools to the HTTP endpoint; their
+author-provided JSON results do not inherit that masking. See
+[Plugin MCP Tools](docs/plugin-mcp.md) for authoring instructions and the bundled
+MCP Notes example. The standalone stdio process does not load plugins.
 
 An agent with these tools can send traffic through your proxy, change your
 scope and release held requests. Untick **Allow agents to connect** and

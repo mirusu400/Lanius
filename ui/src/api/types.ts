@@ -274,6 +274,7 @@ export type EngineEvent =
       };
     }
   | { type: 'plugins.changed'; data: PluginInfo[] }
+  | { type: 'mcp.tools_changed'; data: Record<string, never> }
   | { type: 'scope.changed'; data: ScopeState }
   | { type: 'fuzzer.started' | 'fuzzer.finished'; data: RunSummary }
   | {
@@ -482,6 +483,7 @@ export interface PluginContributionCounts {
   settings?: number;
   passive_scanners?: number;
   active_scanners?: number;
+  mcp_tools?: number;
 }
 
 export interface PluginSettingField {
@@ -727,6 +729,8 @@ export interface McpTool {
   description: string;
   /** True when the tool changes something rather than just reading. */
   writes: boolean;
+  /** Owning plugin; absent for built-in tools. */
+  plugin?: string;
 }
 
 export interface McpState {

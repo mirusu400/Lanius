@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-API_VERSION = "1.2"
+API_VERSION = "1.3"
 
 ActionLocation = Literal[
     "global", "history", "flow", "request", "response", "replay", "fuzzer", "plugin"
@@ -122,6 +122,11 @@ class ActiveScanContext:
 
 
 class _Host(Protocol):
+    def register_mcp_tool(
+        self, tool_id: str, handler: Callable[..., Any], *,
+        description: str | None, read_only: bool,
+    ) -> Disposable: ...
+
     def register_action(
         self,
         action_id: str,
@@ -397,6 +402,26 @@ class Flows:
         )
 
 
+class McpTools:
+    """Plugin-owned tools exposed by the running engine's HTTP MCP server."""
+
+    def __init__(self, host: _Host) -> None:
+        self._host = host
+
+    def register_tool(
+        self, tool_id: str, handler: Callable[..., Any], *,
+        description: str | None = None, read_only: bool = False,
+    ) -> Disposable:
+        """Register a typed sync/async function; its result must be JSON data.
+
+        Names are qualified by plugin ID. ``read_only`` is a declaration for
+        clients and the Settings UI, not a permission or sandbox boundary.
+        """
+        return self._host.register_mcp_tool(
+            tool_id, handler, description=description, read_only=read_only,
+        )
+
+
 class PluginContext:
     """Capabilities given to a plugin's ``activate`` function."""
 
@@ -412,6 +437,7 @@ class PluginContext:
         self.tasks = PluginTasks(host)
         self.scanner = Scanner(host)
         self.flows = Flows(host)
+        self.mcp = McpTools(host)
         self.log = logging.getLogger(f"lanius.plugin.{plugin_id}")
 
 
@@ -426,6 +452,7 @@ __all__ = [
     "IssueSeverity",
     "PluginApiError",
     "PluginContext",
+    "McpTools",
     "PluginResources",
     "ScanIssue",
     "SettingDefinition",

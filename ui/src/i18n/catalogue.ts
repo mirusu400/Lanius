@@ -1046,6 +1046,7 @@ const en = {
   'plugins.contribSettings': 'Settings',
   'plugins.contribPassive': 'Passive checks',
   'plugins.contribActive': 'Active checks',
+  'plugins.contribMcp': 'MCP tools',
 
   // --- scanner issues ---
   'issues.title': 'Issues',
@@ -2211,6 +2212,7 @@ const ko: Catalogue = {
   'plugins.contribSettings': '설정',
   'plugins.contribPassive': '패시브 검사',
   'plugins.contribActive': '액티브 검사',
+  'plugins.contribMcp': 'MCP 도구',
 
   'issues.title': '이슈',
   'issues.passive': '수동 분석 없이 자동 검사',

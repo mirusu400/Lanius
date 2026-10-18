@@ -476,6 +476,7 @@ export function PluginsTab() {
     [t('plugins.contribSettings'), plugin.contributions.settings],
     [t('plugins.contribPassive'), plugin.contributions.passive_scanners],
     [t('plugins.contribActive'), plugin.contributions.active_scanners],
+    [t('plugins.contribMcp'), plugin.contributions.mcp_tools],
   ].filter((entry) => Number(entry[1]) > 0);
 
   return (

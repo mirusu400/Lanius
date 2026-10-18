@@ -116,16 +116,18 @@ def storage_instructions(store: FlowStore) -> str:
 
 def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> Any:
     """Create the MCP server. ``engine`` is optional for read-only use."""
-    from mcp.server.mcpserver import MCPServer
+    from .plugins import PluginMCPServer
 
-    server = MCPServer(
+    server = PluginMCPServer(
+        engine=engine,
         name=name,
         instructions=(
             "Lanius web security proxy. Inspect captured HTTP traffic, manage "
             "scope, hold and edit intercepted requests, and replay requests. "
             "Bookmark a captured PoC with bookmark_flow using the flow ID "
             "returned by send_request or replay_flow. "
-            "Sensitive headers are redacted unless reveal_secrets=true. "
+            "Built-in flow tools redact sensitive headers unless reveal_secrets=true. "
+            "Plugin tools return author-provided JSON without automatic secret redaction. "
             + storage_instructions(store)
         ),
     )
@@ -429,6 +431,13 @@ def describe_tools(server: Any) -> list[dict[str, Any]]:
         }
         for tool in tools
     ]
+    for item in getattr(server, "plugin_tools", lambda: [])():
+        described.append({
+            "name": item.id,
+            "description": item.metadata["description"].strip(),
+            "writes": not item.metadata["read_only"],
+            "plugin": item.owner,
+        })
     return sorted(described, key=lambda entry: entry["name"])
 
 

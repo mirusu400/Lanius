@@ -449,6 +449,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 yield
             finally:
                 await egress_ip.stop()
+                mcp_server = getattr(app.state, "mcp", None)
+                if mcp_server is not None:
+                    await mcp_server.close_plugin_tools()
                 await engine.stop()
                 store.close()
 

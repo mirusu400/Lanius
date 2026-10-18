@@ -1,4 +1,4 @@
-# Plugin SDK 1.2
+# Plugin SDK 1.3
 
 `lanius_sdk` is the stable boundary between a plugin and the engine. Engine
 modules under `app` are internal and can change without an SDK compatibility
@@ -63,6 +63,21 @@ response detail menus also include the loaded detail and a `message` field.
 Replay and Fuzzer include their current raw request and parsed request when
 valid. The host adds the exact `location` chosen by the UI before invocation.
 
+## MCP tools
+
+`context.mcp.register_tool(tool_id, handler, description=None, read_only=False)`
+exposes a typed synchronous or asynchronous handler on the running engine's
+HTTP MCP endpoint. `description` and `read_only` are keyword-only. Tools use
+plugin-qualified names and the same owned `Disposable` lifecycle as actions.
+Inputs are checked against the inferred schema; calls have a 30-second timeout
+and a 1 MiB JSON result limit. Settings lists the owner and declared read/write
+behavior, and Plugins includes MCP tool counts and diagnostics.
+
+Safe mode and Lockdown Mode block execution. Arbitrary plugin JSON output does
+not inherit the built-in flow tools' secret masking. The standalone stdio MCP
+process does not load plugins. See [Plugin MCP Tools](plugin-mcp.md) for a
+complete example, client refresh behavior, and cancellation limitations.
+
 ## Codecs
 
 `context.codecs.register` adds an encoder, a decoder, or both to Decoder. A
@@ -118,12 +133,12 @@ clients use `GET /api/plugins/{id}/logs?after={sequence}&limit=500`, and
 `DELETE /api/plugins/{id}/logs` clears only that plugin's log buffer.
 
 Output attribution covers host-managed import, activation, mitmproxy hooks,
-SDK actions and payload handlers, scanner handlers, and managed tasks. File
+SDK actions, MCP tools, payload handlers, scanner handlers, and managed tasks. File
 descriptor output from a subprocess and output from unmanaged native threads
 are outside this contract. Writes made outside a plugin execution context pass
 through to the engine's original stdout or stderr.
 
-The performance panel measures SDK action, payload, and scanner contribution
+The performance panel measures SDK action, MCP tool, payload, and scanner contribution
 calls. It shows call and error counts, average and maximum duration, and the
 last error. Resetting diagnostics resets those counters and resumes a suspended
 scanner check without deleting logs. A passive or active scanner check is
@@ -166,7 +181,7 @@ starts the plugin's own check from an explicit UI action and returns job status.
 
 ## Compatibility
 
-`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.2`.
+`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.3`.
 Minor additions remain backward compatible. A future breaking API uses a new
 major version and package manifests declare which major versions they accept.
 

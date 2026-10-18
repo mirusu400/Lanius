@@ -41,6 +41,7 @@ ContributionKind = Literal[
     "settings",
     "passive_scanners",
     "active_scanners",
+    "mcp_tools",
 ]
 
 _ID = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
@@ -198,6 +199,9 @@ class ContributionRegistry:
         self.store = store
         self.scope_predicate = scope_predicate
         self.active_scan_start: Callable[..., Awaitable[Any]] | None = None
+        self.plugins_suspended: Callable[[], bool] = lambda: False
+        self._mcp_listeners: set[Callable[[], None]] = set()
+        self._mcp_calls: dict[str, set[asyncio.Task[Any]]] = {}
         self.user_values = UserValueStore(user_values_path)
         self._items: dict[ContributionKind, dict[str, Contribution]] = {
             "actions": {},
@@ -207,6 +211,7 @@ class ContributionRegistry:
             "settings": {},
             "passive_scanners": {},
             "active_scanners": {},
+            "mcp_tools": {},
         }
         self._handles: dict[str, list[Disposable]] = {}
         self._tasks: dict[str, set[asyncio.Future[Any]]] = {}
@@ -226,6 +231,106 @@ class ContributionRegistry:
         self._validate_id(owner, "plugin id")
         self._attach_logger(owner)
         return PluginContext(owner, PluginHost(self, owner, resource_root))
+
+    def subscribe_mcp_tools(self, listener: Callable[[], None]) -> Disposable:
+        self._mcp_listeners.add(listener)
+        return Disposable(lambda: self._mcp_listeners.discard(listener))
+
+    def _mcp_changed(self) -> None:
+        for listener in tuple(self._mcp_listeners):
+            try:
+                listener()
+            except Exception:
+                logging.getLogger(__name__).exception("MCP catalogue listener failed")
+
+    def mcp_tools(self) -> list[Contribution]:
+        if self.plugins_suspended():
+            return []
+        return sorted(self._items["mcp_tools"].values(), key=lambda item: item.id)
+
+    def _require_mcp_tool(self, qualified_id: str, expected: Any) -> Contribution:
+        if self.plugins_suspended():
+            raise PluginApiError("plugin execution is suspended")
+        if self.store is not None and self.store.get_setting("mcp_enabled") == "0":
+            raise PluginApiError("MCP is turned off in Settings")
+        item = self._get("mcp_tools", qualified_id)
+        if item.handler is not expected:
+            raise PluginApiError("plugin MCP tool was reloaded; refresh the tool list")
+        return item
+
+    async def invoke_mcp_tool(
+        self, qualified_id: str, expected: Any, arguments: Mapping[str, Any],
+    ) -> Any:
+        item = self._require_mcp_tool(qualified_id, expected)
+        started = self.begin_call(item)
+
+        async def run() -> Any:
+            self._require_mcp_tool(qualified_id, expected)
+            with self.execution(item.owner):
+                callback = expected.callback
+                if inspect.iscoroutinefunction(callback):
+                    result = await callback(**arguments)
+                else:
+                    def call_sync() -> Any:
+                        # A queued worker must not start plugin code after a
+                        # suspension or replacement on the engine thread.
+                        self._require_mcp_tool(qualified_id, expected)
+                        return callback(**arguments)
+
+                    result = await asyncio.to_thread(call_sync)
+                    if inspect.isawaitable(result):
+                        self._require_mcp_tool(qualified_id, expected)
+                        result = await result
+                self._require_mcp_tool(qualified_id, expected)
+                try:
+                    encoded = json.dumps(result, ensure_ascii=False, allow_nan=False)
+                except (TypeError, ValueError, OverflowError) as exc:
+                    raise PluginApiError("MCP tool result must be JSON compatible") from exc
+                if len(encoded.encode()) > _MAX_ACTION_RESULT_BYTES:
+                    raise PluginApiError("MCP tool result exceeds 1 MiB")
+                # Include output-schema failures in owned diagnostics, and
+                # run custom output validators exactly once.
+                converted = expected.tool.fn_metadata.convert_result(result)
+                self._require_mcp_tool(qualified_id, expected)
+                return converted
+
+        task = asyncio.create_task(run(), name=f"plugin-mcp:{qualified_id}")
+        calls = self._mcp_calls.setdefault(qualified_id, set())
+        tasks = self._tasks.setdefault(item.owner, set())
+        calls.add(task)
+        tasks.add(task)
+
+        def completed(finished: asyncio.Task[Any]) -> None:
+            calls.discard(finished)
+            tasks.discard(finished)
+            if not calls and self._mcp_calls.get(qualified_id) is calls:
+                self._mcp_calls.pop(qualified_id, None)
+            # Timed-out/disconnected callers no longer await this task, but
+            # cancellation cleanup stays owned until it actually finishes.
+            if not finished.cancelled():
+                finished.exception()
+
+        task.add_done_callback(completed)
+        try:
+            done, _ = await asyncio.wait({task}, timeout=_CONTRIBUTION_TIMEOUT_SECONDS)
+            if not done:
+                task.cancel()
+                raise PluginApiError("MCP tool call timed out")
+            result = task.result()
+        except asyncio.CancelledError:
+            task.cancel()
+            self.finish_call(item, started, PluginApiError("MCP tool call cancelled"))
+            current_task = asyncio.current_task()
+            if current_task is not None and current_task.cancelling():
+                raise
+            raise PluginApiError("MCP tool call cancelled because its plugin was unloaded") from None
+        except Exception as exc:
+            self.finish_call(item, started, exc)
+            self.append_exception(item.owner, f"MCP tool {qualified_id}", exc)
+            raise
+        else:
+            self.finish_call(item, started)
+            return result
 
     def _attach_logger(self, owner: str) -> None:
         if owner in self._log_handlers:
@@ -387,8 +492,15 @@ class ContributionRegistry:
                 bucket.pop(qualified, None)
                 if on_dispose is not None:
                     on_dispose()
+                if kind == "mcp_tools":
+                    for task in self._mcp_calls.pop(qualified, set()):
+                        task.cancel()
+                    self._mcp_changed()
 
-        return self._remember(owner, Disposable(remove))
+        handle = self._remember(owner, Disposable(remove))
+        if kind == "mcp_tools":
+            self._mcp_changed()
+        return handle
 
     def list(self, kind: ContributionKind | None = None) -> dict[str, list[dict[str, Any]]]:
         kinds: Sequence[ContributionKind] = (
@@ -729,6 +841,31 @@ class PluginHost:
         self.registry = registry
         self.owner = owner
         self.resource_root = resource_root
+
+    def register_mcp_tool(
+        self, tool_id: str, handler: Callable[..., Any], *,
+        description: str | None, read_only: bool,
+    ) -> Disposable:
+        self.registry._validate_local_id(tool_id, "MCP tool id")
+        qualified = f"{self.owner}.{tool_id}"
+        if len(qualified) > 128:
+            raise PluginApiError("qualified MCP tool name exceeds 128 characters")
+        if not callable(handler) or not isinstance(read_only, bool):
+            raise PluginApiError("MCP tools need a callable handler and boolean read_only")
+        if description is not None and not isinstance(description, str):
+            raise PluginApiError("MCP tool description must be a string")
+        from .mcp.plugins import RegisteredTool
+
+        try:
+            registered = RegisteredTool(self.registry, qualified, handler, description, read_only)
+        except Exception as exc:
+            raise PluginApiError(f"invalid MCP tool signature: {qualified}") from exc
+        return self.registry.register(
+            self.owner, "mcp_tools", tool_id,
+            {"description": registered.tool.description, "read_only": read_only,
+             "input_schema": registered.tool.parameters},
+            registered,
+        )
 
     def page_flows(
         self, *, limit: int, cursor: str | None, anchor: int | None,

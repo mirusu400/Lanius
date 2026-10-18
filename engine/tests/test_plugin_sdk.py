@@ -96,7 +96,7 @@ async def test_sdk_plugin_registers_and_invokes_contributions(sdk_manager) -> No
 
     assert plugin.loaded is True
     assert plugin.objects == []
-    assert plugin.as_dict()["sdk_api_version"] == "1.2"
+    assert plugin.as_dict()["sdk_api_version"] == "1.3"
     assert plugin.as_dict()["contributions"] == {
         "actions": 1,
         "codecs": 1,
@@ -105,6 +105,7 @@ async def test_sdk_plugin_registers_and_invokes_contributions(sdk_manager) -> No
         "settings": 2,
         "passive_scanners": 0,
         "active_scanners": 0,
+        "mcp_tools": 0,
     }
     assert await sdk_manager.registry.invoke_action(
         "sdk.inspect", {"location": "flow", "flow_id": "f-1"}
