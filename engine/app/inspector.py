@@ -701,24 +701,24 @@ def _peel(value: str, ctx: Context) -> tuple[Layer | None, str | bytes]:
         escapes = _JS_ESCAPE.findall(value)
         if all(e.startswith("\\x") for e in escapes):
             # \xNN escapes are bytes; what charset they are is decided next.
-            data = bytearray()
+            escaped_bytes = bytearray()
             i = 0
             while i < len(value):
                 if value.startswith("\\x", i) and _JS_ESCAPE.match(value, i):
-                    data.append(int(value[i + 2:i + 4], 16))
+                    escaped_bytes.append(int(value[i + 2:i + 4], 16))
                     i += 4
                 else:
-                    data.extend(value[i].encode("utf-8"))
+                    escaped_bytes.extend(value[i].encode("utf-8"))
                     i += 1
             lower = not any(c in "ABCDEF" for e in escapes for c in e[2:])
-            return Layer("bytes_escape", {"lower": lower}, value), bytes(data)
+            return Layer("bytes_escape", {"lower": lower}, value), bytes(escaped_bytes)
         try:
-            decoded = json.loads('"' + value.replace('"', '\\"') + '"')
+            decoded_json = json.loads('"' + value.replace('"', '\\"') + '"')
         except ValueError:
-            decoded = None
-        if isinstance(decoded, str) and decoded != value:
+            decoded_json = None
+        if isinstance(decoded_json, str) and decoded_json != value:
             lower = not any(c in "ABCDEF" for e in escapes for c in e[2:])
-            return Layer("unicode_escape", {"lower": lower}, value), decoded
+            return Layer("unicode_escape", {"lower": lower}, value), decoded_json
 
     hex_match = _HEX.match(stripped)
     if hex_match and len(stripped) >= 4:
