@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import { getFlow } from '../api/client';
+import { getFlow, getFlowBodyPreview, getReplayRequest } from '../api/client';
 import type { FlowDetail, FlowSummary, RequestVariant } from '../api/types';
 import { formatUrl, formatBytes } from '../tabs/proxyModel';
 import { sendToReplay } from '../tabs/replayStore';
@@ -107,6 +107,12 @@ function Half({
   body,
   bodyOmitted,
   bodySize,
+  bodyCapturedSize,
+  bodyPreviewSize,
+  bodyTruncated,
+  bodyChunkable,
+  loadingMore,
+  onLoadMore,
   raw,
   charset,
   charsetOverride,
@@ -136,6 +142,12 @@ function Half({
   body: string;
   bodyOmitted?: boolean;
   bodySize?: number;
+  bodyCapturedSize?: number;
+  bodyPreviewSize?: number;
+  bodyTruncated?: boolean;
+  bodyChunkable?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
   raw: string;
   charset: string | null | undefined;
   charsetOverride: string;
@@ -293,6 +305,17 @@ function Half({
       </div>}
       <div className="detail-half-body">
         {bodyOmitted && <p className="banner" role="status">{t('detail.mediaBodyOmitted', { size: formatBytes(bodySize ?? 0) })}</p>}
+        {bodyTruncated && <div className="banner body-preview-notice" role="status">
+          <span>{t('detail.bodyTruncated', {
+            shown: formatBytes(bodyPreviewSize ?? 0),
+            total: formatBytes(bodyCapturedSize ?? bodySize ?? 0),
+          })}</span>
+          {bodyChunkable && onLoadMore
+            ? <button type="button" onClick={onLoadMore} disabled={loadingMore}>
+                {loadingMore ? t('detail.loadingMore') : t('detail.loadMore')}
+              </button>
+            : <span className="muted">{t('detail.bodyChunkUnavailable')}</span>}
+        </div>}
         {decodeError && <div className="banner error">{decodeError}</div>}
         {view === 'parsed' && (
           <>
@@ -370,6 +393,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   });
   const previousFlowId = useRef<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState<'request' | 'response' | null>(null);
   const menu = useContextMenu<{
     message: 'request' | 'response';
     flow: FlowSummary;
@@ -425,18 +449,47 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     send: (flow: FlowSummary, detail: FlowDetail) => void,
   ) => {
     if (!selected) return;
-    if (loaded?.id === selected.id) {
+    if (loaded?.id === selected.id && !loaded.request_body_truncated) {
       send(selected, loaded);
       return;
     }
-    // Selection can change before the detail fetch finishes. Never attach
-    // the previous request's headers or body to the newly selected flow.
-    void getFlow(selected.id, reveal, selected.id === currentFlowId ? {
-      request: requestCharsetOverride,
-      response: responseCharsetOverride,
-    } : {})
+    // Detail responses are bounded previews.  Fetch the request-only model so
+    // a truncated upload is never silently sent and the response BLOB is never
+    // selected merely to open Replay/Fuzzer.
+    void getReplayRequest(
+      selected.id,
+      reveal,
+      selected.id === currentFlowId ? requestCharsetOverride : null,
+    )
       .then((fetched) => send(selected, fetched))
       .catch((err: Error) => setActionError(err.message));
+  };
+
+  const loadMoreBody = (side: 'request' | 'response') => {
+    if (!flow || !detail || loadingMore) return;
+    const offset = detail[`${side}_body_preview_size`] ?? 0;
+    const selectedCharset = side === 'request'
+      ? requestCharsetOverride
+      : responseCharsetOverride;
+    setLoadingMore(side);
+    setActionError(null);
+    void getFlowBodyPreview(flow.id, side, offset, selectedCharset || null)
+      .then((chunk) => {
+        setDetail((current) => {
+          if (!current || current.id !== flow.id) return current;
+          const key = `${side}_body` as const;
+          return {
+            ...current,
+            [key]: `${current[key] ?? ''}${chunk.text}`,
+            [`${side}_charset`]: chunk.charset,
+            [`${side}_body_preview_size`]: chunk.next_offset,
+            [`${side}_body_captured_size`]: chunk.total_bytes,
+            [`${side}_body_truncated`]: chunk.truncated,
+          };
+        });
+      })
+      .catch((err: Error) => setActionError(err.message))
+      .finally(() => setLoadingMore(null));
   };
   const openInReplay = (selected: FlowSummary, loaded: FlowDetail) => {
     sendToReplay(selected, loaded);
@@ -565,6 +618,12 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       body={selectedVariant?.body ?? detail?.request_body ?? ''}
       bodyOmitted={selectedVariant?.body_omitted ?? detail?.request_body_omitted}
       bodySize={selectedVariant?.body_size ?? detail?.request_size}
+      bodyCapturedSize={detail?.request_body_captured_size}
+      bodyPreviewSize={detail?.request_body_preview_size}
+      bodyTruncated={!selectedVariant && detail?.request_body_truncated}
+      bodyChunkable={detail?.request_body_chunkable}
+      loadingMore={loadingMore === 'request'}
+      onLoadMore={() => loadMoreBody('request')}
       raw={
         isTcp
           ? (detail?.request_body ?? '')
@@ -608,6 +667,12 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       body={detail?.response_body ?? ''}
       bodyOmitted={detail?.response_body_omitted}
       bodySize={detail?.response_size}
+      bodyCapturedSize={detail?.response_body_captured_size}
+      bodyPreviewSize={detail?.response_body_preview_size}
+      bodyTruncated={detail?.response_body_truncated}
+      bodyChunkable={detail?.response_body_chunkable}
+      loadingMore={loadingMore === 'response'}
+      onLoadMore={() => loadMoreBody('response')}
       raw={isTcp ? (detail?.response_body ?? '') : rawResponse(flow, detail)}
       charset={detail?.response_charset}
       charsetOverride={responseCharsetOverride}

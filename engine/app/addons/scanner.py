@@ -479,7 +479,7 @@ class ScannerAddon:
             raise ScannerError(
                 f"requests_per_second must be between 0 and {MAX_REQUESTS_PER_SECOND}"
             )
-        record = await asyncio.to_thread(self.store.get, flow_id)
+        record = await asyncio.to_thread(self.store.get_request, flow_id)
         if record is None or record.type != "http":
             raise ScannerError(f"HTTP flow not found: {flow_id}")
         available = self.registry.scan_handlers("active_scanners")

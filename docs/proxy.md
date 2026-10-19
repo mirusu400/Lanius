@@ -12,6 +12,12 @@ before sending. This can be disabled under **Settings > Proxy > HTTP body
 display**. The original bytes of a captured body are available from
 `GET /api/flows/{id}/body/request` and `/response`.
 
+History initially displays at most 256 KiB from each stored body. Use **Load
+next chunk** to inspect more without forcing a very large capture through JSON
+and the UI at once. Sending a History item to Replay or Fuzzer reads only its
+request; the captured response is not loaded. The raw body endpoints stream
+the complete original bytes in bounded chunks.
+
 ## Modified requests
 
 History has a **Modified** column. When Match & Replace, Intercept, or a plugin

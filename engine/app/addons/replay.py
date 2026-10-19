@@ -217,14 +217,30 @@ def _content_type(headers: list[tuple[str, str]] | None) -> str | None:
 
 
 def render_raw(
-    record: FlowRecord, *, auto_decompress: bool = True
+    record: FlowRecord, *, auto_decompress: bool = True,
+    body_limit: int | None = None,
 ) -> dict[str, Any]:
     """Response view for the Replay UI."""
+    raw = record.response_body
+    captured_size = len(raw or b"")
+    preview = (
+        raw
+        if body_limit is None or raw is None
+        else raw[:body_limit]
+    )
+    truncated = raw is not None and preview is not None and len(preview) < len(raw)
     shown, body_encoding, decoded, decode_error = body_for_display(
         record.response_headers,
-        record.response_body,
+        preview,
         enabled=auto_decompress and not record.response_body_omitted,
+        max_output_bytes=body_limit,
     )
+    # A prefix cut out of a compressed stream is not readable by itself.  Keep
+    # the metadata and the original in History, but never turn compressed bytes
+    # into a giant/gibberish JSON string for Replay.
+    encoded_unavailable = bool(body_encoding and (truncated or decode_error))
+    if encoded_unavailable:
+        shown = b""
     return {
         "id": record.id,
         "status_code": record.status_code,
@@ -242,6 +258,9 @@ def render_raw(
         "body_decoded": decoded,
         "decode_error": decode_error,
         "body_omitted": record.response_body_omitted,
+        "body_captured_size": captured_size,
+        "body_preview_size": 0 if encoded_unavailable else len(preview or b""),
+        "body_truncated": truncated or encoded_unavailable,
         "size": record.response_size,
         "duration_ms": record.duration_ms,
         "error": record.error,

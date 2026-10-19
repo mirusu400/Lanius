@@ -12,6 +12,10 @@ The request editor wraps long lines without changing the bytes sent. After a
 send, the arrows beside **Send** browse that tab's request and response pairs.
 Editing an older request creates a draft, so browsing does not overwrite the
 saved exchange. The latest 50 sends per tab are saved with the project.
+Replay keeps the complete response in HTTP History, while its immediate UI
+response is capped at 256 KiB before JSON serialization. This prevents a large
+download from freezing the editor or being copied into every autosaved Replay
+snapshot.
 
 Responses with a valid `Location` header and status 301, 302, 303, 307, or 308
 show **Follow redirect**. Each click sends one more request through the normal

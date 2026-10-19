@@ -4,6 +4,7 @@ import type {
   BodyDisplaySettings,
   EngineStatus,
   FlowDetail,
+  FlowBodyPreviewChunk,
   FlowEdits,
   FlowFilters,
   FlowSummary,
@@ -183,6 +184,35 @@ export function getFlow(
   if (charsets.response) params.set('response_charset', charsets.response);
   const query = params.size ? `?${params}` : '';
   return request<FlowDetail>(`/api/flows/${encodeURIComponent(id)}${query}`);
+}
+
+/** Fetch only the captured request used to seed an editor.  The engine does
+ * not select the response BLOB for this endpoint. */
+export function getReplayRequest(
+  id: string,
+  reveal = true,
+  requestCharset?: string | null,
+): Promise<FlowDetail> {
+  const params = new URLSearchParams();
+  if (reveal) params.set('reveal', 'true');
+  if (requestCharset) params.set('request_charset', requestCharset);
+  const query = params.size ? `?${params}` : '';
+  return request<FlowDetail>(
+    `/api/flows/${encodeURIComponent(id)}/replay-request${query}`,
+  );
+}
+
+export function getFlowBodyPreview(
+  id: string,
+  side: 'request' | 'response',
+  offset: number,
+  charset?: string | null,
+): Promise<FlowBodyPreviewChunk> {
+  const params = new URLSearchParams({ offset: String(offset) });
+  if (charset) params.set('charset', charset);
+  return request<FlowBodyPreviewChunk>(
+    `/api/flows/${encodeURIComponent(id)}/body/${side}/preview?${params}`,
+  );
 }
 
 export function patchFlowAnnotation(

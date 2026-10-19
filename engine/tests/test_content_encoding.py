@@ -103,3 +103,23 @@ def test_replay_encodes_request_and_decodes_response() -> None:
     rendered = render_raw(record, auto_decompress=True)
     assert rendered["body"] == "world"
     assert rendered["body_decoded"] is True
+
+
+def test_replay_bounds_compressed_response_expansion() -> None:
+    compressed = gzip.compress(b"x" * 4096)
+    record = FlowRecord(
+        id="compressed-large",
+        response_headers=[
+            ("Content-Type", "text/plain"),
+            ("Content-Encoding", "gzip"),
+        ],
+        response_body=compressed,
+        response_size=len(compressed),
+    )
+
+    rendered = render_raw(record, auto_decompress=True, body_limit=128)
+
+    assert rendered["body"] == ""
+    assert rendered["body_preview_size"] == 0
+    assert rendered["body_truncated"] is True
+    assert "display limit" in rendered["decode_error"]

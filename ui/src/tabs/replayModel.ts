@@ -18,6 +18,9 @@ export interface ReplayResponse {
   body_decoded?: boolean;
   decode_error?: string | null;
   body_omitted?: boolean;
+  body_captured_size?: number;
+  body_preview_size?: number;
+  body_truncated?: boolean;
   /** Original length, when the body was too large to keep in full. */
   truncated?: number;
 }
@@ -345,6 +348,8 @@ export function trimResponse(response: ReplayResponse): ReplayResponse {
     ...response,
     body: body.slice(0, BODY_KEEP_LIMIT),
     truncated: body.length,
+    body_preview_size: BODY_KEEP_LIMIT,
+    body_truncated: true,
   };
 }
 
@@ -360,12 +365,15 @@ export function renderResponseText(
   }`.trimEnd();
   const headers = response.headers.map(([k, v]) => `${k}: ${v}`).join('\n');
   const body = response.body ?? '';
-  if (body.length <= BODY_DISPLAY_LIMIT) {
+  if (body.length <= BODY_DISPLAY_LIMIT && !response.body_truncated) {
     return `${status}\n${headers}\n\n${body}`;
   }
   // Truncated for display only: the full body is still in the tab, and
   // still what gets saved and sent.
   const shown = body.slice(0, BODY_DISPLAY_LIMIT);
-  const hidden = body.length - BODY_DISPLAY_LIMIT;
+  const total = response.body_truncated
+    ? Math.max(response.size, response.body_captured_size ?? 0, response.truncated ?? 0)
+    : body.length;
+  const hidden = Math.max(0, total - shown.length);
   return `${status}\n${headers}\n\n${shown}\n\n${note(hidden)}`;
 }

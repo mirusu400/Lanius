@@ -11,7 +11,7 @@ import secrets
 import sqlite3
 import tempfile
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -46,7 +46,7 @@ from ..addons.fuzzer import (
 from ..db.payloads import PayloadSetError, parse_payloads
 from .. import wordlists
 from ..addons.plugins import PluginError
-from ..addons.scanner import ScannerError, request_snapshot
+from ..addons.scanner import MAX_SCAN_BODY_BYTES, ScannerError, request_snapshot
 from ..plugin_registry import PluginApiError
 from ..plugin_packages import (
     MAX_ARCHIVE_BYTES,
@@ -66,7 +66,11 @@ from .. import updates
 from ..addons.scope import ScopeError, rule_from_url
 from .. import browser, ca_trust
 from ..config import Settings
-from ..content_encoding import AUTO_DECOMPRESS_SETTING, auto_decompress_enabled
+from ..content_encoding import (
+    AUTO_DECOMPRESS_SETTING,
+    auto_decompress_enabled,
+    content_encoding,
+)
 from ..egress_ip import EgressIpConfig, EgressIpMonitor
 from ..media_storage import MEDIA_BODY_LIMIT_SETTING, MAX_MEDIA_BODY_LIMIT_MB
 from ..db.store import ANNOTATION_COLORS, FlowStore
@@ -74,7 +78,7 @@ from ..db.database_import import SQLITE_HEADER, PreparedDatabase, prepare_databa
 from ..events import EventBroker
 from ..processes import list_processes
 from ..proxy import ProxyEngine, ProxyStartError, local_capture_state
-from ..preview import response_preview
+from ..preview import MAX_PREVIEW_BYTES, response_preview
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +88,16 @@ logger = logging.getLogger(__name__)
 SENSITIVE_HEADERS = codegen.SECRET_HEADERS
 # Flows per batch in a streamed JSON export; each batch is decoded off the loop.
 EXPORT_BATCH_SIZE = 200
+# A detail pane is an inspection window, not a bulk-body transport.  The raw
+# bytes remain in SQLite and can be fetched in explicit chunks below.
+FLOW_BODY_PREVIEW_BYTES = 256 * 1024
+MAX_FLOW_BODY_CHUNK_BYTES = 256 * 1024
+# Loading a bigger request into a textarea is itself a UI denial of service.
+# Never truncate it silently: reject the editable transfer instead.
+MAX_REPLAY_EDITOR_REQUEST_BYTES = 16 * 1024 * 1024
+# Replay tabs already persist at most this much response text.  Apply the same
+# budget before JSON serialization, not after the browser received it.
+REPLAY_RESPONSE_PREVIEW_BYTES = 256 * 1024
 
 
 def _display_charset(value: str | None) -> str | None:
@@ -93,6 +107,13 @@ def _display_charset(value: str | None) -> str | None:
         return charset.selectable(value)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="unsupported charset") from exc
+
+
+def _content_type(headers: list[tuple[str, str]] | None) -> str | None:
+    return next(
+        (value for name, value in headers or [] if name.lower() == "content-type"),
+        None,
+    )
 
 
 class InterceptRulesPatch(BaseModel):
@@ -1390,17 +1411,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request_charset: str | None = None,
         response_charset: str | None = None,
     ) -> dict[str, Any]:
-        record = await asyncio.to_thread(store.get, flow_id)
-        if record is None:
+        preview = await asyncio.to_thread(
+            store.get_preview, flow_id, body_limit=FLOW_BODY_PREVIEW_BYTES
+        )
+        if preview is None:
             raise HTTPException(status_code=404, detail="flow not found")
+        record, body_info = preview
         auto_decompress = await asyncio.to_thread(auto_decompress_enabled, store)
-        # Decompressing and decoding a large body would stall the proxy.
+        # Decode only the bounded window.  A tiny compressed input can expand
+        # enormously, so the decoded output has the same memory budget.
         data = await asyncio.to_thread(
             record.detail,
             auto_decompress=auto_decompress,
             request_charset_override=_display_charset(request_charset),
             response_charset_override=_display_charset(response_charset),
+            body_output_limit=FLOW_BODY_PREVIEW_BYTES,
         )
+        data.update(body_info)
+        for side in ("request", "response"):
+            headers = getattr(record, f"{side}_headers")
+            encoded = content_encoding(headers)
+            truncated = bool(body_info[f"{side}_body_truncated"])
+            data[f"{side}_body_chunkable"] = truncated and not encoded
+            # An independently fetched middle chunk cannot be decompressed as
+            # an HTTP coding stream.  Do not render compressed bytes as text.
+            if encoded and (truncated or data.get(f"{side}_decode_error")):
+                data[f"{side}_body"] = ""
+                data[f"{side}_body_preview_size"] = 0
         annotation = await asyncio.to_thread(store.get_annotation, flow_id)
         data.update(annotation or {})
         data["request_headers"] = redact_headers(
@@ -1416,6 +1453,54 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     variant["headers"] = redact_headers(
                         variant.get("headers"), reveal=reveal
                     )
+        return data
+
+    @app.get("/api/flows/{flow_id}/replay-request")
+    async def get_replay_request(
+        flow_id: str,
+        reveal: bool = False,
+        request_charset: str | None = None,
+    ) -> dict[str, Any]:
+        """The editable request only; never select the captured response BLOB."""
+        request_size = await asyncio.to_thread(store.body_size, flow_id, "request")
+        if request_size is None:
+            raise HTTPException(status_code=404, detail="flow not found")
+        if request_size > MAX_REPLAY_EDITOR_REQUEST_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    "request body is too large for the Replay editor "
+                    f"({request_size} bytes; maximum {MAX_REPLAY_EDITOR_REQUEST_BYTES})"
+                ),
+            )
+        record = await asyncio.to_thread(store.get_request, flow_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="flow not found")
+        data = await asyncio.to_thread(
+            record.detail,
+            auto_decompress=auto_decompress_enabled(store),
+            request_charset_override=_display_charset(request_charset),
+            body_output_limit=MAX_REPLAY_EDITOR_REQUEST_BYTES,
+        )
+        # Replay must receive an exact editable request.  Falling back to the
+        # compressed bytes after a failed/bounded decode would silently change
+        # the request when the text editor encodes it again.
+        if content_encoding(record.request_headers) and data.get("request_decode_error"):
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    "encoded request body cannot be opened safely in Replay: "
+                    f"{data['request_decode_error']}"
+                ),
+            )
+        data["request_body_captured_size"] = request_size
+        data["request_body_preview_size"] = request_size
+        data["request_body_truncated"] = False
+        data["response_body_captured_size"] = 0
+        data["response_body_preview_size"] = 0
+        data["response_body_truncated"] = False
+        data["request_headers"] = redact_headers(record.request_headers, reveal=reveal)
+        data["response_headers"] = None
         return data
 
     @app.patch("/api/flows/{flow_id}/annotation")
@@ -1436,18 +1521,85 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return annotation
 
     @app.get("/api/flows/{flow_id}/body/{side}")
-    async def get_flow_body(flow_id: str, side: str) -> Response:
+    async def get_flow_body(flow_id: str, side: str) -> StreamingResponse:
         if side not in {"request", "response"}:
             raise HTTPException(status_code=400, detail="side must be request or response")
-        body = await asyncio.to_thread(store.get_body_bytes, flow_id, side)
-        if body is None:
+        metadata = await asyncio.to_thread(
+            store.get_body_chunk, flow_id, side, offset=0, limit=0
+        )
+        if metadata is None or metadata[0] is None or metadata[3]:
             raise HTTPException(status_code=404, detail="body not found")
-        return Response(body, media_type="application/octet-stream")
+        total = metadata[1]
+
+        def chunks() -> Iterable[bytes]:
+            offset = 0
+            while offset < total:
+                result = store.get_body_chunk(
+                    flow_id, side, offset=offset, limit=1024 * 1024
+                )
+                if result is None or result[0] is None or result[3] or not result[0]:
+                    break
+                chunk = result[0]
+                offset += len(chunk)
+                yield chunk
+
+        return StreamingResponse(
+            chunks(),
+            media_type="application/octet-stream",
+            headers={"Content-Length": str(total)},
+        )
+
+    @app.get("/api/flows/{flow_id}/body/{side}/preview")
+    async def get_flow_body_preview(
+        flow_id: str,
+        side: str,
+        offset: int = Query(0, ge=0),
+        limit: int = Query(FLOW_BODY_PREVIEW_BYTES, ge=1, le=MAX_FLOW_BODY_CHUNK_BYTES),
+        charset_name: str | None = Query(None, alias="charset"),
+    ) -> dict[str, Any]:
+        if side not in {"request", "response"}:
+            raise HTTPException(status_code=400, detail="side must be request or response")
+        result = await asyncio.to_thread(
+            store.get_body_chunk, flow_id, side, offset=offset, limit=limit
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="flow not found")
+        chunk, total, headers, omitted = result
+        if chunk is None or omitted:
+            raise HTTPException(status_code=404, detail="body not stored")
+        encoding_name = content_encoding(headers)
+        if encoding_name and auto_decompress_enabled(store):
+            raise HTTPException(
+                status_code=409,
+                detail="compressed bodies cannot be loaded as independent text chunks",
+            )
+        selected = (
+            _display_charset(charset_name) or charset.DEFAULT_CHARSET
+            if charset_name
+            else charset.charset_of(_content_type(headers), chunk)
+        )
+        next_offset = offset + len(chunk)
+        return {
+            "text": charset.decode(chunk, selected),
+            "charset": selected,
+            "offset": offset,
+            "next_offset": next_offset,
+            "total_bytes": total,
+            "truncated": next_offset < total,
+        }
+
     @app.get("/api/flows/{flow_id}/response-preview")
     async def get_response_preview(
         flow_id: str,
         charset: str | None = None,
     ) -> dict[str, Any]:
+        captured_size = await asyncio.to_thread(store.body_size, flow_id, "response")
+        if captured_size is None:
+            raise HTTPException(status_code=404, detail="flow not found")
+        # Do this before store.get(): response_preview's own limit previously
+        # ran only after the complete BLOB was already resident in memory.
+        if captured_size > MAX_PREVIEW_BYTES:
+            return {"kind": "unavailable", "reason": "too_large"}
         record = await asyncio.to_thread(store.get, flow_id)
         if record is None:
             raise HTTPException(status_code=404, detail="flow not found")
@@ -1506,7 +1658,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def _spec_from(payload: CodegenBody) -> codegen.RequestSpec:
         """The request to render, whether stored or still being edited."""
         if payload.flow_id:
-            record = await asyncio.to_thread(store.get, payload.flow_id)
+            record = await asyncio.to_thread(store.get_request, payload.flow_id)
             if record is None:
                 raise HTTPException(status_code=404, detail="flow not found")
             detail = record.detail()
@@ -1752,7 +1904,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ReplayError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return render_raw(
-            store.prepare_capture_record(record), auto_decompress=auto_decompress_enabled(store)
+            store.prepare_capture_record(record),
+            auto_decompress=auto_decompress_enabled(store),
+            body_limit=REPLAY_RESPONSE_PREVIEW_BYTES,
         )
 
     # --- scope / target (M4) ----------------------------------------------
@@ -2712,9 +2866,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/scanner/passive/{flow_id}")
     async def run_passive_scanner(flow_id: str) -> dict[str, Any]:
-        record = await asyncio.to_thread(store.get, flow_id)
-        if record is None or record.type != "http":
+        preview = await asyncio.to_thread(
+            store.get_preview, flow_id, body_limit=MAX_SCAN_BODY_BYTES
+        )
+        if preview is None or preview[0].type != "http":
             raise HTTPException(status_code=404, detail="HTTP flow not found")
+        record = preview[0]
         issues = await engine.scanner.scan_passive(request_snapshot(record))
         return {"items": issues, "count": len(issues)}
 

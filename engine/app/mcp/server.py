@@ -47,6 +47,22 @@ def truncate(text: str | None, limit: int = MAX_BODY_CHARS) -> str:
     return f"{text[:limit]}\n… [truncated, {len(text)} chars total]"
 
 
+def _body_preview(body: bytes | None, total_bytes: int | None = None) -> str:
+    """Decode only enough bytes to satisfy the MCP text budget."""
+    raw = body or b""
+    # Four bytes per Unicode scalar covers UTF-8 without decoding an
+    # arbitrarily large captured body first.
+    sample = raw[: MAX_BODY_CHARS * 4]
+    text = sample.decode("utf-8", errors="replace")
+    text_truncated = len(text) > MAX_BODY_CHARS
+    if text_truncated:
+        text = text[:MAX_BODY_CHARS]
+    total = max(len(raw), total_bytes or 0)
+    if text_truncated or len(sample) < total:
+        return f"{text}\n… [truncated, {total} captured bytes total]"
+    return truncate(text)
+
+
 def flow_summary(record: FlowRecord | dict[str, Any]) -> dict[str, Any]:
     get = record.get if isinstance(record, dict) else lambda key: getattr(record, key, None)
     scheme, port = get("scheme"), get("port")
@@ -82,13 +98,9 @@ def flow_detail(
         "query": record.query,
         "http_version": record.http_version,
         "request_headers": redact_headers(record.request_headers, reveal=reveal),
-        "request_body": truncate(
-            (record.request_body or b"").decode("utf-8", errors="replace")
-        ),
+        "request_body": _body_preview(record.request_body, record.request_size),
         "response_headers": redact_headers(record.response_headers, reveal=reveal),
-        "response_body": truncate(
-            (record.response_body or b"").decode("utf-8", errors="replace")
-        ),
+        "response_body": _body_preview(record.response_body, record.response_size),
         "redacted": not reveal,
     }
 
@@ -192,9 +204,12 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
         )
     )
     async def get_flow(flow_id: str, reveal_secrets: bool = False) -> dict[str, Any]:
-        record = await asyncio.to_thread(store.get, flow_id)
-        if record is None:
+        preview = await asyncio.to_thread(
+            store.get_preview, flow_id, body_limit=MAX_BODY_CHARS * 4
+        )
+        if preview is None:
             return {"error": f"flow {flow_id} not found"}
+        record = preview[0]
         annotation = await asyncio.to_thread(store.get_annotation, flow_id)
         return flow_detail(record, reveal=reveal_secrets, annotation=annotation)
 
@@ -362,7 +377,7 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
     ) -> dict[str, Any]:
         if engine is None:
             return {"error": "engine not available"}
-        record = await asyncio.to_thread(store.get, flow_id)
+        record = await asyncio.to_thread(store.get_request, flow_id)
         if record is None:
             return {"error": f"flow {flow_id} not found"}
         url = (

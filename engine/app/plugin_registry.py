@@ -901,6 +901,12 @@ class PluginHost:
             raise PluginApiError("project flow history is unavailable")
         if not isinstance(flow_id, str) or not flow_id or not isinstance(in_scope_only, bool):
             raise PluginApiError("expected a flow ID and boolean in_scope_only")
+        request_bytes = self.registry.store.body_size(flow_id, "request")
+        response_bytes = self.registry.store.body_size(flow_id, "response")
+        if request_bytes is None or response_bytes is None:
+            raise PluginApiError("HTTP exchange not found")
+        if request_bytes + response_bytes > 16 * 1024 * 1024:
+            raise PluginApiError("exchange bodies exceed the 16 MiB snapshot limit")
         record = self.registry.store.get(flow_id)
         if record is None or record.type != "http":
             raise PluginApiError("HTTP exchange not found")
@@ -909,8 +915,6 @@ class PluginHost:
             record.scheme, record.host, record.port, record.path,
         ):
             raise PluginApiError("HTTP exchange is outside project scope")
-        if len(record.request_body) + len(record.response_body or b"") > 16 * 1024 * 1024:
-            raise PluginApiError("exchange bodies exceed the 16 MiB snapshot limit")
         # Decode only a bounded preview. Base64 below preserves the captured bytes,
         # including compressed and binary bodies, independently of that preview.
         preview = replace(
@@ -954,7 +958,10 @@ class PluginHost:
             raise PluginApiError(str(exc)) from exc
         items: list[dict[str, Any]] = []
         for summary in page["items"]:
-            record = self.registry.store.get(summary["id"])
+            preview = self.registry.store.get_preview(
+                summary["id"], body_limit=body_limit
+            )
+            record = preview[0] if preview is not None else None
             if record is None or record.type != "http":
                 continue
             snapshot = request_snapshot(record)
