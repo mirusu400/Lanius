@@ -2411,13 +2411,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         ):
             raise HTTPException(status_code=404, detail="UI asset not found")
+        # WKWebView versions can resolve CSP 'self' against the sandbox's opaque
+        # origin and refuse external CSS/scripts. Explicit package-scoped sources
+        # keep those assets loadable without granting allow-same-origin or network
+        # access. Use configured loopback addresses, never the request Host header.
+        asset_sources = " ".join(
+            f"http://{host}:{settings.api_port}/api/plugin-ui/{name}/"
+            for host in ("127.0.0.1", "localhost")
+        )
         return FileResponse(
             candidate,
             headers={
                 "Cache-Control": "no-store",
                 "Content-Security-Policy": (
-                    "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-                    "img-src 'self' data:; font-src 'self'; connect-src 'none'; "
+                    f"default-src 'none'; script-src 'self' {asset_sources}; "
+                    f"style-src 'self' 'unsafe-inline' {asset_sources}; "
+                    f"img-src 'self' data: {asset_sources}; font-src 'self' {asset_sources}; "
+                    "connect-src 'none'; "
                     "base-uri 'none'; form-action 'none'; navigate-to 'none'; "
                     "frame-src 'none'; frame-ancestors 'self' http://127.0.0.1:5173 "
                     "http://localhost:5173 tauri://localhost http://tauri.localhost "

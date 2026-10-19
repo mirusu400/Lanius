@@ -244,6 +244,39 @@ def test_package_api_serves_sandboxed_ui_and_uninstalls(tmp_path) -> None:
         )
 
 
+@pytest.mark.parametrize("api_port", [12954, 12976])
+def test_sandbox_assets_have_explicit_package_sources_for_webkit(tmp_path, api_port):
+    settings = Settings(
+        proxy_port=free_port(), api_port=api_port, data_dir=tmp_path,
+        db_path=tmp_path / "webkit.sqlite", confdir=tmp_path / "mitm",
+        plugins_dir=tmp_path / "plugins",
+    )
+    files = {
+        "backend/__init__.py": BACKEND,
+        "ui/index.html": b'<!doctype html><link rel="stylesheet" href="style.css"><script src="app.js"></script>',
+        "ui/app.js": SCRIPT,
+        "ui/style.css": b"body { background: rgb(16, 21, 28); }",
+    }
+    with TestClient(create_app(settings)) as client:
+        installed = client.post("/api/plugins/install?enable=true", content=archive_bytes(files=files))
+        assert installed.status_code == 200, installed.text
+        for asset, media_types in [("index.html", {"text/html"}), ("style.css", {"text/css"}), ("app.js", {"text/javascript", "application/javascript"})]:
+            response = client.get(f"/api/plugin-ui/acme.demo/{asset}", headers={"Host": "untrusted.example"})
+            assert response.status_code == 200
+            assert response.headers["content-type"].split(";", 1)[0] in media_types
+            csp = response.headers["content-security-policy"]
+            directives = dict(part.strip().split(" ", 1) for part in csp.split(";") if part.strip())
+            for directive in ("script-src", "style-src", "img-src", "font-src"):
+                assert f"http://127.0.0.1:{api_port}/api/plugin-ui/acme.demo/" in directives[directive]
+                assert f"http://localhost:{api_port}/api/plugin-ui/acme.demo/" in directives[directive]
+            assert "untrusted.example" not in csp
+            assert "allow-same-origin" not in directives["sandbox"]
+            assert directives["connect-src"] == "'none'"
+            assert directives["frame-src"] == "'none'"
+            assert directives["form-action"] == "'none'"
+            assert "*" not in csp
+
+
 def test_bytecode_written_after_import_does_not_break_integrity(tmp_path) -> None:
     packages = PluginPackageManager(tmp_path / "plugins")
     packages.install(archive_bytes())

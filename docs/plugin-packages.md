@@ -103,6 +103,11 @@ Lockdown suspension remove their views. Tabs retain their frame while the user
 visits other tabs, so drafts survive navigation. UI assets use `no-store` because
 the installed URL is reused across package updates. The frame ancestor policy
 permits only the same origin and the exact existing Vite/Tauri UI origins.
+Script, stylesheet, image, and font sources also explicitly include the owning
+package's loopback asset directory at the configured API port. This avoids
+WKWebView's opaque-origin CSP `'self'` compatibility issue while retaining the
+sandbox and `connect-src 'none'`; other plugins and external origins are not
+added as sources. These addresses do not come from the request Host header.
 
 An action may return a view request to open its own declared view:
 
