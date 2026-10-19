@@ -57,6 +57,15 @@ describe('ContextMenu', () => {
     expect(screen.getAllByRole('menuitem')).toHaveLength(2);
   });
 
+  it('exposes checked items as menu checkboxes', () => {
+    render(<ContextMenu position={{ x: 10, y: 10 }} items={[
+      { label: 'Host', checked: true },
+      { label: 'Size', checked: false },
+    ]} onClose={vi.fn()} />);
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Host' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Size' }).getAttribute('aria-checked')).toBe('false');
+  });
+
   it('runs the action and closes', async () => {
     const onSelect = vi.fn();
     const onClose = vi.fn();

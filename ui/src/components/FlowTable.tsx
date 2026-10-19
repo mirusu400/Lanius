@@ -61,6 +61,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
           <tr>
             <ResizableHeader
               label="#"
+              menuLabel={t('flow.requestNumber')}
               index={0}
               columns={columns}
               className="history-number-header"
@@ -68,6 +69,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
             />
             <ResizableHeader
               label="★"
+              menuLabel={t('history.marks')}
               index={1}
               columns={columns}
               className="history-bookmark-header"
@@ -77,6 +79,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
               <ResizableHeader
                 key={index}
                 label={label}
+                menuLabel={index === 7 ? t('flow.duration') : label}
                 index={index + 2}
                 columns={columns}
                 className={index === 5 ? 'modified-header' : undefined}

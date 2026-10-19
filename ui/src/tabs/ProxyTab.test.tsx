@@ -233,6 +233,18 @@ describe('ProxyTab', () => {
     expect(call?.body).toEqual({ bookmarked: true });
   });
 
+  it('removes the bookmark highlight when the bookmark is cleared', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    const row = (await screen.findByText('/seeded')).closest('tr')!;
+    await user.click(within(row).getByRole('button', { name: t('history.addBookmark') }));
+    await user.click(await within(row).findByRole('button', { name: t('history.removeBookmark') }));
+
+    await waitFor(() => expect(row.classList.contains('annotation-yellow')).toBe(false));
+    const annotationCalls = calls.filter((item) => item.url.endsWith('/annotation'));
+    expect(annotationCalls.at(-1)?.body).toEqual({ bookmarked: false, annotation_color: null });
+  });
+
   it('keeps an intercept draft when switching between Proxy subtabs', async () => {
     const user = userEvent.setup();
     render(<ProxyTab />);

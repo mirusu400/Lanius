@@ -36,13 +36,15 @@ returned `anchor` and `next_cursor` on later flow pages.
 ## Layout
 
 Drag a table column header's right edge to resize it in History and other
-headed data tables; column widths are remembered on this machine. Drag the
+headed data tables. Drag the header itself to reorder columns, or right-click
+it and check or uncheck columns to show or hide them. Width, order, and
+visibility are remembered separately for each table on this machine. Drag the
 divider between side-by-side panes to resize them in Proxy, WebSockets, Replay,
-Fuzzer, Logger, Diff, Docs, and editor dialogs. Each pane position is
-remembered independently. In HTTP History, use the layout button immediately
-to the left of the shown-request count to switch between side-by-side panes
-and a history-above-detail layout. The selected layout and each layout's pane
-position are remembered on this machine.
+Fuzzer, Logger, Diff, Docs, and editor dialogs. Each pane position is remembered
+independently. In HTTP History, use the layout button immediately to the left
+of the shown-request count to switch between side-by-side panes and a
+history-above-detail layout. The selected layout and each layout's pane position
+are remembered on this machine.
 
 ## Context menus
 

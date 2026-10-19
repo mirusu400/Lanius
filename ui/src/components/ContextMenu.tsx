@@ -10,6 +10,9 @@ import { useShortcuts } from '../useShortcut';
 export interface MenuItem {
   label: string;
   onSelect?: () => void;
+  /** Renders a checkable menu item. False is meaningful: it leaves an
+   *  unchecked item which can be enabled again. */
+  checked?: boolean;
   /** Runs this menu's action for its captured target while the menu is open. */
   shortcutId?: string;
   disabled?: boolean;
@@ -132,9 +135,11 @@ function MenuRow({ item, onClose }: { item: MenuItem; onClose: () => void }) {
   }, [open]);
 
   if (!item.items) {
+    const checkable = item.checked !== undefined;
     return (
       <button
-        role="menuitem"
+        role={checkable ? 'menuitemcheckbox' : 'menuitem'}
+        aria-checked={checkable ? item.checked : undefined}
         className={
           [item.separator ? 'separated' : '', item.danger ? 'danger' : '']
             .filter(Boolean)
@@ -146,6 +151,7 @@ function MenuRow({ item, onClose }: { item: MenuItem; onClose: () => void }) {
           item.onSelect?.();
         }}
       >
+        {checkable && <span className="menu-check" aria-hidden="true">{item.checked ? '✓' : ''}</span>}
         {item.label}
       </button>
     );

@@ -421,6 +421,15 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
     }
   }, [reload]);
 
+  const toggleBookmark = useCallback((flow: FlowSummary) => {
+    // The default highlight is part of bookmarking from the UI. Clearing
+    // the bookmark must therefore clear that highlight as well; users can
+    // still apply a standalone highlight from the row context menu.
+    void updateAnnotation(flow, flow.bookmarked
+      ? { bookmarked: false, annotation_color: null }
+      : { bookmarked: true });
+  }, [updateAnnotation]);
+
   const onClear = useCallback(async () => {
     setConfirmClear(false);
     setClearing(true);
@@ -575,7 +584,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                   sortBy={historySort.key}
                   sortDesc={historySort.desc}
                   onSort={onSortHistory}
-                  onToggleBookmark={(flow) => void updateAnnotation(flow, { bookmarked: !flow.bookmarked })}
+                  onToggleBookmark={toggleBookmark}
                 />
               </Busy>
             }
@@ -648,7 +657,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                     },
                     copy: copyTextToClipboard,
                     deleteFlow: (flow) => setPendingDelete(flow),
-                    toggleBookmark: (flow) => void updateAnnotation(flow, { bookmarked: !flow.bookmarked }),
+                    toggleBookmark,
                     setColor: (flow, color) => void updateAnnotation(flow, { annotation_color: color }),
                   },
                   // A stored flow is rendered from its id, so the engine

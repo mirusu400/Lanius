@@ -310,9 +310,11 @@ returned `anchor` and `next_cursor` on later flow pages.
 Each row also has a stable request number that keeps its identity across
 sorting, paging and restarts. Bookmarking applies the yellow highlight by
 default; choose another highlight or **No color** from the context menu when
-needed.
+needed. Removing a bookmark also removes its highlight.
 Drag a table column header's right edge to resize it in History and other
-headed data tables. Column widths are remembered on this machine.
+headed data tables. Drag the header itself to reorder columns, or right-click
+it and uncheck columns you do not need. Width, order, and visibility are
+remembered separately for each table on this machine.
 Drag the divider between side-by-side panes to resize them in Proxy,
 WebSockets, Replay, Fuzzer, Logger, Diff, Docs, and editor dialogs.
 Each pane position is remembered independently. In HTTP History, use the
