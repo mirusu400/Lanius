@@ -33,6 +33,7 @@ import type {
 } from '../api/types';
 import { PluginFrame } from '../components/PluginFrame';
 import { PluginLogConsole } from '../components/PluginLogConsole';
+import { useToast } from '../components/Toast';
 import { useReportBusy } from '../components/busy';
 import { usePluginActions } from '../components/usePluginActions';
 import { UndoableInput } from '../components/UndoableText';
@@ -109,6 +110,7 @@ function CatalogueCard({ item, busy, onInstall, onRollback }: {
 
 export function PluginsTab() {
   const t = useT();
+  const { showToast } = useToast();
   const [surface, setSurface] = useState<Surface>('installed');
   const [detailTab, setDetailTab] = useState<DetailTab>('overview');
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
@@ -414,6 +416,12 @@ export function PluginsTab() {
     setCatalogueBusy(item.id);
     try {
       const result = await installCataloguePlugin(item.source, item.id, version);
+      if (item.installed_version) {
+        showToast({
+          message: t('plugins.updateCompleted', { name: result.plugin.package?.name ?? item.name }),
+          tone: 'success',
+        });
+      }
       await Promise.all([refresh(), refreshCatalogue(false), refreshSamples()]);
       setSelectedName(result.plugin.name);
       setSurface('installed');
