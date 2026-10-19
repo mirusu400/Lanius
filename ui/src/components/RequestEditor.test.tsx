@@ -39,17 +39,21 @@ function StatefulEditor({ initial = RAW }: { initial?: string }) {
 }
 
 describe('what gets sent', () => {
-  it('opens on the raw bytes, exactly as captured', () => {
-    // The defect this replaces: the body arrived already reformatted, so
-    // the request could not be reproduced.
+  it('opens in Pretty while keeping the raw bytes exactly as captured', async () => {
     editor();
+    expect(tab(t('detail.view.parsed')).getAttribute('aria-selected')).toBe('true');
+    expect(document.querySelector('.request-editor-view pre')?.textContent).toContain('"a": 1');
+    expect(screen.queryByRole('textbox')).toBeNull();
+
+    await userEvent.click(tab(t('detail.view.raw')));
     expect(box().value).toBe(RAW);
     expect(box().value).toContain('{"a":1,"b":2}');
     expect(box().value).not.toContain('"a": 1');
   });
 
-  it('colours the editable raw request without changing its text', () => {
+  it('colours the editable raw request without changing its text', async () => {
     editor();
+    await userEvent.click(tab(t('detail.view.raw')));
     expect(document.querySelector('.request-highlight-editor .hljs-keyword')?.textContent).toBe('POST');
     expect([...document.querySelectorAll('.request-highlight-editor .hljs-attr')].map((node) => node.textContent)).toContain('Content-Type');
     expect([...document.querySelectorAll('.request-highlight-editor .hljs-attr')].map((node) => node.textContent)).toContain('"a"');
@@ -111,6 +115,7 @@ describe('views', () => {
 
   it('edits go to the raw text unchanged', async () => {
     const { onChange } = editor('GET / HTTP/1.1\n\n');
+    await userEvent.click(tab(t('detail.view.raw')));
     await userEvent.type(box(), 'x');
     expect(onChange).toHaveBeenCalled();
     const last = onChange.mock.calls.at(-1)?.[0] ?? '';
@@ -121,6 +126,7 @@ describe('views', () => {
 describe('edit history', () => {
   it('undoes and redoes controlled edits with Windows and Linux shortcuts', async () => {
     renderWithI18n(<StatefulEditor />);
+    await userEvent.click(tab(t('detail.view.raw')));
     const input = box();
     input.setSelectionRange(input.value.length, input.value.length);
     await userEvent.type(input, 'x');
@@ -134,6 +140,7 @@ describe('edit history', () => {
 
   it('supports the macOS redo shortcut and clears redo after a new edit', async () => {
     renderWithI18n(<StatefulEditor initial="abc" />);
+    await userEvent.click(tab(t('detail.view.raw')));
     const input = box();
     input.setSelectionRange(3, 3);
     await userEvent.type(input, 'd');
@@ -150,6 +157,7 @@ describe('edit history', () => {
 
   it('can undo a formatting action', async () => {
     renderWithI18n(<StatefulEditor />);
+    await userEvent.click(tab(t('detail.view.raw')));
     await userEvent.click(screen.getByRole('button', { name: t('body.format') }));
     expect(box().value).toContain('"a": 1');
     fireEvent.keyDown(box(), { key: 'z', code: 'KeyZ', ctrlKey: true });
@@ -162,6 +170,7 @@ describe('reformatting on request', () => {
     // Still useful, but something you ask for rather than something
     // that happens when a request is opened.
     const { onChange } = editor();
+    await userEvent.click(tab(t('detail.view.raw')));
     await userEvent.click(screen.getByRole('button', { name: t('body.format') }));
     expect(onChange).toHaveBeenCalled();
     expect(onChange.mock.calls[0][0]).toContain('"a": 1');
@@ -170,6 +179,7 @@ describe('reformatting on request', () => {
   it('offers to put it back on one line', async () => {
     const pretty = 'POST /a HTTP/1.1\n\n{\n  "a": 1\n}';
     const { onChange } = editor(pretty);
+    await userEvent.click(tab(t('detail.view.raw')));
     await userEvent.click(screen.getByRole('button', { name: t('body.minify') }));
     expect(onChange.mock.calls[0][0]).toContain('{"a":1}');
   });

@@ -57,7 +57,7 @@ export function RequestEditor({
   historyKey?: string;
 }) {
   const t = useT();
-  const [view, setView] = useState<BodyView>('raw');
+  const [view, setView] = useState<BodyView>('pretty');
 
   const shown = useMemo(() => {
     if (view === 'raw') return value;
@@ -96,7 +96,7 @@ export function RequestEditor({
 
         {/* Rewriting the body is still useful, but it is an action you
             ask for, not something that happens on open. */}
-        {reformattable && (
+        {view === 'raw' && reformattable && (
           <button
             type="button"
             className="link-button"
@@ -105,7 +105,7 @@ export function RequestEditor({
             {t('body.format')}
           </button>
         )}
-        {splitMessage(value).body.trim() && (
+        {view === 'raw' && splitMessage(value).body.trim() && (
           <button
             type="button"
             className="link-button"

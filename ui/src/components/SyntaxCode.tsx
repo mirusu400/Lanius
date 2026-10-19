@@ -28,6 +28,35 @@ function highlightedHtml(text: string, language: SyntaxLanguage | null): string 
   return hljs.highlight(text, { language, ignoreIllegals: true }).value;
 }
 
+/** Colour a request target without treating the whole query as one token.
+ *
+ * Keeping the path as a link makes the request line easy to scan, while
+ * distinct key/value colours make dense Replay and History query strings
+ * readable. This deliberately works on the encoded target: decoding it here
+ * could make an escaped `&` or `=` look like a separator when it is not one.
+ */
+function requestTargetHtml(target: string): string {
+  const question = target.indexOf('?');
+  if (question < 0) return `<span class="hljs-link">${escapeHtml(target)}</span>`;
+
+  const path = target.slice(0, question);
+  const afterQuestion = target.slice(question + 1);
+  const hash = afterQuestion.indexOf('#');
+  const query = hash < 0 ? afterQuestion : afterQuestion.slice(0, hash);
+  const fragment = hash < 0 ? '' : afterQuestion.slice(hash);
+  const params = query.split(/(&)/).map((part) => {
+    if (part === '&') return '&amp;';
+    const equals = part.indexOf('=');
+    const key = equals < 0 ? part : part.slice(0, equals);
+    const value = equals < 0 ? null : part.slice(equals + 1);
+    return `${key ? `<span class="hljs-attr">${escapeHtml(key)}</span>` : ''}`
+      + `${value === null ? '' : `=${value ? `<span class="hljs-string">${escapeHtml(value)}</span>` : ''}`}`;
+  }).join('');
+
+  return `<span class="hljs-link">${escapeHtml(path)}</span>?${params}`
+    + (fragment ? `<span class="hljs-link">${escapeHtml(fragment)}</span>` : '');
+}
+
 function SyntaxFragment({ text, language, query = '', activeIndex = null, offset = 0 }: {
   text: string;
   language: SyntaxLanguage | null;
@@ -48,7 +77,7 @@ function messageHeadHtml(text: string): string {
 
     if (index === 0) {
       const request = line.match(/^([A-Z]+)(\s+)(\S+)(\s+)(HTTP\/\S+)$/);
-      if (request) return `<span class="hljs-keyword">${escapeHtml(request[1])}</span>${escapeHtml(request[2])}<span class="hljs-link">${escapeHtml(request[3])}</span>${escapeHtml(request[4])}<span class="hljs-meta">${escapeHtml(request[5])}</span>`;
+      if (request) return `<span class="hljs-keyword">${escapeHtml(request[1])}</span>${escapeHtml(request[2])}${requestTargetHtml(request[3])}${escapeHtml(request[4])}<span class="hljs-meta">${escapeHtml(request[5])}</span>`;
       const response = line.match(/^(HTTP(?:\/\S+)?)(\s+)(\d{3})(.*)$/);
       if (response) return `<span class="hljs-meta">${escapeHtml(response[1])}</span>${escapeHtml(response[2])}<span class="hljs-number">${escapeHtml(response[3])}</span>${escapeHtml(response[4])}`;
     }

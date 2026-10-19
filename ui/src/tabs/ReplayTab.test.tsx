@@ -71,8 +71,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const editor = () =>
-  screen.getByRole('textbox', { name: t('replay.request') }) as HTMLTextAreaElement;
+const editor = () => {
+  let input = screen.queryByRole('textbox', { name: t('replay.request') });
+  if (!input) {
+    const raw = [...(document.querySelector('.request-editor')?.querySelectorAll('[role="tab"]') ?? [])]
+      .find((node) => node.textContent === t('detail.view.raw'));
+    if (raw) fireEvent.click(raw);
+    input = screen.queryByRole('textbox', { name: t('replay.request') });
+  }
+  if (!input) throw new Error('Replay request editor is not ready');
+  return input as HTMLTextAreaElement;
+};
 
 describe('ReplayTab', () => {
   it('shows the storage omission notice with response headers in raw and preview views', async () => {

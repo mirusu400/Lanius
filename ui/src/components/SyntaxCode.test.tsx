@@ -22,6 +22,19 @@ it('keeps captured HTML inert while highlighting it', () => {
   expect(container.querySelector('pre')?.textContent).toBe(source);
 });
 
+it('uses distinct syntax colours for query parameter keys and values', () => {
+  const source = 'GET /search?name=alice&role=admin%20user&empty= HTTP/1.1\r\nHost: example.test\r\n\r\n';
+  const { container } = render(<HighlightedMessage text={source} headers={[]} className="raw-view" />);
+  const requestLine = container.querySelector('code')!;
+
+  expect(requestLine.textContent).toBe(source);
+  expect(requestLine.querySelector('.hljs-link')?.textContent).toBe('/search');
+  expect([...requestLine.querySelectorAll('.hljs-attr')].map((node) => node.textContent))
+    .toEqual(['name', 'role', 'empty', 'Host']);
+  expect([...requestLine.querySelectorAll('.hljs-string')].map((node) => node.textContent))
+    .toEqual(['alice', 'admin%20user']);
+});
+
 it('preserves raw HTTP text and skips tokenising an oversized body', () => {
   const body = `const value = '${'x'.repeat(128 * 1024)}';`;
   const source = `POST / HTTP/1.1\r\nContent-Type: application/javascript\r\n\r\n${body}`;

@@ -151,6 +151,7 @@ describe('Inspector in Replay', () => {
       text: request, response: null, sending: false, error: null,
     }]);
     render(<ReplayTabView />);
+    await userEvent.click(screen.getByRole('tab', { name: t('detail.view.raw') }));
     const editor = screen.getByRole('textbox', { name: t('replay.request') }) as HTMLTextAreaElement;
     const start = request.indexOf('%C8');
     const end = request.indexOf(' HTTP');

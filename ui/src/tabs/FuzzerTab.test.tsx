@@ -163,8 +163,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const templateBox = () =>
-  screen.getByRole('textbox', { name: t('fuzzer.templateLabel') }) as HTMLTextAreaElement;
+const templateBox = () => {
+  let input = screen.queryByRole('textbox', { name: t('fuzzer.templateLabel') });
+  if (!input) {
+    const activePane = [...document.querySelectorAll<HTMLElement>('.fuzzer-tab')]
+      .find((node) => node.style.display !== 'none');
+    const raw = [...(activePane?.querySelector('.request-editor')?.querySelectorAll('[role="tab"]') ?? [])]
+      .find((node) => node.textContent === t('detail.view.raw'));
+    if (raw) fireEvent.click(raw);
+    input = screen.queryByRole('textbox', { name: t('fuzzer.templateLabel') });
+  }
+  if (!input) throw new Error('Fuzzer request editor is not ready');
+  return input as HTMLTextAreaElement;
+};
 
 describe('FuzzerTab', () => {
   it('shares URL copy and send to Replay actions with the other request editors', async () => {

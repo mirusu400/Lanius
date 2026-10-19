@@ -7,6 +7,10 @@ import { ResponsePreview } from './ResponsePreview';
 import { formatBytes } from '../tabs/proxyModel';
 import { HighlightedMessage } from './SyntaxCode';
 import { messageHeaders } from './syntaxLanguage';
+import { formatMessageBody, hexPreview, type BodyView } from './bodyFormat';
+
+type View = BodyView | 'preview';
+const VIEWS: View[] = ['pretty', 'raw', 'hex', 'preview'];
 
 /** The same recorded response can be inspected from Replay or Fuzzer.
  * Replay already has raw text; Fuzzer retrieves it from its result flow.
@@ -27,7 +31,7 @@ export function ResponseInspector({
   empty: string;
 }) {
   const t = useT();
-  const [view, setView] = useState<'raw' | 'preview'>('raw');
+  const [view, setView] = useState<View>('pretty');
   const [loaded, setLoaded] = useState<{ flowId: string; raw?: string; error?: string; bodyOmitted?: boolean; bodySize?: number } | null>(null);
 
   useEffect(() => {
@@ -47,13 +51,25 @@ export function ResponseInspector({
   const error = loaded?.flowId === flowId ? loaded.error : undefined;
   const omitted = bodyOmitted ?? (loaded?.flowId === flowId ? loaded.bodyOmitted : false);
   const size = bodySize ?? (loaded?.flowId === flowId ? loaded.bodySize : 0);
+  const hex = view === 'hex' && rawText !== undefined ? hexPreview(rawText) : null;
+  const shown = view === 'pretty' && rawText !== undefined
+    ? formatMessageBody(rawText, 'pretty')
+    : rawText;
 
   return <section className="response-inspector">
     <div className="response-inspector-bar">
       <span className="detail-half-title">{title ?? t('detail.response')}</span>
       {flowId && <div className="view-switch" role="tablist">
-        <button type="button" role="tab" aria-selected={view === 'raw'} className={view === 'raw' ? 'active' : ''} onClick={() => setView('raw')}>{t('detail.view.raw')}</button>
-        <button type="button" role="tab" aria-selected={view === 'preview'} className={view === 'preview' ? 'active' : ''} onClick={() => setView('preview')}>{t('detail.view.preview')}</button>
+        {VIEWS.map((option) => <button
+          key={option}
+          type="button"
+          role="tab"
+          aria-selected={view === option}
+          className={view === option ? 'active' : ''}
+          onClick={() => setView(option)}
+        >
+          {t(`detail.view.${option === 'pretty' ? 'parsed' : option}`)}
+        </button>)}
       </div>}
     </div>
     <div className="response-inspector-body">
@@ -62,7 +78,14 @@ export function ResponseInspector({
         ? !omitted && <ResponsePreview flowId={flowId} />
         : error ? <p className="banner error">{error}</p>
           : rawText === undefined ? <p className="muted">{t('detail.preview.loading')}</p>
-            : <HighlightedMessage className="replay-response mono" text={rawText} headers={messageHeaders(rawText)} />}
+            : view === 'hex'
+              ? <>
+                <pre className="replay-response mono">{hex?.text}</pre>
+                {hex && hex.truncated > 0 && <p className="muted">
+                  {t('detail.hexTruncated', { count: String(hex.truncated) })}
+                </p>}
+              </>
+              : <HighlightedMessage className="replay-response mono" text={shown ?? ''} headers={messageHeaders(rawText)} />}
     </div>
   </section>;
 }
