@@ -26,7 +26,56 @@ from ..response_history import (
 Phase = Literal["request", "response"]
 Target = Literal["url", "headers", "body", "message"]
 SETTING = "match_replace_rules"
+PRESETS_VERSION_SETTING = "match_replace_presets_version"
+PRESETS_VERSION = "1"
 logger = logging.getLogger(__name__)
+
+_BROWSER_EMULATION_PRESETS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "preset-emulate-android",
+        "name": "Emulate Android",
+        "enabled": False,
+        "phase": "request",
+        "target": "headers",
+        "match": r"^User-Agent:.*$",
+        "replace": (
+            "User-Agent: Mozilla/5.0 (Linux; Android 13; Pixel 7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 "
+            "Mobile Safari/537.36"
+        ),
+        "regex": True,
+        "case_sensitive": False,
+    },
+    {
+        "id": "preset-emulate-firefox",
+        "name": "Emulate Firefox",
+        "enabled": False,
+        "phase": "request",
+        "target": "headers",
+        "match": r"^User-Agent:.*$",
+        "replace": (
+            "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; "
+            "rv:128.0) Gecko/20100101 Firefox/128.0"
+        ),
+        "regex": True,
+        "case_sensitive": False,
+    },
+    {
+        "id": "preset-emulate-safari",
+        "name": "Emulate Safari",
+        "enabled": False,
+        "phase": "request",
+        "target": "headers",
+        "match": r"^User-Agent:.*$",
+        "replace": (
+            "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 "
+            "Safari/605.1.15"
+        ),
+        "regex": True,
+        "case_sensitive": False,
+    },
+)
 
 
 class MatchReplaceError(ValueError):
@@ -92,6 +141,11 @@ class MatchReplaceRule:
         return asdict(self)
 
 
+def browser_emulation_presets() -> list[MatchReplaceRule]:
+    """Return fresh, disabled built-in browser emulation rules."""
+    return [MatchReplaceRule.from_dict(value) for value in _BROWSER_EMULATION_PRESETS]
+
+
 class MatchReplaceAddon:
     """Applies user rules before interception and capture see a flow."""
 
@@ -103,6 +157,9 @@ class MatchReplaceAddon:
 
     def reload(self) -> list[dict[str, Any]]:
         raw = self.store.get_setting(SETTING)
+        if raw is None:
+            self.rules = browser_emulation_presets()
+            return self.state()
         if not raw:
             self.rules = []
             return []
@@ -111,6 +168,13 @@ class MatchReplaceAddon:
             self.rules = [MatchReplaceRule.from_dict(item) for item in values]
         except (json.JSONDecodeError, TypeError, MatchReplaceError):
             self.rules = []
+            return []
+        if self.store.get_setting(PRESETS_VERSION_SETTING) != PRESETS_VERSION:
+            known = {rule.id for rule in self.rules}
+            self.rules.extend(
+                rule for rule in browser_emulation_presets() if rule.id not in known
+            )
+            self._store_state(self.state())
         return self.state()
 
     def state(self) -> list[dict[str, Any]]:
@@ -120,9 +184,17 @@ class MatchReplaceAddon:
         rules = [MatchReplaceRule.from_dict(value) for value in values]
         self.rules = rules
         state = self.state()
-        self.store.set_setting(SETTING, json.dumps(state, ensure_ascii=False))
+        self._store_state(state)
         self.broker.publish("match_replace.changed", {"rules": state})
         return state
+
+    def _store_state(self, state: list[dict[str, Any]]) -> None:
+        self.store.batch_settings(
+            {
+                SETTING: json.dumps(state, ensure_ascii=False),
+                PRESETS_VERSION_SETTING: PRESETS_VERSION,
+            }
+        )
 
     def request(self, flow: http.HTTPFlow) -> None:
         remember_original(flow)

@@ -400,6 +400,16 @@ def test_match_replace_rules_api(client) -> None:
     assert client.get("/api/match-replace").json()["rules"][0]["id"] == "mask"
 
 
+def test_match_replace_defaults_to_disabled_browser_emulation_presets(client) -> None:
+    rules = client.get("/api/match-replace").json()["rules"]
+    assert [rule["name"] for rule in rules] == [
+        "Emulate Android",
+        "Emulate Firefox",
+        "Emulate Safari",
+    ]
+    assert all(rule["enabled"] is False for rule in rules)
+
+
 def test_match_replace_rejects_invalid_regex(client) -> None:
     response = client.put(
         "/api/match-replace",
@@ -434,7 +444,11 @@ def test_match_replace_preview_uses_unsaved_whole_message_rules(client) -> None:
     assert response.status_code == 200
     assert response.json()["raw"].startswith("HTTP/1.1 404 Missing")
     assert response.json()["raw"].endswith("\r\n\r\nnew")
-    assert client.get("/api/match-replace").json()["rules"] == []
+    assert [rule["name"] for rule in client.get("/api/match-replace").json()["rules"]] == [
+        "Emulate Android",
+        "Emulate Firefox",
+        "Emulate Safari",
+    ]
 
 
 def test_body_display_defaults_on_and_can_be_disabled(client) -> None:

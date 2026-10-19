@@ -349,6 +349,8 @@ see the enabled rules' result before saving them.
 Plain text and regular expressions are supported, rules can be toggled without
 deleting them, and the saved rules travel with a project export. Body rules run
 against decompressed content while preserving the message's wire encoding.
+Built-in User-Agent presets for Android, Firefox and Safari emulation are
+included in the rule list and remain disabled until selected.
 
 ### WebSockets
 

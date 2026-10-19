@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import gzip
+import json
 
 import pytest
 from mitmproxy.test import tflow, tutils
 
-from app.addons.match_replace import MatchReplaceAddon, MatchReplaceError, preview
+from app.addons.match_replace import (
+    SETTING,
+    MatchReplaceAddon,
+    MatchReplaceError,
+    preview,
+)
 from app.db.store import FlowStore
 from app.events import EventBroker
 from app.response_history import AUTO_MODIFIED as RESPONSE_AUTO_MODIFIED, ORIGINAL as RESPONSE_ORIGINAL
@@ -14,6 +20,69 @@ from app.response_history import AUTO_MODIFIED as RESPONSE_AUTO_MODIFIED, ORIGIN
 @pytest.fixture()
 def addon(tmp_path) -> MatchReplaceAddon:
     return MatchReplaceAddon(FlowStore(tmp_path / "test.sqlite"), EventBroker())
+
+
+def test_new_projects_start_with_disabled_browser_emulation_presets(addon) -> None:
+    assert [rule["name"] for rule in addon.state()] == [
+        "Emulate Android",
+        "Emulate Firefox",
+        "Emulate Safari",
+    ]
+    assert all(not rule["enabled"] for rule in addon.state())
+
+    flow = tflow.tflow(req=tutils.treq(), resp=False)
+    flow.request.headers["User-Agent"] = "original"
+    addon.request(flow)
+    assert flow.request.headers["User-Agent"] == "original"
+
+
+def test_saving_no_rules_does_not_restore_presets(addon) -> None:
+    addon.replace_rules([])
+    loaded = MatchReplaceAddon(addon.store, EventBroker())
+    assert loaded.state() == []
+
+
+def test_existing_saved_rules_receive_presets_only_once(tmp_path) -> None:
+    store = FlowStore(tmp_path / "existing.sqlite")
+    store.set_setting(
+        SETTING,
+        json.dumps(
+            [
+                {
+                    "id": "custom",
+                    "name": "Custom",
+                    "match": "before",
+                    "replace": "after",
+                }
+            ]
+        ),
+    )
+
+    addon = MatchReplaceAddon(store, EventBroker())
+    assert [rule["name"] for rule in addon.state()] == [
+        "Custom",
+        "Emulate Android",
+        "Emulate Firefox",
+        "Emulate Safari",
+    ]
+    reloaded = MatchReplaceAddon(store, EventBroker())
+    assert [rule["name"] for rule in reloaded.state()] == [
+        "Custom",
+        "Emulate Android",
+        "Emulate Firefox",
+        "Emulate Safari",
+    ]
+
+
+def test_browser_emulation_preset_replaces_the_user_agent(addon) -> None:
+    rules = addon.state()
+    rules[0]["enabled"] = True
+    addon.replace_rules(rules)
+
+    flow = tflow.tflow(req=tutils.treq(), resp=False)
+    flow.request.headers["User-Agent"] = "original"
+    addon.request(flow)
+    assert "Android 13" in flow.request.headers["User-Agent"]
 
 
 def test_replaces_request_url_header_and_body(addon) -> None:

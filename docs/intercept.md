@@ -23,6 +23,8 @@ see the enabled rules' result before saving them.
 Plain text and regular expressions are supported, rules can be toggled without
 deleting them, and the saved rules travel with a project export. Body rules run
 against decompressed content while preserving the message's wire encoding.
+Built-in User-Agent presets for Android, Firefox and Safari emulation are
+included in the rule list and remain disabled until selected.
 
 Edits made to a held request are kept as versions, so the
 [proxy history](proxy.md) can show the original, automatically modified and
