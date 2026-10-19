@@ -196,6 +196,13 @@ const en = {
   // --- replay ---
   'replay.newRequest': 'New request',
   'replay.send': 'Send',
+  'replay.followRedirect': 'Follow redirect',
+  'replay.autoFollowRedirects': 'Auto-follow redirects',
+  'replay.autoFollowRedirectsHelp':
+    'Follow up to {count} redirects after each Replay send. Every hop is kept in send history.',
+  'replay.redirectLoop': 'Automatic redirect following stopped because a redirect loop was detected.',
+  'replay.redirectLimit':
+    'Automatic redirect following stopped after {count} redirects.',
   'replay.bodyTruncated': '[{count} more characters not shown]',
   'replay.sending': 'Sending…',
   'replay.history': 'Send history',
@@ -1370,6 +1377,13 @@ const ko: Catalogue = {
 
   'replay.newRequest': '새 요청',
   'replay.send': 'Send',
+  'replay.followRedirect': '리다이렉트 따라가기',
+  'replay.autoFollowRedirects': '리다이렉트 자동 추적',
+  'replay.autoFollowRedirectsHelp':
+    'Replay 전송 후 최대 {count}개의 리다이렉트를 따라갑니다. 각 단계는 전송 내역에 남습니다.',
+  'replay.redirectLoop': '리다이렉트 반복이 감지되어 자동 추적을 중단했습니다.',
+  'replay.redirectLimit':
+    '리다이렉트를 {count}회 따라간 뒤 자동 추적을 중단했습니다.',
   'replay.bodyTruncated': '[{count}자 더 있음, 표시 생략]',
   'replay.sending': '전송 중…',
   'replay.history': '전송 내역',

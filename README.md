@@ -416,6 +416,10 @@ The request editor wraps long lines without changing the bytes sent. After a
 send, the arrows beside **Send** browse that tab's request and response pairs.
 Editing an older request creates a draft, so browsing does not overwrite the
 saved exchange. The latest 50 sends per tab are saved with the project.
+Responses with status 301, 302, 303, 307, or 308 and a valid `Location` header
+can be followed one hop at a time. The optional auto-follow mode follows up to
+10 hops, stops on loops, and keeps every exchange in the same send history.
+Credentials and cookies are not copied when the redirect changes origin.
 
 ### Fuzzer
 

@@ -2,12 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 
 import { sendReplayRequest } from '../api/client';
 import {
+  MAX_AUTO_REDIRECTS,
   canStepReplayHistory,
   emptyTab,
+  loadAutoFollowRedirects,
   nextTabId,
+  redirectRequest,
   renderResponseText,
+  saveAutoFollowRedirects,
   toSendPayload,
   trimResponse,
+  type ReplayRedirectRequest,
+  type ReplayResponse,
+  type ReplaySnapshot,
   type ReplayTab,
 } from './replayModel';
 import {
@@ -15,6 +22,7 @@ import {
   editReplayTab,
   finishReplaySend,
   getActiveTabId,
+  getTabs,
   removeTab,
   selectTab,
   stepReplayHistory,
@@ -39,7 +47,7 @@ import { useEditorMenu } from '../components/useEditorMenu';
 import { requestMenuItems } from '../components/requestMenu';
 import { useAddRequestScopeRule } from '../components/requestScope';
 import { usePluginActions } from '../components/usePluginActions';
-import { errorMessage, rawMsg, renderMessage, useT } from '../i18n';
+import { errorMessage, msg, rawMsg, renderMessage, useT } from '../i18n';
 import { sendTextToFuzzer } from './fuzzerStore';
 import { useShortcut } from '../useShortcut';
 import { UndoableInput } from '../components/UndoableText';
@@ -52,11 +60,29 @@ function requestUrl(tab: Pick<ReplayTab, 'url' | 'text'>): string | null {
   }
 }
 
+function redirectFor(
+  snapshot: Pick<ReplaySnapshot, 'url' | 'text' | 'response'>,
+): ReplayRedirectRequest | null {
+  try {
+    return redirectRequest(snapshot, snapshot.response);
+  } catch {
+    return null;
+  }
+}
+
+function redirectSignature(request: Pick<ReplaySnapshot, 'url' | 'text'>): string {
+  const payload = toSendPayload(request.url, request.text);
+  return `${payload.method.toUpperCase()} ${payload.url}`;
+}
+
 export function ReplayTabView() {
   const t = useT();
   const addRequestScopeRule = useAddRequestScopeRule();
   const [tabs, setTabs] = useState<ReplayTab[]>([]);
   const [activeId, setActiveId] = useState(getActiveTabId);
+  const [autoFollowRedirects, setAutoFollowRedirects] = useState(
+    loadAutoFollowRedirects,
+  );
 
   const menu = useContextMenu<string>();
 
@@ -65,6 +91,12 @@ export function ReplayTabView() {
 
   const active = tabs.find((t) => t.id === activeId) ?? null;
   const activeUrl = active ? requestUrl(active) : null;
+  // Once a recorded request is edited, the response beside it is only the
+  // previous result for reference. Do not offer to follow that stale response
+  // against a different draft URL.
+  const activeRedirect = active?.historyIndex != null
+    ? redirectFor(active)
+    : null;
   const menuTab = tabs.find((tab) => tab.id === menu.target);
   const menuUrl = menuTab ? requestUrl(menuTab) : null;
   const sendingIds = useRef(new Set<string>());
@@ -183,28 +215,103 @@ export function ReplayTabView() {
     return true;
   };
 
-  const send = async () => {
-    if (!active || active.sending || sendingIds.current.has(active.id)) return;
-    const requestId = active.id;
-    const request = { url: active.url, text: active.text };
-    const startedIndex = active.historyIndex ?? null;
-    let payload;
+  const sendChain = async (
+    requestId: string,
+    initialRequest: Pick<ReplaySnapshot, 'url' | 'text'>,
+    initialIndex: number | null,
+    followAutomatically: boolean,
+  ) => {
+    let request = initialRequest;
+    let startedIndex = initialIndex;
+    let redirectsFollowed = 0;
+    const seen = new Set<string>();
     try {
-      payload = toSendPayload(request.url, request.text);
+      seen.add(redirectSignature(request));
+      while (true) {
+        let response: ReplayResponse;
+        try {
+          response = trimResponse(await sendReplayRequest(
+            toSendPayload(request.url, request.text),
+          ));
+        } catch (err) {
+          finishReplaySend(
+            requestId, request, startedIndex, null, errorMessage(err),
+          );
+          break;
+        }
+
+        finishReplaySend(requestId, request, startedIndex, response, null);
+        if (!followAutomatically) break;
+
+        const next = redirectFor({ ...request, response });
+        if (!next) break;
+
+        // The editor stays usable during a request. If it changed while this
+        // response was in flight, preserve that draft instead of replacing it
+        // with an automatically generated redirect request.
+        const shown = getTabs().find((tab) => tab.id === requestId);
+        if (!shown || shown.url !== request.url || shown.text !== request.text ||
+            shown.response?.id !== response.id) break;
+
+        if (redirectsFollowed >= MAX_AUTO_REDIRECTS) {
+          updateTab(requestId, {
+            error: msg('replay.redirectLimit', { count: MAX_AUTO_REDIRECTS }),
+          });
+          break;
+        }
+        const signature = redirectSignature(next);
+        if (seen.has(signature)) {
+          updateTab(requestId, { error: msg('replay.redirectLoop') });
+          break;
+        }
+
+        seen.add(signature);
+        redirectsFollowed += 1;
+        request = { url: next.url, text: next.text };
+        startedIndex = null;
+        editReplayTab(requestId, request);
+        updateTab(requestId, { sending: true, error: null });
+      }
+    } finally {
+      updateTab(requestId, { sending: false });
+      sendingIds.current.delete(requestId);
+    }
+  };
+
+  const startSend = async (
+    requestId: string,
+    request: Pick<ReplaySnapshot, 'url' | 'text'>,
+    startedIndex: number | null,
+  ) => {
+    if (sendingIds.current.has(requestId)) return;
+    try {
+      // Fail before changing the tab to a sending state.
+      toSendPayload(request.url, request.text);
     } catch (err) {
       updateTab(requestId, { error: errorMessage(err) });
       return;
     }
     sendingIds.current.add(requestId);
     updateTab(requestId, { sending: true, error: null });
-    try {
-      const response = await sendReplayRequest(payload);
-      finishReplaySend(requestId, request, startedIndex, trimResponse(response), null);
-    } catch (err) {
-      finishReplaySend(requestId, request, startedIndex, null, errorMessage(err));
-    } finally {
-      sendingIds.current.delete(requestId);
-    }
+    await sendChain(
+      requestId, request, startedIndex, autoFollowRedirects,
+    );
+  };
+
+  const send = async () => {
+    if (!active || active.sending) return;
+    await startSend(
+      active.id,
+      { url: active.url, text: active.text },
+      active.historyIndex ?? null,
+    );
+  };
+
+  const followRedirect = async () => {
+    if (!active || active.sending || !activeRedirect) return;
+    const request = { url: activeRedirect.url, text: activeRedirect.text };
+    editReplayTab(active.id, request);
+    await startSend(active.id, request, null);
   };
 
   useShortcut('replay.send', send, Boolean(active && !active.sending));
@@ -369,6 +476,35 @@ export function ReplayTabView() {
             >
               {active.sending ? t('replay.sending') : t('replay.send')}
             </button>
+            {activeRedirect && (
+              <button
+                type="button"
+                className="follow-redirect"
+                title={activeRedirect.destination}
+                onClick={followRedirect}
+                disabled={active.sending}
+              >
+                {t('replay.followRedirect')}
+              </button>
+            )}
+            <label
+              className="replay-auto-redirect"
+              title={t('replay.autoFollowRedirectsHelp', {
+                count: MAX_AUTO_REDIRECTS,
+              })}
+            >
+              <input
+                type="checkbox"
+                checked={autoFollowRedirects}
+                disabled={tabs.some((tab) => tab.sending)}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  setAutoFollowRedirects(enabled);
+                  saveAutoFollowRedirects(enabled);
+                }}
+              />
+              {t('replay.autoFollowRedirects')}
+            </label>
             {active.response && (
               <span className="resp-meta mono">
                 {active.response.status_code ?? 'ERR'} ·{' '}

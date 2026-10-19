@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ReplayTabView } from './ReplayTab';
 import { resetTabs, sendToReplay, getTabs, setTabs } from './replayStore';
+import { AUTO_FOLLOW_REDIRECTS_STORAGE_KEY } from './replayModel';
 import type { FlowSummary } from '../api/types';
 import { resetTarget, subscribeTarget, type FuzzerTarget } from './fuzzerStore';
 
@@ -41,6 +42,7 @@ let sent: unknown[] = [];
 beforeEach(() => {
   resetTabs();
   sent = [];
+  localStorage.removeItem(AUTO_FOLLOW_REDIRECTS_STORAGE_KEY);
   vi.stubGlobal(
     'fetch',
     vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -156,6 +158,186 @@ describe('ReplayTab', () => {
       body: 'a=1',
     });
     expect(screen.getByText(/201 · 4 B · 9 ms/)).toBeTruthy();
+  });
+
+  it('follows one redirect on demand and keeps both exchanges', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)));
+      const first = sent.length === 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => first
+          ? { id: 'redirect', status_code: 302, reason: 'Found',
+              headers: [['Location', '/next?step=2']], body: '', size: 0,
+              duration_ms: 2, error: null }
+          : { id: 'done', status_code: 200, reason: 'OK', headers: [],
+              body: 'finished', size: 8, duration_ms: 3, error: null },
+      } as Response;
+    }));
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
+    const follow = await screen.findByRole('button', {
+      name: t('replay.followRedirect'),
+    });
+    expect(follow.title).toBe('http://echo.test/next?step=2');
+    await user.click(follow);
+
+    await screen.findByText(/finished/);
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toMatchObject({
+      url: 'http://echo.test/next?step=2',
+      method: 'GET',
+      headers: [['Host', 'echo.test']],
+    });
+    expect(getTabs()[0].history).toHaveLength(2);
+    expect(editor().value).toContain('GET /next?step=2 HTTP/1.1');
+  });
+
+  it('does not offer a redirect from a response after its request is edited', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'redirect', status_code: 302, reason: 'Found',
+        headers: [['Location', '/next']], body: '', size: 0,
+        duration_ms: 1, error: null }),
+    } as Response)));
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
+    expect(await screen.findByRole('button', {
+      name: t('replay.followRedirect'),
+    })).toBeTruthy();
+
+    fireEvent.change(editor(), {
+      target: { value: 'GET /edited HTTP/1.1\nHost: echo.test\n\n' },
+    });
+    expect(screen.queryByRole('button', {
+      name: t('replay.followRedirect'),
+    })).toBeNull();
+  });
+
+  it('automatically follows redirects when the saved option is enabled', async () => {
+    localStorage.setItem(AUTO_FOLLOW_REDIRECTS_STORAGE_KEY, '1');
+    vi.stubGlobal('fetch', vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)));
+      const responses = [
+        { id: 'r1', status_code: 302, reason: 'Found',
+          headers: [['Location', '/middle']], body: '', size: 0,
+          duration_ms: 1, error: null },
+        { id: 'r2', status_code: 307, reason: 'Temporary Redirect',
+          headers: [['Location', '/final']], body: '', size: 0,
+          duration_ms: 1, error: null },
+        { id: 'r3', status_code: 200, reason: 'OK', headers: [],
+          body: 'automatic finish', size: 16, duration_ms: 1, error: null },
+      ];
+      return { ok: true, status: 200, json: async () => responses[sent.length - 1] } as Response;
+    }));
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    expect(screen.getByRole('checkbox', {
+      name: t('replay.autoFollowRedirects'),
+    })).toHaveProperty('checked', true);
+
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
+    await screen.findByText(/automatic finish/);
+
+    expect(sent).toHaveLength(3);
+    expect(sent.map((request) => (request as { url: string }).url)).toEqual([
+      'http://echo.test/hello',
+      'http://echo.test/middle',
+      'http://echo.test/final',
+    ]);
+    expect(getTabs()[0].history).toHaveLength(3);
+  });
+
+  it('stops automatic following on a redirect loop', async () => {
+    localStorage.setItem(AUTO_FOLLOW_REDIRECTS_STORAGE_KEY, '1');
+    vi.stubGlobal('fetch', vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)));
+      const location = sent.length === 1 ? '/next' : '/hello';
+      return { ok: true, status: 200, json: async () => ({
+        id: `loop-${sent.length}`, status_code: 302, reason: 'Found',
+        headers: [['Location', location]], body: '', size: 0,
+        duration_ms: 1, error: null,
+      }) } as Response;
+    }));
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
+    expect(await screen.findByText(t('replay.redirectLoop'))).toBeTruthy();
+    expect(sent).toHaveLength(2);
+    expect(getTabs()[0].history).toHaveLength(2);
+  });
+
+  it('bounds automatic redirect chains', async () => {
+    localStorage.setItem(AUTO_FOLLOW_REDIRECTS_STORAGE_KEY, '1');
+    vi.stubGlobal('fetch', vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)));
+      return { ok: true, status: 200, json: async () => ({
+        id: `hop-${sent.length}`, status_code: 302, reason: 'Found',
+        headers: [['Location', `/hop-${sent.length}`]], body: '', size: 0,
+        duration_ms: 1, error: null,
+      }) } as Response;
+    }));
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
+    expect(await screen.findByText(t('replay.redirectLimit', { count: 10 })))
+      .toBeTruthy();
+    expect(sent).toHaveLength(11);
+    expect(getTabs()[0].history).toHaveLength(11);
+  });
+
+  it('does not overwrite an edit made while an automatic redirect is in flight', async () => {
+    localStorage.setItem(AUTO_FOLLOW_REDIRECTS_STORAGE_KEY, '1');
+    let finish: (response: Response) => void = () => undefined;
+    vi.stubGlobal('fetch', vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)));
+      return new Promise<Response>((resolve) => { finish = resolve; });
+    }));
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
+    fireEvent.change(editor(), {
+      target: { value: 'GET /my-draft HTTP/1.1\nHost: echo.test\n\n' },
+    });
+    finish({ ok: true, status: 200, json: async () => ({
+      id: 'late-redirect', status_code: 302, reason: 'Found',
+      headers: [['Location', '/automatic']], body: '', size: 0,
+      duration_ms: 1, error: null,
+    }) } as Response);
+
+    await waitFor(() => expect(getTabs()[0].history).toHaveLength(1));
+    expect(sent).toHaveLength(1);
+    expect(editor().value).toContain('/my-draft');
+  });
+
+  it('persists the automatic redirect option', async () => {
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    const toggle = await screen.findByRole('checkbox', {
+      name: t('replay.autoFollowRedirects'),
+    });
+    await user.click(toggle);
+    expect(localStorage.getItem(AUTO_FOLLOW_REDIRECTS_STORAGE_KEY)).toBe('1');
   });
 
   it('undoes and redoes edits in the request body', async () => {

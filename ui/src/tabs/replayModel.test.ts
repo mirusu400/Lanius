@@ -4,9 +4,13 @@ import type { FlowDetail, FlowSummary } from '../api/types';
 import {
   BODY_DISPLAY_LIMIT,
   BODY_KEEP_LIMIT,
+  AUTO_FOLLOW_REDIRECTS_STORAGE_KEY,
   emptyTab,
+  loadAutoFollowRedirects,
   originOf,
+  redirectRequest,
   renderResponseText,
+  saveAutoFollowRedirects,
   tabFromFlow,
   toSendPayload,
   trimResponse,
@@ -38,6 +42,19 @@ function flow(overrides: Partial<FlowSummary> = {}): FlowSummary {
     source: 'proxy',
     comment: null,
     ...overrides,
+  };
+}
+
+function redirectResponse(status: number, location: string): ReplayResponse {
+  return {
+    id: `redirect-${status}`,
+    status_code: status,
+    reason: 'Redirect',
+    headers: [['Location', location]],
+    body: '',
+    size: 0,
+    duration_ms: 1,
+    error: null,
   };
 }
 
@@ -158,6 +175,93 @@ describe('toSendPayload', () => {
   it('rejects malformed requests', () => {
     expect(() => toSendPayload('http://h', '')).toThrow();
     expect(() => toSendPayload('http://h', 'GET\n\n')).toThrow();
+  });
+});
+
+describe('redirectRequest', () => {
+  it('resolves a relative 302 and changes POST to GET', () => {
+    const next = redirectRequest({
+      url: 'https://app.test',
+      text: [
+        'POST /login HTTP/1.1',
+        'Host: app.test',
+        'Cookie: session=one',
+        'Content-Type: application/json',
+        'Content-Length: 7',
+        '',
+        '{"a":1}',
+      ].join('\r\n'),
+    }, redirectResponse(302, '../home?from=login#section'));
+
+    expect(next).not.toBeNull();
+    expect(next?.url).toBe('https://app.test');
+    expect(next?.destination).toBe('https://app.test/home?from=login');
+    expect(next?.text).toContain('GET /home?from=login HTTP/1.1');
+    expect(next?.text).toContain('Cookie: session=one');
+    expect(next?.text).not.toContain('Content-Type');
+    expect(next?.text).not.toContain('{"a":1}');
+  });
+
+  it('preserves a 307 body but strips credentials across origins', () => {
+    const next = redirectRequest({
+      url: 'https://app.test',
+      text: [
+        'PUT /upload HTTP/1.1',
+        'Host: app.test',
+        'Authorization: Bearer secret',
+        'Proxy-Authorization: Basic secret',
+        'Cookie: session=one',
+        'Content-Type: text/plain',
+        '',
+        'payload',
+      ].join('\r\n'),
+    }, redirectResponse(307, 'https://storage.test:8443/next'));
+
+    expect(next?.url).toBe('https://storage.test:8443');
+    expect(next?.text).toContain('PUT /next HTTP/1.1');
+    expect(next?.text).toContain('Host: storage.test:8443');
+    expect(next?.text).toContain('Content-Type: text/plain');
+    expect(next?.text.endsWith('payload')).toBe(true);
+    expect(next?.text).not.toContain('Authorization:');
+    expect(next?.text).not.toContain('Cookie:');
+  });
+
+  it('uses GET for a 303 but preserves method and body for a 308', () => {
+    const source = {
+      url: 'http://app.test',
+      text: 'PATCH /one HTTP/1.1\r\nHost: app.test\r\nContent-Length: 4\r\n\r\ndata',
+    };
+    expect(redirectRequest(source, redirectResponse(303, '/two'))?.text)
+      .toContain('GET /two HTTP/1.1');
+    const permanent = redirectRequest(source, redirectResponse(308, '/two'));
+    expect(permanent?.text).toContain('PATCH /two HTTP/1.1');
+    expect(permanent?.text.endsWith('data')).toBe(true);
+  });
+
+  it('ignores non-redirect statuses and unsafe destinations', () => {
+    const source = { url: 'http://app.test', text: 'GET / HTTP/1.1\r\n\r\n' };
+    expect(redirectRequest(source, redirectResponse(304, '/cached'))).toBeNull();
+    expect(redirectRequest(source, redirectResponse(302, 'file:///tmp/x'))).toBeNull();
+    expect(redirectRequest(source, redirectResponse(302, 'http://u:p@app.test/')))
+      .toBeNull();
+    expect(redirectRequest(source, { ...redirectResponse(302, '/x'), headers: [] }))
+      .toBeNull();
+  });
+});
+
+describe('automatic redirect option', () => {
+  it('defaults off and persists an explicit choice', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+    };
+    expect(loadAutoFollowRedirects(storage)).toBe(false);
+    saveAutoFollowRedirects(true, storage);
+    expect(values.get(AUTO_FOLLOW_REDIRECTS_STORAGE_KEY)).toBe('1');
+    expect(loadAutoFollowRedirects(storage)).toBe(true);
+    saveAutoFollowRedirects(false, storage);
+    expect(loadAutoFollowRedirects(storage)).toBe(false);
   });
 });
 

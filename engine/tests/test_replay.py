@@ -21,6 +21,12 @@ class Echo(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def _respond(self) -> None:
+        if self.path == "/redirect":
+            self.send_response(302)
+            self.send_header("Location", "/redirect-target")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if self.path == "/media":
             payload = b"x" * (5 * MIB)
             self.send_response(200)
@@ -175,6 +181,15 @@ def test_send_preserves_non_200_status(client, echo_server) -> None:
         "/api/replay/send", json={"url": f"{echo_server}/missing"}
     ).json()
     assert data["status_code"] == 404
+
+
+def test_replay_returns_redirect_without_following_it(client, echo_server) -> None:
+    """Redirect hops stay explicit so each one is visible and scope-checked."""
+    data = client.post(
+        "/api/replay/send", json={"url": f"{echo_server}/redirect"}
+    ).json()
+    assert data["status_code"] == 302
+    assert ["Location", "/redirect-target"] in data["headers"]
 
 
 def test_sent_request_is_recorded_in_history(client, echo_server) -> None:

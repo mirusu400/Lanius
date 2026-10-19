@@ -2659,6 +2659,37 @@ pre.response-preview-text {
   cursor: default;
 }
 
+.replay-controls .follow-redirect {
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.replay-controls .follow-redirect:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.replay-auto-redirect {
+  align-items: center;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 0.9em;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.replay-auto-redirect:has(input:disabled) {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .replay-history-controls {
   display: flex;
   align-items: center;

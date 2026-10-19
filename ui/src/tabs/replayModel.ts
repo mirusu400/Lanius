@@ -72,6 +72,48 @@ export interface SendPayload {
   body: string;
 }
 
+export interface ReplayRedirectRequest {
+  /** Origin shown in Replay's target field. */
+  url: string;
+  /** Complete raw request shown in the editor. */
+  text: string;
+  /** Absolute destination, used as the button tooltip. */
+  destination: string;
+}
+
+export const AUTO_FOLLOW_REDIRECTS_STORAGE_KEY =
+  'lanius.replay.autoFollowRedirects';
+
+/** Bound automatic redirect chains even when every hop has a unique URL. */
+export const MAX_AUTO_REDIRECTS = 10;
+
+export function loadAutoFollowRedirects(
+  storage?: Pick<Storage, 'getItem'> | null,
+): boolean {
+  try {
+    const target = storage === undefined
+      ? (typeof window === 'undefined' ? null : window.localStorage)
+      : storage;
+    return target?.getItem(AUTO_FOLLOW_REDIRECTS_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function saveAutoFollowRedirects(
+  enabled: boolean,
+  storage?: Pick<Storage, 'setItem'> | null,
+): void {
+  try {
+    const target = storage === undefined
+      ? (typeof window === 'undefined' ? null : window.localStorage)
+      : storage;
+    target?.setItem(AUTO_FOLLOW_REDIRECTS_STORAGE_KEY, enabled ? '1' : '0');
+  } catch {
+    // A denied or full browser store must not make Replay unusable.
+  }
+}
+
 const CRLF = '\r\n';
 
 let counter = 0;
@@ -159,6 +201,25 @@ export function emptyTab(): ReplayTab {
 
 /** Turn the raw editor text plus the tab origin into a send payload. */
 export function toSendPayload(url: string, text: string): SendPayload {
+  const { method, target, headers, body } = parseReplayRequest(text);
+
+  const base = url.replace(/\/+$/, '');
+  const absolute = /^https?:\/\//i.test(target)
+    ? target
+    : `${base}${target.startsWith('/') ? '' : '/'}${target}`;
+
+  return { url: absolute, method, headers, body };
+}
+
+interface ParsedReplayRequest {
+  method: string;
+  target: string;
+  httpVersion: string;
+  headers: [string, string][];
+  body: string;
+}
+
+function parseReplayRequest(text: string): ParsedReplayRequest {
   const normalized = text.replace(/\r\n/g, '\n');
   const separator = normalized.indexOf('\n\n');
   const head = (separator === -1 ? normalized : normalized.slice(0, separator))
@@ -167,7 +228,7 @@ export function toSendPayload(url: string, text: string): SendPayload {
   const body = separator === -1 ? '' : normalized.slice(separator + 2);
   if (head.length === 0) throw new ParseError('parse.emptyRequest');
 
-  const [method, target] = head[0].split(/\s+/);
+  const [method, target, httpVersion = 'HTTP/1.1'] = head[0].split(/\s+/);
   if (!method || !target) throw new ParseError('parse.badRequestLine');
 
   const headers: [string, string][] = [];
@@ -177,12 +238,86 @@ export function toSendPayload(url: string, text: string): SendPayload {
     headers.push([line.slice(0, idx).trim(), line.slice(idx + 1).trim()]);
   }
 
-  const base = url.replace(/\/+$/, '');
-  const absolute = /^https?:\/\//i.test(target)
-    ? target
-    : `${base}${target.startsWith('/') ? '' : '/'}${target}`;
+  return { method, target, httpVersion, headers, body };
+}
 
-  return { url: absolute, method, headers, body };
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const CROSS_ORIGIN_SENSITIVE_HEADERS = new Set([
+  'authorization',
+  'proxy-authorization',
+  'cookie',
+]);
+const BODY_FRAMING_HEADERS = new Set([
+  'transfer-encoding',
+  'trailer',
+  'expect',
+]);
+
+/** Build the next editable Replay request for one HTTP redirect hop.
+ *
+ * Redirects remain explicit Replay requests instead of being followed by the
+ * engine. Every hop is therefore recorded and goes through the normal scope
+ * egress guard before DNS or socket creation.
+ */
+export function redirectRequest(
+  source: Pick<ReplaySnapshot, 'url' | 'text'>,
+  response: ReplayResponse | null,
+): ReplayRedirectRequest | null {
+  if (!response || response.status_code == null ||
+      !REDIRECT_STATUSES.has(response.status_code)) return null;
+  const location = response.headers.find(
+    ([name]) => name.toLowerCase() === 'location',
+  )?.[1]?.trim();
+  if (!location) return null;
+
+  const parsed = parseReplayRequest(source.text);
+  let sentUrl: URL;
+  let target: URL;
+  try {
+    sentUrl = new URL(toSendPayload(source.url, source.text).url);
+    target = new URL(location, sentUrl);
+  } catch {
+    return null;
+  }
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') return null;
+  // URL userinfo would silently turn redirect metadata into credentials.
+  if (target.username || target.password) return null;
+  target.hash = '';
+
+  const upperMethod = parsed.method.toUpperCase();
+  const switchToGet =
+    ((response.status_code === 301 || response.status_code === 302) &&
+      upperMethod === 'POST') ||
+    (response.status_code === 303 &&
+      upperMethod !== 'GET' && upperMethod !== 'HEAD');
+  const method = switchToGet ? 'GET' : parsed.method;
+  const crossOrigin = sentUrl.origin !== target.origin;
+  let wroteHost = false;
+  const headers: [string, string][] = [];
+  for (const [name, value] of parsed.headers) {
+    const lower = name.toLowerCase();
+    if (crossOrigin && CROSS_ORIGIN_SENSITIVE_HEADERS.has(lower)) continue;
+    if (switchToGet && (lower.startsWith('content-') ||
+        BODY_FRAMING_HEADERS.has(lower))) continue;
+    if (lower === 'host') {
+      if (!wroteHost) headers.push([name, target.host]);
+      wroteHost = true;
+      continue;
+    }
+    headers.push([name, value]);
+  }
+  if (!wroteHost) headers.push(['Host', target.host]);
+
+  const requestTarget = `${target.pathname || '/'}${target.search}`;
+  const startLine = `${method} ${requestTarget} ${parsed.httpVersion}`;
+  const headerText = headers.map(([name, value]) => `${name}: ${value}`).join(CRLF);
+  const head = headerText ? `${startLine}${CRLF}${headerText}` : startLine;
+  const body = switchToGet ? '' : parsed.body;
+  return {
+    url: target.origin,
+    text: `${head}${CRLF}${CRLF}${body}`,
+    destination: target.href,
+  };
 }
 
 /** Render an engine response as raw HTTP text for display. */
