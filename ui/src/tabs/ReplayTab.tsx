@@ -353,7 +353,9 @@ export function ReplayTabView() {
           bodySize={active.response?.size}
           raw={active.response
             ? renderResponseText(active.response, (count) =>
-                t('replay.bodyTruncated', { count: String(count) }),
+                count === null
+                  ? t('replay.bodyPreviewTruncated')
+                  : t('replay.bodyTruncated', { count: String(count) }),
               )
             : undefined}
           empty={t('replay.noResponse')}

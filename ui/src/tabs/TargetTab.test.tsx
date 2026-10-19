@@ -198,7 +198,8 @@ beforeEach(() => {
         return jsonResponse({ items: endpoints, count: endpoints.length });
       }
       if (url.includes('/api/flows/')) {
-        const id = new URL(url).pathname.split('/').pop();
+        const parts = new URL(url).pathname.split('/');
+        const id = parts.at(-1) === 'replay-request' ? parts.at(-2) : parts.at(-1);
         const path = [...paths, ...extraPaths].find((item) => item.id === id) ?? paths[0];
         return jsonResponse({
           ...path, id, type: 'http', scheme: 'https', host: 'api.test', port: 443,

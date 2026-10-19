@@ -39,7 +39,7 @@ import { useAddRequestScopeRule } from '../components/requestScope';
 import { formatUrl } from './proxyModel';
 import { usePluginActions } from '../components/usePluginActions';
 import { sendTextToReplay, sendToReplay } from './replayStore';
-import { getFlow } from '../api/client';
+import { getFlow, getReplayRequest } from '../api/client';
 import { copyTextToClipboard } from '../clipboard';
 import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
@@ -366,7 +366,7 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
 
   const sendResultToReplay = (id: string | null | undefined) => {
     if (!id) return;
-    void getFlow(id)
+    void getReplayRequest(id, true)
       .then((detail) => sendToReplay(detail, detail))
       .catch((err) => setError(errorMessage(err)));
   };

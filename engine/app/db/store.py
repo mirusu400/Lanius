@@ -26,7 +26,7 @@ from typing import Any, List, Sequence
 import logging
 
 from .. import charset
-from ..content_encoding import body_for_display
+from ..content_encoding import body_for_display, body_prefix_for_display
 from ..media_storage import MEDIA_BODY_LIMIT_SETTING, prepare_record, read_limit
 
 logger = logging.getLogger(__name__)
@@ -77,9 +77,13 @@ class RequestSnapshot:
         *,
         auto_decompress: bool,
         charset_override: str | None = None,
+        body_output_limit: int | None = None,
     ) -> dict[str, Any]:
         shown, content_encoding, decoded, decode_error = body_for_display(
-            self.headers, self.body, enabled=auto_decompress and not self.body_omitted
+            self.headers,
+            self.body,
+            enabled=auto_decompress and not self.body_omitted,
+            max_output_bytes=body_output_limit,
         )
         content_type = _content_type(self.headers)
         body_charset = (
@@ -161,6 +165,10 @@ class FlowRecord:
         auto_decompress: bool = False,
         request_charset_override: str | None = None,
         response_charset_override: str | None = None,
+        body_output_limit: int | None = None,
+        preview_limit: int | None = None,
+        request_body_complete: bool = True,
+        response_body_complete: bool = True,
     ) -> dict[str, Any]:
         """Full dict with headers and bodies rendered as text-safe values.
 
@@ -168,38 +176,69 @@ class FlowRecord:
         with the charset each message declares or detects. Decoding everything
         as UTF-8 turned a Korean EUC-KR page into replacement characters,
         which cannot be turned back into the original bytes.
+
+        With ``preview_limit`` each body shows at most that many (decoded)
+        bytes, and ``*_body_complete=False`` says the stored body continues
+        past the bytes in this record.  ``*_body_preview_size`` and
+        ``*_body_truncated`` then describe the window actually shown.
         """
         data = asdict(self)
         data.pop("request_original", None)
         data.pop("request_auto_modified", None)
-        request_display, request_encoding, request_decoded, request_error = (
-            body_for_display(
-                self.request_headers,
-                self.request_body,
-                enabled=auto_decompress and not self.request_body_omitted,
-            )
+
+        def display(
+            headers: list[tuple[str, str]] | None,
+            body: bytes | None,
+            omitted: bool,
+            complete: bool,
+            override: str | None,
+        ) -> tuple[bytes | None, str, str | None, bool, str | None, bool]:
+            content_type = _content_type(headers)
+            if preview_limit is None:
+                shown, encoding, decoded, error = body_for_display(
+                    headers,
+                    body,
+                    enabled=auto_decompress and not omitted,
+                    max_output_bytes=body_output_limit,
+                )
+                cut = False
+            else:
+                shown, encoding, decoded, error, cut = body_prefix_for_display(
+                    headers,
+                    body,
+                    enabled=auto_decompress and not omitted,
+                    limit=preview_limit,
+                    input_complete=complete,
+                )
+            if override:
+                selected = charset.normalise(override)
+            elif cut:
+                selected = charset.charset_of_prefix(content_type, shown)
+            else:
+                selected = charset.charset_of(content_type, shown)
+            if cut and shown:
+                shown = charset.complete_characters(shown, selected)
+            return shown, selected, encoding, decoded, error, cut
+
+        (
+            request_display, request_charset, request_encoding,
+            request_decoded, request_error, request_cut,
+        ) = display(
+            self.request_headers, self.request_body, self.request_body_omitted,
+            request_body_complete, request_charset_override,
         )
-        response_display, response_encoding, response_decoded, response_error = (
-            body_for_display(
-                self.response_headers,
-                self.response_body,
-                enabled=auto_decompress and not self.response_body_omitted,
-            )
+        (
+            response_display, response_charset, response_encoding,
+            response_decoded, response_error, response_cut,
+        ) = display(
+            self.response_headers, self.response_body, self.response_body_omitted,
+            response_body_complete, response_charset_override,
         )
-        request_charset = (
-            charset.normalise(request_charset_override)
-            if request_charset_override
-            else charset.charset_of(
-                _content_type(self.request_headers), request_display
-            )
-        )
-        response_charset = (
-            charset.normalise(response_charset_override)
-            if response_charset_override
-            else charset.charset_of(
-                _content_type(self.response_headers), response_display
-            )
-        )
+        if preview_limit is not None:
+            data["request_body_preview_size"] = len(request_display or b"")
+            data["response_body_preview_size"] = len(response_display or b"")
+            data["request_body_truncated"] = request_cut
+            data["response_body_truncated"] = response_cut
         data["request_body"] = (
             None
             if request_display is None
@@ -220,6 +259,10 @@ class FlowRecord:
         data["request_decode_error"] = request_error
         data["response_decode_error"] = response_error
         data["request_variants"] = None
+        # Request variants are small by construction (see get_preview); give
+        # them the same output budget as the main preview.
+        if preview_limit is not None and body_output_limit is None:
+            body_output_limit = preview_limit
         if self.modified and self.request_original is not None:
             final = RequestSnapshot(
                 method=self.method or "GET",
@@ -238,14 +281,17 @@ class FlowRecord:
                 "original": self.request_original.detail(
                     auto_decompress=auto_decompress,
                     charset_override=request_charset_override,
+                    body_output_limit=body_output_limit,
                 ),
                 "auto_modified": automatic.detail(
                     auto_decompress=auto_decompress,
                     charset_override=request_charset_override,
+                    body_output_limit=body_output_limit,
                 ),
                 "modified": final.detail(
                     auto_decompress=auto_decompress,
                     charset_override=request_charset_override,
+                    body_output_limit=body_output_limit,
                 ),
             }
         return data
@@ -334,6 +380,51 @@ _COLUMNS = (
 # Rows from before schema 16 have no stored number; theirs is the rowid.
 _SELECT_COLUMNS = _COLUMNS.replace(
     " request_number", " COALESCE(request_number, flows.rowid) AS request_number"
+)
+
+# Detail panes only need a bounded window into each body.  Keep the limit in
+# the SQL expression: fetching the full BLOB and slicing it in Python still
+# allocates the full capture and is exactly what makes a 100+ MiB response
+# freeze History.
+_PREVIEW_SELECT_COLUMNS = (
+    _SELECT_COLUMNS
+    .replace(
+        "request_headers, request_body, request_size",
+        "request_headers, COALESCE(substr(request_body, 1, :body_limit), zeroblob(0)) AS request_body,"
+        " length(request_body) AS request_body_captured_size, request_size",
+    )
+    .replace(
+        "response_headers, response_body, response_size",
+        "response_headers, CASE WHEN response_body IS NULL THEN NULL"
+        " ELSE COALESCE(substr(response_body, 1, :body_limit), zeroblob(0)) END AS response_body,"
+        " length(response_body) AS response_body_captured_size, response_size",
+    )
+    # Modified-request snapshots contain base64 bodies.  A large upload can
+    # therefore hide another unbounded body in these JSON columns.  Small
+    # snapshots retain the existing request-stage UI; oversized ones are
+    # represented by the final bounded request above.
+    .replace(
+        "request_original, request_auto_modified,",
+        "CASE WHEN length(request_original) <= :snapshot_limit THEN request_original END AS request_original,"
+        " CASE WHEN length(request_auto_modified) <= :snapshot_limit THEN request_auto_modified END AS request_auto_modified,"
+        " length(request_original) AS request_original_size,"
+        " length(request_auto_modified) AS request_auto_modified_size,",
+    )
+)
+
+# Replay, Fuzzer, and code generation need the captured request but never the
+# captured response.  Selecting NULL here avoids walking the response BLOB's
+# overflow pages at all.
+_REQUEST_SELECT_COLUMNS = (
+    _SELECT_COLUMNS
+    .replace(
+        "response_headers, response_body, response_size",
+        "NULL AS response_headers, NULL AS response_body, response_size",
+    )
+    .replace(
+        "request_original, request_auto_modified,",
+        "NULL AS request_original, NULL AS request_auto_modified,",
+    )
 )
 
 _SUMMARY_COLUMNS = (
@@ -870,6 +961,94 @@ class FlowStore:
                 f"SELECT {_SELECT_COLUMNS} FROM flows WHERE id = ?", (flow_id,)
             ).fetchone()
         return _row_to_record(row) if row else None
+
+    def get_preview(
+        self, flow_id: str, *, body_limit: int
+    ) -> tuple[FlowRecord, dict[str, int | bool]] | None:
+        """A detail record whose bodies never exceed ``body_limit`` bytes.
+
+        The returned sizes describe bytes stored in the project, independently
+        of the original on-wire size retained in ``request_size`` and
+        ``response_size``.  This distinction matters for old partial captures
+        and bodies deliberately omitted by the media-storage policy.
+        """
+        if isinstance(body_limit, bool) or not isinstance(body_limit, int) or body_limit < 0:
+            raise ValueError("body_limit must be a non-negative integer")
+        snapshot_limit = max(64 * 1024, body_limit * 2)
+        with self._read_lock:
+            row = self._read_conn.execute(
+                f"SELECT {_PREVIEW_SELECT_COLUMNS} FROM flows WHERE id = :flow_id",
+                {
+                    "flow_id": flow_id,
+                    "body_limit": body_limit,
+                    "snapshot_limit": snapshot_limit,
+                },
+            ).fetchone()
+        if row is None:
+            return None
+        record = _row_to_record(row)
+        request_size = int(row["request_body_captured_size"] or 0)
+        response_size = int(row["response_body_captured_size"] or 0)
+        request_preview_size = len(record.request_body)
+        response_preview_size = len(record.response_body or b"")
+        return record, {
+            "request_body_captured_size": request_size,
+            "response_body_captured_size": response_size,
+            "request_body_preview_size": request_preview_size,
+            "response_body_preview_size": response_preview_size,
+            "request_body_truncated": request_size > request_preview_size,
+            "response_body_truncated": response_size > response_preview_size,
+            "request_variants_truncated": bool(
+                (row["request_original_size"] or 0) > snapshot_limit
+                or (row["request_auto_modified_size"] or 0) > snapshot_limit
+            ),
+        }
+
+    def get_request(self, flow_id: str) -> FlowRecord | None:
+        """Load one editable request without ever selecting its response BLOB."""
+        with self._read_lock:
+            row = self._read_conn.execute(
+                f"SELECT {_REQUEST_SELECT_COLUMNS} FROM flows WHERE id = ?",
+                (flow_id,),
+            ).fetchone()
+        return _row_to_record(row) if row else None
+
+    def body_size(self, flow_id: str, side: str) -> int | None:
+        if side not in {"request", "response"}:
+            raise ValueError("side must be request or response")
+        with self._read_lock:
+            row = self._read_conn.execute(
+                f"SELECT length({side}_body) FROM flows WHERE id = ?", (flow_id,)
+            ).fetchone()
+        return int(row[0] or 0) if row is not None else None
+
+    def get_body_chunk(
+        self, flow_id: str, side: str, *, offset: int, limit: int
+    ) -> tuple[bytes | None, int, list[tuple[str, str]], bool] | None:
+        """Read one raw body window without materialising the whole BLOB."""
+        if side not in {"request", "response"}:
+            raise ValueError("side must be request or response")
+        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0
+               for value in (offset, limit)):
+            raise ValueError("offset and limit must be non-negative integers")
+        with self._read_lock:
+            row = self._read_conn.execute(
+                f"SELECT substr({side}_body, ?, ?), length({side}_body),"
+                f" {side}_headers, {side}_body_omitted"
+                " FROM flows WHERE id = ?",
+                (offset + 1, limit, flow_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return (
+            # SQLite returns NULL for substr(zeroblob, ...), including a
+            # stored zero-length BLOB.  length() still distinguishes that
+            # valid empty body (0) from a missing body (NULL).
+            bytes(row[0] or b"") if row[1] is not None else None,
+            int(row[1] or 0),
+            _load_headers(row[2]) or [],
+            bool(row[3]),
+        )
 
     def list_ids(self, *, limit: int) -> List[str]:
         """Flow ids in history order, newest first, without loading bodies."""

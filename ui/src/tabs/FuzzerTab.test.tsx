@@ -106,10 +106,12 @@ beforeEach(() => {
       const url = String(input);
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
       if (url.includes('/api/flows/')) {
+        const parts = new URL(url).pathname.split('/');
+        const id = parts.at(-1) === 'replay-request' ? parts.at(-2) : parts.at(-1);
         return jsonResponse({
-          ...flow, id: new URL(url).pathname.split('/').pop(),
+          ...flow, id,
           request_headers: [['Host', 'app.test']],
-          request_body: `captured-request-${new URL(url).pathname.split('/').pop()}`,
+          request_body: `captured-request-${id}`,
           response_headers: [], response_body: 'captured-response',
         });
       }

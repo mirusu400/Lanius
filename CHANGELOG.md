@@ -7,6 +7,9 @@
   highlight when an HTTP History bookmark is removed.
 - Switch HTTP History between side-by-side and history-above-detail layouts,
   remembering the layout and divider position on this machine.
+- Keep very large HTTP bodies responsive with bounded History chunks,
+  request-only Replay transfers, streamed raw-body reads, and server-bounded
+  Replay response previews.
 - Add SDK 1.3 plugin-owned HTTP MCP tools with typed inputs, reload cleanup,
   execution limits, Lockdown/safe-mode guards, Settings ownership badges, and
   a bundled MCP Notes example. See [Plugin MCP Tools](docs/plugin-mcp.md).

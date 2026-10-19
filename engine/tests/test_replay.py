@@ -11,9 +11,10 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.addons.replay import ReplayError, build_flow
-from app.api.server import create_app
+from app.addons.replay import ReplayError, build_flow, render_raw
+from app.api.server import REPLAY_RESPONSE_PREVIEW_BYTES, create_app
 from app.config import Settings
+from app.db.store import FlowRecord
 from app.media_storage import MIB
 
 
@@ -118,6 +119,24 @@ def test_build_flow_rejects_bad_urls() -> None:
     for bad in ["", "ftp://a.com/", "not-a-url", "http:///nohost"]:
         with pytest.raises(ReplayError):
             build_flow(url=bad)
+
+
+def test_replay_response_is_bounded_before_json_serialization() -> None:
+    body = b"x" * (REPLAY_RESPONSE_PREVIEW_BYTES + 17)
+    rendered = render_raw(
+        FlowRecord(
+            id="large-text",
+            response_headers=[("Content-Type", "text/plain")],
+            response_body=body,
+            response_size=len(body),
+        ),
+        body_limit=REPLAY_RESPONSE_PREVIEW_BYTES,
+    )
+    assert rendered["body"] == "x" * REPLAY_RESPONSE_PREVIEW_BYTES
+    assert rendered["body_preview_size"] == REPLAY_RESPONSE_PREVIEW_BYTES
+    assert rendered["body_captured_size"] == len(body)
+    assert rendered["body_truncated"] is True
+    assert rendered["size"] == len(body)
 
 
 # --- real sends -----------------------------------------------------------

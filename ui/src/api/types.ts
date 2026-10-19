@@ -62,6 +62,18 @@ export interface FlowDetail extends FlowSummary {
   request_body: string | null;
   response_headers: [string, string][] | null;
   response_body: string | null;
+  /** Raw bytes retained in the project and included in this bounded view. */
+  request_body_captured_size?: number;
+  response_body_captured_size?: number;
+  request_body_preview_size?: number;
+  response_body_preview_size?: number;
+  /** The project has more bytes than this detail response contains. */
+  request_body_truncated?: boolean;
+  response_body_truncated?: boolean;
+  /** Independent raw chunks are available (false for encoded streams). */
+  request_body_chunkable?: boolean;
+  response_body_chunkable?: boolean;
+  request_variants_truncated?: boolean;
   /** How the bytes were read. Worth showing: a page that is not UTF-8
    *  looks wrong if the charset was guessed badly. */
   request_charset?: string;
@@ -77,6 +89,15 @@ export interface FlowDetail extends FlowSummary {
     auto_modified: RequestVariant;
     modified: RequestVariant;
   } | null;
+}
+
+export interface FlowBodyPreviewChunk {
+  text: string;
+  charset: string;
+  offset: number;
+  next_offset: number;
+  total_bytes: number;
+  truncated: boolean;
 }
 
 export type ResponsePreview =

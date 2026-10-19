@@ -7,6 +7,7 @@ import {
   getEndpoints,
   getScope,
   getFlow,
+  getReplayRequest,
   getSitemap,
   getSitePaths,
   getSiteFolders,
@@ -735,7 +736,7 @@ function treeMenuItems(
   // The tree only carries a summary, so fetch the request before sending
   // it on; otherwise Replay would open with no headers or body.
   const withDetail = (send: (detail: FlowDetail) => void) => () => {
-    void getFlow(flow.id)
+    void getReplayRequest(flow.id, true)
       .then(send)
       .catch((error: Error) => onError(error));
   };

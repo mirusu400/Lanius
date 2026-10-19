@@ -166,6 +166,34 @@ describe('FlowDetailView', () => {
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('response-preview'))).toBe(false);
   });
 
+  it('loads a truncated body one bounded chunk at a time', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/body/response/preview')) {
+        return { ok: true, status: 200, json: async () => ({
+          text: 'second', charset: 'utf-8', offset: 5, next_offset: 11,
+          total_bytes: 11, truncated: false,
+        }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({
+        ...httpFlow,
+        request_headers: [['Host', 'api.test']], request_body: '',
+        response_headers: [['Content-Type', 'text/plain']], response_body: 'first',
+        response_body_captured_size: 11, response_body_preview_size: 5,
+        response_body_truncated: true, response_body_chunkable: true,
+      }) } as Response;
+    });
+    render(<FlowDetailView flow={httpFlow} />);
+    expect(await screen.findByText(t('detail.loadMore'))).toBeTruthy();
+    expect(bodyText(1)).toBe('first');
+    await userEvent.click(screen.getByRole('button', { name: t('detail.loadMore') }));
+    await waitFor(() => expect(bodyText(1)).toBe('firstsecond'));
+    expect(screen.queryByText(t('detail.loadMore'))).toBeNull();
+    const call = vi.mocked(fetch).mock.calls.find(([url]) =>
+      String(url).includes('/body/response/preview'));
+    expect(new URL(String(call?.[0])).searchParams.get('offset')).toBe('5');
+  });
+
   it('sends the selected request with its headers and body through both shortcuts', async () => {
     const onSentToReplay = vi.fn();
     render(<FlowDetailView flow={codeFlow} onSentToReplay={onSentToReplay} />);

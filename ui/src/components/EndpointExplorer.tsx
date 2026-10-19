@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { deleteFlows, getEndpointFlows, getFlow } from '../api/client';
+import { deleteFlows, getEndpointFlows, getFlow, getReplayRequest } from '../api/client';
 import type { EndpointGroup, FlowDetail, SitePath } from '../api/types';
 import { formatBytes, formatTime, formatUrl, statusClass } from '../tabs/proxyModel';
 import { endpointHost } from '../tabs/targetModel';
@@ -116,7 +116,7 @@ export function EndpointExplorer({
   };
 
   const withDetail = (request: SitePath, action: (detail: FlowDetail) => void) => () => {
-    void getFlow(request.id, true)
+    void getReplayRequest(request.id, true)
       .then(action)
       .catch((err: Error) => setError(err.message));
   };

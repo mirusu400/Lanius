@@ -8,6 +8,7 @@ from app.addons.capture import flow_to_record
 from app.addons.intercept import apply_edits, paused_payload
 from app.addons.match_replace import MatchReplaceAddon
 from app.addons.replay import build_flow, render_raw
+from app.content_encoding import decode_content, decode_content_prefix
 from app.db.store import FlowRecord, FlowStore
 from app.events import EventBroker
 
@@ -103,3 +104,50 @@ def test_replay_encodes_request_and_decodes_response() -> None:
     rendered = render_raw(record, auto_decompress=True)
     assert rendered["body"] == "world"
     assert rendered["body_decoded"] is True
+
+
+def test_replay_bounds_compressed_response_expansion() -> None:
+    compressed = gzip.compress(b"x" * 4096)
+    record = FlowRecord(
+        id="compressed-large",
+        response_headers=[
+            ("Content-Type", "text/plain"),
+            ("Content-Encoding", "gzip"),
+        ],
+        response_body=compressed,
+        response_size=len(compressed),
+    )
+
+    rendered = render_raw(record, auto_decompress=True, body_limit=128)
+
+    assert rendered["body"] == "x" * 128
+    assert rendered["body_decoded"] is True
+    assert rendered["body_preview_size"] == 128
+    assert rendered["body_truncated"] is True
+    assert rendered["decode_error"] is None
+
+
+def test_bounded_decode_reads_whole_zstd_stream() -> None:
+    import zstandard
+
+    body = b"abc" * 70_000
+    compressed = zstandard.ZstdCompressor().compress(body)
+    assert decode_content(compressed, "zstd", max_output_bytes=len(body)) == body
+    assert decode_content_prefix(
+        compressed, "zstd", 1000, input_complete=True
+    ) == (body[:1000], True)
+
+
+def test_bounded_decode_rejects_corrupt_and_truncated_streams() -> None:
+    import pytest
+
+    with pytest.raises(ValueError):
+        decode_content(b"\x1f\x8bnot gzip", "gzip", max_output_bytes=1024)
+    compressed = gzip.compress(bytes(range(256)) * 64)
+    with pytest.raises(ValueError):
+        decode_content(compressed[:100], "gzip", max_output_bytes=1 << 20)
+    # The same cut is expected when the input is known to be a prefix.
+    shown, cut = decode_content_prefix(
+        compressed[:100], "gzip", 1 << 20, input_complete=False
+    )
+    assert cut is True and (bytes(range(256)) * 64).startswith(shown)

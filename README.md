@@ -291,6 +291,9 @@ formats and does not mean that the request body itself is compressed.
 Captured request and response bodies are stored without the former 5 MiB
 database limit. The original bytes are available from
 `GET /api/flows/{id}/body/request` and `/response`.
+History initially reads at most 256 KiB from each body and offers **Load next
+chunk** when more stored bytes are available. Raw body endpoints stream the
+original in bounded chunks rather than buffering it into one API response.
 Bytes already cut off by older versions cannot be recovered by upgrading.
 
 History has a **Modified** column. When Match & Replace, Intercept, or a plugin

@@ -197,11 +197,37 @@ def decode_body(content_type: str | None, body: bytes | None) -> str:
     return decode(body, charset_of(content_type, body))
 
 
+
+def complete_characters(body: bytes, charset: str = DEFAULT_CHARSET) -> bytes:
+    """Drop a multi-byte character cut in half at the end of a byte window.
+
+    A preview or chunk boundary lands mid-character in most non-ASCII text.
+    Left in place, the split character makes the whole window fail to decode
+    and fall back to Latin-1, and the next window starts with a fragment.
+    Bodies that are invalid in ``charset`` anyway are returned unchanged.
+    """
+    if not body:
+        return body
+    try:
+        decoder = codecs.getincrementaldecoder(charset)()
+        decoder.decode(body, final=False)
+        pending = len(decoder.getstate()[0])
+    except (LookupError, UnicodeDecodeError, ValueError):
+        return body
+    return body[:-pending] if 0 < pending < len(body) else body
+
+
+def charset_of_prefix(content_type: str | None, body: bytes | None) -> str:
+    """:func:`charset_of` for the first bytes of a longer body."""
+    return charset_of(content_type, complete_characters(body or b""))
+
 __all__ = [
     "DEFAULT_CHARSET",
     "SELECTABLE_CHARSETS",
     "charset_from_headers",
     "charset_of",
+    "charset_of_prefix",
+    "complete_characters",
     "decode",
     "decode_body",
     "encode",

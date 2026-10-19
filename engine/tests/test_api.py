@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app.api.server import create_app, redact_headers
+from app.api.server import FLOW_BODY_PREVIEW_BYTES, create_app, redact_headers
 from app.config import Settings
 from app.db.store import FlowRecord
 from app.lockdown import PROJECT_SETTING, SCOPE_EGRESS_SETTING
@@ -99,6 +99,144 @@ def test_flow_body_charsets_can_be_overridden_independently(client) -> None:
     assert data["response_body"] == response_text
     assert data["request_charset"] == "utf-16-le"
     assert data["response_charset"] == "shift_jis"
+
+
+def test_flow_detail_reads_bounded_body_chunks_and_keeps_total_size(client) -> None:
+    body = b"a" * FLOW_BODY_PREVIEW_BYTES + b"second chunk"
+    seed(
+        client,
+        "large-text",
+        response_headers=[("Content-Type", "text/plain; charset=utf-8")],
+        response_body=body,
+        response_size=len(body),
+    )
+
+    detail = client.get("/api/flows/large-text").json()
+    assert detail["response_body"] == "a" * FLOW_BODY_PREVIEW_BYTES
+    assert detail["response_body_captured_size"] == len(body)
+    assert detail["response_body_preview_size"] == FLOW_BODY_PREVIEW_BYTES
+    assert detail["response_body_truncated"] is True
+    assert detail["response_body_chunkable"] is True
+
+    chunk = client.get(
+        f"/api/flows/large-text/body/response/preview?offset={FLOW_BODY_PREVIEW_BYTES}"
+    ).json()
+    assert chunk == {
+        "text": "second chunk",
+        "charset": "utf-8",
+        "offset": FLOW_BODY_PREVIEW_BYTES,
+        "next_offset": len(body),
+        "total_bytes": len(body),
+        "truncated": False,
+    }
+
+
+def test_body_chunk_endpoint_distinguishes_no_response_from_an_empty_body(client) -> None:
+    seed(client, "no-response", response_headers=None, response_body=None)
+    seed(client, "empty-response", response_headers=[], response_body=b"")
+
+    assert client.get("/api/flows/no-response/body/response/preview").status_code == 404
+    empty = client.get("/api/flows/empty-response/body/response/preview")
+    assert empty.status_code == 200
+    assert empty.json()["text"] == ""
+
+
+def test_flow_preview_and_chunks_split_on_character_boundaries(client) -> None:
+    # 3-byte characters: the 256 KiB boundary falls inside one of them.
+    body = ("가" * 200_000).encode("utf-8")
+    seed(
+        client,
+        "korean",
+        response_headers=[("Content-Type", "text/plain; charset=utf-8")],
+        response_body=body,
+    )
+
+    detail = client.get("/api/flows/korean").json()
+    assert detail["response_charset"] == "utf-8"
+    preview_size = detail["response_body_preview_size"]
+    assert preview_size % 3 == 0 and preview_size <= FLOW_BODY_PREVIEW_BYTES
+    assert detail["response_body"] == "가" * (preview_size // 3)
+
+    text = detail["response_body"]
+    offset = preview_size
+    while True:
+        chunk = client.get(
+            f"/api/flows/korean/body/response/preview?offset={offset}"
+        ).json()
+        text += chunk["text"]
+        offset = chunk["next_offset"]
+        if not chunk["truncated"]:
+            break
+    assert text == "가" * 200_000
+
+
+def test_flow_preview_shows_prefix_of_large_compressed_body(client) -> None:
+    decoded = b'{"a":1}' * 100_000
+    seed(
+        client,
+        "gzip-large",
+        response_headers=[
+            ("Content-Type", "application/json"),
+            ("Content-Encoding", "gzip"),
+        ],
+        response_body=gzip.compress(decoded),
+    )
+
+    detail = client.get("/api/flows/gzip-large").json()
+    assert detail["response_body_decoded"] is True
+    assert detail["response_decode_error"] is None
+    assert detail["response_body"] == decoded[:FLOW_BODY_PREVIEW_BYTES].decode()
+    assert detail["response_body_truncated"] is True
+    assert detail["response_body_chunkable"] is False
+
+
+def test_flow_preview_reports_corrupt_compressed_body(client) -> None:
+    seed(
+        client,
+        "gzip-corrupt",
+        response_headers=[("Content-Type", "text/plain"), ("Content-Encoding", "gzip")],
+        response_body=b"\x1f\x8bnot gzip",
+    )
+
+    response = client.get("/api/flows/gzip-corrupt")
+    assert response.status_code == 200
+    assert response.json()["response_decode_error"]
+
+
+def test_replay_request_endpoint_does_not_use_full_flow_reader(client) -> None:
+    seed(
+        client,
+        "request-only",
+        request_body=b"x=1",
+        response_body=b"response that must not be selected",
+    )
+    with mock.patch.object(
+        client.app.state.store, "get", side_effect=AssertionError("full reader used")
+    ):
+        detail = client.get(
+            "/api/flows/request-only/replay-request?reveal=true"
+        ).json()
+    assert detail["request_body"] == "x=1"
+    assert detail["response_body"] is None
+    assert ["Cookie", "session=secret"] in detail["request_headers"]
+
+
+def test_replay_request_rejects_encoded_body_that_exceeds_editor_budget(client) -> None:
+    compressed = gzip.compress(b"x" * (17 * 1024 * 1024))
+    seed(
+        client,
+        "compressed-request",
+        request_headers=[
+            ("Content-Type", "text/plain"),
+            ("Content-Encoding", "gzip"),
+        ],
+        request_body=compressed,
+    )
+
+    response = client.get("/api/flows/compressed-request/replay-request")
+
+    assert response.status_code == 413
+    assert "cannot be opened safely" in response.json()["detail"]
 
 
 def test_flow_body_charset_rejects_non_text_codecs(client) -> None:

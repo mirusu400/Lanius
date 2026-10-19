@@ -22,6 +22,7 @@ from .. import charset
 from ..content_encoding import (
     auto_decompress_enabled,
     body_for_display,
+    body_prefix_for_display,
     encode_content,
 )
 from ..db.store import FlowRecord, FlowStore
@@ -217,31 +218,57 @@ def _content_type(headers: list[tuple[str, str]] | None) -> str | None:
 
 
 def render_raw(
-    record: FlowRecord, *, auto_decompress: bool = True
+    record: FlowRecord, *, auto_decompress: bool = True,
+    body_limit: int | None = None,
 ) -> dict[str, Any]:
     """Response view for the Replay UI."""
-    shown, body_encoding, decoded, decode_error = body_for_display(
-        record.response_headers,
-        record.response_body,
-        enabled=auto_decompress and not record.response_body_omitted,
+    raw = record.response_body
+    captured_size = len(raw or b"")
+    content_type = _content_type(record.response_headers)
+    enabled = auto_decompress and not record.response_body_omitted
+    if body_limit is None:
+        shown, body_encoding, decoded, decode_error = body_for_display(
+            record.response_headers, raw, enabled=enabled,
+        )
+        truncated = False
+    else:
+        # Bound the decoded text before JSON serialization.  A compressed
+        # body shows its first decoded bytes, as History does.
+        shown, body_encoding, decoded, decode_error, truncated = (
+            body_prefix_for_display(
+                record.response_headers,
+                None if raw is None else raw[:body_limit],
+                enabled=enabled,
+                limit=body_limit,
+                input_complete=captured_size <= body_limit,
+            )
+        )
+    if truncated and body_encoding and enabled and not decoded:
+        # A cut window of compressed bytes that cannot be decoded is noise.
+        shown = b""
+    body_charset = (
+        charset.charset_of_prefix(content_type, shown)
+        if truncated
+        else charset.charset_of(content_type, shown)
     )
+    if truncated and shown:
+        shown = charset.complete_characters(shown, body_charset)
     return {
         "id": record.id,
         "status_code": record.status_code,
         "reason": record.reason,
         "headers": record.response_headers or [],
-        "body": charset.decode_body(
-            _content_type(record.response_headers), shown
-        ),
+        "body": charset.decode(shown, body_charset),
         # What the bytes were read as, so the UI can say so and a reply can
         # be encoded the same way.
-        "charset": charset.charset_of(
-            _content_type(record.response_headers), shown
-        ),
+        "charset": body_charset,
         "content_encoding": body_encoding,
         "body_decoded": decoded,
         "decode_error": decode_error,
         "body_omitted": record.response_body_omitted,
+        "body_captured_size": captured_size,
+        "body_preview_size": len(shown or b""),
+        "body_truncated": truncated,
         "size": record.response_size,
         "duration_ms": record.duration_ms,
         "error": record.error,

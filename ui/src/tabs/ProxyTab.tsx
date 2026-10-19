@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   clearFlows,
   deleteFlows,
-  getFlow,
+  getReplayRequest,
   getInterceptState,
   getStatus,
   listFlowPage,
@@ -470,7 +470,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   const withDetail = useCallback(
     async (flow: FlowSummary, run: (detail: FlowDetail | null) => void) => {
       try {
-        run(await getFlow(flow.id, true));
+        run(await getReplayRequest(flow.id, true));
       } catch {
         run(null);
       }
