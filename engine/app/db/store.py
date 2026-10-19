@@ -481,12 +481,35 @@ class FlowStore:
 
     # --- writes -----------------------------------------------------------
     def upsert(self, record: FlowRecord) -> int:
+        return self.upsert_many((record,))[0]
+
+    def upsert_many(self, records: Sequence[FlowRecord]) -> list[int]:
+        """Persist multiple flow snapshots in one atomic transaction.
+
+        Capture normally sees a request and its response as two snapshots of
+        the same flow.  Committing every snapshot separately makes SQLite and
+        all of the derived-index triggers pay the transaction cost twice.  A
+        batch keeps input order (and therefore request-number order), while a
+        failure rolls the whole transaction back so callers can retry or
+        isolate the bad record without leaving a partial batch behind.
+        """
+        prepared = [self.prepare_capture_record(record) for record in records]
+        return self.upsert_prepared_many(prepared)
+
+    def upsert_prepared_many(self, records: Sequence[FlowRecord]) -> list[int]:
+        """Persist records which already have capture-storage policy applied."""
+        if not records:
+            return []
         with self._lock:
-            request_number = self._upsert_uncommitted(
-                self.prepare_capture_record(record)
-            )
-            self._conn.commit()
-            return request_number
+            try:
+                request_numbers = [
+                    self._upsert_uncommitted(record) for record in records
+                ]
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+            return request_numbers
 
     def prepare_capture_record(self, record: FlowRecord) -> FlowRecord:
         """Use cached policy in capture hooks; no SQLite work on their loop."""

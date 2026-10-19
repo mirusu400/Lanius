@@ -100,8 +100,14 @@ def test_open_tcp_stream_is_written_at_most_once_per_interval(monkeypatch) -> No
     monkeypatch.setattr(capture, "TCP_MESSAGE_FLUSH_SECONDS", 0.05)
     store = FlowStore()
     writes: list[str] = []
-    upsert = store.upsert
-    monkeypatch.setattr(store, "upsert", lambda record: (writes.append(record.comment), upsert(record))[1])
+    upsert_many = store.upsert_prepared_many
+
+    def track_batch(records):
+        records = list(records)
+        writes.extend(record.comment for record in records)
+        return upsert_many(records)
+
+    monkeypatch.setattr(store, "upsert_prepared_many", track_batch)
     addon = CaptureAddon(store, EventBroker())
     flow = make_tcp_flow()
 

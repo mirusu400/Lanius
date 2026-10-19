@@ -66,6 +66,38 @@ def test_migrate_is_idempotent(tmp_path) -> None:
     conn.close()
 
 
+def test_upsert_many_commits_a_batch_and_preserves_input_order() -> None:
+    store = FlowStore()
+    try:
+        numbers = store.upsert_many([
+            make_record("first"),
+            make_record("second"),
+            make_record("first", status_code=201),
+        ])
+
+        assert numbers == [1, 2, 1]
+        assert store.count() == 2
+        assert store.get("first").status_code == 201
+        assert store.get("second").request_number == 2
+    finally:
+        store.close()
+
+
+def test_upsert_many_rolls_back_the_entire_batch_on_failure() -> None:
+    store = FlowStore()
+    try:
+        with pytest.raises(ValueError, match="request_number"):
+            store.upsert_many([
+                make_record("would-have-been-first"),
+                make_record("invalid", request_number=True),
+            ])
+
+        assert store.count() == 0
+        assert store.upsert(make_record("after-rollback")) == 1
+    finally:
+        store.close()
+
+
 def test_history_backfills_old_projects_and_never_reads_body_pages(tmp_path) -> None:
     path = tmp_path / "v11.sqlite"
     original = FlowStore(path)
