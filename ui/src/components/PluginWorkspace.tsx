@@ -1,4 +1,4 @@
-import { Activity, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Activity, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
 import { listPlugins } from '../api/client';
 import { connectStream } from '../api/stream';
 import type { PluginInfo } from '../api/types';
@@ -48,17 +48,21 @@ export function PluginWorkspaceProvider({ children }: { children: ReactNode }) {
     key: `${plugin.name}/${view.id}`, plugin, view,
   }))), [plugins]);
   const tabs = useMemo(() => views.filter(({ view }) => view.placement === 'tab'), [views]);
+  const openPluginView = useEffectEvent((event: Event) => {
+    const next = (event as CustomEvent<Request>).detail;
+    const found = views.find(({ plugin, view }) => plugin.name === next.plugin && view.id === next.view);
+    if (!found || (next.mode === 'tab' && found.view.placement !== 'tab')) return;
+    setRequest(next);
+    if (next.mode === 'tab') select(found.key);
+  });
   useEffect(() => {
-    const open = (event: Event) => {
-      const next = (event as CustomEvent<Request>).detail;
-      const found = views.find(({ plugin, view }) => plugin.name === next.plugin && view.id === next.view);
-      if (!found || (next.mode === 'tab' && found.view.placement !== 'tab')) return;
-      setRequest(next);
-      if (next.mode === 'tab') select(found.key);
-    };
+    // Keep one listener for the provider's lifetime. Replacing it every time
+    // the plugin list renders leaves a gap where a just-rendered action can
+    // dispatch its view request before the new listener has been installed.
+    const open = (event: Event) => openPluginView(event);
     window.addEventListener('lanius.openPluginView', open);
     return () => window.removeEventListener('lanius.openPluginView', open);
-  }, [views, select]);
+  }, []);
   const selected = tabs.find(({ key }) => key === active);
   const dialog = request?.mode === 'dialog'
     ? views.find(({ plugin, view }) => plugin.name === request.plugin && view.id === request.view)

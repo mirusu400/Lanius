@@ -1,6 +1,7 @@
 import { act, cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useLayoutEffect, useRef } from 'react';
 import { renderWithI18n as render } from '../test-utils';
 import type { PluginInfo } from '../api/types';
 import { PluginWorkspaceProvider } from './PluginWorkspace';
@@ -13,6 +14,16 @@ const plugin = {
 function Harness() {
   const workspace = usePluginWorkspace();
   return <>{workspace.tabs.map(({ key, view }) => <button key={key} onClick={() => workspace.select(key)}>{view.title}</button>)}{workspace.content}</>;
+}
+function OpenDialogWhenViewAppears() {
+  const workspace = usePluginWorkspace();
+  const opened = useRef(false);
+  useLayoutEffect(() => {
+    if (opened.current || !workspace.tabs.some(({ view }) => view.id === 'flow')) return;
+    opened.current = true;
+    openPluginActionView('demo', { ui: { mode: 'dialog', view: 'flow' } });
+  }, [workspace.tabs]);
+  return <>{workspace.content}</>;
 }
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe('Plugin workspace', () => {
@@ -42,6 +53,11 @@ describe('Plugin workspace', () => {
     }, '*'));
     await userEvent.click(screen.getByRole('dialog').querySelector('button')!);
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+  it('does not miss a view request dispatched as the plugin list renders', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ items: [plugin], suspended: false }) })));
+    render(<PluginWorkspaceProvider><OpenDialogWhenViewAppears /></PluginWorkspaceProvider>);
+    expect(await screen.findByRole('dialog', { name: 'Flow' })).toBeTruthy();
   });
   it('hides views while execution is suspended', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ items: [plugin], suspended: true }) })));
