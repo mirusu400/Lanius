@@ -10,6 +10,7 @@ import {
 import type { PluginInfo, PluginUiView } from '../api/types';
 import { useT } from '../i18n';
 import { writeClipboardText } from '../clipboard';
+import { readPluginTheme, watchPluginTheme } from './pluginTheme';
 
 interface RpcRequest {
   type: 'lanius.request';
@@ -44,6 +45,18 @@ export function PluginFrame({
 }) {
   const t = useT();
   const frame = useRef<HTMLIFrameElement | null>(null);
+  const themeSubscribed = useRef(false);
+
+  useEffect(() => {
+    const send = (theme: ReturnType<typeof readPluginTheme>) => {
+      if (themeSubscribed.current) frame.current?.contentWindow?.postMessage({
+        type: 'lanius.theme.changed', theme,
+      }, '*');
+    };
+    // Activity pauses hidden-tab effects. Catch up when a retained frame resumes.
+    send(readPluginTheme());
+    return watchPluginTheme(send);
+  }, []);
 
   useEffect(() => {
     const permissions = new Set(plugin.package?.permissions ?? []);
@@ -54,7 +67,10 @@ export function PluginFrame({
       const params = request.params ?? {};
       try {
         let result: unknown;
-        if (request.method === 'context.get') {
+        if (request.method === 'theme.get') {
+          themeSubscribed.current = true;
+          result = readPluginTheme();
+        } else if (request.method === 'context.get') {
           result = context;
         } else if (request.method === 'ui.close') {
           onClose?.();

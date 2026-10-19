@@ -1,0 +1,203 @@
+/* Shared by the Lanius workspace and SDK plugin views. Palette and typography
+   values come from the host's resolved CSS variables, never a second palette. */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-ui);
+  line-height: 1.45;
+}
+
+/* Form controls do not inherit font by default, so the interface size
+   setting resized the text around them and left them at the browser's
+   own 13.3333px. Anything with a .mono class overrides this below. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+/* One rule for all of them.
+ *
+ * There were six different paddings across the app, chosen per area, so
+ * buttons sitting near each other were visibly different heights. The
+ * padding is in em so a button grows with the interface size instead of
+ * keeping a fixed height around larger text. */
+button {
+  padding: 0.3em 0.85em;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-alt);
+  color: var(--fg);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Inputs and dropdowns. Textareas are excluded: they are full-height
+   editors here, and the ones that want a frame set their own. */
+input:not([type='checkbox']):not([type='radio']),
+select {
+  padding: 0.3em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-mono);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* --- dialogs --- */
+.dialog {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  padding: 0;
+  box-shadow: 0 16px 48px var(--shadow);
+  max-width: 90vw;
+  max-height: 85vh;
+  overscroll-behavior: none;
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.dialog-head,
+.ui-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.dialog-head h3,
+.ui-toolbar h3 {
+  margin: 0;
+  font-size: 1em;
+  flex: 1;
+}
+
+.dialog-head button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.3em;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+.dialog-head button:hover {
+  color: var(--fg);
+}
+
+.dialog-body {
+  padding: 12px 14px;
+  overflow: auto;
+}
+
+.dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.dialog-foot .spacer {
+  flex: 1;
+}
+
+/* Named primitives for form-style plugin views and other small workspaces. */
+.ui-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  min-width: 0;
+  color: var(--muted);
+}
+
+textarea.ui-input {
+  padding: 0.3em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.ui-input { width: 100%; }
+
+.ui-input:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button.primary {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+button.danger { color: var(--danger); }
+button.danger:hover:not(:disabled) { border-color: var(--danger); }
+
+.ui-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  background: transparent;
+  border-color: transparent;
+}
+
+.ui-list-item.active {
+  background: var(--accent-wash);
+  border-color: var(--accent);
+}
+
+.ui-code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-mono);
+  line-height: 1.45;
+  color: var(--fg);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.75em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ui-accent { color: var(--accent); }
+.ui-error { color: var(--danger); }

@@ -142,9 +142,38 @@ parent.postMessage({
 ```
 
 The host replies with `lanius.response` and the same `id`. Supported methods
-are `context.get`, `ui.close`, `clipboard.write`, `contributions.list`, `actions.invoke`,
+are `theme.get`, `context.get`, `ui.close`, `clipboard.write`, `contributions.list`, `actions.invoke`,
 `settings.get`, and `settings.patch`. The last three require their matching manifest permission,
 and an iframe can invoke only an action owned by its own plugin.
+
+## Shared appearance (SDK 1.5)
+
+A sandboxed view requests `theme.get` through the existing message bridge.
+No permission is required: the result contains public UI appearance only:
+
+- `version: 1`, the resolved `theme` name, and `colorScheme`.
+- `css`: the same shared control/dialog/typography stylesheet imported by the
+  main application. There is no separate plugin palette or control implementation.
+- `variables`: an allowlisted mapping of resolved color roles and the interface
+  and monospace font families/sizes (`--bg`, `--fg`, `--accent`, `--font-ui`, etc.).
+
+Insert `css` into a `<style>` element before your own layout stylesheet. Apply
+`variables` with `document.documentElement.style.setProperty(name, value)` and
+set `document.documentElement.style.colorScheme`. Never concatenate host settings
+into HTML or a CSS string. After the request, the host sends
+`{type: "lanius.theme.changed", theme: <same result shape>}` whenever palette or
+font settings change, including system-theme changes. Check `event.source ===
+parent` for both bridge responses and appearance events. Apply these events
+without reloading the document so editor drafts and selected evidence survive.
+
+Shared primitives include standard `button`, `input`, `select` and body styles;
+`.mono`, `.muted`, `.spacer`, `.dialog`, `.dialog-head`, `.dialog-body`, and
+`.dialog-foot`, `.ui-toolbar`; and `.ui-form-field`, `.ui-input` (framed textarea/full-width
+input), `.ui-list-item`/`.active`, `.ui-code`, `.ui-accent` and `.ui-error`.
+Plugin styles should define layout and reference host role variables for layout
+separators. Avoid local palettes, font stacks, and fixed font sizes. Declare
+`"sdk": ">=1.5,<2"` for views that require this contract. The iframe keeps its
+opaque origin, asset integrity checks, and existing network restrictions.
 
 ## Bundled reference package
 

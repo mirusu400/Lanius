@@ -6,6 +6,8 @@ export default defineConfig({
   server: { fs: { allow: ['..'] } },
   test: {
     environment: 'jsdom',
+    // The plugin theme bridge sends this stylesheet as text, not a CSS stub.
+    css: { include: [/sharedUi\.css(?:\?|$)/] },
     globals: false,
     // The default forks pool intermittently times out spawning workers on
     // this suite, which silently reports far fewer tests than exist.

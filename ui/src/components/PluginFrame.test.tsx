@@ -1,3 +1,4 @@
+import { Activity } from 'react';
 import { cleanup, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -127,4 +128,90 @@ it('rejects clipboard writes without the declared permission', async () => {
     type: 'lanius.response', id: 'copy', error: 'permission denied: clipboard.write',
   }, '*'));
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it('shares host controls and synchronizes resolved palette and typography without reloading the frame', async () => {
+  const root = document.documentElement;
+  const previousStyle = root.getAttribute('style');
+  const previousTheme = root.getAttribute('data-theme');
+  root.dataset.theme = 'steel';
+  root.style.setProperty('--bg', '#1f1f1f');
+  root.style.setProperty('--font-size-ui', '15px');
+  root.style.setProperty('--private-host-value', 'not-a-theme-token');
+  root.style.colorScheme = 'dark';
+  try {
+    render(<PluginFrame plugin={plugin} view={view} />);
+    const iframe = screen.getByTitle('acme.demo: Main view') as HTMLIFrameElement;
+    const target = iframe.contentWindow!;
+    const reply = vi.spyOn(target, 'postMessage');
+    const source = iframe.src;
+    window.dispatchEvent(new MessageEvent('message', { source: target, data: {
+      type: 'lanius.request', plugin: plugin.name, id: 'theme', method: 'theme.get',
+    } }));
+    await waitFor(() => expect(reply).toHaveBeenCalled());
+    const theme = reply.mock.calls[0][0].result;
+    expect(theme.version).toBe(1);
+    expect(theme.theme).toBe('steel');
+    expect(theme.colorScheme).toBe('dark');
+    expect(theme.variables['--bg']).toBe('#1f1f1f');
+    expect(theme.variables['--font-size-ui']).toBe('15px');
+    expect(theme.variables).not.toHaveProperty('--private-host-value');
+    expect(theme.css).toContain('button');
+    expect(theme.css).toContain('var(--font-ui)');
+    expect(theme.css).toContain('var(--border)');
+
+    root.dataset.theme = 'light';
+    root.style.colorScheme = 'light';
+    root.style.setProperty('--bg', '#f6f7f9');
+    root.style.setProperty('--font-size-ui', '18px');
+    await waitFor(() => expect(reply).toHaveBeenCalledWith({
+      type: 'lanius.theme.changed', theme: expect.objectContaining({
+        theme: 'light', colorScheme: 'light', variables: expect.objectContaining({
+          '--bg': '#f6f7f9', '--font-size-ui': '18px',
+        }),
+      }),
+    }, '*'));
+    expect(iframe.src).toBe(source);
+    expect(iframe.getAttribute('sandbox')).not.toContain('allow-same-origin');
+    cleanup();
+    const calls = reply.mock.calls.length;
+    root.style.setProperty('--font-size-ui', '12px');
+    await Promise.resolve();
+    expect(reply.mock.calls.length).toBe(calls);
+  } finally {
+    if (previousStyle === null) root.removeAttribute('style'); else root.setAttribute('style', previousStyle);
+    if (previousTheme === null) root.removeAttribute('data-theme'); else root.setAttribute('data-theme', previousTheme);
+  }
+});
+
+it('catches up a retained hidden frame when it becomes visible again', async () => {
+  const root = document.documentElement;
+  const previous = root.getAttribute('style');
+  const previousTheme = root.getAttribute('data-theme');
+  try {
+    root.dataset.theme = 'dark';
+    const rendered = render(<Activity mode="visible"><PluginFrame plugin={plugin} view={view} /></Activity>);
+    const iframe = screen.getByTitle('acme.demo: Main view') as HTMLIFrameElement;
+    const target = iframe.contentWindow!;
+    const reply = vi.spyOn(target, 'postMessage');
+    window.dispatchEvent(new MessageEvent('message', { source: target, data: {
+      type: 'lanius.request', plugin: plugin.name, id: 'theme', method: 'theme.get',
+    } }));
+    await waitFor(() => expect(reply).toHaveBeenCalled());
+    rendered.rerender(<Activity mode="hidden"><PluginFrame plugin={plugin} view={view} /></Activity>);
+    reply.mockClear();
+    root.dataset.theme = 'light';
+    root.style.setProperty('--font-size-ui', '17px');
+    rendered.rerender(<Activity mode="visible"><PluginFrame plugin={plugin} view={view} /></Activity>);
+    await waitFor(() => expect(reply).toHaveBeenCalledWith({
+      type: 'lanius.theme.changed', theme: expect.objectContaining({
+        theme: 'light', variables: expect.objectContaining({ '--font-size-ui': '17px' }),
+      }),
+    }, '*'));
+    expect(screen.getByTitle('acme.demo: Main view')).toBe(iframe);
+  } finally {
+    cleanup();
+    if (previous === null) root.removeAttribute('style'); else root.setAttribute('style', previous);
+    if (previousTheme === null) root.removeAttribute('data-theme'); else root.setAttribute('data-theme', previousTheme);
+  }
 });

@@ -1,4 +1,4 @@
-# Plugin SDK 1.4
+# Plugin SDK 1.5
 
 `lanius_sdk` is the stable boundary between a plugin and the engine. Engine
 modules under `app` are internal and can change without an SDK compatibility
@@ -197,9 +197,16 @@ the unchanged control request. All such requests share the active job's limits
 and Replay/scope egress path. `await context.scanner.start(check_id, flow_id)`
 starts the plugin's own check from an explicit UI action and returns job status.
 
+## Shared view styles
+
+SDK 1.5 adds the `theme.get` UI bridge method and live `lanius.theme.changed`
+messages. Views receive the host's shared CSS and resolved palette/typography
+roles rather than copying application CSS or defining their own theme. See
+[Shared appearance](plugin-packages.md#shared-appearance-sdk-15) for the contract.
+
 ## Compatibility
 
-`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.4`.
+`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.5`.
 Minor additions remain backward compatible. A future breaking API uses a new
 major version and package manifests declare which major versions they accept.
 

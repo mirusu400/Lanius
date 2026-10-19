@@ -96,7 +96,7 @@ async def test_sdk_plugin_registers_and_invokes_contributions(sdk_manager) -> No
 
     assert plugin.loaded is True
     assert plugin.objects == []
-    assert plugin.as_dict()["sdk_api_version"] == "1.4"
+    assert plugin.as_dict()["sdk_api_version"] == "1.5"
     assert plugin.as_dict()["contributions"] == {
         "actions": 1,
         "codecs": 1,

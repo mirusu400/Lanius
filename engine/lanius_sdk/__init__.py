@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-API_VERSION = "1.4"
+API_VERSION = "1.5"
 
 ActionLocation = Literal[
     "global", "history", "flow", "request", "response", "replay", "fuzzer", "plugin"

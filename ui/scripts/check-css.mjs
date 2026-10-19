@@ -8,7 +8,9 @@
 
 import { readFileSync } from 'node:fs';
 
-const css = readFileSync(new URL('../src/App.css', import.meta.url), 'utf8');
+const css = [
+  '../src/sharedUi.css', '../src/App.css',
+].map((path) => readFileSync(new URL(path, import.meta.url), 'utf8')).join('\n');
 const problems = [];
 
 // Form controls do not inherit font by default, so without this the
