@@ -126,6 +126,14 @@ export function DashboardTab({
               ? t('dash.proxyRunning', { address })
               : t('dash.proxyStopped')}
           </span>
+          {(data.proxy.listener_count ?? 1) > 1 && (
+            <span className="pill">
+              {t('dash.listenersActive', {
+                active: data.proxy.active_listeners ?? 0,
+                total: data.proxy.listener_count ?? 1,
+              })}
+            </span>
+          )}
           <span className={data.intercept_enabled ? 'pill warn' : 'pill'}>
             {data.intercept_enabled ? t('dash.interceptOn') : t('dash.interceptOff')}
           </span>

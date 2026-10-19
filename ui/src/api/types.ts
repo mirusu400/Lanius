@@ -204,7 +204,14 @@ export interface WebSocketState {
 
 export interface EngineStatus {
   version: string;
-  proxy: { running: boolean; host: string; port: number; error?: string | null };
+  proxy: {
+    running: boolean;
+    host: string;
+    port: number;
+    error?: string | null;
+    listener_count?: number;
+    active_listeners?: number;
+  };
   flows: number;
   subscribers: number;
   db_path: string;
@@ -692,7 +699,13 @@ export interface Dashboard {
   status_groups: Record<string, number>;
   methods: { method: string; count: number }[];
   top_hosts: DashboardHost[];
-  proxy: { running: boolean; host: string; port: number };
+  proxy: {
+    running: boolean;
+    host: string;
+    port: number;
+    listener_count?: number;
+    active_listeners?: number;
+  };
   intercept_enabled: boolean;
   paused: number;
   version: string;
@@ -748,7 +761,8 @@ export interface BindAddress {
   label: string;
 }
 
-export interface ListenerState {
+export interface ProxyListenerState {
+  id: string;
   host: string;
   port: number;
   running: boolean;
@@ -756,6 +770,16 @@ export interface ListenerState {
   error: string | null;
   /** True when bound beyond loopback, so other machines can reach it. */
   exposed: boolean;
+  primary: boolean;
+}
+
+export interface ListenerState extends ProxyListenerState {
+  addresses: BindAddress[];
+}
+
+export interface ListenersState {
+  listeners: ProxyListenerState[];
+  primary_id: string;
   addresses: BindAddress[];
 }
 

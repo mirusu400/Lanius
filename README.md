@@ -178,14 +178,17 @@ database, but importing a project never adds them.
 ### Where the proxy listens
 
 Port 8080 is a popular default and another tool may already have it. Open
-**Settings > Proxy listener** and pick a free port. If the port was taken at
-launch, Lanius says so there and keeps running so you can change it; the rest
-of the app works meanwhile.
+**Settings > Proxy listener** to edit the primary endpoint or add more
+listeners. Multiple tools and devices can connect on different addresses or
+ports while sharing the same project history, CA, upstream route, scope, and
+Lockdown policy. The primary listener is used by the built-in browser and
+setup instructions. If one saved listener cannot bind at launch, the others
+remain available and its row shows the error.
 
-The same section sets the bind address. By default the proxy accepts
+Each listener has its own bind address. By default the proxy accepts
 connections from this machine only. Choose **All interfaces** or a specific
 address to let a phone or a virtual machine point at it, then set their proxy
-to this machine's address and the port shown. Anyone who can reach that
+to that address and port. Anyone who can reach that
 address can send traffic through your proxy, so prefer a specific address over
 all interfaces on a network you do not control.
 

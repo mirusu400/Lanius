@@ -1039,6 +1039,49 @@ export function getListener(): Promise<import('./types').ListenerState> {
   return request('/api/listener');
 }
 
+export function getListeners(): Promise<import('./types').ListenersState> {
+  return request('/api/listeners');
+}
+
+export function addListener(
+  host: string,
+  port: number,
+): Promise<import('./types').ListenersState> {
+  return request('/api/listeners', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ host, port }),
+  });
+}
+
+export function updateListener(
+  id: string,
+  host: string,
+  port: number,
+): Promise<import('./types').ListenersState> {
+  return request(`/api/listeners/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ host, port }),
+  });
+}
+
+export function deleteListener(
+  id: string,
+): Promise<import('./types').ListenersState> {
+  return request(`/api/listeners/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export function setPrimaryListener(
+  id: string,
+): Promise<import('./types').ListenersState> {
+  return request(`/api/listeners/${encodeURIComponent(id)}/primary`, {
+    method: 'POST',
+  });
+}
+
 export function getUpstream(): Promise<import('./types').UpstreamState> {
   return request('/api/upstream');
 }

@@ -816,6 +816,24 @@ def test_export_describes_itself(client) -> None:
     assert "scope" in data and "workspace" in data
 
 
+def test_listener_collection_survives_project_export_and_import(client) -> None:
+    added = client.post(
+        "/api/listeners", json={"host": "127.0.0.1", "port": free_port()}
+    ).json()
+    second_id = added["listeners"][1]["id"]
+    client.post(f"/api/listeners/{second_id}/primary")
+    exported = client.get("/api/project/export").json()
+
+    assert client.delete(f"/api/listeners/{second_id}").status_code == 200
+    assert len(client.get("/api/listeners").json()["listeners"]) == 1
+    assert client.post("/api/project/import", json=exported).status_code == 200
+
+    restored = client.get("/api/listeners").json()
+    assert len(restored["listeners"]) == 2
+    assert restored["primary_id"] == second_id
+    assert all(listener["running"] for listener in restored["listeners"])
+
+
 def test_local_source_ip_survives_project_export_and_import(client) -> None:
     seed(client, "source-audit", local_source_ip="192.0.2.12")
     exported = client.get("/api/project/export").json()
@@ -1052,6 +1070,56 @@ def test_listener_rejects_nonsense(client) -> None:
     assert client.post("/api/listener", json={"port": "abc"}).status_code == 422
     assert client.post("/api/listener", json={"port": 0}).status_code == 409
     assert client.post("/api/listener", json={"host": ""}).status_code == 409
+
+
+def test_multiple_listener_crud_and_primary_selection(client) -> None:
+    initial = client.get("/api/listeners").json()
+    assert len(initial["listeners"]) == 1
+    original_id = initial["primary_id"]
+
+    second_port = free_port()
+    added = client.post(
+        "/api/listeners", json={"host": "127.0.0.1", "port": second_port}
+    )
+    assert added.status_code == 200
+    second = added.json()["listeners"][1]
+    assert second["port"] == second_port
+    assert second["running"] is True
+
+    moved_port = free_port()
+    moved = client.patch(
+        f"/api/listeners/{second['id']}", json={"port": moved_port}
+    )
+    assert moved.status_code == 200
+    assert moved.json()["listeners"][1]["port"] == moved_port
+
+    primary = client.post(f"/api/listeners/{second['id']}/primary")
+    assert primary.status_code == 200
+    assert primary.json()["primary_id"] == second["id"]
+    assert client.get("/api/listener").json()["port"] == moved_port
+    assert client.get("/api/status").json()["proxy"]["listener_count"] == 2
+
+    removed = client.delete(f"/api/listeners/{original_id}")
+    assert removed.status_code == 200
+    assert len(removed.json()["listeners"]) == 1
+    assert client.delete(f"/api/listeners/{second['id']}").status_code == 409
+
+
+def test_busy_add_does_not_change_listener_collection(client) -> None:
+    before = client.get("/api/listeners").json()
+    blocker = socket.socket()
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    try:
+        response = client.post(
+            "/api/listeners",
+            json={"host": "127.0.0.1", "port": blocker.getsockname()[1]},
+        )
+        assert response.status_code == 409
+        after = client.get("/api/listeners").json()
+        assert after["listeners"] == before["listeners"]
+    finally:
+        blocker.close()
 
 
 def test_upstream_route_can_be_set_and_cleared(client) -> None:

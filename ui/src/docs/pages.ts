@@ -206,7 +206,7 @@ const en: DocPage[] = [
     id: 'listener',
     title: 'Proxy listener',
     summary:
-      'Choose the port, and let other devices reach the proxy.',
+      'Run the proxy on multiple addresses and ports.',
     sections: [
       {
         heading: 'Sending through another proxy',
@@ -239,15 +239,15 @@ const en: DocPage[] = [
         ],
       },
       {
-        heading: 'Changing the port',
+        heading: 'Adding and choosing listeners',
         blocks: [
           {
             kind: 'text',
-            body: 'Port 8080 is a popular default, and another tool may already hold it. Open Settings, find Proxy listener, type a free port and apply. The change takes effect immediately and is remembered for next time.',
+            body: 'Open Settings > Proxy listener to add, edit, or remove endpoints. A local browser, phone, virtual machine, and testing tool can each use a different address or port while their traffic lands in the same project history.',
           },
           {
             kind: 'text',
-            body: 'If the port was already taken when Lanius started, the same section says so and the rest of the app keeps working, so you can pick another port without restarting.',
+            body: 'The Primary listener is used by the built-in browser and setup instructions. All listeners share the CA, upstream route, TLS settings, scope, and Lockdown policy. If one saved port is taken at startup, the other listeners remain available and the failed row shows its error.',
           },
         ],
       },
@@ -677,7 +677,7 @@ const ko: DocPage[] = [
   {
     id: 'listener',
     title: '프록시 리스너',
-    summary: '포트를 고르고, 다른 기기에서도 접속할 수 있게 합니다.',
+    summary: '여러 주소와 포트에서 프록시를 실행합니다.',
     sections: [
       {
         heading: '다른 프록시를 통해 보내기',
@@ -710,15 +710,15 @@ const ko: DocPage[] = [
         ],
       },
       {
-        heading: '포트 바꾸기',
+        heading: '리스너 추가 및 대표 지정',
         blocks: [
           {
             kind: 'text',
-            body: '8080은 흔한 기본값이라 다른 도구가 이미 쓰고 있을 수 있습니다. 설정에서 프록시 리스너를 찾아 비어 있는 포트를 입력하고 적용하세요. 바로 반영되고 다음 실행에도 유지됩니다.',
+            body: 'Settings > 프록시 리스너에서 엔드포인트를 추가·편집·삭제할 수 있습니다. 로컬 브라우저, 휴대폰, 가상 머신, 테스트 도구가 서로 다른 주소나 포트를 사용해도 트래픽은 같은 프로젝트 히스토리에 모입니다.',
           },
           {
             kind: 'text',
-            body: '시작할 때 이미 포트가 사용 중이었다면 같은 자리에 그 사실이 표시되고, 나머지 기능은 계속 동작합니다. 재시작 없이 다른 포트를 고르면 됩니다.',
+            body: '대표 리스너는 내장 브라우저와 설정 안내에 사용됩니다. 모든 리스너는 CA, 상위 프록시 경로, TLS 설정, 스코프와 Lockdown 정책을 공유합니다. 시작할 때 리스너 하나의 포트가 사용 중이어도 나머지는 계속 동작하며 실패한 행에 오류가 표시됩니다.',
           },
         ],
       },

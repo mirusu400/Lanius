@@ -620,14 +620,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/status")
     async def status() -> dict[str, Any]:
+        primary_listener = engine.listener_state()
+        listener_states = engine.listeners_state()["listeners"]
         return {
             "version": __version__,
             "proxy": {
-                "running": engine.running,
+                "running": primary_listener["running"],
                 "host": settings.proxy_host,
                 "port": settings.proxy_port,
                 # Why it is not running, when that is known.
-                "error": engine.start_error,
+                "error": primary_listener["error"],
+                "listener_count": len(listener_states),
+                "active_listeners": sum(
+                    1 for listener in listener_states if listener["running"]
+                ),
             },
             "flows": await asyncio.to_thread(store.count),
             "subscribers": broker.subscriber_count,
@@ -649,6 +655,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict[str, Any]:
         """Everything the Dashboard tab needs, in one round trip."""
         data = await asyncio.to_thread(store.dashboard, top, window)
+        primary_listener = engine.listener_state()
+        listener_states = engine.listeners_state()["listeners"]
         return {
             **data,
             "fuzzer_runs": [
@@ -656,9 +664,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if run.status in ("pending", "running")
             ],
             "proxy": {
-                "running": engine.running,
+                "running": primary_listener["running"],
                 "host": settings.proxy_host,
                 "port": settings.proxy_port,
+                "listener_count": len(listener_states),
+                "active_listeners": sum(
+                    1 for listener in listener_states if listener["running"]
+                ),
             },
             "intercept_enabled": engine.intercept.rules.enabled,
             "paused": len(engine.intercept.paused),
@@ -763,6 +775,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lockdown.set_project(was_locked or imported["project_enabled"])
         if was_scope_egress:
             lockdown.set_scope_egress(True)
+        engine.reload_route_settings()
         scope = await asyncio.to_thread(engine.scope.reload)
         engine.match_replace.reload()
         engine.scanner.reload()
@@ -865,6 +878,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             async with project_import_lock:
                 was_locked = lockdown.project_enabled
                 was_scope_egress = lockdown.scope_egress_effective
+                was_running = engine.running
                 # Trust decisions are never imported: a shared project must not
                 # add a CA or switch off verification for a host on its own.
                 kept = {
@@ -872,19 +886,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     for key in (TRUSTED_CA_SETTING, TLS_EXCEPTIONS_SETTING)
                 }
                 await engine.fuzzer.stop_all()
+                await engine.replay.cancel_active()
                 await egress_ip.stop()
+                await engine.stop()
+                imported = False
                 try:
                     counts = await asyncio.to_thread(store.import_project, payload)
+                    imported = True
                     engine.fuzzer.reload()
                     for key, value in kept.items():
                         if value is None:
                             store.delete_setting(key)
                         else:
                             store.set_setting(key, value)
-                    await apply_imported_project(was_locked, was_scope_egress)
+                    warnings: list[str] = []
+                    can_resume = False
+                    try:
+                        await apply_imported_project(was_locked, was_scope_egress)
+                        can_resume = True
+                    except Exception as exc:
+                        logger.exception("could not apply all imported project settings")
+                        warnings.append(
+                            f"Project imported, but the proxy remains stopped: {exc}"
+                        )
+                    if was_running and can_resume:
+                        try:
+                            await engine.start()
+                        except Exception as exc:
+                            warnings.append(
+                                f"Project imported, but the proxy could not restart: {exc}"
+                            )
                     broker.publish("project.imported", counts)
-                    return {"ok": True, **counts}
+                    return {"ok": True, **counts, "warnings": warnings}
                 finally:
+                    # An invalid upload leaves the old in-memory route intact.
+                    # Bring it back because we stopped it before the database
+                    # transaction began. A committed import reports restart
+                    # failures above instead of silently reverting its route.
+                    if not imported and was_running and not engine.running:
+                        with contextlib.suppress(Exception):
+                            await engine.start()
                     await egress_ip.reload()
                     await egress_ip.start()
         except (ValueError, sqlite3.DatabaseError) as exc:
@@ -1185,6 +1226,69 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/listener")
     async def listener() -> dict[str, Any]:
         return engine.listener_state()
+
+    @app.get("/api/listeners")
+    async def listeners() -> dict[str, Any]:
+        return engine.listeners_state()
+
+    def listener_port(payload: dict[str, Any], *, required: bool) -> int | None:
+        if "port" not in payload:
+            if required:
+                raise HTTPException(status_code=422, detail="port is required")
+            return None
+        port = payload["port"]
+        if isinstance(port, str) and port.isdigit():
+            port = int(port)
+        if not isinstance(port, int) or isinstance(port, bool):
+            raise HTTPException(status_code=422, detail="port must be a number")
+        return port
+
+    @app.post("/api/listeners")
+    async def add_listener(payload: dict[str, Any]) -> dict[str, Any]:
+        host = payload.get("host")
+        if not isinstance(host, str):
+            raise HTTPException(status_code=422, detail="host must be a string")
+        port = listener_port(payload, required=True)
+        assert port is not None
+        try:
+            return await engine.add_listener(host, port)
+        except ProxyStartError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.patch("/api/listeners/{listener_id}")
+    async def update_listener(
+        listener_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        if "host" not in payload and "port" not in payload:
+            raise HTTPException(status_code=422, detail="host or port is required")
+        host = payload.get("host")
+        if "host" in payload and not isinstance(host, str):
+            raise HTTPException(status_code=422, detail="host must be a string")
+        port = listener_port(payload, required=False)
+        try:
+            return await engine.update_listener(listener_id, host=host, port=port)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="proxy listener not found") from exc
+        except ProxyStartError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.delete("/api/listeners/{listener_id}")
+    async def delete_listener(listener_id: str) -> dict[str, Any]:
+        try:
+            return await engine.delete_listener(listener_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="proxy listener not found") from exc
+        except ProxyStartError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/listeners/{listener_id}/primary")
+    async def set_primary_listener(listener_id: str) -> dict[str, Any]:
+        try:
+            return await engine.set_primary_listener(listener_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="proxy listener not found") from exc
+        except ProxyStartError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.get("/api/upstream")
     async def upstream() -> dict[str, Any]:

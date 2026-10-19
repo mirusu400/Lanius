@@ -12,8 +12,10 @@ import socket
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from mitmproxy import options
 from mitmproxy.proxy.mode_specs import ProxyMode
@@ -35,7 +37,6 @@ from .addons.scope import ScopeManager
 from .addons.scope_egress import ScopeEgressEarlyAddon, ScopeEgressGuardAddon
 from .addons.system_trust import MacOSSystemTrustAddon
 from .config import Settings
-from .doctor import probe_listen
 from .lockdown import LockdownPolicy
 from .db.store import FlowStore
 from .events import EventBroker
@@ -198,6 +199,15 @@ class ProxyStartError(RuntimeError):
     """The proxy could not bind its listen address."""
 
 
+@dataclass(frozen=True, slots=True)
+class ProxyListenerConfig:
+    """One browser-facing proxy socket owned by this project."""
+
+    id: str
+    host: str
+    port: int
+
+
 def normalize_upstream_url(value: str) -> str:
     """Accept an explicit HTTP, HTTPS or SOCKS5 proxy URL."""
     try:
@@ -311,6 +321,7 @@ class ProxyEngine:
         # Why the proxy is not listening, when it failed to start. The API
         # stays up so the user can fix the listener from the app itself.
         self.start_error: str | None = None
+        self._listener_lock = asyncio.Lock()
         # A saved listener overrides the defaults and the environment, since
         # it is the one a user chose deliberately.
         self._apply_saved_listener()
@@ -327,19 +338,144 @@ class ProxyEngine:
 
     LISTEN_HOST_SETTING = "listen_host"
     LISTEN_PORT_SETTING = "listen_port"
+    LISTENERS_SETTING = "proxy_listeners"
     UPSTREAM_SETTING = "upstream_proxy_url"
     UPSTREAM_HOPS_SETTING = "upstream_proxy_hops"
 
     def _apply_saved_listener(self) -> None:
-        host = self.store.get_setting(self.LISTEN_HOST_SETTING)
-        if host:
-            self.settings.proxy_host = host
-        port = self.store.get_setting(self.LISTEN_PORT_SETTING)
-        if port:
+        """Load the listener collection, migrating the old pair of settings."""
+        saved = self.store.get_setting(self.LISTENERS_SETTING)
+        listeners: list[ProxyListenerConfig] | None = None
+        primary_id: str | None = None
+        if saved:
             try:
-                self.settings.proxy_port = int(port)
-            except ValueError:
-                logger.warning("ignoring saved listener port %r", port)
+                payload = json.loads(saved)
+                if not isinstance(payload, dict) or payload.get("version") != 1:
+                    raise ValueError("unsupported listener settings version")
+                raw_listeners = payload.get("listeners")
+                if not isinstance(raw_listeners, list):
+                    raise ValueError("listeners must be a list")
+                listeners = []
+                for raw in raw_listeners:
+                    if not isinstance(raw, dict):
+                        raise ValueError("listener must be an object")
+                    listener_id = raw.get("id")
+                    host = raw.get("host")
+                    port = raw.get("port")
+                    if (
+                        not isinstance(listener_id, str)
+                        or not isinstance(host, str)
+                        or not isinstance(port, int)
+                        or isinstance(port, bool)
+                    ):
+                        raise ValueError("listener id, host, or port has the wrong type")
+                    listeners.append(ProxyListenerConfig(listener_id, host, port))
+                primary_id = payload.get("primary_id")
+                if not isinstance(primary_id, str):
+                    raise ValueError("primary listener is missing")
+                self._validate_listener_set(listeners, primary_id)
+            except (ValueError, TypeError, ProxyStartError, json.JSONDecodeError) as exc:
+                logger.warning("ignoring saved proxy listeners: %s", exc)
+                listeners = None
+                primary_id = None
+
+        if listeners is None:
+            host = self.store.get_setting(self.LISTEN_HOST_SETTING)
+            if host:
+                self.settings.proxy_host = host
+            port = self.store.get_setting(self.LISTEN_PORT_SETTING)
+            if port:
+                try:
+                    self.settings.proxy_port = int(port)
+                except ValueError:
+                    logger.warning("ignoring saved listener port %r", port)
+            listeners = [
+                ProxyListenerConfig("default", self.settings.proxy_host, self.settings.proxy_port)
+            ]
+            primary_id = "default"
+
+        assert primary_id is not None
+        self.listeners = listeners
+        self.primary_listener_id = primary_id
+        self._sync_primary_settings()
+        if not saved:
+            self._persist_listeners()
+
+    def _primary_listener(self) -> ProxyListenerConfig:
+        return next(
+            listener
+            for listener in self.listeners
+            if listener.id == self.primary_listener_id
+        )
+
+    def _sync_primary_settings(self) -> None:
+        primary = self._primary_listener()
+        # Keep the old Settings fields meaningful for browser launch, status,
+        # shell integration, and third-party callers during the API transition.
+        self.settings.proxy_host = primary.host
+        self.settings.proxy_port = primary.port
+
+    def _persist_listeners(self) -> None:
+        payload = {
+            "version": 1,
+            "primary_id": self.primary_listener_id,
+            "listeners": [
+                {"id": listener.id, "host": listener.host, "port": listener.port}
+                for listener in self.listeners
+            ],
+        }
+        primary = self._primary_listener()
+        self.store.batch_settings({
+            self.LISTENERS_SETTING: json.dumps(payload, separators=(",", ":")),
+            # Mirror the primary for older Lanius builds and project exports.
+            self.LISTEN_HOST_SETTING: primary.host,
+            self.LISTEN_PORT_SETTING: str(primary.port),
+        })
+
+    @staticmethod
+    def _listeners_overlap(
+        left: ProxyListenerConfig, right: ProxyListenerConfig
+    ) -> bool:
+        if left.port != right.port:
+            return False
+        if left.host == right.host:
+            return True
+        wildcards = {"", "0.0.0.0", "::"}
+        return left.host in wildcards or right.host in wildcards
+
+    def _validate_listener_set(
+        self,
+        listeners: list[ProxyListenerConfig],
+        primary_id: str,
+    ) -> None:
+        if not listeners:
+            raise ProxyStartError("at least one proxy listener is required")
+        if len(listeners) > 16:
+            raise ProxyStartError("a project can contain at most 16 proxy listeners")
+        ids: set[str] = set()
+        for listener in listeners:
+            if not listener.id or listener.id in ids:
+                raise ProxyStartError("proxy listener ids must be unique")
+            ids.add(listener.id)
+            if not listener.host.strip():
+                raise ProxyStartError("bind address must not be empty")
+            if not 1 <= listener.port <= 65535:
+                raise ProxyStartError(
+                    f"port {listener.port} is out of range (1-65535)"
+                )
+            if any(
+                _upstream_loops_back(hop, listener.host, listener.port)
+                for hop in getattr(self, "upstream_hops", [])
+            ):
+                raise ProxyStartError("upstream proxy points back to a listener")
+        if primary_id not in ids:
+            raise ProxyStartError("primary proxy listener does not exist")
+        for index, listener in enumerate(listeners):
+            for other in listeners[index + 1:]:
+                if self._listeners_overlap(listener, other):
+                    raise ProxyStartError(
+                        f"proxy listeners overlap on port {listener.port}"
+                    )
 
     def _apply_saved_upstream(self) -> None:
         saved = self.store.get_setting(self.UPSTREAM_HOPS_SETTING)
@@ -352,11 +488,25 @@ class ProxyEngine:
                 if not isinstance(hops, list) or not all(isinstance(hop, str) for hop in hops):
                     raise ValueError("invalid saved upstream chain")
                 hops = [normalize_upstream_url(hop) for hop in hops]
-                if any(_upstream_loops_back(hop, self.settings.proxy_host, self.settings.proxy_port) for hop in hops):
+                if any(
+                    _upstream_loops_back(hop, listener.host, listener.port)
+                    for hop in hops
+                    for listener in self.listeners
+                ):
                     raise ValueError("upstream proxy points back to the listener")
                 self.upstream_hops = hops
             except (ValueError, TypeError) as exc:
                 logger.warning("ignoring saved upstream proxy: %s", exc)
+
+    def reload_route_settings(self) -> None:
+        """Reload project-owned listeners and upstream route after an import.
+
+        The caller stops the engine before replacing its database, so no live
+        socket can observe the settings half-applied.
+        """
+        self._apply_saved_listener()
+        self.upstream_hops = []
+        self._apply_saved_upstream()
 
     def _needs_upstream_bridge(self) -> bool:
         return len(self.upstream_hops) > 1 or (
@@ -368,7 +518,7 @@ class ProxyEngine:
         return self._task is not None and not self._task.done()
 
     def _modes(self, extra: list[str] | None = None) -> list[str]:
-        """The mode list: the HTTP proxy, plus anything configured.
+        """The browser-facing proxy sockets, plus anything configured.
 
         ``extra`` overrides the saved local-capture setting, so a caller
         switching it off is not handed the old value back.
@@ -376,8 +526,7 @@ class ProxyEngine:
         upstream = self._upstream_bridge.url if self._upstream_bridge else (
             self.upstream_hops[0] if self.upstream_hops else None
         )
-        listener = f"upstream:{upstream}@{self.settings.proxy_port}" if upstream else f"regular@{self.settings.proxy_port}"
-        modes = [listener]
+        modes = [self._listener_mode(listener, upstream) for listener in self.listeners]
         modes.extend(self.settings.extra_modes)
         if extra is None:
             if (spec := self.local_capture_spec()) is not None:
@@ -385,6 +534,18 @@ class ProxyEngine:
         else:
             modes.extend(extra)
         return modes
+
+    def _listener_mode(
+        self,
+        listener: ProxyListenerConfig,
+        upstream: str | None = None,
+    ) -> str:
+        if upstream is None:
+            upstream = self._upstream_bridge.url if self._upstream_bridge else (
+                self.upstream_hops[0] if self.upstream_hops else None
+            )
+        prefix = f"upstream:{upstream}" if upstream else "regular"
+        return f"{prefix}@{listener.host}:{listener.port}"
 
     def _build_master(self) -> DumpMaster:
         self.scope_egress.reset_connections()
@@ -477,11 +638,6 @@ class ProxyEngine:
         if self.running:
             return
         try:
-            self._check_port_available()
-        except ProxyStartError as exc:
-            self.start_error = str(exc)
-            raise
-        try:
             if self._needs_upstream_bridge():
                 bridge = UpstreamBridge(self.upstream_hops)
                 try:
@@ -499,28 +655,55 @@ class ProxyEngine:
             raise
         self.broker.publish(
             "engine.started",
-            {"host": self.settings.proxy_host, "port": self.settings.proxy_port},
+            {
+                "host": self.settings.proxy_host,
+                "port": self.settings.proxy_port,
+                "listeners": len(self.listeners),
+            },
         )
         logger.info(
-            "proxy listening on %s:%s",
+            "proxy listening on %s endpoint(s); primary is %s:%s",
+            len([state for state in self._listener_states() if state["running"]]),
             self.settings.proxy_host,
             self.settings.proxy_port,
         )
         self.start_error = None
         self._report_mode_failures()
 
-    def listener_state(self) -> dict[str, Any]:
-        """Where the proxy listens, and whether it managed to."""
+    def _listener_states(self) -> list[dict[str, Any]]:
+        modes = {str(mode["spec"]): mode for mode in self.mode_status()}
+        states: list[dict[str, Any]] = []
+        for listener in self.listeners:
+            mode = modes.get(self._listener_mode(listener))
+            running = bool(mode and mode["running"] and mode["listening"])
+            error = str(mode["error"]) if mode and mode["error"] else None
+            if error is None and not running and listener.id == self.primary_listener_id:
+                error = self.start_error
+            states.append({
+                "id": listener.id,
+                "host": listener.host,
+                "port": listener.port,
+                "running": running,
+                "error": error,
+                "exposed": not _is_loopback(listener.host),
+                "primary": listener.id == self.primary_listener_id,
+            })
+        return states
+
+    def listeners_state(self) -> dict[str, Any]:
+        """All configured browser-facing proxy sockets and their state."""
         return {
-            "host": self.settings.proxy_host,
-            "port": self.settings.proxy_port,
-            "running": self.running,
-            "error": self.start_error,
-            # Anything other than a loopback address is reachable from the
-            # network, which is what makes a phone or a VM able to use it.
-            "exposed": not _is_loopback(self.settings.proxy_host),
+            "listeners": self._listener_states(),
+            "primary_id": self.primary_listener_id,
             "addresses": _bindable_addresses(),
         }
+
+    def listener_state(self) -> dict[str, Any]:
+        """The primary listener, preserving the original API contract."""
+        primary = next(
+            state for state in self._listener_states() if state["primary"]
+        )
+        return {**primary, "addresses": _bindable_addresses()}
 
     def upstream_state(self) -> dict[str, Any]:
         return {
@@ -544,7 +727,11 @@ class ProxyEngine:
         wanted = [normalize_upstream_url(hop) for hop in hops] if hops is not None else []
         if len(wanted) > 16:
             raise ValueError("an upstream chain can contain at most 16 hops")
-        if any(_upstream_loops_back(hop, self.settings.proxy_host, self.settings.proxy_port) for hop in wanted):
+        if any(
+            _upstream_loops_back(hop, listener.host, listener.port)
+            for hop in wanted
+            for listener in self.listeners
+        ):
             raise ValueError("upstream proxy points back to the listener")
         if wanted == self.upstream_hops:
             return self.upstream_state()
@@ -574,44 +761,111 @@ class ProxyEngine:
         return state
 
     async def set_listener(self, host: str, port: int) -> dict[str, Any]:
-        """Move the proxy to a new address, keeping the old one on failure.
+        """Move the primary listener, preserving the original API."""
+        await self.update_listener(self.primary_listener_id, host=host, port=port)
+        return self.listener_state()
 
-        The engine is stopped first, because a port cannot be tested while
-        the current listener still holds it. If the new address turns out to
-        be unusable, the previous one is restored and restarted, so a typo
-        cannot leave the user without a proxy.
-        """
-        host = host.strip()
-        if not host:
-            raise ProxyStartError("bind address must not be empty")
-        if not 1 <= port <= 65535:
-            raise ProxyStartError(f"port {port} is out of range (1-65535)")
-        if any(_upstream_loops_back(hop, host, port) for hop in self.upstream_hops):
-            raise ProxyStartError("upstream proxy points back to the listener")
-
-        previous = (self.settings.proxy_host, self.settings.proxy_port)
-        if (host, port) == previous and self.running:
-            return self.listener_state()
-
+    async def _replace_listeners(
+        self,
+        wanted: list[ProxyListenerConfig],
+        primary_id: str,
+    ) -> dict[str, Any]:
+        """Apply and persist a complete listener set, rolling back on failure."""
+        self._validate_listener_set(wanted, primary_id)
+        previous = self.listeners
+        previous_primary = self.primary_listener_id
         was_running = self.running
         if was_running:
             await self.stop()
-
-        self.settings.proxy_host = host
-        self.settings.proxy_port = port
+        self.listeners = wanted
+        self.primary_listener_id = primary_id
+        self._sync_primary_settings()
         try:
             await self.start()
-        except ProxyStartError:
-            self.settings.proxy_host, self.settings.proxy_port = previous
+            failed = [state for state in self._listener_states() if not state["running"]]
+            if failed:
+                first = failed[0]
+                detail = first["error"] or "listener did not start"
+                raise ProxyStartError(
+                    f"proxy port {first['host']}:{first['port']} is unavailable: {detail}"
+                )
+        except Exception:
+            if self.running:
+                await self.stop()
+            self.listeners = previous
+            self.primary_listener_id = previous_primary
+            self._sync_primary_settings()
             if was_running:
-                with contextlib.suppress(ProxyStartError):
+                with contextlib.suppress(Exception):
                     await self.start()
             raise
 
-        self.store.set_setting(self.LISTEN_HOST_SETTING, host)
-        self.store.set_setting(self.LISTEN_PORT_SETTING, str(port))
-        self.broker.publish("engine.listener_changed", self.listener_state())
-        return self.listener_state()
+        self._persist_listeners()
+        state = self.listeners_state()
+        self.broker.publish("engine.listener_changed", state)
+        return state
+
+    async def add_listener(self, host: str, port: int) -> dict[str, Any]:
+        async with self._listener_lock:
+            listener = ProxyListenerConfig(uuid4().hex, host.strip(), port)
+            return await self._replace_listeners(
+                [*self.listeners, listener], self.primary_listener_id
+            )
+
+    async def update_listener(
+        self,
+        listener_id: str,
+        *,
+        host: str | None = None,
+        port: int | None = None,
+    ) -> dict[str, Any]:
+        async with self._listener_lock:
+            found = False
+            wanted: list[ProxyListenerConfig] = []
+            for listener in self.listeners:
+                if listener.id != listener_id:
+                    wanted.append(listener)
+                    continue
+                found = True
+                wanted.append(ProxyListenerConfig(
+                    listener.id,
+                    listener.host if host is None else host.strip(),
+                    listener.port if port is None else port,
+                ))
+            if not found:
+                raise KeyError(listener_id)
+            if wanted == self.listeners:
+                return self.listeners_state()
+            return await self._replace_listeners(wanted, self.primary_listener_id)
+
+    async def delete_listener(self, listener_id: str) -> dict[str, Any]:
+        async with self._listener_lock:
+            if not any(listener.id == listener_id for listener in self.listeners):
+                raise KeyError(listener_id)
+            wanted = [listener for listener in self.listeners if listener.id != listener_id]
+            primary_id = self.primary_listener_id
+            if listener_id == primary_id and wanted:
+                primary_id = wanted[0].id
+            return await self._replace_listeners(wanted, primary_id)
+
+    async def set_primary_listener(self, listener_id: str) -> dict[str, Any]:
+        async with self._listener_lock:
+            if not any(listener.id == listener_id for listener in self.listeners):
+                raise KeyError(listener_id)
+            if self.running:
+                target = next(
+                    state
+                    for state in self._listener_states()
+                    if state["id"] == listener_id
+                )
+                if not target["running"]:
+                    raise ProxyStartError("a stopped listener cannot be primary")
+            self.primary_listener_id = listener_id
+            self._sync_primary_settings()
+            self._persist_listeners()
+            state = self.listeners_state()
+            self.broker.publish("engine.listener_changed", state)
+            return state
 
     CAPTURE_SETTING = "local_capture_spec"
     TLS_PROFILE_SETTING = "tls_profile"
@@ -866,38 +1120,53 @@ class ProxyEngine:
         )
         self.broker.publish("engine.local_capture_blocked", state)
 
-    def _check_port_available(self) -> None:
-        """Fail fast with a clear message when the listen port is taken."""
-        try:
-            probe_listen(self.settings.proxy_host, self.settings.proxy_port)
-        except OSError as exc:
-            raise ProxyStartError(
-                f"proxy port {self.settings.proxy_host}:"
-                f"{self.settings.proxy_port} is unavailable: {exc}"
-            ) from exc
-
     async def _await_bind(self) -> None:
-        """Block until mitmproxy actually accepts connections, or fail loudly.
+        """Wait for every configured listener to either bind or fail.
 
-        ``DumpMaster.run()`` binds asynchronously, so without this a bind
-        failure (e.g. port already in use) would surface only as a late crash.
+        A project may reopen while one of several ports is occupied. In that
+        case healthy listeners remain usable and the failed row carries the
+        bind error. If none can bind, startup still fails as it did when only
+        one listener existed.
         """
         deadline = asyncio.get_running_loop().time() + BIND_TIMEOUT_SECONDS
+        expected = {self._listener_mode(listener) for listener in self.listeners}
         while asyncio.get_running_loop().time() < deadline:
             if self._task is not None and self._task.done():
                 exc = self._task.exception()
                 self._task = None
                 self.master = None
                 raise ProxyStartError(
-                    f"proxy failed to bind {self.settings.proxy_host}:"
-                    f"{self.settings.proxy_port}: {exc or 'startup aborted'}"
+                    f"proxy failed to start: {exc or 'startup aborted'}"
                 )
-            if await self._can_connect() and self._addons_ready():
-                return
+            modes = {
+                str(mode["spec"]): mode
+                for mode in self.mode_status()
+                if str(mode["spec"]) in expected
+            }
+            if expected.issubset(modes) and self._addons_ready():
+                settled = all(
+                    bool(mode["listening"]) or bool(mode["error"])
+                    for mode in modes.values()
+                )
+                if settled:
+                    listening = [mode for mode in modes.values() if mode["listening"]]
+                    if listening:
+                        return
+                    errors = [str(mode["error"]) for mode in modes.values() if mode["error"]]
+                    detail = errors[0] if errors else "no listener could bind"
+                    primary = self._primary_listener()
+                    raise ProxyStartError(
+                        f"proxy failed to bind {primary.host}:{primary.port}: {detail}"
+                    )
             await asyncio.sleep(0.05)
+        states = self._listener_states()
+        listening = [state for state in states if state["running"]]
+        if listening and self._addons_ready():
+            return
+        primary = self._primary_listener()
         raise ProxyStartError(
-            f"proxy did not start listening on {self.settings.proxy_host}:"
-            f"{self.settings.proxy_port} within {BIND_TIMEOUT_SECONDS}s"
+            f"proxy did not start listening on {primary.host}:"
+            f"{primary.port} within {BIND_TIMEOUT_SECONDS}s"
         )
 
     def _addons_ready(self) -> bool:
@@ -910,18 +1179,6 @@ class ProxyEngine:
         engine as not running, permanently, until the next restart.
         """
         return self.replay.options is not None
-
-    async def _can_connect(self) -> bool:
-        try:
-            _reader, writer = await asyncio.open_connection(
-                self.settings.proxy_host, self.settings.proxy_port
-            )
-        except OSError:
-            return False
-        writer.close()
-        with contextlib.suppress(Exception):
-            await writer.wait_closed()
-        return True
 
     async def stop(self) -> None:
         if self.scope_egress.active:

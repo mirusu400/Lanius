@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -12,7 +13,12 @@ import pytest
 from app.config import Settings
 from app.db.store import FlowStore
 from app.events import EventBroker
-from app.proxy import ProxyEngine, ProxyStartError, normalize_upstream_url
+from app.proxy import (
+    ProxyEngine,
+    ProxyListenerConfig,
+    ProxyStartError,
+    normalize_upstream_url,
+)
 
 
 def free_port() -> int:
@@ -415,7 +421,7 @@ async def test_mode_status_reports_the_regular_proxy(tmp_path) -> None:
     try:
         modes = eng.mode_status()
         # The port is named on the mode so the list stays switchable.
-        assert [m["spec"] for m in modes] == [f"regular@{port}"]
+        assert [m["spec"] for m in modes] == [f"regular@127.0.0.1:{port}"]
         assert modes[0]["running"] is True
         assert modes[0]["listening"] is True, "a regular proxy binds an address"
         assert modes[0]["error"] is None
@@ -729,7 +735,9 @@ async def test_upstream_forwards_http_and_is_saved(tmp_path) -> None:
 
         revived = _reopen(tmp_path, port)
         assert revived.upstream_state() == state
-        assert revived._modes()[0] == f"upstream:http://127.0.0.1:{upstream_port}@{port}"
+        assert revived._modes()[0] == (
+            f"upstream:http://127.0.0.1:{upstream_port}@127.0.0.1:{port}"
+        )
         revived.store.close()
 
         with pytest.raises(ValueError, match="back to the listener"):
@@ -737,7 +745,7 @@ async def test_upstream_forwards_http_and_is_saved(tmp_path) -> None:
         assert proxy.upstream_state() == state
 
         assert await proxy.set_upstream(None) == {"enabled": False, "hops": [], "url": None}
-        assert proxy._modes()[0] == f"regular@{port}"
+        assert proxy._modes()[0] == f"regular@127.0.0.1:{port}"
     finally:
         await proxy.stop()
         proxy.store.close()
@@ -753,7 +761,7 @@ async def test_a_filter_is_restored_after_a_restart(tmp_path) -> None:
 
     restarted = _reopen(tmp_path, port)
     assert restarted.local_capture_spec() == "curl"
-    assert restarted._modes() == [f"regular@{port}", "local:curl"]
+    assert restarted._modes() == [f"regular@127.0.0.1:{port}", "local:curl"]
 
 
 @pytest.mark.asyncio
@@ -766,7 +774,7 @@ async def test_capture_everything_is_restored_as_everything(tmp_path) -> None:
 
     restarted = _reopen(tmp_path, port)
     assert restarted.local_capture_spec() == ""
-    assert restarted._modes() == [f"regular@{port}", "local"]
+    assert restarted._modes() == [f"regular@127.0.0.1:{port}", "local"]
 
 
 @pytest.mark.asyncio
@@ -778,7 +786,7 @@ async def test_switching_off_is_restored_as_off(tmp_path) -> None:
 
     restarted = _reopen(tmp_path, port)
     assert restarted.local_capture_spec() is None
-    assert restarted._modes() == [f"regular@{port}"]
+    assert restarted._modes() == [f"regular@127.0.0.1:{port}"]
 
 
 @pytest.mark.asyncio
@@ -880,12 +888,134 @@ async def test_the_listener_choice_survives_a_restart(tmp_path) -> None:
     assert revived.settings.proxy_port == second
 
 
+def test_legacy_listener_settings_are_migrated_to_a_collection(tmp_path) -> None:
+    port = free_port()
+    settings = Settings(
+        proxy_port=free_port(),
+        api_port=free_port(),
+        data_dir=tmp_path,
+        db_path=tmp_path / "p.sqlite",
+        confdir=tmp_path / "mitm",
+    )
+    store = FlowStore(settings.db_path)
+    store.set_setting(ProxyEngine.LISTEN_HOST_SETTING, "127.0.0.1")
+    store.set_setting(ProxyEngine.LISTEN_PORT_SETTING, str(port))
+
+    proxy = ProxyEngine(settings, store, EventBroker())
+    assert [(listener.host, listener.port) for listener in proxy.listeners] == [
+        ("127.0.0.1", port)
+    ]
+    saved = json.loads(store.get_setting(ProxyEngine.LISTENERS_SETTING) or "{}")
+    assert saved["version"] == 1
+    assert saved["listeners"][0]["port"] == port
+    store.close()
+
+
+async def test_multiple_listeners_accept_connections(tmp_path) -> None:
+    first, second = free_port(), free_port()
+    proxy = engine(tmp_path, first)
+    await proxy.start()
+    try:
+        state = await proxy.add_listener("127.0.0.1", second)
+        assert len(state["listeners"]) == 2
+        assert state["primary_id"] == "default"
+        assert all(listener["running"] for listener in state["listeners"])
+
+        for port in (first, second):
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.close()
+            await writer.wait_closed()
+    finally:
+        await proxy.stop()
+
+
+async def test_rejected_add_keeps_all_existing_listeners(tmp_path) -> None:
+    first, second, taken = free_port(), free_port(), free_port()
+    proxy = engine(tmp_path, first)
+    await proxy.start()
+    await proxy.add_listener("127.0.0.1", second)
+    blocker = socket.socket()
+    blocker.bind(("127.0.0.1", taken))
+    blocker.listen(1)
+    try:
+        with pytest.raises(ProxyStartError):
+            await proxy.add_listener("127.0.0.1", taken)
+        state = proxy.listeners_state()
+        assert [listener["port"] for listener in state["listeners"]] == [first, second]
+        assert all(listener["running"] for listener in state["listeners"])
+    finally:
+        blocker.close()
+        await proxy.stop()
+
+
+async def test_listener_collection_and_primary_survive_restart(tmp_path) -> None:
+    first, second = free_port(), free_port()
+    proxy = engine(tmp_path, first)
+    await proxy.start()
+    state = await proxy.add_listener("127.0.0.1", second)
+    second_id = state["listeners"][1]["id"]
+    await proxy.set_primary_listener(second_id)
+    await proxy.stop()
+    proxy.store.close()
+
+    settings = Settings(
+        proxy_port=free_port(),
+        api_port=free_port(),
+        data_dir=tmp_path,
+        db_path=tmp_path / "p.sqlite",
+        confdir=tmp_path / "mitm",
+    )
+    revived = ProxyEngine(settings, FlowStore(settings.db_path), EventBroker())
+    assert [listener.port for listener in revived.listeners] == [first, second]
+    assert revived.primary_listener_id == second_id
+    assert revived.settings.proxy_port == second
+    revived.store.close()
+
+
+async def test_one_busy_saved_listener_does_not_stop_the_others(tmp_path) -> None:
+    first, second = free_port(), free_port()
+    proxy = engine(tmp_path, first)
+    await proxy.start()
+    await proxy.add_listener("127.0.0.1", second)
+    await proxy.stop()
+    proxy.store.close()
+
+    blocker = socket.socket()
+    blocker.bind(("127.0.0.1", second))
+    blocker.listen(1)
+    settings = Settings(
+        proxy_port=free_port(),
+        api_port=free_port(),
+        data_dir=tmp_path,
+        db_path=tmp_path / "p.sqlite",
+        confdir=tmp_path / "mitm",
+    )
+    revived = ProxyEngine(settings, FlowStore(settings.db_path), EventBroker())
+    try:
+        await revived.start()
+        by_port = {
+            listener["port"]: listener
+            for listener in revived.listeners_state()["listeners"]
+        }
+        assert by_port[first]["running"] is True
+        assert by_port[second]["running"] is False
+        assert by_port[second]["error"]
+    finally:
+        blocker.close()
+        await revived.stop()
+        revived.store.close()
+
+
 def test_binding_beyond_loopback_is_reported_as_exposed(tmp_path) -> None:
     """The UI warns on this, so the engine has to be honest about it."""
     proxy = engine(tmp_path, free_port())
     assert proxy.listener_state()["exposed"] is False
 
-    proxy.settings.proxy_host = "0.0.0.0"  # noqa: S104 - the case under test
+    proxy.listeners[0] = ProxyListenerConfig(
+        proxy.listeners[0].id,
+        "0.0.0.0",  # noqa: S104 - the case under test
+        proxy.listeners[0].port,
+    )
     assert proxy.listener_state()["exposed"] is True
 
     addresses = [entry["host"] for entry in proxy.listener_state()["addresses"]]

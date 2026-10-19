@@ -25,17 +25,26 @@ than as a certificate error. Browsers with separate certificate stores and
 other devices still need their own trust setup. The check makes no test
 connection and does not change TLS verification.
 
-## Proxy listener and API port
+## Proxy listeners and API port
 
 Port 8080 is a popular default and another tool may already have it. Open
-**Settings > Proxy listener** and pick a free port. If the port was taken at
-launch, Lanius says so there and keeps running so you can change it; the rest
-of the app works meanwhile.
+**Settings > Proxy listener** to edit the primary listener or add more
+listeners. Each listener can use a different bind address and port, so a local
+browser, phone, virtual machine, and testing tool can connect to the same
+project through separate endpoints. All listeners share the project's capture
+history, CA, upstream route, TLS settings, scope, and Lockdown policy.
 
-The same section sets the bind address. By default the proxy accepts
+One listener is marked **Primary**. Lanius uses it for the built-in browser,
+Dashboard address, and setup instructions. Changing the primary does not stop
+the other listeners. If one saved port is unavailable at launch, the other
+listeners still start and the failed listener shows its own error. A listener
+change is saved only after every configured address binds successfully; on
+failure Lanius restores the previous collection.
+
+By default the proxy accepts
 connections from this machine only. Choose **All interfaces** or a specific
 address to let a phone or a virtual machine point at it, then set their proxy
-to this machine's address and the port shown. Anyone who can reach that
+to that listener's address and port. Anyone who can reach that
 address can send traffic through your proxy, so prefer a specific address over
 all interfaces on a network you do not control.
 

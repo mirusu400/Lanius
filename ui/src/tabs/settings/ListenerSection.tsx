@@ -1,11 +1,18 @@
-/** Where the proxy listens. */
+/** Browser-facing proxy listener collection. */
 
 import { useEffect, useState } from 'react';
 import {
-  getListener,
-  setListener,
+  addListener,
+  deleteListener,
+  getListeners,
+  setPrimaryListener,
+  updateListener,
 } from '../../api/client';
-import type { ListenerState } from '../../api/types';
+import type {
+  ListenerState,
+  ListenersState,
+  ProxyListenerState,
+} from '../../api/types';
 import {
   msg,
   rawMsg,
@@ -17,81 +24,144 @@ import { UndoableInput } from '../../components/UndoableText';
 
 const LOOPBACK = '127.0.0.1';
 const ALL_INTERFACES = '0.0.0.0';
-/** Dropdown value meaning "let me type an address myself". */
 const OTHER_HOST = '\u0000other\u0000';
 
-/** Is this address reachable only from this machine?
- *
- * Kept deliberately simple: the engine decides for real, this only drives
- * the warning shown while the user is still choosing.
- */
+interface ListenerDraft {
+  id: string | null;
+  host: string;
+  port: string;
+}
+
+function normalizeState(next: ListenersState | ListenerState): ListenersState {
+  if ('listeners' in next && Array.isArray(next.listeners)) {
+    return { ...next, addresses: next.addresses ?? [] };
+  }
+  // Keep Settings usable during a rolling desktop/engine update and in old
+  // test fixtures that still return the singular endpoint shape.
+  const legacy = next as ListenerState;
+  const listener: ProxyListenerState = {
+    id: legacy.id ?? 'default',
+    host: legacy.host ?? LOOPBACK,
+    port: legacy.port,
+    running: legacy.running,
+    error: legacy.error,
+    exposed: legacy.exposed,
+    primary: true,
+  };
+  return {
+    listeners: [listener],
+    primary_id: listener.id,
+    addresses: legacy.addresses ?? [],
+  };
+}
+
 function isLoopback(host: string): boolean {
-  return host === 'localhost' || host.startsWith('127.');
+  return host === 'localhost' || host === '::1' || host.startsWith('127.');
 }
 
 export function ListenerSection() {
   const { t } = useI18n();
-  const [state, setState] = useState<ListenerState | null>(null);
-  const [port, setPort] = useState('');
-  const [host, setHost] = useState('');
-  // Held separately: the dropdown falls back to a free-text field for an
-  // address that is not one of the offered ones.
-  const [customHost, setCustomHost] = useState('');
+  const [state, setState] = useState<ListenersState | null>(null);
+  const [draft, setDraft] = useState<ListenerDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Message | null>(null);
   const [error, setError] = useState<Message | null>(null);
 
-  const load = (next: ListenerState) => {
-    // An older engine, or a partial response, must not take the section
-    // down: without an address list there is still a port to fix.
-    setState({ ...next, addresses: next.addresses ?? [] });
-    setPort(String(next.port ?? ''));
-    setHost(next.host ?? LOOPBACK);
+  const load = (next: ListenersState | ListenerState) => {
+    setState(normalizeState(next));
   };
 
   useEffect(() => {
-    getListener()
+    getListeners()
       .then(load)
       .catch((err) => setError(rawMsg((err as Error).message)));
   }, []);
 
-  if (!state) return null;
+  if (!state) {
+    return error
+      ? <section><div className="banner error">{renderMessage(error, t)}</div></section>
+      : null;
+  }
 
-  const addresses =
-    state.addresses.length > 0
-      ? state.addresses
-      : [
-          { host: LOOPBACK, label: LOOPBACK },
-          { host: ALL_INTERFACES, label: ALL_INTERFACES },
-        ];
-  const known = addresses.some((entry) => entry.host === host);
-  const chosenHost = known ? host : customHost || host;
-  const exposed = chosenHost !== '' && !isLoopback(chosenHost);
-  const changed =
-    chosenHost !== state.host || port !== String(state.port);
+  const addresses = state.addresses.length > 0
+    ? state.addresses
+    : [
+        { host: LOOPBACK, label: LOOPBACK },
+        { host: ALL_INTERFACES, label: ALL_INTERFACES },
+      ];
+  const knownDraftHost = draft
+    ? addresses.some((entry) => entry.host === draft.host)
+    : true;
+  const draftExposed = Boolean(draft?.host) && !isLoopback(draft?.host ?? '');
 
-  const apply = async () => {
+  const beginAdd = () => {
+    setDraft({ id: null, host: LOOPBACK, port: '' });
+    setNote(null);
+    setError(null);
+  };
+
+  const beginEdit = (listener: ProxyListenerState) => {
+    setDraft({ id: listener.id, host: listener.host, port: String(listener.port) });
+    setNote(null);
+    setError(null);
+  };
+
+  const save = async () => {
+    if (!draft) return;
     setBusy(true);
     setNote(null);
     setError(null);
-    const wanted = Number(port);
     try {
-      const next = await setListener(chosenHost, wanted);
+      const port = Number(draft.port);
+      const next = draft.id
+        ? await updateListener(draft.id, draft.host, port)
+        : await addListener(draft.host, port);
       load(next);
-      setCustomHost('');
-      setNote(msg('listener.applied', { host: next.host, port: next.port }));
+      setDraft(null);
+      setNote(msg(draft.id ? 'listener.updated' : 'listener.added', {
+        host: draft.host,
+        port: draft.port,
+      }));
     } catch (err) {
-      setError(
-        msg('listener.failed', {
-          host: chosenHost,
-          port: port,
-          message: (err as Error).message,
-        }),
-      );
-      // The engine rolls back, so say so rather than leaving the user
-      // wondering whether they have a proxy at all.
+      setError(msg('listener.failed', {
+        host: draft.host,
+        port: draft.port,
+        message: (err as Error).message,
+      }));
       setNote(msg('listener.kept'));
-      getListener().then(load).catch(() => undefined);
+      getListeners().then(load).catch(() => undefined);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (listener: ProxyListenerState) => {
+    setBusy(true);
+    setNote(null);
+    setError(null);
+    try {
+      load(await deleteListener(listener.id));
+      if (draft?.id === listener.id) setDraft(null);
+      setNote(msg('listener.removed', { host: listener.host, port: listener.port }));
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const makePrimary = async (listener: ProxyListenerState) => {
+    setBusy(true);
+    setNote(null);
+    setError(null);
+    try {
+      load(await setPrimaryListener(listener.id));
+      setNote(msg('listener.primaryChanged', {
+        host: listener.host,
+        port: listener.port,
+      }));
+    } catch (err) {
+      setError(rawMsg((err as Error).message));
     } finally {
       setBusy(false);
     }
@@ -102,81 +172,120 @@ export function ListenerSection() {
       <h3>{t('listener.section')}</h3>
       <p className="muted">{t('listener.help')}</p>
 
-      {!state.running && state.error && (
-        <div className="banner error">
-          {t('listener.down', { message: state.error })}
-          <br />
-          {t('listener.downHint')}
-        </div>
-      )}
-
-      <div className="settings-row">
-        <label htmlFor="listener-port">{t('listener.port')}</label>
-        <UndoableInput
-          id="listener-port"
-          type="number"
-          min={1}
-          max={65535}
-          className="mono"
-          value={port}
-          disabled={busy}
-          onValueChange={setPort}
-        />
+      <div className="listener-list">
+        {state.listeners.map((listener) => (
+          <div className="listener-item" key={listener.id}>
+            <div className="listener-summary">
+              <span className="mono">{listener.host}:{listener.port}</span>
+              <span className={listener.running ? 'pill ok' : 'pill bad'}>
+                {listener.running ? t('listener.running') : t('listener.stopped')}
+              </span>
+              {listener.primary && <span className="pill">{t('listener.primary')}</span>}
+              {listener.exposed && <span className="pill warn">{t('listener.exposedShort')}</span>}
+            </div>
+            {listener.error && (
+              <div className="banner error">
+                {t('listener.down', { message: listener.error })}
+              </div>
+            )}
+            <div className="listener-actions">
+              {!listener.primary && (
+                <button
+                  type="button"
+                  disabled={busy || !listener.running}
+                  onClick={() => void makePrimary(listener)}
+                >
+                  {t('listener.makePrimary')}
+                </button>
+              )}
+              <button type="button" disabled={busy} onClick={() => beginEdit(listener)}>
+                {t('listener.edit')}
+              </button>
+              <button
+                type="button"
+                className="danger"
+                disabled={busy || state.listeners.length === 1}
+                onClick={() => void remove(listener)}
+              >
+                {t('common.delete')}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="settings-row">
-        <label htmlFor="listener-host">{t('listener.bind')}</label>
-        <select
-          id="listener-host"
-          value={known ? host : OTHER_HOST}
-          disabled={busy}
-          onChange={(event) => {
-            if (event.target.value === OTHER_HOST) {
-              setHost(OTHER_HOST);
-              setCustomHost('');
-            } else {
-              setHost(event.target.value);
-            }
-          }}
-        >
-          {addresses.map((entry) => (
-            <option key={entry.host} value={entry.host}>
-              {entry.host === LOOPBACK || entry.host === ALL_INTERFACES
-                ? `${entry.label} (${entry.host})`
-                : entry.host}
-            </option>
-          ))}
-          <option value={OTHER_HOST}>{t('listener.hostOther')}</option>
-        </select>
-      </div>
-
-      {!known && (
-        <div className="settings-row">
-          <label htmlFor="listener-custom">{t('listener.hostOther')}</label>
-          <UndoableInput
-            id="listener-custom"
-            className="mono"
-            placeholder={t('listener.hostPlaceholder')}
-            value={customHost}
-            disabled={busy}
-            onValueChange={setCustomHost}
-          />
-        </div>
-      )}
-
-      <div className="settings-row">
-        <button
-          type="button"
-          disabled={busy || !changed || chosenHost === ''}
-          onClick={() => void apply()}
-        >
-          {t('listener.apply')}
+      {!draft && (
+        <button type="button" disabled={busy || state.listeners.length >= 16} onClick={beginAdd}>
+          {t('listener.add')}
         </button>
-      </div>
+      )}
 
-      <p className={exposed ? 'banner warn' : 'muted'}>
-        {exposed ? t('listener.exposed') : t('listener.localOnly')}
-      </p>
+      {draft && (
+        <div className="listener-editor">
+          <h4>{t(draft.id ? 'listener.editTitle' : 'listener.addTitle')}</h4>
+          <div className="settings-row">
+            <label htmlFor="listener-host">{t('listener.bind')}</label>
+            <select
+              id="listener-host"
+              value={knownDraftHost ? draft.host : OTHER_HOST}
+              disabled={busy}
+              onChange={(event) => setDraft({
+                ...draft,
+                host: event.target.value === OTHER_HOST ? '' : event.target.value,
+              })}
+            >
+              {addresses.map((entry) => (
+                <option key={entry.host} value={entry.host}>
+                  {entry.host === LOOPBACK || entry.host === ALL_INTERFACES
+                    ? `${entry.label} (${entry.host})`
+                    : entry.host}
+                </option>
+              ))}
+              <option value={OTHER_HOST}>{t('listener.hostOther')}</option>
+            </select>
+          </div>
+          {!knownDraftHost && (
+            <div className="settings-row">
+              <label htmlFor="listener-custom">{t('listener.hostOther')}</label>
+              <UndoableInput
+                id="listener-custom"
+                className="mono"
+                placeholder={t('listener.hostPlaceholder')}
+                value={draft.host}
+                disabled={busy}
+                onValueChange={(host) => setDraft({ ...draft, host })}
+              />
+            </div>
+          )}
+          <div className="settings-row">
+            <label htmlFor="listener-port">{t('listener.port')}</label>
+            <UndoableInput
+              id="listener-port"
+              type="number"
+              min={1}
+              max={65535}
+              className="mono"
+              value={draft.port}
+              disabled={busy}
+              onValueChange={(port) => setDraft({ ...draft, port })}
+            />
+          </div>
+          {draftExposed && <p className="banner warn">{t('listener.exposed')}</p>}
+          {!draftExposed && draft.host && <p className="muted">{t('listener.localOnly')}</p>}
+          <div className="listener-actions">
+            <button
+              type="button"
+              disabled={busy || !draft.host || !draft.port}
+              onClick={() => void save()}
+            >
+              {t('listener.save')}
+            </button>
+            <button type="button" disabled={busy} onClick={() => setDraft(null)}>
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {note && <p className="muted">{renderMessage(note, t)}</p>}
       {error && <div className="banner error">{renderMessage(error, t)}</div>}

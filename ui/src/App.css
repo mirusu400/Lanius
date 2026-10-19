@@ -4961,6 +4961,50 @@ pre.response-preview-text {
   width: 100px;
 }
 
+.listener-list {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.listener-item,
+.listener-editor {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px;
+}
+
+.listener-summary,
+.listener-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.listener-summary {
+  min-height: 28px;
+}
+
+.listener-summary > .mono {
+  font-weight: 600;
+  margin-right: auto;
+}
+
+.listener-actions {
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.listener-editor {
+  margin-top: 14px;
+}
+
+.listener-editor h4 {
+  margin: 0 0 12px;
+}
+
 .upstream-hops {
   margin: 14px 0;
 }
