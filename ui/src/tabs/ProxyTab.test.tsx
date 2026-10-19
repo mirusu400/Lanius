@@ -80,6 +80,7 @@ let calls: { url: string; method: string; body?: unknown }[] = [];
 
 beforeEach(() => {
   calls = [];
+  window.localStorage.clear();
   // The selection lives outside the component so it survives a tab
   // switch, which also means it survives between tests.
   clearSelection();
@@ -194,6 +195,27 @@ function jsonResponse(body: unknown) {
 }
 
 describe('ProxyTab', () => {
+  it('switches between side-by-side and stacked history layouts and remembers the choice', async () => {
+    const user = userEvent.setup();
+    const view = render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+
+    const toggle = screen.getByRole('button', { name: t('proxy.switchToStackedLayout') });
+    expect(document.querySelector('.proxy-split')?.classList.contains('split-h')).toBe(true);
+    await user.click(toggle);
+
+    expect(document.querySelector('.proxy-split')?.classList.contains('split-v')).toBe(true);
+    expect(window.localStorage.getItem('lanius.layout.proxyHistory')).toBe('stacked');
+    expect(screen.getByRole('button', { name: t('proxy.switchToSideBySideLayout') })).toBeTruthy();
+    const count = screen.getByText(t('proxy.flowCount', { count: 1 }));
+    expect(toggle.nextElementSibling).toBe(count);
+
+    view.unmount();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    expect(document.querySelector('.proxy-split')?.classList.contains('split-v')).toBe(true);
+  });
+
   it('loads existing history from REST on mount', async () => {
     render(<ProxyTab />);
     expect(await screen.findByText('seeded.test')).toBeTruthy();

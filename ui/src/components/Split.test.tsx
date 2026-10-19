@@ -1,5 +1,5 @@
 /** Draggable pane divider. */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { Split } from './Split';
@@ -114,6 +114,35 @@ describe('Split', () => {
     dragTo(300);
     cleanup();
     renderSplit({ storageKey: 'b', initial: 0.5 });
+    expect(position()).toBeCloseTo(50);
+  });
+
+  it('loads a new stored position when a mounted split changes keys', async () => {
+    window.localStorage.setItem('horizontal', '0.6');
+    window.localStorage.setItem('vertical', '0.35');
+    const view = renderSplit({ storageKey: 'horizontal' });
+    expect(position()).toBeCloseTo(60);
+
+    view.rerender(
+      <Split
+        direction="vertical"
+        storageKey="vertical"
+        first={<div>top</div>}
+        second={<div>bottom</div>}
+      />,
+    );
+
+    await waitFor(() => expect(position()).toBeCloseTo(35));
+    expect(window.localStorage.getItem('horizontal')).toBe('0.6');
+    expect(screen.getByRole('separator').getAttribute('aria-orientation')).toBe('horizontal');
+  });
+
+  it('moves a vertical split with the up and down arrow keys', () => {
+    renderSplit({ direction: 'vertical', initial: 0.5 });
+    const handle = screen.getByRole('separator');
+    fireEvent.keyDown(handle, { key: 'ArrowDown' });
+    expect(position()).toBeGreaterThan(50);
+    fireEvent.keyDown(handle, { key: 'ArrowUp' });
     expect(position()).toBeCloseTo(50);
   });
 });

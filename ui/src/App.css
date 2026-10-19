@@ -841,6 +841,22 @@ pre.body,
   color: var(--danger);
 }
 
+.filter-bar .history-layout-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 26px;
+  padding: 4px;
+}
+
+.history-layout-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
 .spacer {
   flex: 1;
 }

@@ -41,7 +41,7 @@ import { sendToFuzzer } from './fuzzerStore';
 import { useAddRequestScopeRule } from '../components/requestScope';
 import { FlowDetailView } from '../components/FlowDetail';
 import { copyTextToClipboard } from '../clipboard';
-import { FilterBar } from '../components/FilterBar';
+import { FilterBar, type HistoryLayout } from '../components/FilterBar';
 import { InterceptPanel } from '../components/InterceptPanel';
 import { WebSocketPanel } from '../components/WebSocketPanel';
 import { matchesFilters, mergeFlow } from './proxyModel';
@@ -59,11 +59,21 @@ const DEFAULT_RULES: InterceptRules = {
 
 type View = 'intercept' | 'history' | 'websockets';
 
+const HISTORY_LAYOUT_STORAGE_KEY = 'lanius.layout.proxyHistory';
+
+function loadHistoryLayout(): HistoryLayout {
+  if (typeof window === 'undefined') return 'side-by-side';
+  return window.localStorage?.getItem(HISTORY_LAYOUT_STORAGE_KEY) === 'stacked'
+    ? 'stacked'
+    : 'side-by-side';
+}
+
 export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { method: string } | null }) {
   const t = useT();
   const { showToast } = useToast();
   const addRequestScopeRule = useAddRequestScopeRule();
   const [view, setView] = useState<View>('history');
+  const [historyLayout, setHistoryLayout] = useState<HistoryLayout>(loadHistoryLayout);
   const [flows, setFlows] = useState<FlowSummary[]>([]);
   const flowsRef = useRef(flows);
   flowsRef.current = flows;
@@ -476,6 +486,14 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
     setFilters(next);
   };
 
+  const toggleHistoryLayout = () => {
+    setHistoryLayout((current) => {
+      const next = current === 'side-by-side' ? 'stacked' : 'side-by-side';
+      window.localStorage?.setItem(HISTORY_LAYOUT_STORAGE_KEY, next);
+      return next;
+    });
+  };
+
   return (
     <div className="proxy-tab">
       <div className="subtabs">
@@ -529,6 +547,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
             status={status}
             count={flows.length}
             onOpenFilter={() => setFilterOpen(true)}
+            historyLayout={historyLayout}
+            onToggleHistoryLayout={toggleHistoryLayout}
           />
           <FilterDialog
             open={filterOpen}
@@ -538,9 +558,11 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
           />
           {error && <div className="banner error">{renderMessage(error, t)}</div>}
           <Split
-            direction="horizontal"
-            storageKey="lanius.split.proxy"
-            initial={0.58}
+            direction={historyLayout === 'side-by-side' ? 'horizontal' : 'vertical'}
+            storageKey={historyLayout === 'side-by-side'
+              ? 'lanius.split.proxy'
+              : 'lanius.split.proxy.stacked'}
+            initial={historyLayout === 'side-by-side' ? 0.58 : 0.45}
             className="proxy-split"
             first={
               <Busy busy={searchLoading} label={t('proxy.searching')}>

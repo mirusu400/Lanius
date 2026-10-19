@@ -50,6 +50,7 @@ export function Split({
   const [fraction, setFraction] = useState(() => load(storageKey, initial));
   const [dragging, setDragging] = useState(false);
   const container = useRef<HTMLDivElement | null>(null);
+  const loadedStorageKey = useRef(storageKey);
   const isRow = direction === 'horizontal';
 
   useEffect(() => {
@@ -81,8 +82,16 @@ export function Split({
   }, [dragging, isRow]);
 
   useEffect(() => {
+    // A single mounted split may switch layouts. Load that layout's own
+    // position without remounting either pane (and without first overwriting
+    // the new key with the previous layout's fraction).
+    if (loadedStorageKey.current !== storageKey) {
+      loadedStorageKey.current = storageKey;
+      setFraction(load(storageKey, initial));
+      return;
+    }
     window.localStorage?.setItem(storageKey, String(fraction));
-  }, [fraction, storageKey]);
+  }, [fraction, initial, storageKey]);
 
   // Keyboard, because a divider that can only be dragged is unreachable
   // for anyone not using a mouse.
