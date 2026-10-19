@@ -119,18 +119,26 @@ class _CaptureWriter:
         self.run_after_flush()
 
     def run_after_flush(self, action: Callable[[], None] | None = None) -> None:
-        """Run an action after queued writes while preventing new offers."""
+        """Run an action after every write accepted before this call.
+
+        Only the enqueue holds the lifecycle lock.  Capture hooks take that
+        lock on the proxy event loop, so waiting under it would freeze the
+        proxy and API for as long as the action (e.g. Clear History) runs.
+        Captures offered meanwhile queue behind the barrier.
+        """
         with self._lifecycle_lock:
             thread = self._thread
-            if thread is None or not thread.is_alive():
-                if action is not None:
-                    action()
-                return
+            running = thread is not None and thread.is_alive()
             barrier = _FlushBarrier(threading.Event(), action)
-            self._queue.put(barrier)
-            barrier.done.wait()
-            if barrier.error is not None:
-                raise barrier.error
+            if running:
+                self._queue.put(barrier)
+        if not running:
+            if action is not None:
+                action()
+            return
+        barrier.done.wait()
+        if barrier.error is not None:
+            raise barrier.error
 
     def stop(self) -> None:
         """Drain and stop; a later capture automatically starts a new writer."""
@@ -146,9 +154,11 @@ class _CaptureWriter:
             self._thread = None
 
     def status(self) -> dict[str, int | float | str | bool | None]:
-        with self._lifecycle_lock:
-            running = self._thread is not None and self._thread.is_alive()
-            depth = self._queue.qsize()
+        # Lock-free: the lifecycle lock can be held while offer() waits for
+        # queue space, and /api/status must stay responsive then.
+        thread = self._thread
+        running = thread is not None and thread.is_alive()
+        depth = self._queue.qsize()
         with self._stats_lock:
             return {
                 "enqueued": self._enqueued,

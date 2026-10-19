@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
 
 import pytest
 from mitmproxy.test import tflow, tutils
@@ -187,3 +189,33 @@ def test_a_replay_is_not_proxied_traffic() -> None:
     flow = make_flow()
     flow.is_replay = "request"
     assert flow_to_record(flow).source == "replay"
+
+
+@pytest.mark.asyncio
+async def test_clear_history_does_not_block_capture_hooks_or_status() -> None:
+    store = FlowStore()
+    addon = CaptureAddon(store, EventBroker(), flush_seconds=0)
+    clearing = threading.Event()
+    release = threading.Event()
+    clear = store.clear
+
+    def slow_clear() -> None:
+        clearing.set()
+        assert release.wait(5)
+        clear()
+
+    store.clear = slow_clear  # type: ignore[method-assign]
+    addon.response(make_flow("/before"))
+    task = asyncio.create_task(addon.clear_history())
+    assert await asyncio.to_thread(clearing.wait, 5)
+
+    started = time.monotonic()
+    addon.writer_status()
+    addon.response(make_flow("/during"))
+    assert time.monotonic() - started < 1
+
+    release.set()
+    await task
+    await addon.done()
+    assert [flow.path for flow in store.list()] == ["/during"]
+    store.close()
