@@ -2414,12 +2414,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return FileResponse(
             candidate,
             headers={
-                "Cache-Control": "no-store" if plugin.package_root.is_symlink() else "public, max-age=31536000, immutable",
+                "Cache-Control": "no-store",
                 "Content-Security-Policy": (
                     "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
                     "img-src 'self' data:; font-src 'self'; connect-src 'none'; "
                     "base-uri 'none'; form-action 'none'; navigate-to 'none'; "
-                    "frame-src 'none'; frame-ancestors 'self'; sandbox allow-scripts"
+                    "frame-src 'none'; frame-ancestors 'self' http://127.0.0.1:5173 "
+                    "http://localhost:5173 tauri://localhost http://tauri.localhost "
+                    "https://tauri.localhost; sandbox allow-scripts"
+                    + (" allow-downloads" if "ui.downloads" in plugin.meta.get("package", {}).get("permissions", []) else "")
                 ),
                 "X-Content-Type-Options": "nosniff",
             },

@@ -26,7 +26,7 @@ then atomically moves the package into the plugin directory.
   },
   "ui": {
     "views": [
-      { "id": "main", "title": "Plugin", "entrypoint": "ui/index.html" }
+      { "id": "main", "title": "Plugin", "entrypoint": "ui/index.html", "placement": "tab" }
     ]
   },
   "permissions": ["actions.invoke", "settings.read"],
@@ -96,6 +96,34 @@ subresources, nested frames, and forms are blocked by the response policy. A
 view cannot navigate the host, receives no referrer, and can load only
 integrity-listed assets under `ui/`.
 
+SDK 1.4 supports `placement: "tab"` for a view in the main workspace
+navigation. The default `"panel"` keeps the existing Plugins view launcher.
+Only loaded plugins contribute tabs; disabling, removal, safe mode, and
+Lockdown suspension remove their views. Tabs retain their frame while the user
+visits other tabs, so drafts survive navigation. UI assets use `no-store` because
+the installed URL is reused across package updates. The frame ancestor policy
+permits only the same origin and the exact existing Vite/Tauri UI origins.
+
+An action may return a view request to open its own declared view:
+
+```python
+return {"ui": {"view": "main", "mode": "dialog", "context": {"exchange_ids": [flow_id]}}}
+```
+
+`mode` is `"dialog"` or `"tab"` (the latter requires tab placement). The host
+binds the request to the action owner, resolves its current loaded view, and
+passes the JSON context only to that frame. Views use `context.get` to read it
+and `ui.close` to close their dialog. A view cannot open another plugin's UI.
+
+Views can call `clipboard.write` with `{text: "..."}` when their manifest
+declares `clipboard.write`. The host uses its cross-platform clipboard writer
+and limits text to 65,536 characters. Clipboard reads are not exposed.
+
+A package can explicitly declare `ui.downloads` to allow local file downloads
+from its frame. Both the iframe sandbox and response CSP add `allow-downloads`
+only for that permission. The frame retains its opaque origin and cannot fetch
+or open sockets. Undeclared packages keep the script-only sandbox.
+
 The page can request a host operation with `postMessage`:
 
 ```js
@@ -109,8 +137,8 @@ parent.postMessage({
 ```
 
 The host replies with `lanius.response` and the same `id`. Supported methods
-are `contributions.list`, `actions.invoke`, `settings.get`, and
-`settings.patch`. The latter three require their matching manifest permission,
+are `context.get`, `ui.close`, `clipboard.write`, `contributions.list`, `actions.invoke`,
+`settings.get`, and `settings.patch`. The last three require their matching manifest permission,
 and an iframe can invoke only an action owned by its own plugin.
 
 ## Bundled reference package

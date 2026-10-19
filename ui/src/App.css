@@ -6457,3 +6457,8 @@ pre.response-preview-text {
 .inspector-actions .primary:disabled {
   opacity: 0.5;
 }
+
+/* Plugin workspace tabs reuse the permission-checked iframe bridge. */
+.plugin-frame-embedded { position: relative; inset: auto; height: 100%; min-height: 0; }
+.plugin-dialog-backdrop { border: 0; padding: 0; margin: 0; max-width: none; max-height: none; width: 100vw; height: 100vh; position: fixed; inset: 0; background: #0009; z-index: 100; display: grid; place-items: center; }
+.plugin-dialog-backdrop .plugin-frame-shell { position: relative; inset: auto; width: min(780px, 92vw); height: min(660px, 86vh); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; box-shadow: 0 20px 80px #0008; }

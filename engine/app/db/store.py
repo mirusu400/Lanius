@@ -1306,6 +1306,17 @@ class FlowStore:
             if key == MEDIA_BODY_LIMIT_SETTING:
                 self.media_body_limit_mb = read_limit(value)
 
+    def batch_settings(self, values: dict[str, str], delete: Sequence[str] = ()) -> None:
+        """Commit related plugin values and removals as one transaction."""
+        with self._lock, self._conn:
+            self._conn.executemany(
+                "DELETE FROM settings WHERE key = ?", ((key,) for key in delete),
+            )
+            self._conn.executemany(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                values.items(),
+            )
+
     # --- observed public egress addresses -------------------------------
     def record_egress_ip_observation(
         self,

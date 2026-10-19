@@ -67,6 +67,7 @@ class PluginManifest:
                         "id": view["id"],
                         "title": view["title"],
                         "entrypoint": view["entrypoint"],
+                        **({"placement": view["placement"]} if "placement" in view else {}),
                     }
                 )
         try:
@@ -173,6 +174,9 @@ def parse_manifest(value: Any) -> PluginManifest:
             view_id = _nonempty_string(view.get("id"), "ui view id")
             if not _PLUGIN_ID.fullmatch(view_id) or view_id in seen_views:
                 raise PluginPackageError(f"invalid or duplicate UI view id: {view_id!r}")
+            placement = view.get("placement", "panel")
+            if not isinstance(placement, str) or placement not in {"panel", "tab"}:
+                raise PluginPackageError("UI view placement must be panel or tab")
             seen_views.add(view_id)
             _nonempty_string(view.get("title"), "ui view title")
             entrypoint = _safe_relative(

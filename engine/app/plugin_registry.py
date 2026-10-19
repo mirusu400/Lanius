@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import inspect
 import json
 import logging
@@ -15,7 +16,7 @@ import traceback
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, List, Literal
 
@@ -866,6 +867,67 @@ class PluginHost:
              "input_schema": registered.tool.parameters},
             registered,
         )
+
+    def batch_storage(self, values: Mapping[str, Any], delete: Sequence[str]) -> None:
+        if self.registry.store is None:
+            raise PluginApiError("project storage is unavailable")
+        if not isinstance(values, Mapping) or isinstance(delete, (str, bytes)):
+            raise PluginApiError("storage batch needs a mapping and a key sequence")
+        if len(values) > 4096 or len(delete) > 100000:
+            raise PluginApiError("storage batch exceeds 4096 writes or 100000 deletions")
+        encoded = {}
+        removed = []
+        total = 0
+        for key, value in values.items():
+            self.registry._validate_key(key)
+            try:
+                raw = json.dumps(value, ensure_ascii=False, allow_nan=False)
+            except (TypeError, ValueError) as exc:
+                raise PluginApiError("plugin values must be JSON serializable") from exc
+            size = len(raw.encode("utf-8"))
+            if size > _MAX_STORAGE_BYTES:
+                raise PluginApiError("plugin value exceeds 1 MiB")
+            total += size
+            encoded[self.registry._value_key("storage", self.owner, key)] = raw
+        if total > 48 * 1024 * 1024:
+            raise PluginApiError("storage batch exceeds 48 MiB")
+        for key in delete:
+            self.registry._validate_key(key)
+            removed.append(self.registry._value_key("storage", self.owner, key))
+        self.registry.store.batch_settings(encoded, removed)
+
+    def get_flow(self, flow_id: str, *, in_scope_only: bool) -> Mapping[str, Any]:
+        if self.registry.store is None:
+            raise PluginApiError("project flow history is unavailable")
+        if not isinstance(flow_id, str) or not flow_id or not isinstance(in_scope_only, bool):
+            raise PluginApiError("expected a flow ID and boolean in_scope_only")
+        record = self.registry.store.get(flow_id)
+        if record is None or record.type != "http":
+            raise PluginApiError("HTTP exchange not found")
+        predicate = self.registry.scope_predicate
+        if in_scope_only and predicate and not predicate(
+            record.scheme, record.host, record.port, record.path,
+        ):
+            raise PluginApiError("HTTP exchange is outside project scope")
+        if len(record.request_body) + len(record.response_body or b"") > 16 * 1024 * 1024:
+            raise PluginApiError("exchange bodies exceed the 16 MiB snapshot limit")
+        # Decode only a bounded preview. Base64 below preserves the captured bytes,
+        # including compressed and binary bodies, independently of that preview.
+        preview = replace(
+            record, request_body=record.request_body[:16384],
+            response_body=(record.response_body[:16384] if record.response_body is not None else None),
+            request_original=None, request_auto_modified=None,
+        ).detail(auto_decompress=False)
+        preview.pop("request_variants", None)
+        for side in ("request", "response"):
+            body = getattr(record, f"{side}_body")
+            preview[f"{side}_body_base64"] = (
+                base64.b64encode(body).decode("ascii") if body is not None else None
+            )
+            preview[f"{side}_captured_bytes"] = len(body or b"")
+            preview[f"{side}_preview_truncated"] = len(body or b"") > 16384
+        preview["response_present"] = record.response_headers is not None or record.status_code is not None
+        return preview
 
     def page_flows(
         self, *, limit: int, cursor: str | None, anchor: int | None,

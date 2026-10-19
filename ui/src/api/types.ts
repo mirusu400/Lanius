@@ -470,6 +470,7 @@ export interface PluginCatalogue {
 }
 
 export interface PluginUiView {
+  placement?: 'panel' | 'tab';
   id: string;
   title: string;
   entrypoint: string;

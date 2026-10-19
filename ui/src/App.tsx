@@ -21,6 +21,8 @@ import { IssuesTab } from "./tabs/IssuesTab";
 import { FuzzerTab } from "./tabs/FuzzerTab";
 import { DecoderTab } from "./tabs/DecoderTab";
 import { DiffTab } from "./tabs/DiffTab";
+import { PluginWorkspaceProvider } from './components/PluginWorkspace';
+import { usePluginWorkspace } from './components/pluginViewBridge';
 import { PluginsTab } from "./tabs/PluginsTab";
 import { LoggerTab } from "./tabs/LoggerTab";
 import { SettingsTab } from "./tabs/SettingsTab";
@@ -113,7 +115,7 @@ export default function App() {
     ? <div className="project-picker" />
     : desktop && !project
       ? <ProjectPicker onOpen={setProject} />
-      : <WorkspaceApp project={project} onLeave={leaveProject} />;
+      : <PluginWorkspaceProvider key={project?.id ?? 'web'}><WorkspaceApp project={project} onLeave={leaveProject} /></PluginWorkspaceProvider>;
   return <>{content}{desktop && <DesktopClose />}</>;
 }
 
@@ -122,7 +124,8 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   // Mount a workspace tab on its first visit, then hide it with Activity.
   // React keeps its filters, drafts, selections and scroll position while
   // pausing subscriptions and polling for tabs that are out of view.
-  const [{ tab, visited }, setTab] = useReducer(
+  const pluginWorkspace = usePluginWorkspace();
+  const [{ tab: builtinTab, visited }, setBuiltinTab] = useReducer(
     (current: { tab: Tab; visited: Set<Tab> }, update: Tab | ((tab: Tab) => Tab)) => {
       const next = typeof update === 'function' ? update(current.tab) : update;
       if (next === current.tab) return current;
@@ -130,6 +133,12 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
     },
     { tab: 'Dashboard' as Tab, visited: new Set<Tab>(['Dashboard', 'Proxy']) },
   );
+  const tab = pluginWorkspace.active ?? builtinTab;
+  const selectPlugin = pluginWorkspace.select;
+  const setTab = useCallback((update: Tab | ((tab: Tab) => Tab)) => {
+    selectPlugin(null);
+    setBuiltinTab(update);
+  }, [selectPlugin]);
   const [historyMethodRequest, setHistoryMethodRequest] = useState<{ method: string } | null>(null);
   const [historyRevision, setHistoryRevision] = useState(0);
   const onProjectImported = useCallback(() => {
@@ -162,11 +171,11 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
       .then((state) => {
         const available = state.passive_checks.length > 0 || state.active_checks.length > 0;
         setScannerAvailable(available);
-        if (!available) setTab((current) => current === 'Issues' ? 'Dashboard' : current);
+        if (!available) setBuiltinTab((current) => current === 'Issues' ? 'Dashboard' : current);
       })
       .catch(() => {
         setScannerAvailable(false);
-        setTab((current) => current === 'Issues' ? 'Dashboard' : current);
+        setBuiltinTab((current) => current === 'Issues' ? 'Dashboard' : current);
       });
   }, []);
 
@@ -229,7 +238,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
     () => Object.fromEntries(
       DEFAULT_TAB_ORDER.map((name) => [`app.${name.toLowerCase()}`, () => setTab(name)]),
     ),
-    [],
+    [setTab],
   );
   useShortcuts(navigationShortcuts, !switching);
 
@@ -327,6 +336,9 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
               )}
             </button>
           ))}
+          {pluginWorkspace.tabs.map(({ key, plugin, view }) => <button key={key}
+            className={`tab${tab === key ? ' active' : ''}`} title={plugin.package?.name ?? plugin.name}
+            onClick={() => selectPlugin(key)}>{view.title}</button>)}
         </nav>
         {lockdownActive && (
           <button type="button" className="lockdown-pill" onClick={openLockdown}>
@@ -385,6 +397,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
           )}
           {visited.has('Docs') && <Activity mode={tab === 'Docs' ? 'visible' : 'hidden'}><DocsTab /></Activity>}
         </BusyProvider>
+        {pluginWorkspace.content}
       </main>
     </div>
   );

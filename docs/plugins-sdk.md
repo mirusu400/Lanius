@@ -1,4 +1,4 @@
-# Plugin SDK 1.3
+# Plugin SDK 1.4
 
 `lanius_sdk` is the stable boundary between a plugin and the engine. Engine
 modules under `app` are internal and can change without an SDK compatibility
@@ -155,6 +155,24 @@ integrity map. Legacy loose-file plugins do not receive a resource directory.
 
 ## Captured flows
 
+SDK 1.4 adds `context.flows.get(flow_id, in_scope_only=True)`. It returns a
+copy of one captured HTTP exchange, with exact `request_body_base64` and
+`response_body_base64`, captured byte counts, omission flags, and
+`response_present`. Text previews decode at most the first 16 KiB of each
+body without decompression, with explicit `*_preview_truncated` flags. The
+combined captured bodies must fit within 16 MiB; larger exchanges fail without
+silently truncating the raw data. `None` and empty response bodies stay distinct.
+Unknown IDs, non-HTTP records, and out-of-scope selections are refused. An
+explicit UI or agent selection may opt out of scope filtering, as with pages.
+
+SDK 1.4 also adds `context.storage.batch(values, delete=())`, an atomic project
+storage operation. Every key is namespaced to its owner and validated before
+writing. Values retain the 1 MiB per-value limit; a batch permits up to 4096
+writes, 100000 deletions, and 48 MiB of encoded values. Related metadata and
+snapshot chunks commit together, and a failed write rolls back all changes.
+This API does not support user-scoped values.
+
+
 `context.flows.page(limit=50, cursor=None, anchor=None, in_scope_only=True,
 body_limit=32768)` reads a bounded page of captured HTTP snapshots. The host
 limits pages to 100 flows and each rendered request/response body to 65,536
@@ -181,7 +199,7 @@ starts the plugin's own check from an explicit UI action and returns job status.
 
 ## Compatibility
 
-`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.3`.
+`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.4`.
 Minor additions remain backward compatible. A future breaking API uses a new
 major version and package manifests declare which major versions they accept.
 

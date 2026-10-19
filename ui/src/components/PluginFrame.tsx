@@ -9,6 +9,7 @@ import {
 } from '../api/client';
 import type { PluginInfo, PluginUiView } from '../api/types';
 import { useT } from '../i18n';
+import { writeClipboardText } from '../clipboard';
 
 interface RpcRequest {
   type: 'lanius.request';
@@ -32,10 +33,14 @@ export function PluginFrame({
   plugin,
   view,
   onClose,
+  embedded = false,
+  context = {},
 }: {
   plugin: PluginInfo;
   view: PluginUiView;
-  onClose: () => void;
+  onClose?: () => void;
+  embedded?: boolean;
+  context?: Record<string, unknown>;
 }) {
   const t = useT();
   const frame = useRef<HTMLIFrameElement | null>(null);
@@ -49,7 +54,17 @@ export function PluginFrame({
       const params = request.params ?? {};
       try {
         let result: unknown;
-        if (request.method === 'contributions.list') {
+        if (request.method === 'context.get') {
+          result = context;
+        } else if (request.method === 'ui.close') {
+          onClose?.();
+          result = { closed: true };
+        } else if (request.method === 'clipboard.write') {
+          if (!permissions.has('clipboard.write')) throw new Error('permission denied: clipboard.write');
+          if (typeof params.text !== 'string' || params.text.length > 65536) throw new Error('clipboard text exceeds 65536 characters');
+          await writeClipboardText(params.text);
+          result = { copied: true };
+        } else if (request.method === 'contributions.list') {
           const catalogue = await listPluginContributions();
           result = Object.fromEntries(
             Object.entries(catalogue).map(([kind, items]) => [
@@ -90,20 +105,20 @@ export function PluginFrame({
     };
     window.addEventListener('message', receive);
     return () => window.removeEventListener('message', receive);
-  }, [plugin, view]);
+  }, [plugin, view, context, onClose]);
 
   return (
-    <section className="plugin-frame-shell">
+    <section className={`plugin-frame-shell${embedded ? ' plugin-frame-embedded' : ''}`}>
       <header>
         <strong>{plugin.package?.name ?? plugin.name} · {view.title}</strong>
         <span className="spacer" />
-        <button aria-label={t('common.close')} onClick={onClose}>×</button>
+        {onClose && <button aria-label={t('common.close')} onClick={onClose}>×</button>}
       </header>
       <iframe
         ref={frame}
         title={`${plugin.name}: ${view.title}`}
-        src={pluginUiUrl(plugin.name, view.entrypoint)}
-        sandbox="allow-scripts"
+        src={`${pluginUiUrl(plugin.name, view.entrypoint)}?version=${encodeURIComponent(plugin.version ?? 'legacy')}`}
+        sandbox={plugin.package?.permissions.includes('ui.downloads') ? 'allow-scripts allow-downloads' : 'allow-scripts'}
         referrerPolicy="no-referrer"
       />
     </section>

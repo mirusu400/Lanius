@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-API_VERSION = "1.3"
+API_VERSION = "1.4"
 
 ActionLocation = Literal[
     "global", "history", "flow", "request", "response", "replay", "fuzzer", "plugin"
@@ -170,6 +170,8 @@ class _Host(Protocol):
     def get_storage(self, key: str, default: Any, scope: SettingScope) -> Any: ...
     def set_storage(self, key: str, value: Any, scope: SettingScope) -> None: ...
     def delete_storage(self, key: str, scope: SettingScope) -> None: ...
+    def batch_storage(self, values: Mapping[str, Any], delete: Sequence[str]) -> None: ...
+    def get_flow(self, flow_id: str, *, in_scope_only: bool) -> Mapping[str, Any]: ...
     def list_resources(self, prefix: str) -> Sequence[str]: ...
     def read_resource(self, path: str) -> bytes: ...
     def create_task(
@@ -311,6 +313,13 @@ class PluginStorage:
     def delete(self, key: str, *, scope: SettingScope = "project") -> None:
         self._host.delete_storage(key, scope)
 
+    def batch(self, values: Mapping[str, Any], *, delete: Sequence[str] = ()) -> None:
+        """Atomically write/delete project values (1 MiB each, 48 MiB total).
+
+        All keys belong to this plugin. Validation precedes any mutation.
+        """
+        self._host.batch_storage(values, delete)
+
 
 class PluginTasks:
     def __init__(self, host: _Host) -> None:
@@ -390,6 +399,14 @@ class Flows:
 
     def __init__(self, host: _Host) -> None:
         self._host = host
+
+    def get(self, flow_id: str, *, in_scope_only: bool = True) -> Mapping[str, Any]:
+        """Copy one HTTP exchange, including exact base64 bodies (16 MiB total).
+
+        Text previews are bounded; raw bodies are never silently truncated.
+        Omitted capture bodies and absent responses are explicitly marked.
+        """
+        return self._host.get_flow(flow_id, in_scope_only=in_scope_only)
 
     def page(
         self, *, limit: int = 50, cursor: str | None = None,

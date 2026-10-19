@@ -6,6 +6,7 @@ import type {
   PluginActionLocation,
 } from '../api/types';
 import { useT } from '../i18n';
+import { openPluginActionView } from './pluginViewBridge';
 import type { MenuItem } from './ContextMenu';
 import { useToast } from './Toast';
 
@@ -30,6 +31,9 @@ export function usePluginActions(
 
   useEffect(() => {
     void refresh();
+    const changed = () => void refresh();
+    window.addEventListener('lanius.pluginsChanged', changed);
+    return () => window.removeEventListener('lanius.pluginsChanged', changed);
   }, [refresh]);
 
   const actionsAt = useCallback(
@@ -43,6 +47,7 @@ export function usePluginActions(
       try {
         const response = await invokePluginAction(action.id, context);
         onInvoked?.(response.result);
+        openPluginActionView(action.plugin, response.result);
         const result = response.result;
         if (result && typeof result === 'object' &&
           'check_ids' in result && Array.isArray(result.check_ids) &&

@@ -228,7 +228,11 @@ def test_package_api_serves_sandboxed_ui_and_uninstalls(tmp_path) -> None:
 
         page = client.get("/api/plugin-ui/acme.demo/index.html")
         assert page.status_code == 200
+        assert page.headers["cache-control"] == "no-store"
         assert "sandbox allow-scripts" in page.headers["content-security-policy"]
+        assert "allow-downloads" not in page.headers["content-security-policy"]
+        assert "http://127.0.0.1:5173" in page.headers["content-security-policy"]
+        assert "https://tauri.localhost" in page.headers["content-security-policy"]
         assert page.headers["x-content-type-options"] == "nosniff"
         assert client.get("/api/plugin-ui/acme.demo/../plugin.json").status_code == 404
 
@@ -326,3 +330,34 @@ def test_replacing_a_loaded_package_reloads_it(tmp_path) -> None:
         )
         assert result.status_code == 200, result.text
         assert result.json()["result"] == {"updated": "x"}
+
+
+def test_tab_placement_metadata_and_download_permission(tmp_path):
+    import json
+    files = {'backend/__init__.py': BACKEND, 'ui/index.html': INDEX, 'ui/app.js': SCRIPT}
+    manifest = manifest_for(files)
+    manifest['ui']['views'][0]['placement'] = 'tab'
+    manifest['permissions'].append('ui.downloads')
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, 'w') as package:
+        package.writestr('plugin.json', json.dumps(manifest))
+        for name, content in files.items():
+            package.writestr(name, content)
+    settings = Settings(proxy_port=free_port(), api_port=free_port(), data_dir=tmp_path,
+                        db_path=tmp_path / 'api.sqlite', confdir=tmp_path / 'mitm', plugins_dir=tmp_path / 'plugins')
+    with TestClient(create_app(settings)) as client:
+        installed = client.post('/api/plugins/install?enable=true', content=archive.getvalue())
+        assert installed.status_code == 200, installed.text
+        assert installed.json()['plugin']['ui']['views'][0]['placement'] == 'tab'
+        page = client.get('/api/plugin-ui/acme.demo/index.html')
+        assert 'sandbox allow-scripts allow-downloads' in page.headers['content-security-policy']
+
+
+@pytest.mark.parametrize('placement', [None, [], {}, 'sidebar'])
+def test_invalid_view_placement_is_a_package_error(tmp_path, placement):
+    from app.plugin_packages import load_manifest
+    manifest = manifest_for({'backend/__init__.py': BACKEND, 'ui/index.html': INDEX})
+    manifest['ui']['views'][0]['placement'] = placement
+    (tmp_path / 'plugin.json').write_text(json.dumps(manifest))
+    with pytest.raises(PluginPackageError, match='placement'):
+        load_manifest(tmp_path)

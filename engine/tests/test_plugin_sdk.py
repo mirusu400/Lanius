@@ -96,7 +96,7 @@ async def test_sdk_plugin_registers_and_invokes_contributions(sdk_manager) -> No
 
     assert plugin.loaded is True
     assert plugin.objects == []
-    assert plugin.as_dict()["sdk_api_version"] == "1.3"
+    assert plugin.as_dict()["sdk_api_version"] == "1.4"
     assert plugin.as_dict()["contributions"] == {
         "actions": 1,
         "codecs": 1,
@@ -339,3 +339,54 @@ def test_dotted_plugin_ids_cannot_collide_with_each_other(tmp_path) -> None:
     assert [
         item["id"] for item in registry.diagnostics("acme.demo")["contributions"]
     ] == ["acme.demo.hello"]
+
+
+def test_exchange_snapshots_are_exact_bounded_and_scope_checked(tmp_path):
+    import base64
+    store = FlowStore(tmp_path / 'snapshot.sqlite')
+    raw = b'\x00\xff' * 40000
+    store.upsert(FlowRecord(id='binary', scheme='https', host='inside.test', port=443,
+                           path='/', request_body=raw, response_headers=[], response_body=b''))
+    registry = ContributionRegistry(store, scope_predicate=lambda _s, host, _p, _path: host == 'inside.test')
+    context = registry.context('reader')
+    snapshot = context.flows.get('binary')
+    assert base64.b64decode(snapshot['request_body_base64']) == raw
+    assert snapshot['request_preview_truncated'] is True
+    assert snapshot['request_captured_bytes'] == len(raw)
+    assert snapshot['response_body_base64'] == ''
+    assert snapshot['response_present'] is True
+    snapshot['request_headers'].append(('X-Mutation', 'local'))
+    assert store.get('binary').request_headers == []
+    store.upsert(FlowRecord(id='outside', scheme='https', host='outside.test'))
+    with pytest.raises(PluginApiError, match='outside project scope'):
+        context.flows.get('outside')
+    assert context.flows.get('outside', in_scope_only=False)['id'] == 'outside'
+    with pytest.raises(PluginApiError, match='not found'):
+        context.flows.get('missing')
+    store.upsert(FlowRecord(id='large', request_body=b'x' * (16 * 1024 * 1024 + 1)))
+    with pytest.raises(PluginApiError, match='16 MiB'):
+        context.flows.get('large', in_scope_only=False)
+    store.close()
+
+
+def test_project_storage_batch_validates_before_writing_and_is_atomic(tmp_path):
+    store = FlowStore(tmp_path / 'batch.sqlite')
+    registry = ContributionRegistry(store)
+    one = registry.context('one').storage
+    two = registry.context('two').storage
+    one.batch({'meta': {'count': 1}, 'chunk.0': 'bytes'})
+    two.set('meta', 'other plugin')
+    with pytest.raises(PluginApiError, match='1 MiB'):
+        one.batch({'meta': {'count': 2}, 'oversized': 'x' * (1024 * 1024)})
+    assert one.get('meta') == {'count': 1}
+    assert one.get('oversized') is None
+    with pytest.raises(PluginApiError):
+        one.batch({'../invalid': 1})
+    one.batch({'meta': {'count': 0}}, delete=['chunk.0'])
+    assert one.get('chunk.0') is None
+    assert two.get('meta') == 'other plugin'
+    store._conn.execute("CREATE TRIGGER reject_batch BEFORE INSERT ON settings WHEN NEW.key LIKE '%/fail' BEGIN SELECT RAISE(ABORT, 'test failure'); END")
+    with pytest.raises(Exception, match='test failure'):
+        one.batch({'meta': {'count': 3}, 'fail': True})
+    assert one.get('meta') == {'count': 0}
+    store.close()

@@ -113,3 +113,18 @@ describe('PluginFrame', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+it('rejects clipboard writes without the declared permission', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  render(<PluginFrame plugin={plugin} view={view} />);
+  const target = (screen.getByTitle('acme.demo: Main view') as HTMLIFrameElement).contentWindow!;
+  const reply = vi.spyOn(target, 'postMessage');
+  window.dispatchEvent(new MessageEvent('message', { source: target, data: {
+    type: 'lanius.request', plugin: plugin.name, id: 'copy', method: 'clipboard.write', params: { text: 'flow-id' },
+  } }));
+  await waitFor(() => expect(reply).toHaveBeenCalledWith({
+    type: 'lanius.response', id: 'copy', error: 'permission denied: clipboard.write',
+  }, '*'));
+  expect(fetchMock).not.toHaveBeenCalled();
+});
