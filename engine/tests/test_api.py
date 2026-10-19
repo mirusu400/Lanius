@@ -61,6 +61,8 @@ def test_status_reports_running_proxy(client) -> None:
     data = client.get("/api/status").json()
     assert data["proxy"]["running"] is True
     assert data["flows"] == 0
+    assert data["capture_writer"]["dropped"] == 0
+    assert data["capture_writer"]["queue_capacity"] > 0
 
 
 def test_list_flows_empty(client) -> None:

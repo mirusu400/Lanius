@@ -57,7 +57,10 @@ async def test_addon_persists_and_publishes() -> None:
     addon = CaptureAddon(store, broker)
 
     flow = make_flow()
+    response = flow.response
+    flow.response = None
     addon.request(flow)
+    flow.response = response
     addon.response(flow)
     await addon.done()
 
@@ -71,6 +74,83 @@ async def test_addon_persists_and_publishes() -> None:
     assert second["type"] == "flow.response"
     assert second["data"]["host"] == "example.com"
     assert first["data"]["request_number"] == second["data"]["request_number"] == 1
+    assert addon.writer_status()["coalesced"] == 1
+    assert addon.writer_status()["records_written"] == 1
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_addon_batches_latest_snapshot_but_keeps_both_events(monkeypatch) -> None:
+    store = FlowStore()
+    broker = EventBroker()
+    queue = broker.subscribe()
+    batches: list[list[str]] = []
+    upsert_many = store.upsert_prepared_many
+
+    def track_batch(records):
+        records = list(records)
+        batches.append([record.id for record in records])
+        return upsert_many(records)
+
+    monkeypatch.setattr(store, "upsert_prepared_many", track_batch)
+    addon = CaptureAddon(store, broker, batch_size=2, flush_seconds=0.1)
+    first = make_flow("/first")
+    second = make_flow("/second")
+    first_response = first.response
+    second_response = second.response
+    first.response = None
+    second.response = None
+
+    addon.request(first)
+    addon.request(second)
+    first.response = first_response
+    second.response = second_response
+    addon.response(first)
+    addon.response(second)
+    await addon.done()
+
+    assert batches == [[first.id, second.id]]
+    assert [queue.get_nowait()["type"] for _ in range(4)] == [
+        "flow.request",
+        "flow.request",
+        "flow.response",
+        "flow.response",
+    ]
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_flush_is_durable_and_writer_restarts_after_done() -> None:
+    store = FlowStore()
+    addon = CaptureAddon(store, EventBroker(), flush_seconds=60)
+    first = make_flow("/first")
+    second = make_flow("/second")
+
+    addon.response(first)
+    await addon.flush()
+    assert store.count() == 1
+    assert addon.writer_status()["running"] is True
+
+    await addon.done()
+    assert addon.writer_status()["running"] is False
+    addon.response(second)
+    await addon.done()
+
+    assert store.count() == 2
+    assert addon.writer_status()["running"] is False
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_clear_history_is_ordered_after_queued_captures() -> None:
+    store = FlowStore()
+    addon = CaptureAddon(store, EventBroker(), flush_seconds=60)
+
+    addon.response(make_flow())
+    await addon.clear_history()
+    await addon.done()
+
+    assert store.count() == 0
     store.close()
 
 

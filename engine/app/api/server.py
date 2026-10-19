@@ -636,6 +636,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
             },
             "flows": await asyncio.to_thread(store.count),
+            "capture_writer": engine.capture.writer_status(),
             "subscribers": broker.subscriber_count,
             "db_path": str(settings.db_path),
             "intercept": engine.intercept.rules.as_dict(),
@@ -1540,7 +1541,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.delete("/api/flows")
     async def clear_flows() -> dict[str, Any]:
-        await asyncio.to_thread(store.clear)
+        # Captures accepted before Clear must not reappear after deletion.
+        await engine.capture.clear_history()
         await asyncio.to_thread(store.reclaim_space)
         broker.publish("flows.cleared", {})
         return {"ok": True}
