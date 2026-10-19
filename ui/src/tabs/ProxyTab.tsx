@@ -105,6 +105,10 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   const historyCursors = useRef<Record<number, string>>({});
   const [nextHistoryCursor, setNextHistoryCursor] = useState<string | null>(null);
   const requestGeneration = useRef(0);
+  // State changes are reloaded by the effect below, so remember when the
+  // change came from a person interacting with searched history. Background
+  // flow events must not start progress on their own.
+  const nextReloadShowsSearchProgress = useRef(false);
   const scopeReloadTimer = useRef<number | null>(null);
   const previousSearch = useRef(filters.search);
   const pausedRef = useRef(paused);
@@ -117,7 +121,10 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
 
   const reload = useCallback(async ({ showSearchProgress = false } = {}) => {
     const generation = ++requestGeneration.current;
-    setSearchLoading(showSearchProgress && Boolean(filtersRef.current.search));
+    // A background refresh can supersede an interactive request. Do not let
+    // it hide progress that is already explaining the user's wait; the newest
+    // request will clear the indicator when it settles.
+    if (showSearchProgress) setSearchLoading(true);
     setHistoryLoading(true);
     try {
       const page = await listFlowPage(
@@ -147,6 +154,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   }, [historySort]);
 
   const onSortHistory = (key: HistorySortKey) => {
+    if (filtersRef.current.search) nextReloadShowsSearchProgress.current = true;
     setHistorySort((current) => ({
       key,
       desc: current.key === key ? !current.desc : key === 'started_at',
@@ -160,8 +168,10 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   useEffect(() => {
     const searchChanged = filters.search !== previousSearch.current;
     previousSearch.current = filters.search;
+    const showSearchProgress = nextReloadShowsSearchProgress.current;
+    nextReloadShowsSearchProgress.current = false;
     if (!searchChanged) {
-      void reload();
+      void reload({ showSearchProgress });
       return;
     }
     requestGeneration.current += 1;
@@ -194,12 +204,16 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   const jumpToHistoryPage = () => {
     const page = Number(historyPageInput);
     if (Number.isSafeInteger(page) && page > 0) {
+      const nextPage = page - 1;
+      if (nextPage !== historyPageRef.current && filtersRef.current.search) {
+        nextReloadShowsSearchProgress.current = true;
+      }
       if (page === 1) {
         historyAnchor.current = undefined;
         historyCursors.current = {};
         setNextHistoryCursor(null);
       }
-      setHistoryPage(page - 1);
+      setHistoryPage(nextPage);
     }
     else setHistoryPageInput(String(historyPage + 1));
   };
@@ -450,6 +464,18 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
     [flows, selected],
   );
 
+  const applyHistoryFilters = (next: FlowFilters) => {
+    if (filtersRef.current.search || next.search) {
+      nextReloadShowsSearchProgress.current = true;
+    }
+    historyAnchor.current = undefined;
+    historyCursors.current = {};
+    setNextHistoryCursor(null);
+    setHistoryPage(0);
+    setHistoryPageInput('1');
+    setFilters(next);
+  };
+
   return (
     <div className="proxy-tab">
       <div className="subtabs">
@@ -493,12 +519,12 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
         <>
           <FilterBar
             filters={filters}
-            onChange={(next) => { historyAnchor.current = undefined; historyCursors.current = {}; setNextHistoryCursor(null); setHistoryPage(0); setHistoryPageInput('1'); setFilters(next); }}
+            onChange={applyHistoryFilters}
             paused={paused}
             onTogglePause={() => setPaused((p) => !p)}
             onClear={() => setConfirmClear(true)}
             clearBusy={clearing}
-            onReload={reload}
+            onReload={() => void reload({ showSearchProgress: Boolean(filtersRef.current.search) })}
             connection={connection}
             status={status}
             count={flows.length}
@@ -508,7 +534,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
             open={filterOpen}
             filters={filters}
             onClose={() => setFilterOpen(false)}
-            onApply={(next) => { setHistoryPage(0); setHistoryPageInput('1'); setFilters(next); }}
+            onApply={applyHistoryFilters}
           />
           {error && <div className="banner error">{renderMessage(error, t)}</div>}
           <Split
@@ -535,6 +561,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
           />
           <div className="history-pages">
             <button disabled={historyPage === 0 || historyLoading} onClick={() => {
+              if (filtersRef.current.search) nextReloadShowsSearchProgress.current = true;
               if (historyPage === 1) {
                 historyAnchor.current = undefined;
                 historyCursors.current = {};
@@ -549,6 +576,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
             </label>
             <button disabled={historyLoading} onClick={jumpToHistoryPage}>{t('proxy.jumpToPage')}</button>
             <button disabled={!hasMoreHistory || historyLoading} onClick={() => {
+              if (filtersRef.current.search) nextReloadShowsSearchProgress.current = true;
               if (nextHistoryCursor) historyCursors.current[historyPage + 1] = nextHistoryCursor;
               else delete historyCursors.current[historyPage + 1];
               setHistoryPage((page) => page + 1);

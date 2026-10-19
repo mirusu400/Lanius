@@ -75,6 +75,7 @@ let clearResponse: Promise<Response> | null = null;
 let paginateHistory = false;
 let importedHistory = false;
 let searchResponse: Promise<Response> | null = null;
+let flowPageResponse: Promise<Response> | null = null;
 let calls: { url: string; method: string; body?: unknown }[] = [];
 
 beforeEach(() => {
@@ -88,6 +89,7 @@ beforeEach(() => {
   paginateHistory = false;
   importedHistory = false;
   searchResponse = null;
+  flowPageResponse = null;
   MockSocket.instances = [];
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
   vi.stubGlobal(
@@ -159,6 +161,9 @@ beforeEach(() => {
       }
       if (searchResponse && url.includes('/api/flows?') && new URL(url).searchParams.has('search')) {
         return searchResponse;
+      }
+      if (flowPageResponse && url.includes('/api/flows?')) {
+        return flowPageResponse;
       }
       if (importedHistory && url.includes('/api/flows?')) {
         return jsonResponse({ items: [{ ...seeded, id: 'imported', path: '/imported' }], count: 1, has_more: false, anchor: 2 });
@@ -344,6 +349,128 @@ describe('ProxyTab', () => {
     await waitFor(() => expect(
       document.querySelector('.flow-table tbody tr')?.textContent,
     ).toContain('needle-live.test'));
+  });
+
+  it('keeps search progress when a background reload supersedes a pending user search', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+
+    let finishSearch!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finishSearch = resolve; });
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'needle');
+    await screen.findByRole('status', { name: t('proxy.searching') });
+
+    const searchCalls = calls.filter(({ url }) => url.includes('search=needle')).length;
+    MockSocket.instances[0].emit('flow.request', { ...live, host: 'needle-live.test' });
+    await waitFor(() => expect(
+      calls.filter(({ url }) => url.includes('search=needle')).length,
+    ).toBeGreaterThan(searchCalls));
+    expect(screen.getByRole('status', { name: t('proxy.searching') })).toBeTruthy();
+
+    finishSearch(jsonResponse({
+      items: [{ ...seeded, id: 'background', host: 'needle-live.test' }],
+      count: 1,
+    }));
+    await waitFor(() => expect(
+      screen.queryByRole('status', { name: t('proxy.searching') }),
+    ).toBeNull());
+  });
+
+  it('keeps search progress while clearing a pending search restores history', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+
+    let finishSearch!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finishSearch = resolve; });
+    const search = screen.getByPlaceholderText(t('proxy.searchPlaceholder'));
+    await user.type(search, 'needle');
+    await screen.findByRole('status', { name: t('proxy.searching') });
+
+    let finishRestore!: (response: Response) => void;
+    flowPageResponse = new Promise<Response>((resolve) => { finishRestore = resolve; });
+    const restoreCalls = calls.filter(({ url }) => (
+      url.includes('/api/flows?') && !new URL(url).searchParams.has('search')
+    )).length;
+    await user.clear(search);
+    await waitFor(() => expect(calls.filter(({ url }) => (
+      url.includes('/api/flows?') && !new URL(url).searchParams.has('search')
+    )).length).toBeGreaterThan(restoreCalls));
+    expect(screen.getByRole('status', { name: t('proxy.searching') })).toBeTruthy();
+
+    finishRestore(jsonResponse({ items: [seeded], count: 1 }));
+    await waitFor(() => expect(
+      screen.queryByRole('status', { name: t('proxy.searching') }),
+    ).toBeNull());
+    finishSearch(jsonResponse({ items: [], count: 0 }));
+  });
+
+  it('shows search progress while sorting searched history', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+
+    searchResponse = Promise.resolve(jsonResponse({ items: [seeded], count: 1 }));
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'seeded');
+    await waitFor(() => expect(calls.some(({ url }) => url.includes('search=seeded'))).toBe(true));
+
+    let finishSort!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finishSort = resolve; });
+    await user.click(screen.getByRole('button', { name: t('flow.host') }));
+    await screen.findByRole('status', { name: t('proxy.searching') });
+
+    finishSort(jsonResponse({ items: [seeded], count: 1 }));
+    await waitFor(() => expect(
+      screen.queryByRole('status', { name: t('proxy.searching') }),
+    ).toBeNull());
+  });
+
+  it('shows search progress while paging through searched history', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+
+    searchResponse = Promise.resolve(jsonResponse({
+      items: [seeded],
+      count: 1,
+      has_more: true,
+    }));
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'seeded');
+    const older = screen.getByRole('button', { name: t('proxy.olderHistory') });
+    await waitFor(() => expect((older as HTMLButtonElement).disabled).toBe(false));
+
+    let finishPage!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finishPage = resolve; });
+    await user.click(older);
+    await screen.findByRole('status', { name: t('proxy.searching') });
+
+    finishPage(jsonResponse({ items: [], count: 0, has_more: false }));
+    await waitFor(() => expect(
+      screen.queryByRole('status', { name: t('proxy.searching') }),
+    ).toBeNull());
+  });
+
+  it('shows search progress for a manual refresh of searched history', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+
+    searchResponse = Promise.resolve(jsonResponse({ items: [seeded], count: 1 }));
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'seeded');
+    await waitFor(() => expect(
+      screen.queryByRole('status', { name: t('proxy.searching') }),
+    ).toBeNull());
+
+    let finishRefresh!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finishRefresh = resolve; });
+    await user.click(screen.getByRole('button', { name: t('common.refresh') }));
+    await screen.findByRole('status', { name: t('proxy.searching') });
+
+    finishRefresh(jsonResponse({ items: [seeded], count: 1 }));
+    await waitFor(() => expect(
+      screen.queryByRole('status', { name: t('proxy.searching') }),
+    ).toBeNull());
   });
 
   it('keeps refreshing a searched history while flows arrive faster than the reload delay', async () => {
