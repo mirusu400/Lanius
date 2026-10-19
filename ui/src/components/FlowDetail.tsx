@@ -306,10 +306,14 @@ function Half({
       <div className="detail-half-body">
         {bodyOmitted && <p className="banner" role="status">{t('detail.mediaBodyOmitted', { size: formatBytes(bodySize ?? 0) })}</p>}
         {bodyTruncated && <div className="banner body-preview-notice" role="status">
-          <span>{t('detail.bodyTruncated', {
-            shown: formatBytes(bodyPreviewSize ?? 0),
-            total: formatBytes(bodyCapturedSize ?? bodySize ?? 0),
-          })}</span>
+          <span>{encodingLabel
+            // Decoded bytes against a compressed total would read as
+            // "256 KB of 40 KB"; the decoded length is unknown here.
+            ? t('detail.bodyTruncatedDecoded', { shown: formatBytes(bodyPreviewSize ?? 0) })
+            : t('detail.bodyTruncated', {
+                shown: formatBytes(bodyPreviewSize ?? 0),
+                total: formatBytes(bodyCapturedSize ?? bodySize ?? 0),
+              })}</span>
           {bodyChunkable && onLoadMore
             ? <button type="button" onClick={onLoadMore} disabled={loadingMore}>
                 {loadingMore ? t('detail.loadingMore') : t('detail.loadMore')}

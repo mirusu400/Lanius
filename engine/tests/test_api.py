@@ -139,6 +139,68 @@ def test_body_chunk_endpoint_distinguishes_no_response_from_an_empty_body(client
     assert empty.json()["text"] == ""
 
 
+def test_flow_preview_and_chunks_split_on_character_boundaries(client) -> None:
+    # 3-byte characters: the 256 KiB boundary falls inside one of them.
+    body = ("가" * 200_000).encode("utf-8")
+    seed(
+        client,
+        "korean",
+        response_headers=[("Content-Type", "text/plain; charset=utf-8")],
+        response_body=body,
+    )
+
+    detail = client.get("/api/flows/korean").json()
+    assert detail["response_charset"] == "utf-8"
+    preview_size = detail["response_body_preview_size"]
+    assert preview_size % 3 == 0 and preview_size <= FLOW_BODY_PREVIEW_BYTES
+    assert detail["response_body"] == "가" * (preview_size // 3)
+
+    text = detail["response_body"]
+    offset = preview_size
+    while True:
+        chunk = client.get(
+            f"/api/flows/korean/body/response/preview?offset={offset}"
+        ).json()
+        text += chunk["text"]
+        offset = chunk["next_offset"]
+        if not chunk["truncated"]:
+            break
+    assert text == "가" * 200_000
+
+
+def test_flow_preview_shows_prefix_of_large_compressed_body(client) -> None:
+    decoded = b'{"a":1}' * 100_000
+    seed(
+        client,
+        "gzip-large",
+        response_headers=[
+            ("Content-Type", "application/json"),
+            ("Content-Encoding", "gzip"),
+        ],
+        response_body=gzip.compress(decoded),
+    )
+
+    detail = client.get("/api/flows/gzip-large").json()
+    assert detail["response_body_decoded"] is True
+    assert detail["response_decode_error"] is None
+    assert detail["response_body"] == decoded[:FLOW_BODY_PREVIEW_BYTES].decode()
+    assert detail["response_body_truncated"] is True
+    assert detail["response_body_chunkable"] is False
+
+
+def test_flow_preview_reports_corrupt_compressed_body(client) -> None:
+    seed(
+        client,
+        "gzip-corrupt",
+        response_headers=[("Content-Type", "text/plain"), ("Content-Encoding", "gzip")],
+        response_body=b"\x1f\x8bnot gzip",
+    )
+
+    response = client.get("/api/flows/gzip-corrupt")
+    assert response.status_code == 200
+    assert response.json()["response_decode_error"]
+
+
 def test_replay_request_endpoint_does_not_use_full_flow_reader(client) -> None:
     seed(
         client,

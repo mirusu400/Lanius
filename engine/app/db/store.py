@@ -26,7 +26,7 @@ from typing import Any, List, Sequence
 import logging
 
 from .. import charset
-from ..content_encoding import body_for_display
+from ..content_encoding import body_for_display, body_prefix_for_display
 from ..media_storage import MEDIA_BODY_LIMIT_SETTING, prepare_record, read_limit
 
 logger = logging.getLogger(__name__)
@@ -166,6 +166,9 @@ class FlowRecord:
         request_charset_override: str | None = None,
         response_charset_override: str | None = None,
         body_output_limit: int | None = None,
+        preview_limit: int | None = None,
+        request_body_complete: bool = True,
+        response_body_complete: bool = True,
     ) -> dict[str, Any]:
         """Full dict with headers and bodies rendered as text-safe values.
 
@@ -173,40 +176,69 @@ class FlowRecord:
         with the charset each message declares or detects. Decoding everything
         as UTF-8 turned a Korean EUC-KR page into replacement characters,
         which cannot be turned back into the original bytes.
+
+        With ``preview_limit`` each body shows at most that many (decoded)
+        bytes, and ``*_body_complete=False`` says the stored body continues
+        past the bytes in this record.  ``*_body_preview_size`` and
+        ``*_body_truncated`` then describe the window actually shown.
         """
         data = asdict(self)
         data.pop("request_original", None)
         data.pop("request_auto_modified", None)
-        request_display, request_encoding, request_decoded, request_error = (
-            body_for_display(
-                self.request_headers,
-                self.request_body,
-                enabled=auto_decompress and not self.request_body_omitted,
-                max_output_bytes=body_output_limit,
-            )
+
+        def display(
+            headers: list[tuple[str, str]] | None,
+            body: bytes | None,
+            omitted: bool,
+            complete: bool,
+            override: str | None,
+        ) -> tuple[bytes | None, str, str | None, bool, str | None, bool]:
+            content_type = _content_type(headers)
+            if preview_limit is None:
+                shown, encoding, decoded, error = body_for_display(
+                    headers,
+                    body,
+                    enabled=auto_decompress and not omitted,
+                    max_output_bytes=body_output_limit,
+                )
+                cut = False
+            else:
+                shown, encoding, decoded, error, cut = body_prefix_for_display(
+                    headers,
+                    body,
+                    enabled=auto_decompress and not omitted,
+                    limit=preview_limit,
+                    input_complete=complete,
+                )
+            if override:
+                selected = charset.normalise(override)
+            elif cut:
+                selected = charset.charset_of_prefix(content_type, shown)
+            else:
+                selected = charset.charset_of(content_type, shown)
+            if cut and shown:
+                shown = charset.complete_characters(shown, selected)
+            return shown, selected, encoding, decoded, error, cut
+
+        (
+            request_display, request_charset, request_encoding,
+            request_decoded, request_error, request_cut,
+        ) = display(
+            self.request_headers, self.request_body, self.request_body_omitted,
+            request_body_complete, request_charset_override,
         )
-        response_display, response_encoding, response_decoded, response_error = (
-            body_for_display(
-                self.response_headers,
-                self.response_body,
-                enabled=auto_decompress and not self.response_body_omitted,
-                max_output_bytes=body_output_limit,
-            )
+        (
+            response_display, response_charset, response_encoding,
+            response_decoded, response_error, response_cut,
+        ) = display(
+            self.response_headers, self.response_body, self.response_body_omitted,
+            response_body_complete, response_charset_override,
         )
-        request_charset = (
-            charset.normalise(request_charset_override)
-            if request_charset_override
-            else charset.charset_of(
-                _content_type(self.request_headers), request_display
-            )
-        )
-        response_charset = (
-            charset.normalise(response_charset_override)
-            if response_charset_override
-            else charset.charset_of(
-                _content_type(self.response_headers), response_display
-            )
-        )
+        if preview_limit is not None:
+            data["request_body_preview_size"] = len(request_display or b"")
+            data["response_body_preview_size"] = len(response_display or b"")
+            data["request_body_truncated"] = request_cut
+            data["response_body_truncated"] = response_cut
         data["request_body"] = (
             None
             if request_display is None
@@ -227,6 +259,10 @@ class FlowRecord:
         data["request_decode_error"] = request_error
         data["response_decode_error"] = response_error
         data["request_variants"] = None
+        # Request variants are small by construction (see get_preview); give
+        # them the same output budget as the main preview.
+        if preview_limit is not None and body_output_limit is None:
+            body_output_limit = preview_limit
         if self.modified and self.request_original is not None:
             final = RequestSnapshot(
                 method=self.method or "GET",

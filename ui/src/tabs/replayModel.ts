@@ -355,7 +355,8 @@ export function trimResponse(response: ReplayResponse): ReplayResponse {
 
 export function renderResponseText(
   response: ReplayResponse,
-  note: (hidden: number) => string = (n) => `[${n} more characters not shown]`,
+  note: (hidden: number | null) => string = (n) =>
+    n === null ? '[preview truncated]' : `[${n} more characters not shown]`,
 ): string {
   if (response.error && response.status_code === null) {
     return `[error] ${response.error}`;
@@ -371,6 +372,10 @@ export function renderResponseText(
   // Truncated for display only: the full body is still in the tab, and
   // still what gets saved and sent.
   const shown = body.slice(0, BODY_DISPLAY_LIMIT);
+  // A decompressed preview has no known decoded total to subtract from.
+  if (response.body_truncated && response.body_decoded) {
+    return `${status}\n${headers}\n\n${shown}\n\n${note(null)}`;
+  }
   const total = response.body_truncated
     ? Math.max(response.size, response.body_captured_size ?? 0, response.truncated ?? 0)
     : body.length;

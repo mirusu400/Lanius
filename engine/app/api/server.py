@@ -1419,23 +1419,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         record, body_info = preview
         auto_decompress = await asyncio.to_thread(auto_decompress_enabled, store)
         # Decode only the bounded window.  A tiny compressed input can expand
-        # enormously, so the decoded output has the same memory budget.
+        # enormously, so the decoded output has the same memory budget; a
+        # compressed body shows the first decoded bytes rather than nothing.
         data = await asyncio.to_thread(
             record.detail,
             auto_decompress=auto_decompress,
             request_charset_override=_display_charset(request_charset),
             response_charset_override=_display_charset(response_charset),
-            body_output_limit=FLOW_BODY_PREVIEW_BYTES,
+            preview_limit=FLOW_BODY_PREVIEW_BYTES,
+            request_body_complete=not body_info["request_body_truncated"],
+            response_body_complete=not body_info["response_body_truncated"],
         )
-        data.update(body_info)
+        data["request_body_captured_size"] = body_info["request_body_captured_size"]
+        data["response_body_captured_size"] = body_info["response_body_captured_size"]
+        data["request_variants_truncated"] = body_info["request_variants_truncated"]
         for side in ("request", "response"):
-            headers = getattr(record, f"{side}_headers")
-            encoded = content_encoding(headers)
-            truncated = bool(body_info[f"{side}_body_truncated"])
-            data[f"{side}_body_chunkable"] = truncated and not encoded
-            # An independently fetched middle chunk cannot be decompressed as
-            # an HTTP coding stream.  Do not render compressed bytes as text.
-            if encoded and (truncated or data.get(f"{side}_decode_error")):
+            encoded = bool(data.get(f"{side}_content_encoding")) and auto_decompress
+            # Later raw chunks can be appended only to raw text: a window from
+            # the middle of a compressed stream cannot be decoded by itself.
+            data[f"{side}_body_chunkable"] = bool(
+                data[f"{side}_body_truncated"] and not encoded
+            )
+            # Never render a truncated window of undecodable compressed bytes.
+            if (
+                encoded
+                and not data.get(f"{side}_body_decoded")
+                and data[f"{side}_body_truncated"]
+            ):
                 data[f"{side}_body"] = ""
                 data[f"{side}_body_preview_size"] = 0
         annotation = await asyncio.to_thread(store.get_annotation, flow_id)
@@ -1573,11 +1583,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=409,
                 detail="compressed bodies cannot be loaded as independent text chunks",
             )
+        more = offset + len(chunk) < total
         selected = (
             _display_charset(charset_name) or charset.DEFAULT_CHARSET
             if charset_name
+            else charset.charset_of_prefix(_content_type(headers), chunk)
+            if more
             else charset.charset_of(_content_type(headers), chunk)
         )
+        if more:
+            # End on a character boundary so the next chunk starts on one too.
+            chunk = charset.complete_characters(chunk, selected)
         next_offset = offset + len(chunk)
         return {
             "text": charset.decode(chunk, selected),

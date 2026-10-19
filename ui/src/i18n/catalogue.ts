@@ -176,6 +176,7 @@ const en = {
   'captureStorage.hint': 'Default: 5 MB. 1 MB = 1,024 × 1,024 bytes. Set 0 for unlimited storage. Existing captures remain unchanged.',
   'detail.mediaBodyOmitted': 'Media body not stored because it reached the storage limit. Original size: {size}.',
   'detail.bodyTruncated': 'Showing {shown} of {total} stored body data.',
+  'detail.bodyTruncatedDecoded': 'Showing the first {shown} of the decompressed body.',
   'detail.loadMore': 'Load next chunk',
   'detail.loadingMore': 'Loading…',
   'detail.bodyChunkUnavailable': 'Additional chunks are unavailable while this encoded body is displayed decompressed.',
@@ -210,6 +211,7 @@ const en = {
   'replay.redirectLimit':
     'Automatic redirect following stopped after {count} redirects.',
   'replay.bodyTruncated': '[{count} more bytes not shown]',
+  'replay.bodyPreviewTruncated': '[decompressed preview truncated]',
   'replay.sending': 'Sending…',
   'replay.history': 'Send history',
   'replay.previousHistory': 'Previous send',
@@ -1379,6 +1381,7 @@ const ko: Catalogue = {
   'captureStorage.hint': '기본값은 5MB이며 1MB = 1,024 × 1,024바이트입니다. 0이면 제한 없이 저장합니다. 기존 캡처는 그대로 유지됩니다.',
   'detail.mediaBodyOmitted': '설정 한도 이상이므로 미디어 본문을 저장하지 않았습니다. 원래 크기: {size}.',
   'detail.bodyTruncated': '저장된 본문 {total} 중 {shown}를 표시하고 있습니다.',
+  'detail.bodyTruncatedDecoded': '압축 해제된 본문의 처음 {shown}를 표시하고 있습니다.',
   'detail.loadMore': '다음 청크 불러오기',
   'detail.loadingMore': '불러오는 중…',
   'detail.bodyChunkUnavailable': '인코딩된 본문을 압축 해제하여 표시하는 동안에는 추가 청크를 불러올 수 없습니다.',
@@ -1412,6 +1415,7 @@ const ko: Catalogue = {
   'replay.redirectLimit':
     '리다이렉트를 {count}회 따라간 뒤 자동 추적을 중단했습니다.',
   'replay.bodyTruncated': '[{count}바이트 더 있음, 표시 생략]',
+  'replay.bodyPreviewTruncated': '[압축 해제 미리보기 생략됨]',
   'replay.sending': '전송 중…',
   'replay.history': '전송 내역',
   'replay.previousHistory': '이전 전송',
