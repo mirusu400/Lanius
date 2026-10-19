@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { autosave as startAutosave, flushAutosaves, replaceWorkspace } from './autosave';
-import { addFuzzerDraft, ensureFuzzerDraft, getFuzzerWorkspace, mergeFuzzerWorkspace, newFuzzerDraft, resetTarget, setFuzzerWorkspace, subscribeFuzzerWorkspace } from './fuzzerStore';
+import { addFuzzerDraft, ensureFuzzerDraft, getFuzzerWorkspace, mergeFuzzerWorkspace, newFuzzerDraft, renameFuzzerDraft, resetTarget, setFuzzerWorkspace, subscribeFuzzerWorkspace } from './fuzzerStore';
 
 let puts: { key: string; value: unknown }[] = [];
 let stored: Record<string, unknown> = {};
@@ -102,6 +102,24 @@ describe('autosave', () => {
 
     expect(getFuzzerWorkspace().tabs.map((tab) => tab.url)).toEqual(['http://saved.test']);
     expect(getFuzzerWorkspace().activeId).toBe(old.id);
+  });
+  it('keeps a renamed starter tab when a saved Fuzzer workspace arrives', async () => {
+    const old = newFuzzerDraft('http://saved.test');
+    let finishRead!: (response: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => { finishRead = resolve; }));
+    autosave('fuzzer', subscribeFuzzerWorkspace, setFuzzerWorkspace, undefined, resetTarget, mergeFuzzerWorkspace);
+    ensureFuzzerDraft();
+    const starter = getFuzzerWorkspace().tabs[0];
+    renameFuzzerDraft(starter.id, 'Login fuzz');
+
+    finishRead(jsonResponse({ value: { tabs: [old], activeId: old.id } }));
+    await vi.runAllTimersAsync();
+
+    expect(getFuzzerWorkspace().tabs.map((tab) => tab.title ?? tab.url)).toEqual([
+      'http://saved.test',
+      'Login fuzz',
+    ]);
+    expect(getFuzzerWorkspace().activeId).toBe(starter.id);
   });
   it('does not write when nothing actually changed', async () => {
     // Stores emit freely, and the payload can be large. Re-sending an

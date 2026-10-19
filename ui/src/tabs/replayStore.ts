@@ -107,6 +107,12 @@ export function updateTab(id: string, patch: Partial<ReplayTab>): void {
   emit();
 }
 
+export function renameTab(id: string, title: string): void {
+  const normalized = title.trim();
+  if (!normalized) return;
+  updateTab(id, { title: normalized });
+}
+
 /** Editing a sent pair starts a draft; the recorded request stays immutable. */
 export function editReplayTab(id: string, patch: Partial<Pick<ReplayTab, 'url' | 'text'>>): void {
   tabs = tabs.map((tab) => {

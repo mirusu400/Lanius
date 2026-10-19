@@ -23,6 +23,7 @@ import {
   finishReplaySend,
   getActiveTabId,
   getTabs,
+  renameTab,
   removeTab,
   selectTab,
   stepReplayHistory,
@@ -51,6 +52,7 @@ import { errorMessage, msg, rawMsg, renderMessage, useT } from '../i18n';
 import { sendTextToFuzzer } from './fuzzerStore';
 import { useShortcut } from '../useShortcut';
 import { UndoableInput } from '../components/UndoableText';
+import { EditableTabTitle } from '../components/EditableTabTitle';
 
 function requestUrl(tab: Pick<ReplayTab, 'url' | 'text'>): string | null {
   try {
@@ -364,27 +366,28 @@ export function ReplayTabView() {
     <div className="replay-tab">
       <div className="subtabs replay-tabs">
         {tabs.map((tab) => (
-          <button
+          <div
             key={tab.id}
-            className={tab.id === activeId ? 'active' : ''}
-            onClick={() => selectTab(tab.id)}
-            onContextMenu={(event) => menu.open(event, tab.id)}
+            className={`replay-tab-choice ${tab.id === activeId ? 'active' : ''}`}
           >
-            <span className="tab-title" title={tab.title}>
-              {tab.title}
-            </span>
-            <span
+            <EditableTabTitle
+              active={tab.id === activeId}
+              ariaLabel={t('common.renameTab', { title: tab.title })}
+              buttonClassName="replay-tab-select"
+              displayTitle={tab.title}
+              onContextMenu={(event) => menu.open(event, tab.id)}
+              onRename={(title) => renameTab(tab.id, title)}
+              onSelect={() => selectTab(tab.id)}
+            />
+            <button
+              type="button"
               className="close"
-              role="button"
               aria-label={t('replay.closeTab', { title: tab.title })}
-              onClick={(e) => {
-                e.stopPropagation();
-                closeTab(tab.id);
-              }}
+              onClick={() => closeTab(tab.id)}
             >
               ×
-            </span>
-          </button>
+            </button>
+          </div>
         ))}
         <button className="new-tab" onClick={createTab}>
           +

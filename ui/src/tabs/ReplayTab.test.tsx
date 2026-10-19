@@ -550,11 +550,24 @@ describe('ReplayTab', () => {
     // wait on the DOM, not the store, so React effects have flushed
     await waitFor(() => expect(editor()?.value).toContain('/second'));
     expect(getTabs()).toHaveLength(2);
-    const [helloTab] = screen
-      .getAllByRole('button')
-      .filter((b) => b.textContent === 'GET /hello×');
-    await user.click(helloTab);
+    await user.click(screen.getByRole('button', { name: 'GET /hello' }));
     expect(editor().value).toContain('/hello');
+  });
+
+  it('renames a request tab by double-clicking its title', async () => {
+    const user = userEvent.setup();
+    sendToReplay(flow);
+    render(<ReplayTabView />);
+
+    await user.dblClick(screen.getByText('GET /hello'));
+    const name = screen.getByRole('textbox', {
+      name: t('common.renameTab', { title: 'GET /hello' }),
+    });
+    await user.clear(name);
+    await user.type(name, 'Login probe{Enter}');
+
+    expect(screen.getByText('Login probe')).toBeTruthy();
+    expect(getTabs()[0].title).toBe('Login probe');
   });
 
   it('shows a newly transferred request while an older Replay tab is selected', async () => {

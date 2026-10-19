@@ -20,6 +20,7 @@ const listeners = new Set<Listener>();
 
 export interface FuzzerDraft {
   id: string;
+  title?: string;
   url: string;
   template: string;
   mode: RunMode;
@@ -67,6 +68,7 @@ export function mergeFuzzerWorkspace(saved: FuzzerWorkspace, changed: FuzzerWork
     // The Fuzzer screen creates a starter tab on first visit. If the saved
     // workspace has tabs, discard that untouched placeholder on restore.
     const pristineAutoDraft = tab.id === autoDraftId && saved.tabs.length > 0 &&
+      !tab.title?.trim() &&
       tab.url === DEFAULT_URL && tab.template === DEFAULT_TEMPLATE &&
       tab.mode === 'single_position' && tab.payloadText.length === 1 &&
       tab.payloadText[0] === 'a\nb\nc' && tab.concurrency === 5 &&
@@ -104,6 +106,11 @@ export function patchFuzzerDraft(id: string, patch: Partial<FuzzerDraft>): void 
   if (!tab || Object.entries(patch).every(([key, value]) => tab[key as keyof FuzzerDraft] === value)) return;
   workspace = { ...workspace, tabs: workspace.tabs.map((entry) => entry.id === id ? { ...entry, ...patch } : entry) };
   emitWorkspace();
+}
+export function renameFuzzerDraft(id: string, title: string): void {
+  const normalized = title.trim();
+  if (!normalized) return;
+  patchFuzzerDraft(id, { title: normalized });
 }
 export function selectFuzzerDraft(id: string): void {
   workspace = { ...workspace, activeId: id };

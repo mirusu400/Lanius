@@ -21,7 +21,7 @@ import {
 } from './fuzzerModel';
 import {
   addFuzzerDraft, ensureFuzzerDraft, getFuzzerWorkspace, getFuzzerWorkspaceEpoch, newFuzzerDraft, openFuzzerRun,
-  patchFuzzerDraft, removeFuzzerDraft, selectFuzzerDraft,
+  patchFuzzerDraft, removeFuzzerDraft, renameFuzzerDraft, selectFuzzerDraft,
   subscribeFuzzerWorkspace, type FuzzerDraft,
 } from './fuzzerStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
@@ -44,6 +44,7 @@ import { copyTextToClipboard } from '../clipboard';
 import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 import { useShortcut } from '../useShortcut';
+import { EditableTabTitle } from '../components/EditableTabTitle';
 
 export function FuzzerTab() {
   const t = useT();
@@ -90,14 +91,25 @@ export function FuzzerTab() {
   };
   return <div className="fuzzer-workspace">
     <div className="subtabs fuzzer-tabs">
-      {workspace.tabs.map((draft, index) => <div key={draft.id} className={`fuzzer-tab-choice ${draft.id === workspace.activeId ? 'active' : ''}`}>
-        <button type="button" className="fuzzer-tab-select" aria-current={draft.id === workspace.activeId ? 'page' : undefined}
-          onClick={() => selectFuzzerDraft(draft.id)}>
-          <span className="tab-title" title={draft.url}>{index + 1}. {draft.url}</span>
-        </button>
-        <button type="button" className="tab-close" aria-label={`${t('fuzzer.closeTab')} ${index + 1}`}
-          onClick={() => removeFuzzerDraft(draft.id)}>×</button>
-      </div>)}
+      {workspace.tabs.map((draft, index) => {
+        const title = draft.title?.trim() || `${index + 1}. ${draft.url}`;
+        return (
+          <div key={draft.id} className={`fuzzer-tab-choice ${draft.id === workspace.activeId ? 'active' : ''}`}>
+            <EditableTabTitle
+              active={draft.id === workspace.activeId}
+              ariaLabel={t('common.renameTab', { title })}
+              buttonClassName="fuzzer-tab-select"
+              displayTitle={title}
+              editValue={draft.title ?? draft.url}
+              tooltip={draft.title ? `${draft.title} — ${draft.url}` : draft.url}
+              onRename={(name) => renameFuzzerDraft(draft.id, name)}
+              onSelect={() => selectFuzzerDraft(draft.id)}
+            />
+            <button type="button" className="tab-close" aria-label={`${t('fuzzer.closeTab')} ${index + 1}`}
+              onClick={() => removeFuzzerDraft(draft.id)}>×</button>
+          </div>
+        );
+      })}
       <button className="new-tab" onClick={() => addFuzzerDraft(newFuzzerDraft())} aria-label={t('fuzzer.newTab')}>+</button>
       <select aria-label={t('fuzzer.history')} value="" onChange={(event) => void openHistory(event.target.value)}>
         <option value="">{t('fuzzer.history')}</option>

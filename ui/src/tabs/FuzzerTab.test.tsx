@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FuzzerTab } from './FuzzerTab';
-import { newFuzzerDraft, resetTarget, sendToFuzzer, setFuzzerWorkspace } from './fuzzerStore';
+import { getFuzzerWorkspace, newFuzzerDraft, resetTarget, sendToFuzzer, setFuzzerWorkspace } from './fuzzerStore';
 import type { RunResult, FlowSummary } from '../api/types';
 import { getTabs, resetTabs } from './replayStore';
 
@@ -279,6 +279,21 @@ describe('FuzzerTab', () => {
     close.focus();
     await userEvent.keyboard('{Enter}');
     expect(screen.queryByRole('button', { name: /app\.test/ })).toBeNull();
+  });
+  it('renames a request tab by double-clicking its title', async () => {
+    const user = userEvent.setup();
+    sendToFuzzer(flow);
+    render(<FuzzerTab />);
+
+    await user.dblClick(screen.getByText('1. http://app.test'));
+    const name = screen.getByRole('textbox', {
+      name: t('common.renameTab', { title: '1. http://app.test' }),
+    });
+    await user.clear(name);
+    await user.type(name, 'Login fuzz{Enter}');
+
+    expect(screen.getByText('Login fuzz')).toBeTruthy();
+    expect(getFuzzerWorkspace().tabs[0].title).toBe('Login fuzz');
   });
   it('keeps an edited target when its hidden tab is shown again', async () => {
     sendToFuzzer(flow);

@@ -31,6 +31,7 @@ const en = {
   'common.location': 'Location',
   'common.enabled': 'Enabled',
   'common.proxy': 'Proxy',
+  'common.renameTab': 'Rename {title}',
   'clipboard.failed': 'Could not access the clipboard: {message}',
 
   'shutdown.closing': 'Closing Lanius…',
@@ -1242,6 +1243,7 @@ const ko: Catalogue = {
   'common.location': '위치',
   'common.enabled': '사용',
   'common.proxy': '프록시',
+  'common.renameTab': '{title} 이름 변경',
   'clipboard.failed': '클립보드에 접근하지 못했습니다: {message}',
 
   'proxy.intercept': 'Intercept',

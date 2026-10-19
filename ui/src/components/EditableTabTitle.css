@@ -1,0 +1,39 @@
+.tab-title-input {
+  box-sizing: border-box;
+  width: 185px;
+  min-width: 80px;
+  padding: 2px 6px;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--fg);
+  font: inherit;
+  line-height: 1.5;
+  outline: none;
+}
+
+.replay-tab-choice {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 240px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.replay-tab-choice.active {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+
+.replay-tabs .replay-tab-choice button {
+  border: 0;
+}
+
+.replay-tabs .replay-tab-select {
+  min-width: 0;
+}
+
+.replay-tabs .replay-tab-choice.active button {
+  color: var(--fg);
+}
