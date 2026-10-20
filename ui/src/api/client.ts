@@ -159,7 +159,7 @@ export async function listFlows(
 
 export async function listFlowPage(
   filters: FlowFilters = {}, offset = 0, limit = 200, anchor?: number, cursor?: string,
-  sortBy: HistorySortKey = 'started_at', sortDesc = true,
+  sortBy: HistorySortKey = 'started_at', sortDesc = true, signal?: AbortSignal,
 ): Promise<{ items: FlowSummary[]; has_more: boolean; anchor?: number; next_cursor?: string | null }> {
   const params = new URLSearchParams(buildFlowQuery(filters, limit, offset, anchor, cursor));
   if (sortBy !== 'started_at' || !sortDesc) {
@@ -168,6 +168,7 @@ export async function listFlowPage(
   }
   const data = await request<{ items: FlowSummary[]; has_more?: boolean; anchor?: number; next_cursor?: string | null }>(
     `/api/flows?${params}`,
+    signal ? { signal } : undefined,
   );
   return { items: data?.items ?? [], has_more: data?.has_more ?? false,
     anchor: data?.anchor, next_cursor: data?.next_cursor };

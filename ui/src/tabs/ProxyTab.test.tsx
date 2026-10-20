@@ -83,7 +83,7 @@ let paginateHistory = false;
 let importedHistory = false;
 let searchResponse: Promise<Response> | null = null;
 let flowPageResponse: Promise<Response> | null = null;
-let calls: { url: string; method: string; body?: unknown }[] = [];
+let calls: { url: string; method: string; body?: unknown; signal?: AbortSignal | null }[] = [];
 
 beforeEach(() => {
   calls = [];
@@ -108,6 +108,7 @@ beforeEach(() => {
         url,
         method: init?.method ?? 'GET',
         body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        signal: init?.signal,
       });
       // Before the /api/flows/ branch below: that prefix would otherwise
       // answer a delete with a flow.
@@ -357,6 +358,217 @@ describe('ProxyTab', () => {
     await waitFor(() => expect(document.querySelector('.flow-table tbody tr')?.textContent).toContain('needle.test'));
     await waitFor(() => expect(screen.queryByRole('status', { name: t('proxy.searching') })).toBeNull());
     expect(screen.getByText(t('toast.searchCompleted'))).toBeTruthy();
+  });
+
+  it.each(['bookmark', 'filter', 'sort', 'refresh', 'page', 'page size'] as const)(
+    'shows query progress without a search term for %s changes', async (action) => {
+      const user = userEvent.setup();
+      paginateHistory = true;
+      render(<ProxyTab />);
+      await screen.findByText('seeded.test');
+      let finish!: (response: Response) => void;
+      flowPageResponse = new Promise<Response>((resolve) => { finish = resolve; });
+
+      switch (action) {
+        case 'bookmark':
+          await user.click(screen.getByRole('button', { name: `★ ${t('history.bookmarkedOnly')}` }));
+          break;
+        case 'filter': {
+          const before = calls.filter(({ url }) => url.includes('/api/flows?')).length;
+          await user.click(screen.getByRole('button', { name: t('filter.button') }));
+          expect(calls.filter(({ url }) => url.includes('/api/flows?'))).toHaveLength(before);
+          const dialog = screen.getByRole('dialog', { name: t('filter.title') });
+          await user.click(within(dialog).getByRole('checkbox', { name: 'GET' }));
+          await user.click(within(dialog).getByRole('button', { name: t('filter.apply') }));
+          break;
+        }
+        case 'sort':
+          await user.click(screen.getByRole('button', { name: t('flow.host') }));
+          break;
+        case 'refresh':
+          await user.click(screen.getByRole('button', { name: t('common.refresh') }));
+          break;
+        case 'page':
+          await user.click(screen.getByRole('button', { name: t('proxy.olderHistory') }));
+          break;
+        case 'page size': {
+          const input = screen.getByRole('spinbutton', { name: t('proxy.historyPageSize') });
+          await user.clear(input);
+          await user.type(input, '100{Enter}');
+          break;
+        }
+      }
+
+      await screen.findByRole('status', { name: t('proxy.searching') });
+      expect(screen.getByText('seeded.test')).toBeTruthy();
+      finish(jsonResponse({ items: [{ ...seeded, host: 'filtered.test' }], has_more: false }));
+      await screen.findByText('filtered.test');
+      await waitFor(() => expect(screen.queryByRole('status', { name: t('proxy.searching') })).toBeNull());
+      expect(screen.queryByText(t('toast.searchCompleted'))).toBeNull();
+      expect(screen.queryByText(t('toast.searchEmpty'))).toBeNull();
+    },
+  );
+
+  it('searches the combined filters when bookmarks are toggled before the search debounce fires', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    let finish!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finish = resolve; });
+
+    fireEvent.change(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), { target: { value: 'needle' } });
+    await user.click(screen.getByRole('button', { name: `★ ${t('history.bookmarkedOnly')}` }));
+    await screen.findByRole('status', { name: t('proxy.searching') });
+
+    finish(jsonResponse({ items: [{ ...seeded, host: 'needle.test', bookmarked: true }] }));
+    await waitFor(() => expect(document.querySelector('.flow-table tbody tr')?.textContent).toContain('needle.test'));
+    await waitFor(() => expect(screen.queryByRole('status', { name: t('proxy.searching') })).toBeNull());
+    const searched = calls.filter(({ url }) => new URL(url).searchParams.get('search') === 'needle');
+    expect(searched).toHaveLength(1);
+    expect(new URL(searched[0].url).searchParams.get('bookmarked_only')).toBe('true');
+  });
+
+  it.each(['success', 'failure'] as const)(
+    'keeps bookmark search progress when the superseded search settles with %s', async (outcome) => {
+      const user = userEvent.setup();
+      render(<ProxyTab />);
+      await screen.findByText('seeded.test');
+      let finishOld!: (response: Response) => void;
+      let failOld!: (error: Error) => void;
+      searchResponse = new Promise<Response>((resolve, reject) => { finishOld = resolve; failOld = reject; });
+      await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'needle');
+      await screen.findByRole('status', { name: t('proxy.searching') });
+      const oldRequest = calls.find(({ url }) => url.includes('search=needle'))!;
+
+      let finishLatest!: (response: Response) => void;
+      searchResponse = new Promise<Response>((resolve) => { finishLatest = resolve; });
+      await user.click(screen.getByRole('button', { name: `★ ${t('history.bookmarkedOnly')}` }));
+      expect(oldRequest.signal?.aborted).toBe(true);
+      await act(async () => {
+        if (outcome === 'success') finishOld(jsonResponse({ items: [{ ...seeded, host: 'stale.test' }] }));
+        else failOld(new DOMException('Aborted', 'AbortError'));
+        await new Promise((resolve) => window.setTimeout(resolve, 450));
+      });
+      expect(screen.getByRole('status', { name: t('proxy.searching') })).toBeTruthy();
+      expect(screen.queryByText('stale.test')).toBeNull();
+      expect(document.querySelector('.banner.error')).toBeNull();
+      expect(screen.queryByText(t('toast.searchCompleted'))).toBeNull();
+
+      finishLatest(jsonResponse({ items: [{ ...seeded, host: 'latest.test', bookmarked: true }] }));
+      await screen.findByText('latest.test');
+      await waitFor(() => expect(screen.queryByRole('status', { name: t('proxy.searching') })).toBeNull());
+      expect(screen.getByText(t('toast.searchCompleted'))).toBeTruthy();
+    },
+  );
+
+  it('settles progress on the latest bookmark result and ignores a later obsolete result', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    let finishOld!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finishOld = resolve; });
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'needle');
+    await screen.findByRole('status', { name: t('proxy.searching') });
+
+    let finishLatest!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finishLatest = resolve; });
+    await user.click(screen.getByRole('button', { name: `★ ${t('history.bookmarkedOnly')}` }));
+    finishLatest(jsonResponse({ items: [{ ...seeded, host: 'latest.test', bookmarked: true }] }));
+    await screen.findByText('latest.test');
+    await waitFor(() => expect(screen.queryByRole('status', { name: t('proxy.searching') })).toBeNull());
+
+    await act(async () => finishOld(jsonResponse({ items: [{ ...seeded, host: 'stale.test' }] })));
+    expect(screen.getByText('latest.test')).toBeTruthy();
+    expect(screen.queryByText('stale.test')).toBeNull();
+  });
+
+  it('clears query progress when the latest bookmark request fails', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    let fail!: (error: Error) => void;
+    flowPageResponse = new Promise<Response>((_resolve, reject) => { fail = reject; });
+    await user.click(screen.getByRole('button', { name: `★ ${t('history.bookmarkedOnly')}` }));
+    await screen.findByRole('status', { name: t('proxy.searching') });
+
+    fail(new Error('bookmark query failed'));
+    await screen.findByText(t('proxy.engineUnreachable', { message: 'bookmark query failed' }));
+    await waitFor(() => expect(screen.queryByRole('status', { name: t('proxy.searching') })).toBeNull());
+    expect(screen.queryByText(t('toast.searchCompleted'))).toBeNull();
+  });
+
+  it('aborts a pending history query when the tab unmounts', async () => {
+    const user = userEvent.setup();
+    const view = render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    let finish!: (response: Response) => void;
+    flowPageResponse = new Promise<Response>((resolve) => { finish = resolve; });
+    await user.click(screen.getByRole('button', { name: `★ ${t('history.bookmarkedOnly')}` }));
+    const request = calls.find(({ url }) => new URL(url).searchParams.has('bookmarked_only'))!;
+    expect(request.signal?.aborted).toBe(false);
+
+    view.unmount();
+    expect(request.signal?.aborted).toBe(true);
+    await act(async () => finish(jsonResponse({ items: [] })));
+  });
+
+  it('stops query progress and ignores the pending result when history is cleared', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    let finish!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finish = resolve; });
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'needle');
+    await screen.findByRole('status', { name: t('proxy.searching') });
+    const request = calls.find(({ url }) => url.includes('search=needle'))!;
+
+    await user.click(screen.getByRole('button', { name: t('common.clear') }));
+    const dialog = screen.getByRole('dialog', { name: t('proxy.clearConfirmTitle') });
+    await user.click(within(dialog).getByRole('button', { name: t('common.clear') }));
+    await screen.findByText(t('proxy.cleared'));
+    expect(request.signal?.aborted).toBe(true);
+    await waitFor(() => expect(screen.queryByRole('status', { name: t('proxy.searching') })).toBeNull());
+    await act(async () => finish(jsonResponse({ items: [seeded] })));
+    expect(screen.queryByText('seeded.test')).toBeNull();
+    expect(document.querySelector('.flow-table td.empty')).toBeTruthy();
+    expect(screen.queryByText(t('toast.searchCompleted'))).toBeNull();
+  });
+
+  it('does not let a background refresh settle progress during the next search debounce', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<ProxyTab />);
+      await act(async () => {});
+      let finishOld!: (response: Response) => void;
+      searchResponse = new Promise<Response>((resolve) => { finishOld = resolve; });
+      const input = screen.getByPlaceholderText(t('proxy.searchPlaceholder'));
+      fireEvent.change(input, { target: { value: 'needle' } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+      expect(screen.getByRole('status', { name: t('proxy.searching') })).toBeTruthy();
+
+      act(() => MockSocket.instances[0].emit('flow.request', live));
+      await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+      let finishLatest!: (response: Response) => void;
+      searchResponse = new Promise<Response>((resolve) => { finishLatest = resolve; });
+      fireEvent.change(input, { target: { value: 'needle-next' } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+      expect(calls.filter(({ url }) => new URL(url).searchParams.get('search') === 'needle-next')).toHaveLength(0);
+      expect(screen.getByRole('status', { name: t('proxy.searching') })).toBeTruthy();
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+      expect(calls.filter(({ url }) => new URL(url).searchParams.get('search') === 'needle-next')).toHaveLength(1);
+      await act(async () => {
+        finishLatest(jsonResponse({ items: [{ ...seeded, host: 'latest.test' }] }));
+        finishOld(jsonResponse({ items: [{ ...seeded, host: 'stale.test' }] }));
+      });
+      await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+      expect(screen.queryByRole('status', { name: t('proxy.searching') })).toBeNull();
+      expect(screen.getByText('latest.test')).toBeTruthy();
+      expect(screen.queryByText('stale.test')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not show search progress for a background reload caused by a new flow', async () => {

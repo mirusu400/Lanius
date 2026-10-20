@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildFlowQuery, getStatus, patchFlowAnnotation, setApiToken } from './client';
+import { buildFlowQuery, getStatus, listFlowPage, patchFlowAnnotation, setApiToken } from './client';
 
 afterEach(() => {
   setApiToken('');
@@ -37,6 +37,20 @@ describe('desktop API authentication', () => {
     expect(new Headers(init.headers).get('Authorization')).toBe(
       'Bearer desktop-secret',
     );
+  });
+});
+
+describe('history request cancellation', () => {
+  it.each(['', 'desktop-secret'])('passes the abort signal through authentication (%s)', async (token) => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ items: [], has_more: false }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    setApiToken(token);
+    const controller = new AbortController();
+
+    await listFlowPage({}, 0, 200, undefined, undefined, 'started_at', true, controller.signal);
+
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
   });
 });
 
