@@ -46,6 +46,13 @@ Enable **Regex** to match host names with a regular expression instead; use
 `.*` for any number of characters and `?` to make the preceding item optional.
 When a scheme is omitted, all ports match unless a port is specified.
 
+Double-click a rule to edit its host and path patterns, protocol, port, pattern
+type, and enabled state, then choose **Save rule**. Double-click the rule kind
+to switch between **Include** and **Exclude** in a dropdown. You can also
+right-click a rule and choose **Edit rule**. Keyboard users can focus either
+cell and press **Enter** or **F2** to edit; cancel the dialog or press **Escape**
+to discard unsaved changes.
+
 In Lockdown settings, the separate scope egress option can prevent
 out-of-scope traffic from being sent at all while Lockdown is active; see
 [lockdown-mode.md](lockdown-mode.md).

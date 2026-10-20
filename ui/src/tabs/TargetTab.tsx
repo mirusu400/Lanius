@@ -566,8 +566,8 @@ export function TargetTab() {
             await refreshScope();
             await refreshSites();
           }}
-          onToggle={async (id, enabled) => {
-            setScope(await patchScopeRule(id, { enabled }));
+          onUpdate={async (id, changes) => {
+            setScope(await patchScopeRule(id, changes));
             resetPages();
             await refreshSites();
           }}

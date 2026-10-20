@@ -1,5 +1,5 @@
 /** Renders the real Target tab against a mocked engine. */
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithI18n as render, t } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -695,6 +695,53 @@ describe('TargetTab', () => {
     await waitFor(() =>
       expect(screen.queryByText('https://target.com/*')).toBeNull(),
     );
+  });
+
+  describe('editing scope rules', () => {
+    beforeEach(() => {
+      rules = [{ id: 42, kind: 'include', host: 'target.com', path: '/api/*',
+        protocol: 'https', port: 8443, match_type: 'glob', enabled: false }];
+    });
+
+    it('saves edits on the existing rule after a double-click', async () => {
+      const user = userEvent.setup();
+      render(<TargetTab />);
+      await user.click(await screen.findByRole('button', { name: new RegExp(t('target.scope')) }));
+      await user.dblClick(await screen.findByText('https://target.com:8443/api/*'));
+      const dialog = within(screen.getByRole('dialog', { name: t('scope.editRule') }));
+      await user.clear(dialog.getByLabelText(t('scope.hostPattern')));
+      await user.type(dialog.getByLabelText(t('scope.hostPattern')), '*.updated.test');
+      await user.clear(dialog.getByLabelText(t('scope.pathPattern')));
+      await user.type(dialog.getByLabelText(t('scope.pathPattern')), '/v2/*');
+      await user.selectOptions(dialog.getByLabelText(t('scope.protocol')), 'any');
+      await user.clear(dialog.getByLabelText(t('scope.port')));
+      await user.click(dialog.getByRole('button', { name: t('scope.saveRule') }));
+
+      expect(await screen.findByText('*://*.updated.test/v2/*')).toBeTruthy();
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(rules).toEqual([{ id: 42, kind: 'include', host: '*.updated.test', path: '/v2/*',
+        protocol: 'any', port: null, match_type: 'glob', enabled: false }]);
+      expect(calls.filter((call) => call.method !== 'GET')).toEqual([
+        { url: expect.stringContaining('/api/scope/rules/42'), method: 'PATCH',
+          body: { host: '*.updated.test', path: '/v2/*', protocol: 'any', port: null } },
+      ]);
+    });
+
+    it('changes the kind using the inline dropdown', async () => {
+      const user = userEvent.setup();
+      render(<TargetTab />);
+      await user.click(await screen.findByRole('button', { name: new RegExp(t('target.scope')) }));
+      const row = (await screen.findByText('https://target.com:8443/api/*')).closest('tr')!;
+      await user.dblClick(within(row).getByText(t('scope.include')));
+      await user.selectOptions(within(row).getByRole('combobox'), 'exclude');
+
+      await waitFor(() => expect(within(row).queryByRole('combobox')).toBeNull());
+      expect(within(row).getByText(t('scope.exclude'))).toBeTruthy();
+      expect(rules[0]).toMatchObject({ id: 42, kind: 'exclude', host: 'target.com', enabled: false });
+      expect(calls.filter((call) => call.method !== 'GET')).toEqual([
+        { url: expect.stringContaining('/api/scope/rules/42'), method: 'PATCH', body: { kind: 'exclude' } },
+      ]);
+    });
   });
 
   it('toggles capture restriction', async () => {
