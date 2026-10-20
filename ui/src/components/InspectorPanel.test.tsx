@@ -97,6 +97,54 @@ describe('InspectorPanel', () => {
     expect(rememberedCharset('shop.example.kr')).toBe('gb18030');
   });
 
+  it('switches from auto decoding to an ordered manual chain', async () => {
+    const onApply = vi.fn(() => true);
+    const selection = { text: '%C8%AB', start: 0, end: 6 };
+    render(<InspectorPanel selection={selection} request={request} onApply={onApply} />);
+    await screen.findByLabelText(t('inspector.decoded'));
+
+    const first = screen.getByLabelText(t('inspector.decoding')) as HTMLSelectElement;
+    expect(first.value).toBe('auto');
+    fireEvent.change(first, { target: { value: 'url' } });
+    await waitFor(() => expect(inspectCalls().at(-1)?.body.decode_steps).toEqual(['url']));
+
+    await userEvent.click(screen.getByRole('button', { name: t('inspector.addDecodeStep') }));
+    const second = screen.getByLabelText(
+      t('inspector.decodeStep', { index: 2 }),
+    ) as HTMLSelectElement;
+    expect(second.value).toBe('base64');
+    await waitFor(() => {
+      expect(inspectCalls().at(-1)?.body.decode_steps).toEqual(['url', 'base64']);
+    });
+
+    const output = await screen.findByLabelText(t('inspector.decoded'));
+    fireEvent.change(output, { target: { value: 'edited' } });
+    await userEvent.click(screen.getByRole('button', { name: t('inspector.apply') }));
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled());
+    const applied = calls.find((call) => call.path.endsWith('/api/inspect/apply'));
+    expect(applied?.body).toMatchObject({
+      decode_steps: ['url', 'base64'],
+      text: 'edited',
+    });
+  });
+
+  it('removes manual decoding steps without changing their order', async () => {
+    render(<InspectorPanel selection={{ text: '%C8%AB' }} request={request} />);
+    await screen.findByLabelText(t('inspector.decoded'));
+
+    fireEvent.change(screen.getByLabelText(t('inspector.decoding')), {
+      target: { value: 'url' },
+    });
+    await userEvent.click(screen.getByRole('button', { name: t('inspector.addDecodeStep') }));
+    await userEvent.click(screen.getByRole('button', {
+      name: t('inspector.removeDecodeStep', { index: 2 }),
+    }));
+
+    await waitFor(() => expect(inspectCalls().at(-1)?.body.decode_steps).toEqual(['url']));
+    expect(screen.queryByLabelText(t('inspector.decodeStep', { index: 2 }))).toBeNull();
+  });
+
   it('is read-only in History and offers Replay instead', async () => {
     const edit = vi.fn();
     render(<InspectorPanel selection={{ text: '%C8%AB' }} request={request} onEditInReplay={edit} />);
@@ -161,13 +209,22 @@ describe('Inspector in Replay', () => {
       editor.setSelectionRange(start, end);
       document.dispatchEvent(new Event('selectionchange'));
     });
-    const output = await screen.findByLabelText(t('inspector.decoded'));
+    let output = await screen.findByLabelText(t('inspector.decoded'));
     expect(inspectCalls()[0].body.value).toBe('%C8%AB%B1%E6%B5%BF');
+    fireEvent.change(screen.getByLabelText(t('inspector.decoding')), {
+      target: { value: 'url' },
+    });
+    await waitFor(() => expect(inspectCalls().at(-1)?.body.decode_steps).toEqual(['url']));
+    output = await screen.findByLabelText(t('inspector.decoded'));
 
     fireEvent.change(output, { target: { value: '김' } });
     await userEvent.click(screen.getByRole('button', { name: t('inspector.apply') }));
 
     await waitFor(() => expect(getTabs()[0].text).toBe('GET /s?q=%B1%E8 HTTP/1.1\nHost: shop.example.kr\n\n'));
+    await waitFor(() => expect(inspectCalls().at(-1)?.body).toMatchObject({
+      value: '%B1%E8',
+      decode_steps: ['url'],
+    }));
   });
 
   it('can be hidden, and stays hidden', async () => {

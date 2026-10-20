@@ -24,6 +24,19 @@ History has a **Modified** column. When Match & Replace, Intercept, or a plugin
 changes a request, its detail pane keeps **Original**, **Auto-modified**, and
 **Modified request** tabs so every stage can be compared.
 
+## Inspector decoding
+
+Select text in a request or response and open **Inspector** to peel its
+encoding layers. **Auto** detects the layers as before; the decoding dropdown
+can instead force URL, Base64, Base64URL, hex, HTML, Unicode or byte escapes,
+gzip, and JWT decoding. Add steps to decode nested values in order, such as
+URL then Base64.
+
+History remains read-only and offers **Edit in Replay**. In Replay, editing the
+decoded value and choosing **Apply** re-encodes it through the selected steps
+in reverse order while preserving details such as percent-escape case, Base64
+padding, and hex separators.
+
 ## Paging and search
 
 History shows 200 requests per page; **Older**, **Newer**, and the page number

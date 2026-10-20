@@ -590,6 +590,19 @@ _B64 = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
 _B64URL = re.compile(r"^[A-Za-z0-9_-]+={0,2}$")
 _JWT = re.compile(r"^eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]*)?$")
 MAX_LAYERS = 8
+MANUAL_DECODERS = frozenset(
+    {
+        "url",
+        "base64",
+        "base64url",
+        "hex",
+        "html",
+        "unicode_escape",
+        "bytes_escape",
+        "gzip",
+        "jwt",
+    }
+)
 
 
 def _url_style(value: str, plus_space: bool) -> dict[str, Any]:
@@ -748,6 +761,112 @@ def _peel(value: str, ctx: Context) -> tuple[Layer | None, str | bytes]:
     return None, value
 
 
+def _manual_peel(value: str | bytes, kind: str, ctx: Context) -> tuple[Layer, str | bytes]:
+    """Remove one explicitly requested layer without auto-detection heuristics.
+
+    Unlike :func:`_peel`, this deliberately accepts short and identity
+    transforms.  Choosing Base64 for ``YQ==`` or URL for a value that only
+    contains literal characters is an instruction, not a guess.  The layer
+    still records the source style so an edit can be encoded back through the
+    exact same chain.
+    """
+    if kind not in MANUAL_DECODERS:
+        raise ValueError("unknown decoder")
+
+    if kind == "gzip":
+        if not isinstance(value, bytes):
+            raise ValueError("gzip needs bytes")
+        return Layer("gzip", {}, value), gzip.decompress(value)
+
+    if isinstance(value, bytes):
+        raise ValueError("text decoder needs text")
+
+    stripped = value.strip()
+    if kind == "url":
+        plus = ctx.form and "+" in value
+        source = value.replace("+", " ") if plus else value
+        return Layer("url", _url_style(value, ctx.form), value), urllib.parse.unquote_to_bytes(source)
+
+    if kind == "base64":
+        if not stripped or not _B64.fullmatch(stripped):
+            raise ValueError("invalid base64")
+        return Layer("base64", {"padding": stripped.endswith("=")}, value), _b64(stripped)
+
+    if kind == "base64url":
+        if not stripped or not _B64URL.fullmatch(stripped):
+            raise ValueError("invalid base64url")
+        return Layer("base64url", {"padding": stripped.endswith("=")}, value), _b64url(stripped)
+
+    if kind == "hex":
+        match = _HEX.fullmatch(stripped)
+        if not match:
+            # The automatic detector requires at least two bytes to avoid
+            # treating ordinary words as hex.  A manual single byte is valid.
+            match = re.fullmatch(r"^(?:0x)?[0-9A-Fa-f]{2}$", stripped)
+        if not match:
+            raise ValueError("invalid hex")
+        digits = re.sub(r"[^0-9A-Fa-f]", "", stripped.removeprefix("0x"))
+        letters = [c for c in digits if c.isalpha()]
+        separator = match.group(1) if len(match.groups()) else ""
+        style = {
+            "separator": separator or "",
+            "upper": bool(letters) and all(c.isupper() for c in letters),
+            "prefix": stripped.startswith("0x"),
+        }
+        return Layer("hex", style, value), bytes.fromhex(digits)
+
+    if kind == "html":
+        entities = _HTML_ENTITY.findall(value)
+        numeric = [entity for entity in entities if entity.startswith("&#")]
+        style = {
+            "escaped": "".join(sorted({html.unescape(entity) for entity in entities})),
+            "hex": any(entity[2:3] in "xX" for entity in numeric),
+            # With no existing entities, named entities are the least
+            # surprising style for characters introduced by an edit.
+            "named": not entities or len(numeric) < len(entities),
+        }
+        return Layer("html", style, value), html.unescape(value)
+
+    if kind == "unicode_escape":
+        if "\\x" in value:
+            raise ValueError("byte escape in unicode escape input")
+        decoded = json.loads('"' + value.replace('"', '\\"') + '"')
+        if not isinstance(decoded, str):
+            raise ValueError("invalid unicode escape")
+        escapes = re.findall(r"\\u[0-9A-Fa-f]{4}", value)
+        lower = not any(c in "ABCDEF" for escape in escapes for c in escape[2:])
+        return Layer("unicode_escape", {"lower": lower}, value), decoded
+
+    if kind == "bytes_escape":
+        if re.search(r"\\x(?![0-9A-Fa-f]{2})", value):
+            raise ValueError("invalid byte escape")
+        escaped = bytearray()
+        i = 0
+        matches = re.findall(r"\\x[0-9A-Fa-f]{2}", value)
+        while i < len(value):
+            match = re.match(r"\\x[0-9A-Fa-f]{2}", value[i:])
+            if match:
+                escaped.append(int(match.group(0)[2:], 16))
+                i += 4
+            else:
+                escaped.extend(value[i].encode("utf-8"))
+                i += 1
+        lower = not any(c in "ABCDEF" for escape in matches for c in escape[2:])
+        return Layer("bytes_escape", {"lower": lower}, value), bytes(escaped)
+
+    if kind == "jwt":
+        parts = stripped.split(".")
+        if len(parts) not in {2, 3}:
+            raise ValueError("invalid JWT")
+        header = json.loads(_b64url(parts[0]))
+        payload = json.loads(_b64url(parts[1]))
+        text = json.dumps({"header": header, "payload": payload}, indent=2, ensure_ascii=False)
+        return Layer("jwt", {"signature": parts[2] if len(parts) == 3 else None}, value), text
+
+    # Kept as a defensive guard if MANUAL_DECODERS and this function drift.
+    raise ValueError("unknown decoder")
+
+
 def _b64(value: str) -> bytes:
     return base64.b64decode(value + "=" * (-len(value) % 4), validate=True)
 
@@ -768,13 +887,99 @@ class Reading:
     charset_data: bytes | None
 
 
-def read(value: str, ctx: Context, charset: str | None = None) -> Reading:
+def _bytes_as_text(
+    data: bytes,
+    ctx: Context,
+    charset: str | None,
+) -> tuple[str | None, list[Candidate]]:
+    """Read bytes using the same charset rules in auto and manual modes."""
+    ranked = _try_text(data, ctx)
+    forced = canonical(charset) if charset else None
+    if forced and not data.isascii():
+        try:
+            text = data.decode(forced)
+        except UnicodeDecodeError:
+            text = None
+        if text is not None:
+            chosen = next((candidate for candidate in ranked if candidate.name == forced), None)
+            if chosen is None:
+                chosen = Candidate(forced, text, plausibility(text, forced), 0.0)
+            chosen.reasons = [{"code": "manual"}]
+            ranked = [chosen] + [candidate for candidate in ranked if candidate.name != forced]
+    if not ranked or (not data.isascii() and ranked[0].plausibility < 0.15 and not forced):
+        return None, ranked
+    return ranked[0].text, ranked
+
+
+def _read_manual(
+    value: str,
+    ctx: Context,
+    charset: str | None,
+    decode_steps: list[str],
+) -> Reading:
+    if len(decode_steps) > MAX_LAYERS:
+        raise InspectError("INSPECT_TOO_MANY_STEPS")
+
+    layers: list[Layer] = []
+    current: str | bytes = value
+    candidates: list[Candidate] = []
+    charset_data: bytes | None = None
+
+    for index, kind in enumerate(decode_steps):
+        if kind not in MANUAL_DECODERS:
+            raise InspectError(f"INSPECT_UNKNOWN_DECODER:{kind}")
+
+        # Text encodings can follow byte-producing steps (URL -> Base64 is
+        # the common case).  ASCII is a lossless bridge and needs no visible
+        # charset layer; non-ASCII bytes keep the chosen charset as a layer so
+        # edits travel back through it correctly.
+        if isinstance(current, bytes) and kind != "gzip":
+            data = current
+            text, ranked = _bytes_as_text(data, ctx, charset)
+            if text is None:
+                raise InspectError(f"INSPECT_STEP_FAILED:{index + 1}:{kind}")
+            if not data.isascii():
+                candidates = ranked
+                charset_data = data
+                layers.append(Layer("charset", {"charset": ranked[0].name}, data))
+            current = text
+
+        try:
+            layer, current = _manual_peel(current, kind, ctx)
+        except (ValueError, TypeError, KeyError, binascii.Error, OSError, EOFError, zlib.error):
+            raise InspectError(f"INSPECT_STEP_FAILED:{index + 1}:{kind}") from None
+        layers.append(layer)
+
+    if isinstance(current, bytes):
+        data = current
+        text, ranked = _bytes_as_text(data, ctx, charset)
+        if text is None:
+            return Reading(layers, None, data, ranked, data)
+        if not data.isascii():
+            candidates = ranked
+            charset_data = data
+            layers.append(Layer("charset", {"charset": ranked[0].name}, data))
+        current = text
+
+    return Reading(layers, current, None, candidates, charset_data)
+
+
+def read(
+    value: str,
+    ctx: Context,
+    charset: str | None = None,
+    decode_steps: list[str] | None = None,
+) -> Reading:
     """Peel every layer off `value`.
 
     `charset`, when given, is used for the bytes-to-text step instead of the
-    detected one.
+    detected one.  `decode_steps=None` keeps automatic detection; a list
+    applies exactly those manual decoding steps in order.
     """
     ctx.prepare(value)
+    if decode_steps is not None:
+        return _read_manual(value, ctx, charset, decode_steps)
+
     layers: list[Layer] = []
     current: str | bytes = value
     candidates: list[Candidate] = []
@@ -789,26 +994,15 @@ def read(value: str, ctx: Context, charset: str | None = None) -> Reading:
                 layers.append(Layer("gzip", {}, current))
                 current = inflated
                 continue
-            ranked = _try_text(current, ctx)
-            forced = canonical(charset) if charset else None
-            if forced and not current.isascii():
-                try:
-                    text = current.decode(forced)
-                except UnicodeDecodeError:
-                    text = None
-                if text is not None:
-                    chosen = next((c for c in ranked if c.name == forced), None)
-                    if chosen is None:
-                        chosen = Candidate(forced, text, plausibility(text, forced), 0.0)
-                    chosen.reasons = [{"code": "manual"}]
-                    ranked = [chosen] + [c for c in ranked if c.name != forced]
-            if not ranked or (not current.isascii() and ranked[0].plausibility < 0.15 and not forced):
+            data = current
+            text, ranked = _bytes_as_text(data, ctx, charset)
+            if text is None:
                 return Reading(layers, None, current, ranked, current)
-            if not current.isascii():
+            if not data.isascii():
                 candidates = ranked
-                charset_data = current
-                layers.append(Layer("charset", {"charset": ranked[0].name}, current))
-            current = ranked[0].text
+                charset_data = data
+                layers.append(Layer("charset", {"charset": ranked[0].name}, data))
+            current = text
             continue
         layer, inner = _peel(current, ctx)
         if layer is None:
@@ -898,9 +1092,15 @@ def _rewrap(layer: Layer, inner: str | bytes) -> str | bytes:
     raise InspectError(f"cannot re-encode {layer.kind}")
 
 
-def write(value: str, text: str, ctx: Context, charset: str | None = None) -> str:
+def write(
+    value: str,
+    text: str,
+    ctx: Context,
+    charset: str | None = None,
+    decode_steps: list[str] | None = None,
+) -> str:
     """Put `text` back inside the layers `value` was read through."""
-    reading = read(value, ctx, charset)
+    reading = read(value, ctx, charset, decode_steps)
     if reading.text is None:
         raise InspectError("NOT_TEXT")
     if text == reading.text:
@@ -931,8 +1131,13 @@ def hex_dump(data: bytes, width: int = 16) -> str:
     return "\n".join(lines)
 
 
-def inspect(value: str, ctx: Context, charset: str | None = None) -> dict[str, Any]:
-    reading = read(value, ctx, charset)
+def inspect(
+    value: str,
+    ctx: Context,
+    charset: str | None = None,
+    decode_steps: list[str] | None = None,
+) -> dict[str, Any]:
+    reading = read(value, ctx, charset, decode_steps)
     result: dict[str, Any] = {
         "layers": [layer.public() for layer in reading.layers],
         "text": reading.text,
@@ -957,6 +1162,7 @@ __all__ = [
     "CANDIDATES",
     "Context",
     "InspectError",
+    "MANUAL_DECODERS",
     "canonical",
     "inspect",
     "plausibility",

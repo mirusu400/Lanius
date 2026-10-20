@@ -6387,12 +6387,30 @@ pre.response-preview-text {
 }
 
 .inspector-layers,
+.inspector-decoding,
 .inspector-charset,
 .inspector-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+
+.inspector-decoding label,
+.inspector-decode-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.inspector-decoding select {
+  max-width: 100%;
+}
+
+.inspector-decode-step button {
+  min-width: 24px;
+  padding: 1px 6px;
 }
 
 .inspector-charset label {

@@ -648,6 +648,8 @@ export interface InspectRequest {
   text?: string;
   /** The charset to read and write with, instead of the detected one. */
   charset?: string | null;
+  /** Null/omitted uses auto-detection; otherwise decode exactly in this order. */
+  decode_steps?: string[] | null;
   /** The raw request the value was selected from, for context. */
   request?: string;
   /** The value is form-encoded, so "+" is a space. */

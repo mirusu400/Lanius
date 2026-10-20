@@ -321,6 +321,9 @@ class InspectBody(BaseModel):
     # The edited text, for /api/inspect/apply.
     text: str | None = None
     charset: str | None = None
+    # None means automatic layer detection. A list applies exactly these
+    # decoders in order and is reversed when an edit is written back.
+    decode_steps: list[str] | None = None
     # Where the value came from: the raw request it was selected in, and
     # whether that part is form-encoded (so "+" means a space).
     request: str = ""
@@ -2342,7 +2345,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/inspect")
     async def inspect_value(body: InspectBody) -> dict[str, Any]:
         ctx = _inspect_context(body)
-        return await asyncio.to_thread(inspector.inspect, body.value, ctx, body.charset)
+        try:
+            return await asyncio.to_thread(
+                inspector.inspect,
+                body.value,
+                ctx,
+                body.charset,
+                body.decode_steps,
+            )
+        except inspector.InspectError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/inspect/apply")
     async def inspect_apply(body: InspectBody) -> dict[str, Any]:
@@ -2351,7 +2363,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ctx = _inspect_context(body)
         try:
             value = await asyncio.to_thread(
-                inspector.write, body.value, body.text, ctx, body.charset
+                inspector.write,
+                body.value,
+                body.text,
+                ctx,
+                body.charset,
+                body.decode_steps,
             )
         except inspector.InspectError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -49,6 +49,19 @@ const LAYER_LABELS: Record<string, string> = {
   jwt: 'JWT',
 };
 
+const MANUAL_DECODERS = [
+  'url',
+  'base64',
+  'base64url',
+  'hex',
+  'html',
+  'unicode_escape',
+  'bytes_escape',
+  'gzip',
+  'jwt',
+] as const;
+const MAX_MANUAL_STEPS = 8;
+
 function inspectError(t: Translator, error: unknown): string {
   const text = error instanceof Error ? error.message : String(error);
   if (text.startsWith('CHARSET_UNENCODABLE:')) {
@@ -56,8 +69,18 @@ function inspectError(t: Translator, error: unknown): string {
     return t('inspector.unencodable', { charset, char: chars.join(':') });
   }
   if (text === 'INSPECT_TOO_LARGE') return t('inspector.tooLarge');
+  if (text === 'INSPECT_TOO_MANY_STEPS') return t('inspector.tooManySteps');
   if (text === 'JWT_INVALID_JSON') return t('inspector.jwtInvalid');
   if (text === 'NOT_TEXT') return t('inspector.notText');
+  const failed = /^INSPECT_STEP_FAILED:(\d+):(.+)$/.exec(text);
+  if (failed) {
+    return t('inspector.stepFailed', {
+      index: failed[1],
+      codec: LAYER_LABELS[failed[2]] ?? failed[2],
+    });
+  }
+  const unknown = /^INSPECT_UNKNOWN_DECODER:(.+)$/.exec(text);
+  if (unknown) return t('inspector.unknownDecoder', { codec: unknown[1] });
   return text || t('common.error');
 }
 
@@ -84,12 +107,18 @@ export function InspectorPanel({
   // selection starts clean without an effect having to reset anything.
   const [choice, setChoice] = useState({ text: '', charset: '' });
   const charset = choice.text === text ? choice.charset : '';
-  const [inspected, setInspected] = useState<{
+  const [decoding, setDecoding] = useState<{
     text: string;
+    steps: string[] | null;
+  }>({ text: '', steps: null });
+  const decodeSteps = decoding.text === text ? decoding.steps : null;
+  const inspectKey = JSON.stringify([text, start ?? null, charset, decodeSteps]);
+  const [inspected, setInspected] = useState<{
+    key: string;
     result: InspectResult | null;
     error: string | null;
   } | null>(null);
-  const current = text && inspected?.text === text ? inspected : null;
+  const current = text && inspected?.key === inspectKey ? inspected : null;
   const result = current?.result ?? null;
   const [draftState, setDraftState] = useState<{ result: InspectResult | null; value: string }>({
     result: null,
@@ -124,25 +153,58 @@ export function InspectorPanel({
     if (!text) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      inspectValue({ ...context(text, start), charset: charset || null })
+      inspectValue({
+        ...context(text, start),
+        charset: charset || null,
+        decode_steps: decodeSteps,
+      })
         .then((next) => {
-          if (!cancelled) setInspected({ text, result: next, error: null });
+          if (!cancelled) setInspected({ key: inspectKey, result: next, error: null });
         })
         .catch((err: unknown) => {
-          if (!cancelled) setInspected({ text, result: null, error: inspectError(t, err) });
+          if (!cancelled) {
+            setInspected({ key: inspectKey, result: null, error: inspectError(t, err) });
+          }
         });
     }, DEBOUNCE_MS);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [text, start, charset, context, t]);
+  }, [text, start, charset, decodeSteps, inspectKey, context, t]);
 
   const chooseCharset = (value: string) => {
     setChoice({ text, charset: value });
     // Remembered per host: a site that uses one legacy charset uses it
     // everywhere, and the next value should not need the same correction.
     rememberCharset(host, value || null);
+  };
+
+  const chooseFirstDecoder = (value: string) => {
+    setDecoding({
+      text,
+      steps: value === 'auto' ? null : [value, ...(decodeSteps?.slice(1) ?? [])],
+    });
+    setApplyError(null);
+  };
+
+  const chooseDecoder = (index: number, value: string) => {
+    setDecoding({
+      text,
+      steps: (decodeSteps ?? []).map((step, at) => (at === index ? value : step)),
+    });
+    setApplyError(null);
+  };
+
+  const addDecoder = () => {
+    setDecoding({ text, steps: [...(decodeSteps ?? []), 'base64'] });
+    setApplyError(null);
+  };
+
+  const removeDecoder = (index: number) => {
+    const steps = (decodeSteps ?? []).filter((_, at) => at !== index);
+    setDecoding({ text, steps: steps.length > 0 ? steps : null });
+    setApplyError(null);
   };
 
   const canEdit = Boolean(onApply && selection && result?.editable);
@@ -155,10 +217,19 @@ export function InspectorPanel({
       const { value } = await applyInspect({
         ...context(selection.text, selection.start),
         charset: result?.charset?.name ?? null,
+        decode_steps: decodeSteps,
         text: draft,
       });
-      if (onApply(selection, value)) setApplyError(null);
-      else setApplyError({ text: selection.text, message: t('inspector.stale') });
+      if (onApply(selection, value)) {
+        // Replay selects the replacement after applying it. Carry the manual
+        // chain and charset to that new selection so a short value that only
+        // decodes when forced does not suddenly fall back to raw Auto output.
+        setDecoding({ text: value, steps: decodeSteps });
+        setChoice({ text: value, charset });
+        setApplyError(null);
+      } else {
+        setApplyError({ text: selection.text, message: t('inspector.stale') });
+      }
     } catch (err) {
       setApplyError({ text: selection.text, message: inspectError(t, err) });
     } finally {
@@ -187,6 +258,61 @@ export function InspectorPanel({
             <h4>{t('inspector.selected')}</h4>
             <pre className="inspector-original mono">{selection.text}</pre>
           </>
+        )}
+
+        {selection && (
+          <div className="inspector-decoding">
+            <label>
+              <span>{t('inspector.decoding')}</span>
+              <select
+                aria-label={t('inspector.decoding')}
+                value={decodeSteps?.[0] ?? 'auto'}
+                onChange={(event) => chooseFirstDecoder(event.target.value)}
+              >
+                <option value="auto">{t('inspector.decodeAuto')}</option>
+                {MANUAL_DECODERS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {t('inspector.decodeOption', { codec: LAYER_LABELS[kind] })}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {decodeSteps?.slice(1).map((kind, offset) => {
+              const index = offset + 1;
+              return (
+                <span className="inspector-decode-step" key={index}>
+                  <span className="muted" aria-hidden="true">→</span>
+                  <select
+                    aria-label={t('inspector.decodeStep', { index: index + 1 })}
+                    value={kind}
+                    onChange={(event) => chooseDecoder(index, event.target.value)}
+                  >
+                    {MANUAL_DECODERS.map((option) => (
+                      <option key={option} value={option}>
+                        {t('inspector.decodeOption', { codec: LAYER_LABELS[option] })}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    aria-label={t('inspector.removeDecodeStep', { index: index + 1 })}
+                    onClick={() => removeDecoder(index)}
+                  >
+                    ×
+                  </button>
+                </span>
+              );
+            })}
+            {decodeSteps && (
+              <button
+                type="button"
+                onClick={addDecoder}
+                disabled={decodeSteps.length >= MAX_MANUAL_STEPS}
+              >
+                {t('inspector.addDecodeStep')}
+              </button>
+            )}
+          </div>
         )}
 
         {result && result.layers.length > 0 && (

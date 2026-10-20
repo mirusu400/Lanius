@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import gzip
 import json
 import socket
 
@@ -16,12 +17,14 @@ from app.inspector import Context, InspectError
 
 def inspect(value: str, **kwargs) -> dict:
     charset = kwargs.pop("charset", None)
-    return inspector.inspect(value, Context(**kwargs), charset)
+    decode_steps = kwargs.pop("decode_steps", None)
+    return inspector.inspect(value, Context(**kwargs), charset, decode_steps)
 
 
 def write(value: str, text: str, **kwargs) -> str:
     charset = kwargs.pop("charset", None)
-    return inspector.write(value, text, Context(**kwargs), charset)
+    decode_steps = kwargs.pop("decode_steps", None)
+    return inspector.write(value, text, Context(**kwargs), charset, decode_steps)
 
 
 def kinds(result: dict) -> list[str]:
@@ -272,6 +275,52 @@ def test_gzip_inside_base64() -> None:
     assert gzip.decompress(base64.b64decode(rewritten)).decode() == "바뀐 값"
 
 
+def test_manual_decoder_handles_a_short_value_auto_detection_leaves_alone() -> None:
+    assert inspect("YQ==")["text"] == "YQ=="
+
+    result = inspect("YQ==", decode_steps=["base64"])
+
+    assert result["text"] == "a"
+    assert kinds(result) == ["base64"]
+    assert result["editable"] is True
+    assert write("YQ==", "b", decode_steps=["base64"]) == "Yg=="
+
+
+def test_manual_decoder_chain_is_exact_and_rewraps_edits_in_reverse() -> None:
+    value = "YQ%3D%3D"
+
+    url_only = inspect(value, decode_steps=["url"])
+    assert url_only["text"] == "YQ=="
+    assert kinds(url_only) == ["url"]
+
+    result = inspect(value, decode_steps=["url", "base64"])
+    assert result["text"] == "a"
+    assert kinds(result) == ["url", "base64"]
+
+    rewritten = write(value, "changed", decode_steps=["url", "base64"])
+    assert rewritten == "Y2hhbmdlZA%3D%3D"
+
+
+def test_manual_binary_chain_can_include_gzip() -> None:
+    value = base64.b64encode(gzip.compress("compressed".encode(), mtime=0)).decode()
+
+    result = inspect(value, decode_steps=["base64", "gzip"])
+
+    assert result["text"] == "compressed"
+    assert kinds(result) == ["base64", "gzip"]
+    rewritten = write(value, "edited", decode_steps=["base64", "gzip"])
+    raw = base64.b64decode(rewritten + "=" * (-len(rewritten) % 4))
+    assert gzip.decompress(raw).decode() == "edited"
+
+
+def test_invalid_manual_step_is_reported_with_its_position() -> None:
+    with pytest.raises(InspectError, match="INSPECT_STEP_FAILED:2:base64"):
+        inspect("not%20base64", decode_steps=["url", "base64"])
+
+    with pytest.raises(InspectError, match="INSPECT_UNKNOWN_DECODER:rot13"):
+        inspect("value", decode_steps=["rot13"])
+
+
 def test_characters_the_charset_cannot_hold_are_refused_not_mangled() -> None:
     with pytest.raises(InspectError, match="CHARSET_UNENCODABLE"):
         write("%C8%AB%B1%E6%B5%BF", "홍길동😀")
@@ -349,6 +398,35 @@ def test_inspect_apply_reports_unencodable_text(client) -> None:
 
     assert res.status_code == 400
     assert res.json()["detail"].startswith("CHARSET_UNENCODABLE")
+
+
+def test_inspect_endpoints_apply_a_manual_chain(client) -> None:
+    read = client.post(
+        "/api/inspect",
+        json={"value": "YQ%3D%3D", "decode_steps": ["url", "base64"]},
+    )
+
+    assert read.status_code == 200
+    assert read.json()["text"] == "a"
+    applied = client.post(
+        "/api/inspect/apply",
+        json={
+            "value": "YQ%3D%3D",
+            "text": "b",
+            "decode_steps": ["url", "base64"],
+        },
+    )
+    assert applied.json() == {"value": "Yg%3D%3D"}
+
+
+def test_inspect_endpoint_rejects_a_bad_manual_chain(client) -> None:
+    res = client.post(
+        "/api/inspect",
+        json={"value": "not-base64", "decode_steps": ["base64"]},
+    )
+
+    assert res.status_code == 400
+    assert res.json()["detail"] == "INSPECT_STEP_FAILED:1:base64"
 
 
 def test_inspect_rejects_huge_values(client) -> None:

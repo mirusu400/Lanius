@@ -10,6 +10,8 @@
 - Keep very large HTTP bodies responsive with bounded History chunks,
   request-only Replay transfers, streamed raw-body reads, and server-bounded
   Replay response previews.
+- Choose automatic or manual decoding in Inspector, chain URL, Base64, hex,
+  HTML, escape, gzip, and JWT steps, and re-encode edits through the chain.
 - Add SDK 1.3 plugin-owned HTTP MCP tools with typed inputs, reload cleanup,
   execution limits, Lockdown/safe-mode guards, Settings ownership badges, and
   a bundled MCP Notes example. See [Plugin MCP Tools](docs/plugin-mcp.md).
