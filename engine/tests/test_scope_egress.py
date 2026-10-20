@@ -68,6 +68,37 @@ def test_http_requests_in_scope_are_left_alive(tmp_path) -> None:
     store.close()
 
 
+@pytest.mark.parametrize("phase", ["requestheaders", "http_connect"])
+def test_a_spoofed_host_does_not_authorize_an_out_of_scope_destination(tmp_path, phase) -> None:
+    store, scope, _policy, broker, addon, early = guarded(tmp_path)
+    scope.add_rule(host="allowed.test")
+    flow = build_flow(url="https://blocked.test/", headers=[["Host", "allowed.test"]])
+    flow.live = True
+    queue = broker.subscribe()
+    try:
+        getattr(early, phase)(flow)
+        assert flow.error is not None
+        assert flow.metadata[BLOCKED_METADATA] is True
+        assert queue.get_nowait()["data"]["host"] == "blocked.test"
+        connection = Server(address=("blocked.test", 443))
+        early.server_connect(ServerConnectionHookData(connection, flow.client_conn))
+        assert connection.error == RAW_BLOCKED_ERROR
+    finally:
+        store.close()
+
+
+def test_an_out_of_scope_host_header_is_not_sent_to_an_allowed_destination(tmp_path) -> None:
+    store, scope, _policy, _broker, _addon, early = guarded(tmp_path)
+    scope.add_rule(host="allowed.test")
+    flow = build_flow(url="https://allowed.test/", headers=[["Host", "blocked.test"]])
+    flow.live = True
+    try:
+        early.requestheaders(flow)
+        assert flow.error is not None
+    finally:
+        store.close()
+
+
 def test_connect_uses_origin_match_until_path_is_visible(tmp_path) -> None:
     store, scope, _policy, _broker, _addon, early = guarded(tmp_path)
     scope.add_rule(host="allowed.test", path="/api/*")
@@ -147,6 +178,49 @@ def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
+
+
+@pytest.mark.parametrize("transport", ["proxy", "replay"])
+async def test_host_override_cannot_open_an_out_of_scope_socket(tmp_path, transport) -> None:
+    accepted = []
+
+    async def target(reader, writer):
+        accepted.append(True)
+        await reader.readuntil(b"\r\n\r\n")
+        writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(target, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    store = FlowStore(tmp_path / "spoof.sqlite")
+    ScopeManager(store).add_rule(host="allowed.test", port=port)
+    policy = LockdownPolicy(store)
+    policy.set_scope_egress(True)
+    policy.set_project(True)
+    engine = ProxyEngine(Settings(
+        proxy_port=free_port(), api_port=free_port(), data_dir=tmp_path,
+        db_path=tmp_path / "spoof.sqlite", confdir=tmp_path / "mitm",
+    ), store, EventBroker(), policy)
+    await engine.start()
+    try:
+        url = f"http://127.0.0.1:{port}/allowed"
+        if transport == "replay":
+            record = await engine.replay.send(build_flow(url=url, headers=[["Host", "allowed.test"]]))
+            assert record.error
+        else:
+            async with httpx.AsyncClient(
+                proxy=f"http://127.0.0.1:{engine.settings.proxy_port}", trust_env=False,
+            ) as client:
+                with pytest.raises(httpx.HTTPError):
+                    await client.get(url, headers={"Host": "allowed.test"})
+        assert accepted == []
+    finally:
+        await engine.stop()
+        server.close()
+        await server.wait_closed()
+        store.close()
 
 
 @pytest.mark.asyncio

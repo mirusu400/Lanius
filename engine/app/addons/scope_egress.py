@@ -63,9 +63,10 @@ class ScopeEgressGuardAddon:
         if not self.active:
             return
         request = flow.request
-        if self.scope.could_contain_origin("https", request.pretty_host, request.port):
-            return
-        self._block_http(flow)
+        for host in dict.fromkeys((request.host, request.pretty_host)):
+            if not self.scope.could_contain_origin("https", host, request.port):
+                self._block_http(flow, host=host)
+                return
 
     def request(self, flow: http.HTTPFlow) -> None:
         # Match & Replace runs before this addon and may have changed the URL.
@@ -97,20 +98,18 @@ class ScopeEgressGuardAddon:
             return True
         request = flow.request
         path = request.path.split("?", 1)[0] or "/"
-        allowed = self.scope.contains(
-            request.scheme, request.pretty_host, request.port, path
-        )
-        if allowed:
-            self._authorize_http(flow)
-        if not allowed and publish:
-            self._mark_and_publish(
-                flow,
-                request.scheme or "http",
-                request.pretty_host,
-                request.port,
-                path,
-            )
-        return bool(allowed)
+        # Host/:authority is editable independently from the socket target.
+        # Both must be scoped before either destination is authorized.
+        for host in dict.fromkeys((request.host, request.pretty_host)):
+            if self.scope.contains(request.scheme, host, request.port, path):
+                continue
+            if publish:
+                self._mark_and_publish(
+                    flow, request.scheme or "http", host, request.port, path,
+                )
+            return False
+        self._authorize_http(flow)
+        return True
 
     def check_server_connect(self, data: Any) -> None:
         """Last line of defence immediately before mitmproxy opens a socket."""
@@ -134,12 +133,12 @@ class ScopeEgressGuardAddon:
             flow.kill()
         return False
 
-    def _block_http(self, flow: http.HTTPFlow) -> None:
+    def _block_http(self, flow: http.HTTPFlow, *, host: str | None = None) -> None:
         request = flow.request
         self._mark_and_publish(
             flow,
             request.scheme or "https",
-            request.pretty_host,
+            host or request.host,
             request.port,
             request.path.split("?", 1)[0] or "/",
         )

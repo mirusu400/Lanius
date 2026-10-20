@@ -11,6 +11,8 @@ match the active project scope. This includes ordinary proxy clients, local
 capture, WebSocket handshakes, Replay and Fuzzer. Raw TCP and UDP are refused
 outright because they do not have an HTTP URL that can be checked against the
 scope. Traffic that bypasses Lanius is outside this application's control.
+When the Host header differs from the connection destination, both hosts must
+match scope. A header override cannot authorize a connection outside scope.
 
 The scope egress switch is stored in the project database and included in
 exports. It follows the existing scope meaning: exclude rules win, and with no
