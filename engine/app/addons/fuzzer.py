@@ -521,11 +521,7 @@ class FuzzerAddon:
                     finally:
                         queue.task_done()
 
-            workers = [
-                asyncio.create_task(worker())
-                for _ in range(run.speed.concurrency)
-            ]
-            try:
+            async def produce() -> None:
                 for index, (slots, labels) in enumerate(
                     generate_payload_tuples(
                         run.mode, positions, payload_sets
@@ -534,13 +530,23 @@ class FuzzerAddon:
                     await queue.put((index, slots, labels))
                 for _ in workers:
                     await queue.put(None)
-                await asyncio.gather(*workers)
+
+            workers = [
+                asyncio.create_task(worker())
+                for _ in range(run.speed.concurrency)
+            ]
+            # Watch the producer and consumers together. If a result write
+            # kills a worker, the producer may already be blocked on a full
+            # queue and cannot reach a later gather of just the workers.
+            tasks = [*workers, asyncio.create_task(produce())]
+            try:
+                await asyncio.gather(*tasks)
             except BaseException:
                 # Includes cancellation: stopping a run should not
                 # leave workers waiting on a queue nobody will fill.
-                for task in workers:
+                for task in tasks:
                     task.cancel()
-                await asyncio.gather(*workers, return_exceptions=True)
+                await asyncio.gather(*tasks, return_exceptions=True)
                 raise
             if run.status != "stopped":
                 run.status = "completed"
