@@ -651,3 +651,26 @@ describe('FlowDetailView', () => {
     expect(half(1)?.querySelector('.detail-find-count')?.textContent).toBe('1/1');
   });
 });
+
+it('shows loading circles in both panes, cancels the old selection and ignores its late response', async () => {
+  const baseFetch = vi.mocked(fetch).getMockImplementation()!;
+  const pending = new Map<string, (value: Response) => void>();
+  const signals: AbortSignal[] = [];
+  vi.mocked(fetch).mockImplementation((input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/api/flows/h1' || url.pathname === '/api/flows/next') {
+      if (init?.signal) signals.push(init.signal);
+      return new Promise<Response>(resolve => pending.set(url.pathname, resolve));
+    }
+    return baseFetch(input, init);
+  });
+  const { rerender } = render(<FlowDetailView flow={httpFlow} />);
+  expect(screen.getAllByRole('status', { name: t('detail.preview.loading') })).toHaveLength(2);
+  rerender(<FlowDetailView flow={{ ...httpFlow, id: 'next' }} />);
+  expect(signals[0].aborted).toBe(true);
+  const detail = (id: string, body: string) => ({ ok: true, json: async () => ({ ...httpFlow, id, request_headers: [], request_body: '', response_headers: [], response_body: body }) }) as Response;
+  pending.get('/api/flows/next')!(detail('next', 'new selection'));
+  expect(await screen.findByText('new selection')).toBeTruthy();
+  pending.get('/api/flows/h1')!(detail('h1', 'stale selection'));
+  await waitFor(() => expect(screen.queryByText('stale selection')).toBeNull());
+});

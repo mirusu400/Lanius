@@ -72,3 +72,21 @@ it('reloads the preview with the selected response charset', async () => {
     '/api/flows/legacy/response-preview?charset=cp949',
   );
 });
+
+it('shows a loading circle and aborts an old preview without displaying its late result', async () => {
+  const pending = new Map<string, (value: Response) => void>();
+  const signals: AbortSignal[] = [];
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.signal) signals.push(init.signal);
+    return new Promise<Response>(resolve => pending.set(new URL(String(input)).pathname, resolve));
+  }));
+  const { rerender } = render(<ResponsePreview flowId="old" />);
+  expect(screen.getByRole('status', { name: t('detail.preview.loading') })).toBeTruthy();
+  rerender(<ResponsePreview flowId="new" />);
+  expect(signals[0].aborted).toBe(true);
+  const response = (text: string) => ({ ok: true, json: async () => ({ kind: 'text', text, mime: 'text/plain' }) }) as Response;
+  pending.get('/api/flows/new/response-preview')!(response('current preview'));
+  expect(await screen.findByText('current preview')).toBeTruthy();
+  pending.get('/api/flows/old/response-preview')!(response('outdated preview'));
+  await waitFor(() => expect(screen.queryByText('outdated preview')).toBeNull());
+});

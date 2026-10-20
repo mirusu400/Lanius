@@ -177,13 +177,14 @@ export function getFlow(
   id: string,
   reveal = false,
   charsets: { request?: string | null; response?: string | null } = {},
+  signal?: AbortSignal,
 ): Promise<FlowDetail> {
   const params = new URLSearchParams();
   if (reveal) params.set('reveal', 'true');
   if (charsets.request) params.set('request_charset', charsets.request);
   if (charsets.response) params.set('response_charset', charsets.response);
   const query = params.size ? `?${params}` : '';
-  return request<FlowDetail>(`/api/flows/${encodeURIComponent(id)}${query}`);
+  return request<FlowDetail>(`/api/flows/${encodeURIComponent(id)}${query}`, signal ? { signal } : undefined);
 }
 
 /** Fetch only the captured request used to seed an editor.  The engine does
@@ -225,9 +226,9 @@ export function patchFlowAnnotation(
   });
 }
 
-export function getResponsePreview(id: string, charset?: string | null): Promise<ResponsePreview> {
+export function getResponsePreview(id: string, charset?: string | null, signal?: AbortSignal): Promise<ResponsePreview> {
   const query = charset ? `?charset=${encodeURIComponent(charset)}` : '';
-  return request<ResponsePreview>(`/api/flows/${encodeURIComponent(id)}/response-preview${query}`);
+  return request<ResponsePreview>(`/api/flows/${encodeURIComponent(id)}/response-preview${query}`, signal ? { signal } : undefined);
 }
 
 export function clearFlows(): Promise<{ ok: boolean }> {

@@ -8,6 +8,8 @@ import { matchCount } from './searchHighlight';
 import { MarkedText } from './MarkedText';
 import { markHtmlPreview } from './htmlPreviewSearch';
 import { HighlightedBody } from './SyntaxCode';
+import { LoadingPane } from './Spinner';
+import { LARGE_TEXT_THRESHOLD } from './textDocumentModel';
 
 const PREVIEW_CSP = "default-src 'none'; script-src 'none'; connect-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'; navigate-to 'none'";
 const NOOP_MATCH_COUNT = () => {};
@@ -109,14 +111,14 @@ function PreviewContent({ preview, query, activeIndex, onMatchCount }: {
     : null, [preview, query, activeIndex]);
   const count = (() => {
     if (preview.kind === 'html') return markedHtml?.count || 0;
-    if (preview.kind === 'text') return matchCount(preview.text, query);
+    if (preview.kind === 'text') return preview.text.length >= LARGE_TEXT_THRESHOLD ? null : matchCount(preview.text, query);
     if (preview.kind === 'csv') return preview.rows.reduce((sum, row) => sum + row.slice(0, 50).reduce((n, cell) => n + matchCount(cell, query), 0), 0);
     if (preview.kind === 'spreadsheet') return gridMatchCount(preview.sheets[Math.min(selected, preview.sheets.length - 1)]?.rows || [], query);
     if (preview.kind === 'archive') return preview.entries.reduce((sum, entry) => sum + matchCount(entry.name, query), 0)
       + matchCount(preview.entries[Math.min(selected, preview.entries.length - 1)]?.text || '', query);
     return 0;
   })();
-  useEffect(() => onMatchCount(count), [count, onMatchCount]);
+  useEffect(() => { if (count !== null) onMatchCount(count); }, [count, onMatchCount]);
 
   if (preview.kind === 'unavailable') {
     const key = `detail.preview.${preview.reason}` as Parameters<typeof t>[0];
@@ -139,7 +141,7 @@ function PreviewContent({ preview, query, activeIndex, onMatchCount }: {
   }
   if (preview.kind === 'text') {
     return <HighlightedBody className="response-preview-text" text={preview.text} headers={null}
-      fallbackMime={preview.mime} responsePath={preview.path} query={query} activeIndex={activeIndex} />;
+      fallbackMime={preview.mime} responsePath={preview.path} query={query} activeIndex={activeIndex} onMatchCount={onMatchCount} />;
   }
   if (preview.kind === 'csv') {
     const rows = preview.rows.map((cells, index) => ({ number: String(index + 1), cells: cells.map((value, column) => ({ ref: `${columnName(column)}${index + 1}`, value })) }));
@@ -190,15 +192,16 @@ export function ResponsePreview({ flowId, charset, query = '', activeIndex = nul
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     onMatchCount(0);
-    getResponsePreview(flowId, charset)
+    getResponsePreview(flowId, charset, controller.signal)
       .then((data) => { if (!cancelled) setResult({ flowId, charset: charset ?? null, preview: data }); })
       .catch((cause: unknown) => { if (!cancelled) setResult({ flowId, charset: charset ?? null, error: cause instanceof Error ? cause.message : String(cause) }); });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [flowId, charset, onMatchCount]);
 
-  if (result?.flowId !== flowId || result.charset !== (charset ?? null)) return <p className="muted">{t('detail.preview.loading')}</p>;
+  if (result?.flowId !== flowId || result.charset !== (charset ?? null)) return <LoadingPane label={t('detail.preview.loading')} />;
   if (result.error) return <p className="banner error">{t('detail.preview.failed', { message: result.error })}</p>;
-  if (!result.preview) return <p className="muted">{t('detail.preview.loading')}</p>;
+  if (!result.preview) return <LoadingPane label={t('detail.preview.loading')} />;
   return <div className="response-preview"><PreviewContent preview={result.preview} query={query} activeIndex={activeIndex} onMatchCount={onMatchCount} /></div>;
 }

@@ -1,8 +1,14 @@
-import { cleanup, fireEvent, render } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { renderWithI18n } from '../test-utils';
 
 import { HighlightedBody, HighlightedEditor, HighlightedMessage } from './SyntaxCode';
 import { bodyLanguage } from './syntaxLanguage';
+
+// Viewport layout/clipboard needs a real browser. This unit test checks
+// that routing passes the complete source through unchanged.
+vi.mock('./LargeTextView', () => ({ default: ({ text, className }: { text: string; className: string }) =>
+  <div className={className} data-testid="large-text">{text}</div> }));
 
 afterEach(cleanup);
 
@@ -35,17 +41,15 @@ it('uses distinct syntax colours for query parameter keys and values', () => {
     .toEqual(['alice', 'admin%20user']);
 });
 
-it('preserves raw HTTP text and skips tokenising an oversized body', () => {
+it('routes oversized HTTP messages to the asynchronous viewer without truncating their source', async () => {
   const body = `const value = '${'x'.repeat(128 * 1024)}';`;
   const source = `POST / HTTP/1.1\r\nContent-Type: application/javascript\r\n\r\n${body}`;
-  const { container } = render(<HighlightedMessage
+  const { container } = renderWithI18n(<HighlightedMessage
     text={source}
     headers={[["Content-Type", "application/javascript"]]}
     className="raw-view"
   />);
-  expect(container.querySelector('pre')?.textContent).toBe(source);
-  expect(container.querySelector('.hljs-attr')?.textContent).toBe('Content-Type');
-  expect(container.querySelector('.hljs-keyword')?.textContent).toBe('POST');
+  expect((await screen.findByTestId('large-text')).textContent).toBe(source);
   expect(container.querySelectorAll('.hljs-string')).toHaveLength(0);
 });
 

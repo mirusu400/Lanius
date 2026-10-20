@@ -9,6 +9,7 @@ import { HighlightedMessage } from './SyntaxCode';
 import { messageHeaders } from './syntaxLanguage';
 import { formatMessageBody, hexPreview, type BodyView } from './bodyFormat';
 import { CodeDisplayControls } from './CodeDisplayControls';
+import { LoadingPane } from './Spinner';
 
 type View = BodyView | 'preview';
 const VIEWS: View[] = ['pretty', 'raw', 'hex', 'preview'];
@@ -40,14 +41,15 @@ export function ResponseInspector({
   useEffect(() => {
     if (!flowId || raw !== undefined) return;
     let cancelled = false;
-    getFlow(flowId)
+    const controller = new AbortController();
+    getFlow(flowId, false, {}, controller.signal)
       .then((detail) => {
         if (!cancelled) setLoaded({ flowId, raw: rawResponse(detail, detail), bodyOmitted: detail.response_body_omitted, bodySize: detail.response_size });
       })
       .catch((cause: unknown) => {
         if (!cancelled) setLoaded({ flowId, error: cause instanceof Error ? cause.message : String(cause) });
       });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [flowId, raw]);
 
   const rawText = raw ?? (loaded?.flowId === flowId ? loaded.raw : undefined);
@@ -82,7 +84,7 @@ export function ResponseInspector({
       {!flowId ? <p className="muted">{empty}</p> : view === 'preview'
         ? !omitted && <ResponsePreview flowId={flowId} />
         : error ? <p className="banner error">{error}</p>
-          : rawText === undefined ? <p className="muted">{t('detail.preview.loading')}</p>
+          : rawText === undefined ? <LoadingPane label={t('detail.preview.loading')} />
             : view === 'hex'
               ? <>
                 <pre className="replay-response mono">{hex?.text}</pre>

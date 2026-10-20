@@ -1,6 +1,7 @@
 /** State shared by the views that host the Inspector. */
 
 import { useCallback, useEffect, useState } from 'react';
+import { DOCUMENT_SELECTION_EVENT, documentSelection } from './textDocument';
 
 export interface InspectorSelection {
   text: string;
@@ -56,6 +57,12 @@ export function useInspectorSelection(
         return { scope, selection: next };
       });
     const update = () => {
+      const root = container.current;
+      const virtual = root && documentSelection(root);
+      if (virtual) {
+        if (virtual.text) keep({ text: virtual.text });
+        return;
+      }
       const area = editor?.current;
       if (area && document.activeElement === area) {
         const { selectionStart: start, selectionEnd: end } = area;
@@ -63,7 +70,6 @@ export function useInspectorSelection(
         return;
       }
       const range = window.getSelection();
-      const root = container.current;
       if (!range || range.isCollapsed || !root) return;
       if (!range.anchorNode || !range.focusNode) return;
       if (!root.contains(range.anchorNode) || !root.contains(range.focusNode)) return;
@@ -73,7 +79,7 @@ export function useInspectorSelection(
     // WebKit does not always report selection changes inside a textarea,
     // so the end of a drag or a shift-arrow is checked too. On the
     // document, because the container may not exist yet.
-    const events = ['selectionchange', 'mouseup', 'keyup'] as const;
+    const events = ['selectionchange', 'mouseup', 'keyup', DOCUMENT_SELECTION_EVENT] as const;
     for (const name of events) document.addEventListener(name, update);
     return () => {
       for (const name of events) document.removeEventListener(name, update);

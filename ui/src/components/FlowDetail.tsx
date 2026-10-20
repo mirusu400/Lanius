@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { getFlow, getFlowBodyPreview, getReplayRequest } from '../api/client';
 import type { FlowDetail, FlowSummary, RequestVariant } from '../api/types';
@@ -31,6 +31,8 @@ import { useShortcuts } from '../useShortcut';
 import { UndoableInput } from './UndoableText';
 import { copyTextToClipboard } from '../clipboard';
 import { CodeDisplayControls } from './CodeDisplayControls';
+import { LoadingPane } from './Spinner';
+import { selectedText } from './textDocument';
 
 interface Props {
   flow: FlowSummary | null;
@@ -113,6 +115,7 @@ function Half({
   bodyTruncated,
   bodyChunkable,
   loadingMore,
+  loading = false,
   onLoadMore,
   raw,
   charset,
@@ -148,6 +151,7 @@ function Half({
   bodyTruncated?: boolean;
   bodyChunkable?: boolean;
   loadingMore?: boolean;
+  loading?: boolean;
   onLoadMore?: () => void;
   raw: string;
   charset: string | null | undefined;
@@ -170,7 +174,7 @@ function Half({
   isActive: () => boolean;
   searchQuery: string;
 }) {
-  const hex = view === 'hex' ? hexPreview(raw) : null;
+  const hex = useMemo(() => view === 'hex' ? hexPreview(raw) : null, [raw, view]);
   const [findOpen, setFindOpen] = useState(false);
   const [showLineEndings, setShowLineEndings] = useState(false);
   const [wrap, setWrap] = useState(true);
@@ -180,7 +184,9 @@ function Half({
   const sectionRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const query = findOpen ? findQuery : searchQuery;
-  const formattedBody = formatBody(body, bodyView) || t('common.empty');
+  const formatted = useMemo(() => view === 'parsed' ? formatBody(body, bodyView) : '', [body, bodyView, view]);
+  const formattedBody = formatted || t('common.empty');
+  const reformattable = useMemo(() => view === 'parsed' && canReformat(body), [body, view]);
   const headerMatches = view === 'parsed'
     ? (headers || []).reduce((count, [name, value]) => count + matchCount(name, query) + matchCount(value, query), 0)
     : 0;
@@ -308,9 +314,10 @@ function Half({
         <button type="button" onClick={() => move(1)} disabled={!matches} aria-label={t('detail.findNext')}>↓</button>
         <button type="button" onClick={() => setFindOpen(false)} aria-label={t('detail.findClose')}>×</button>
       </div>}
-      <div className="detail-half-body">
+      <div className="detail-half-body" aria-busy={loading}>
+        {loading ? <LoadingPane label={t('detail.preview.loading')} /> : <>
         {bodyOmitted && <p className="banner" role="status">{t('detail.mediaBodyOmitted', { size: formatBytes(bodySize ?? 0) })}</p>}
-        {bodyTruncated && <div className="banner body-preview-notice" role="status">
+        {bodyTruncated && view !== 'preview' && <div className="banner body-preview-notice" role="status">
           <span>{encodingLabel
             // Decoded bytes against a compressed total would read as
             // "256 KB of 40 KB"; the decoded length is unknown here.
@@ -332,7 +339,7 @@ function Half({
             <HeaderList headers={headers} t={t} query={query} activeIndex={selectedIndex} />
             <h4>
               {t('detail.body')}
-              {canReformat(body) && (
+              {reformattable && (
                 // Only when laying it out would change something: a
                 // control that does nothing is worse than none.
                 <button
@@ -382,6 +389,7 @@ function Half({
           </>
         )}
         {view === 'preview' && previewFlowId && !bodyOmitted && <ResponsePreview flowId={previewFlowId} charset={charsetOverride || null} query={query} activeIndex={selectedIndex} onMatchCount={setPreviewMatches} />}
+        </>}
       </div>
     </section>
   );
@@ -391,6 +399,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const t = useT();
   const addRequestScopeRule = useAddRequestScopeRule();
   const [detail, setDetail] = useState<FlowDetail | null>(null);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [reveal, setReveal] = useState(false);
   const layoutStorageKey = `${splitStorageKey}.layout`;
   const [exchangeDirection, setExchangeDirection] = useState<'horizontal' | 'vertical'>(() =>
@@ -433,6 +442,8 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const responseCharsetOverride = charsetChoices.flowId === currentFlowId
     ? charsetChoices.response
     : '';
+  const detailKey = JSON.stringify([currentFlowId, flow?.status_code, flow?.completed_at, flow?.request_size, flow?.response_size, flow?.modified, flow?.error, reveal, requestCharsetOverride, responseCharsetOverride]);
+  const detailLoading = Boolean(flow && loadedKey !== detailKey);
 
   useEffect(() => {
     if ((flow?.id ?? null) !== previousFlowId.current) {
@@ -444,20 +455,22 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       return;
     }
     let cancelled = false;
+    const controller = new AbortController();
     getFlow(flow.id, reveal, {
       request: requestCharsetOverride,
       response: responseCharsetOverride,
-    })
+    }, controller.signal)
       .then((d) => {
-        if (!cancelled) setDetail(d);
+        if (!cancelled) { setDetail(d); setLoadedKey(detailKey); }
       })
-      .catch(() => {
-        if (!cancelled) setDetail(null);
+      .catch((error: unknown) => {
+        if (!cancelled) { setDetail(null); setLoadedKey(detailKey); setActionError(error instanceof Error ? error.message : String(error)); }
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [flow, flow?.status_code, reveal, requestCharsetOverride, responseCharsetOverride]);
+  }, [flow, detailKey, reveal, requestCharsetOverride, responseCharsetOverride]);
 
   const sendRequest = (
     selected: FlowSummary | null,
@@ -540,17 +553,9 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     event: React.MouseEvent,
     message: 'request' | 'response',
   ) => {
-    const selection = window.getSelection();
-    const anchor = selection?.anchorNode;
-    const focus = selection?.focusNode;
     // Capture this before opening the menu: clicking an action can collapse
     // the browser selection. Ignore a stale selection from the other pane.
-    const selectedText = selection && !selection.isCollapsed && anchor && focus
-      && event.currentTarget.contains(anchor)
-      && event.currentTarget.contains(focus)
-      ? selection.toString()
-      : '';
-    menu.open(event, { message, flow, detail, selection: selectedText });
+    menu.open(event, { message, flow, detail, selection: selectedText(event.currentTarget, event.target) });
   };
 
   const menuFlow = menu.target?.flow ?? flow;
@@ -634,6 +639,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       bodyTruncated={!selectedVariant && detail?.request_body_truncated}
       bodyChunkable={detail?.request_body_chunkable}
       loadingMore={loadingMore === 'request'}
+      loading={detailLoading}
       onLoadMore={() => loadMoreBody('request')}
       raw={
         isTcp
@@ -683,6 +689,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       bodyTruncated={detail?.response_body_truncated}
       bodyChunkable={detail?.response_body_chunkable}
       loadingMore={loadingMore === 'response'}
+      loading={detailLoading}
       onLoadMore={() => loadMoreBody('response')}
       raw={isTcp ? (detail?.response_body ?? '') : rawResponse(flow, detail)}
       charset={detail?.response_charset}

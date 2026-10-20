@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { lazy, Suspense, useMemo, useRef } from 'react';
 
 import hljs from 'highlight.js/lib/core';
 import css from 'highlight.js/lib/languages/css';
@@ -10,6 +10,10 @@ import { splitMessage } from './bodyFormat';
 import { bodyLanguage, HIGHLIGHT_LIMIT, type SyntaxHeaders, type SyntaxLanguage } from './syntaxLanguage';
 import { markHighlightedHtml } from './searchHighlight';
 import { UndoableTextarea } from './UndoableText';
+import { LoadingPane } from './Spinner';
+import { LARGE_TEXT_THRESHOLD } from './textDocumentModel';
+
+const LargeTextView = lazy(() => import('./LargeTextView'));
 
 // Register only the grammars used by captured HTTP bodies. XML also handles
 // HTML and its embedded script/style elements.
@@ -168,6 +172,7 @@ export function HighlightedBody({
   offset = 0,
   showLineEndings = false,
   wrap = true,
+  onMatchCount,
 }: {
   text: string;
   headers: SyntaxHeaders;
@@ -179,14 +184,37 @@ export function HighlightedBody({
   offset?: number;
   showLineEndings?: boolean;
   wrap?: boolean;
+  onMatchCount?: (count: number) => void;
 }) {
+  if (text.length >= LARGE_TEXT_THRESHOLD) return <Suspense fallback={<LoadingPane />}>
+    <LargeTextView text={text} className={`body mono syntax-code${className ? ` ${className}` : ''}`}
+      query={query} activeIndex={activeIndex} offset={offset} showLineEndings={showLineEndings} wrap={wrap} onMatchCount={onMatchCount} />
+  </Suspense>;
   const language = bodyLanguage(headers, text, fallbackMime, responsePath);
   return <pre className={`body mono syntax-code code-wrap-${wrap ? 'on' : 'off'}${className ? ` ${className}` : ''}`}><code>
     <SyntaxFragment text={text} language={language} query={query} activeIndex={activeIndex} offset={offset} showLineEndings={showLineEndings} />
   </code></pre>;
 }
 
-export function HighlightedMessage({
+export function HighlightedMessage(props: {
+  text: string;
+  headers: SyntaxHeaders;
+  fallbackMime?: string | null;
+  responsePath?: string | null;
+  className: string;
+  http?: boolean;
+  query?: string;
+  activeIndex?: number | null;
+  showLineEndings?: boolean;
+  wrap?: boolean;
+}) {
+  if (props.text.length >= LARGE_TEXT_THRESHOLD) return <Suspense fallback={<LoadingPane />}>
+    <LargeTextView {...props} className={`${props.className} syntax-code`} />
+  </Suspense>;
+  return <SmallHighlightedMessage {...props} />;
+}
+
+function SmallHighlightedMessage({
   text,
   headers,
   fallbackMime,
