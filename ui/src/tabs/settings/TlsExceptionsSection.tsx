@@ -67,7 +67,7 @@ export function TlsExceptionsSection() {
       <h3>{t('tlsExceptions.section')}</h3>
       <p className="muted">{t('tlsExceptions.help')}</p>
       <div className="settings-row">
-        <label>
+        <label className="tls-insecure-label">
           <input type="checkbox" checked={insecure ?? false} disabled={busy || insecure === null}
             onChange={(event) => event.target.checked
               ? setConfirmingInsecure(true)

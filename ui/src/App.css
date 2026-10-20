@@ -4977,6 +4977,8 @@ pre.response-preview-text {
   }
 }
 
+.settings-row .tls-insecure-label { color: var(--danger); }
+
 .lockdown-section h3,
 .lockdown-section .lockdown-label,
 .lockdown-active {
