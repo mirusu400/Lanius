@@ -79,6 +79,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   flowsRef.current = flows;
   const [historyPage, setHistoryPage] = useState(0);
   const [historyPageInput, setHistoryPageInput] = useState('1');
+  const [historyPageSize, setHistoryPageSize] = useState(200);
+  const historyPageSizeRef = useRef(historyPageSize);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -132,7 +134,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
 
   const reload = useCallback(async ({ showSearchProgress = false } = {}) => {
     const generation = ++requestGeneration.current;
-    const searchKey = JSON.stringify([filtersRef.current, historyPageRef.current, historySortRef.current]);
+    const searchKey = JSON.stringify([filtersRef.current, historyPageRef.current, historyPageSizeRef.current, historySortRef.current]);
     if (showSearchProgress && filtersRef.current.search?.trim()) pendingSearchNotification.current = searchKey;
     // A background refresh can supersede an interactive request. Do not let
     // it hide progress that is already explaining the user's wait; the newest
@@ -141,7 +143,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
     setHistoryLoading(true);
     try {
       const page = await listFlowPage(
-        filtersRef.current, historyPageRef.current * 200, 200,
+        filtersRef.current, historyPageRef.current * historyPageSizeRef.current, historyPageSizeRef.current,
         historyAnchor.current,
         historySortRef.current.key === 'started_at' && historySortRef.current.desc
           ? historyCursors.current[historyPageRef.current] : undefined,
@@ -200,7 +202,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
       300,
     );
     return () => window.clearTimeout(timer);
-  }, [filters, historyPage, reload]);
+  }, [filters, historyPage, historyPageSize, reload]);
 
   useEffect(() => {
     if (!methodFilterRequest || methodFilterRequest === appliedMethodRequest.current) return;
@@ -236,6 +238,21 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
       setHistoryPage(nextPage);
     }
     else setHistoryPageInput(String(historyPage + 1));
+  };
+
+  const changeHistoryPageSize = (size: number) => {
+    if (size === historyPageSizeRef.current) return;
+    if (filtersRef.current.search) nextReloadShowsSearchProgress.current = true;
+    requestGeneration.current += 1;
+    historyPageSizeRef.current = size;
+    historyPageRef.current = 0;
+    historyAnchor.current = undefined;
+    historyCursors.current = {};
+    setNextHistoryCursor(null);
+    setHistoryPage(0);
+    setHistoryPageInput('1');
+    setHistoryPageSize(size);
+    setFlows((previous) => previous.slice(0, size));
   };
 
   useEffect(() => () => {
@@ -357,7 +374,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
               const current = existing ? { ...existing, ...flow } : flow;
               if (historyPageRef.current === 0
                 && matchesFilters(current, filtersRef.current)
-                && flowsRef.current.length >= 200
+                && flowsRef.current.length >= historyPageSizeRef.current
                 && !flowsRef.current.some((item) => item.id === flow.id)) {
                 setHasMoreHistory(true);
               }
@@ -368,7 +385,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                 if (historyPageRef.current > 0 && !prev.some((item) => item.id === flow.id)) {
                   return prev;
                 }
-                return mergeFlow(prev, current, 200);
+                return mergeFlow(prev, current, historyPageSizeRef.current);
               });
               return;
             }
@@ -565,6 +582,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
             connection={connection}
             status={status}
             count={flows.length}
+            historyPageSize={historyPageSize}
+            onHistoryPageSizeChange={changeHistoryPageSize}
             onOpenFilter={() => setFilterOpen(true)}
             historyLayout={historyLayout}
             onToggleHistoryLayout={toggleHistoryLayout}

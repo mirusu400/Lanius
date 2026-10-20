@@ -583,6 +583,86 @@ describe('ProxyTab', () => {
     )).toBe(true));
   });
 
+  it('loads more than 200 rows and keeps the selected limit when live traffic arrives', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('/seeded');
+    flowPageResponse = Promise.resolve(jsonResponse({
+      items: Array.from({ length: 300 }, (_, index) => ({
+        ...seeded, id: `history-${index}`, path: `/history-${index}`,
+      })),
+      has_more: false,
+    }));
+
+    const size = screen.getByRole('spinbutton', { name: t('proxy.historyPageSize') });
+    expect(size).toHaveProperty('value', '200');
+    await user.clear(size);
+    await user.type(size, '300{Enter}');
+    await screen.findByText('/history-299');
+    expect(screen.getByText(t('proxy.flowCount', { count: 300 }))).toBeTruthy();
+    expect(calls.some(({ url }) => new URL(url).searchParams.get('limit') === '300')).toBe(true);
+
+    act(() => MockSocket.instances[0].emit('flow.request', live));
+    expect(await screen.findByText('/live')).toBeTruthy();
+    expect(screen.queryByText('/history-299')).toBeNull();
+    expect(screen.getByText('/history-298')).toBeTruthy();
+    expect(screen.getByText(t('proxy.flowCount', { count: 300 }))).toBeTruthy();
+    expect(screen.getByRole('button', { name: t('proxy.olderHistory') })).toHaveProperty('disabled', false);
+  });
+
+  it('resets pagination on a page size change and uses the new size for offsets', async () => {
+    flowPageResponse = Promise.resolve(jsonResponse({
+      items: [seeded], has_more: true, anchor: 10, next_cursor: 'old-size-cursor',
+    }));
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('/seeded');
+    await user.click(screen.getByRole('button', { name: t('proxy.olderHistory') }));
+    expect(calls.some(({ url }) => new URL(url).searchParams.get('cursor') === 'old-size-cursor')).toBe(true);
+
+    flowPageResponse = Promise.resolve(jsonResponse({ items: [seeded], has_more: true, anchor: 20 }));
+    const before = calls.length;
+    const size = screen.getByRole('spinbutton', { name: t('proxy.historyPageSize') });
+    await user.clear(size);
+    await user.type(size, '500');
+    await user.tab();
+
+    const resized = calls.slice(before).find(({ url }) => url.includes('/api/flows?'));
+    expect(resized).toBeTruthy();
+    const params = new URL(resized!.url).searchParams;
+    expect(params.get('limit')).toBe('500');
+    expect(params.has('offset')).toBe(false);
+    expect(params.has('cursor')).toBe(false);
+    expect(params.has('anchor')).toBe(false);
+    const page = screen.getByRole('spinbutton', { name: t('proxy.historyPageLabel') });
+    expect(page).toHaveProperty('value', '1');
+
+    await user.click(screen.getByRole('button', { name: t('proxy.olderHistory') }));
+    expect(calls.some(({ url }) => new URL(url).searchParams.get('offset') === '500')).toBe(true);
+    await user.clear(page);
+    await user.type(page, '4{Enter}');
+    expect(calls.some(({ url }) => new URL(url).searchParams.get('offset') === '1500')).toBe(true);
+  });
+
+  it('rejects invalid row limits and accepts the engine maximum', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('/seeded');
+    const size = screen.getByRole('spinbutton', { name: t('proxy.historyPageSize') });
+    const before = calls.length;
+    for (const value of ['', '0', '-1', '1.5', '1001']) {
+      fireEvent.change(size, { target: { value } });
+      fireEvent.blur(size);
+      expect(size).toHaveProperty('value', '200');
+    }
+    expect(calls.slice(before).filter(({ url }) => url.includes('/api/flows?'))).toHaveLength(0);
+
+    await user.clear(size);
+    await user.type(size, '1000{Enter}');
+    expect(calls.some(({ url }) => new URL(url).searchParams.get('limit') === '1000')).toBe(true);
+    expect(size).toHaveProperty('value', '1000');
+  });
+
   it('appends flows arriving over the WebSocket and updates them in place', async () => {
     render(<ProxyTab />);
     await screen.findByText('seeded.test');

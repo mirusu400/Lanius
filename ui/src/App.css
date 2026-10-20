@@ -797,6 +797,18 @@ pre.body,
   color: var(--muted);
 }
 
+.history-page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.history-page-size input {
+  width: 5.5em;
+}
+
 .conn-open {
   color: var(--ok-strong);
 }

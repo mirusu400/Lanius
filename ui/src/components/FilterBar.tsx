@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ConnectionState } from '../api/stream';
 import { useT } from '../i18n';
 import { countActive } from './FilterDialog';
@@ -18,6 +19,8 @@ interface Props {
   status: EngineStatus | null;
   onOpenFilter: () => void;
   count: number;
+  historyPageSize: number;
+  onHistoryPageSizeChange: (size: number) => void;
   historyLayout: HistoryLayout;
   onToggleHistoryLayout: () => void;
 }
@@ -53,10 +56,22 @@ export function FilterBar({
   status,
   onOpenFilter,
   count,
+  historyPageSize,
+  onHistoryPageSizeChange,
   historyLayout,
   onToggleHistoryLayout,
 }: Props) {
   const t = useT();
+  const [pageSizeInput, setPageSizeInput] = useState(String(historyPageSize));
+  const applyPageSize = () => {
+    const size = Number(pageSizeInput);
+    if (Number.isSafeInteger(size) && size >= 1 && size <= 1000) {
+      setPageSizeInput(String(size));
+      onHistoryPageSizeChange(size);
+    } else {
+      setPageSizeInput(String(historyPageSize));
+    }
+  };
   const active = countActive(filters);
   const targetLayout = historyLayout === 'side-by-side' ? 'stacked' : 'side-by-side';
   const layoutLabel = targetLayout === 'stacked'
@@ -102,6 +117,19 @@ export function FilterBar({
         <HistoryLayoutIcon target={targetLayout} />
       </button>
       <span className="count">{t('proxy.flowCount', { count })}</span>
+      <label className="history-page-size">
+        {t('proxy.historyPageSize')}
+        <UndoableInput
+          type="number"
+          min="1"
+          max="1000"
+          step="1"
+          value={pageSizeInput}
+          onValueChange={setPageSizeInput}
+          onBlur={applyPageSize}
+          onKeyDown={(event) => { if (event.key === 'Enter') applyPageSize(); }}
+        />
+      </label>
       <span className={`conn conn-${connection}`}>
         {connection === 'open'
           ? t('proxy.live')
