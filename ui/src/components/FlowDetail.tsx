@@ -30,6 +30,7 @@ import { MarkedText } from './MarkedText';
 import { useShortcuts } from '../useShortcut';
 import { UndoableInput } from './UndoableText';
 import { copyTextToClipboard } from '../clipboard';
+import { CodeDisplayControls } from './CodeDisplayControls';
 
 interface Props {
   flow: FlowSummary | null;
@@ -171,6 +172,8 @@ function Half({
 }) {
   const hex = view === 'hex' ? hexPreview(raw) : null;
   const [findOpen, setFindOpen] = useState(false);
+  const [showLineEndings, setShowLineEndings] = useState(false);
+  const [wrap, setWrap] = useState(true);
   const [findQuery, setFindQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const [previewMatches, setPreviewMatches] = useState(0);
@@ -277,6 +280,8 @@ function Half({
             ))}
           </div>
         )}
+        <CodeDisplayControls showLineEndings={showLineEndings} onShowLineEndings={setShowLineEndings}
+          wrap={wrap} onWrap={setWrap} disabled={view === 'preview' || view === 'hex'} />
         <div className="view-switch" role="tablist">
           {views.map((option) => (
             <button
@@ -347,6 +352,8 @@ function Half({
               query={query}
               activeIndex={selectedIndex}
               offset={headerMatches}
+              showLineEndings={showLineEndings}
+              wrap={wrap}
             />}
           </>
         )}
@@ -360,6 +367,8 @@ function Half({
             http={http}
             query={query}
             activeIndex={selectedIndex}
+            showLineEndings={showLineEndings}
+            wrap={wrap}
           />
         )}
         {view === 'hex' && (
@@ -383,6 +392,9 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const addRequestScopeRule = useAddRequestScopeRule();
   const [detail, setDetail] = useState<FlowDetail | null>(null);
   const [reveal, setReveal] = useState(false);
+  const layoutStorageKey = `${splitStorageKey}.layout`;
+  const [exchangeDirection, setExchangeDirection] = useState<'horizontal' | 'vertical'>(() =>
+    window.localStorage.getItem(layoutStorageKey) === 'horizontal' ? 'horizontal' : 'vertical');
   const [requestView, setRequestView] = useState<View>('parsed');
   const [responseView, setResponseView] = useState<View>('parsed');
   // Laid out by default: a captured JSON body is one long line, which is
@@ -704,6 +716,19 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
         <span className="detail-url-text" title={formatUrl(flow)}>
           <strong><MarkedText text={flow.method || ''} query={searchQuery} /></strong> <MarkedText text={formatUrl(flow)} query={searchQuery} />
         </span>
+        <button type="button" className="code-display-toggle" aria-label={t('detail.exchangeSideBySide')}
+          aria-pressed={exchangeDirection === 'horizontal'}
+          title={t(exchangeDirection === 'horizontal' ? 'detail.exchangeStacked' : 'detail.exchangeSideBySide')}
+          onClick={() => {
+            const next = exchangeDirection === 'horizontal' ? 'vertical' : 'horizontal';
+            setExchangeDirection(next);
+            window.localStorage.setItem(layoutStorageKey, next);
+          }}>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <rect x="3" y="3" width="14" height="14" rx="2" />
+            {exchangeDirection === 'horizontal' ? <path d="M3 10h14" /> : <path d="M10 3v14" />}
+          </svg>
+        </button>
         <label className="reveal">
           <input
             type="checkbox"
@@ -732,8 +757,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
         host={flow.host}
         hasResponse={flow.status_code != null}
       />
-      {/* Stacked rather than tabbed: comparing what was sent with what
-          came back is the usual reason to open a flow at all. */}
+      {/* Keep both messages mounted when changing the exchange layout. */}
       <Split
         direction="horizontal"
         storageKey={`${splitStorageKey}.inspector`}
@@ -742,8 +766,8 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
         first={
           <div className="inspector-host" ref={exchangeRef}>
             <Split
-              direction="vertical"
-              storageKey={splitStorageKey}
+              direction={exchangeDirection}
+              storageKey={exchangeDirection === 'vertical' ? splitStorageKey : `${splitStorageKey}.horizontal`}
               initial={initialSplit}
               first={request}
               second={response}

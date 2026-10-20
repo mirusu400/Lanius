@@ -148,6 +148,30 @@ describe('toHex', () => {
 });
 
 describe('FlowDetailView', () => {
+  it('remembers exchange layout without remounting either message pane', async () => {
+    const splitStorageKey = 'lanius.test.exchange';
+    const layoutKey = `${splitStorageKey}.layout`;
+    window.localStorage.removeItem(layoutKey);
+    const { container, unmount } = render(<FlowDetailView flow={httpFlow} splitStorageKey={splitStorageKey} />);
+    await waitFor(() => expect(bodyText(1)).toBe('ok'));
+    await userEvent.click(screen.getAllByRole('tab', { name: t('detail.view.raw') })[1]);
+    const response = container.querySelectorAll('.detail-half')[1];
+    const toggle = screen.getByRole('button', { name: t('detail.exchangeSideBySide') });
+    expect(toggle.nextElementSibling?.textContent).toContain(t('detail.revealSecrets'));
+    await userEvent.click(toggle);
+    expect(response).toBe(container.querySelectorAll('.detail-half')[1]);
+    expect(response.parentElement?.parentElement?.classList.contains('split-h')).toBe(true);
+    expect(response.querySelector('[aria-selected="true"]')?.textContent).toBe(t('detail.view.raw'));
+    expect(window.localStorage.getItem(layoutKey)).toBe('horizontal');
+
+    unmount();
+    render(<FlowDetailView flow={httpFlow} splitStorageKey={splitStorageKey} />);
+    expect(screen.getByRole('button', { name: t('detail.exchangeSideBySide') }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(screen.getByRole('button', { name: t('detail.exchangeSideBySide') }));
+    expect(window.localStorage.getItem(layoutKey)).toBe('vertical');
+    window.localStorage.removeItem(layoutKey);
+  });
+
   it('explains omitted media bodies in parsed, raw and preview views while preserving headers', async () => {
     vi.mocked(fetch).mockResolvedValue({ ok: true, status: 200, json: async () => ({
       ...httpFlow, response_body_omitted: true, response_size: 5 * 1024 * 1024,

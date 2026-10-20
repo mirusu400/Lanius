@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 
-import { HighlightedBody, HighlightedMessage } from './SyntaxCode';
+import { HighlightedBody, HighlightedEditor, HighlightedMessage } from './SyntaxCode';
 import { bodyLanguage } from './syntaxLanguage';
 
 afterEach(cleanup);
@@ -57,4 +57,28 @@ it('selects the whole highlighted message with the keyboard', () => {
   fireEvent.keyDown(pre, { key: 'a', metaKey: true });
   expect(window.getSelection()?.toString()).toBe(source);
   window.getSelection()?.removeAllRanges();
+});
+
+it('labels CRLF, LF and CR without changing selections or search offsets', () => {
+  const source = 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nfirst\nsecond\rthird';
+  const { container } = render(<HighlightedMessage text={source} headers={[]} className="raw-view"
+    showLineEndings wrap={false} query="second" activeIndex={0} />);
+  expect([...container.querySelectorAll('.code-line-ending')].map((node) => node.getAttribute('data-eol')))
+    .toEqual(['\\r\\n', '\\r\\n', '\\r\\n', '\\n', '\\r']);
+  expect(container.querySelector('.find-current')?.textContent).toBe('second');
+  const pre = container.querySelector('pre')!;
+  expect(pre.textContent).toBe(source);
+  fireEvent.keyDown(pre, { key: 'a', ctrlKey: true });
+  expect(window.getSelection()?.toString()).toBe(source);
+  window.getSelection()?.removeAllRanges();
+});
+
+it('aligns editable line endings with textarea normalisation while labelling the original endings', () => {
+  const source = 'POST / HTTP/1.1\r\nHost: example.test\r\n\r\nfirst\rsecond\nthird';
+  const { container } = render(<HighlightedEditor text={source} headers={[]} className="replay-editor"
+    showLineEndings onChange={() => { throw new Error('A display option must not edit the request'); }} />);
+  const textarea = container.querySelector('textarea')!;
+  expect(container.querySelector('pre')?.textContent).toBe(textarea.value);
+  expect([...container.querySelectorAll('.code-line-ending')].map((node) => node.getAttribute('data-eol')))
+    .toEqual(['\\r\\n', '\\r\\n', '\\r\\n', '\\r', '\\n']);
 });

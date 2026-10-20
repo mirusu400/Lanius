@@ -39,6 +39,23 @@ function StatefulEditor({ initial = RAW }: { initial?: string }) {
 }
 
 describe('what gets sent', () => {
+  it('keeps display toggles out of the editable request and sent bytes', async () => {
+    const { onChange } = editor();
+    await userEvent.click(screen.getByRole('button', { name: t('body.showLineEndings') }));
+    await userEvent.click(screen.getByRole('button', { name: t('body.wrap') }));
+    await userEvent.click(tab(t('detail.view.raw')));
+    expect(box().value).toBe(RAW);
+    expect(box().wrap).toBe('off');
+    expect(document.querySelector('.highlight-editor-overlay')?.textContent).toBe(RAW);
+    expect(document.querySelectorAll('.highlight-editor-overlay .code-line-ending')).toHaveLength(4);
+    expect(onChange).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: t('body.wrap') }));
+    expect(box().wrap).toBe('soft');
+    await userEvent.type(box(), 'x');
+    expect(onChange).toHaveBeenLastCalledWith(`${RAW}x`);
+  });
+
   it('opens in Pretty while keeping the raw bytes exactly as captured', async () => {
     editor();
     expect(tab(t('detail.view.parsed')).getAttribute('aria-selected')).toBe('true');

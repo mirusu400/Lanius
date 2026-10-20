@@ -2159,6 +2159,103 @@ pre.raw-view:focus-visible {
   font: inherit;
 }
 
+.code-display-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+}
+
+.detail-half-bar .code-display-controls,
+.response-inspector-bar .code-display-controls {
+  margin-left: auto;
+}
+
+.detail-half-bar .view-switch,
+.response-inspector-bar .view-switch {
+  margin-left: 0;
+}
+
+.code-display-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 25px;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.code-display-toggle svg {
+  width: 17px;
+  height: 17px;
+}
+
+.code-display-toggle:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: var(--border);
+}
+
+.code-display-toggle[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.code-display-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.code-display-toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.code-line-ending::after {
+  content: attr(data-eol);
+  color: var(--muted);
+  opacity: 0.7;
+  white-space: pre;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Editable markers sit at the end of a line without moving the caret or
+   changing where the textarea wraps. */
+.highlight-editor .code-line-ending {
+  position: relative;
+}
+
+.highlight-editor .code-line-ending::after {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+/* Keep syntax overlays and editable text on the same wrapping rules. */
+pre.syntax-code.code-wrap-on,
+.highlight-editor.code-wrap-on > pre,
+.highlight-editor.code-wrap-on > textarea {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+pre.syntax-code.code-wrap-off,
+.highlight-editor.code-wrap-off > pre,
+.highlight-editor.code-wrap-off > textarea {
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  overflow-x: auto;
+}
+
 .syntax-code .hljs-keyword,
 .syntax-code .hljs-literal,
 .syntax-code .hljs-selector-tag {

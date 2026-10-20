@@ -28,6 +28,19 @@ function highlightedHtml(text: string, language: SyntaxLanguage | null): string 
   return hljs.highlight(text, { language, ignoreIllegals: true }).value;
 }
 
+/** Generated content keeps line-ending labels out of selections and raw bytes.
+ * Textareas normalise line endings, so their visual overlay must do the same. */
+function withLineEndings(html: string, show: boolean, normalize = false): string {
+  if (!show && !normalize) return html;
+  return html.replace(/(?:&#13;|\r)\n|&#13;|\r|\n/g, (ending) => {
+    const label = ending.endsWith('\n')
+      ? ending.length === 1 ? '\\n' : '\\r\\n'
+      : '\\r';
+    const marker = show ? `<span class="code-line-ending" data-eol="${label}" aria-hidden="true"></span>` : '';
+    return marker + (normalize ? '\n' : ending);
+  });
+}
+
 /** Colour a request target without treating the whole query as one token.
  *
  * Keeping the path as a link makes the request line easy to scan, while
@@ -57,16 +70,17 @@ function requestTargetHtml(target: string): string {
     + (fragment ? `<span class="hljs-link">${escapeHtml(fragment)}</span>` : '');
 }
 
-function SyntaxFragment({ text, language, query = '', activeIndex = null, offset = 0 }: {
+function SyntaxFragment({ text, language, query = '', activeIndex = null, offset = 0, showLineEndings = false }: {
   text: string;
   language: SyntaxLanguage | null;
   query?: string;
   activeIndex?: number | null;
   offset?: number;
+  showLineEndings?: boolean;
 }) {
   const html = useMemo(() => {
-    return markHighlightedHtml(highlightedHtml(text, language), query, activeIndex, offset);
-  }, [text, language, query, activeIndex, offset]);
+    return withLineEndings(markHighlightedHtml(highlightedHtml(text, language), query, activeIndex, offset), showLineEndings);
+  }, [text, language, query, activeIndex, offset, showLineEndings]);
 
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }
@@ -97,7 +111,7 @@ function messageHtml(text: string, headers: SyntaxHeaders, responsePath?: string
 }
 
 /** An editable raw message with inert syntax colours behind the textarea. */
-export function HighlightedEditor({ text, onChange, headers, responsePath, className, containerClassName, readOnly = false, label, historyKey, editorRef, onContextMenu, onSelect, onKeyUp, onMouseUp }: {
+export function HighlightedEditor({ text, onChange, headers, responsePath, className, containerClassName, readOnly = false, label, historyKey, editorRef, onContextMenu, onSelect, onKeyUp, onMouseUp, showLineEndings = false, wrap = true }: {
   text: string;
   onChange: (text: string) => void;
   headers: SyntaxHeaders;
@@ -112,10 +126,12 @@ export function HighlightedEditor({ text, onChange, headers, responsePath, class
   onSelect?: React.ReactEventHandler<HTMLTextAreaElement>;
   onKeyUp?: React.KeyboardEventHandler<HTMLTextAreaElement>;
   onMouseUp?: React.MouseEventHandler<HTMLTextAreaElement>;
+  showLineEndings?: boolean;
+  wrap?: boolean;
 }) {
-  const highlight = useMemo(() => messageHtml(text, headers, responsePath), [text, headers, responsePath]);
+  const highlight = useMemo(() => withLineEndings(messageHtml(text, headers, responsePath), showLineEndings, true), [text, headers, responsePath, showLineEndings]);
   const overlay = useRef<HTMLPreElement>(null);
-  return <div className={`highlight-editor${containerClassName ? ` ${containerClassName}` : ''}`}>
+  return <div className={`highlight-editor code-wrap-${wrap ? 'on' : 'off'}${containerClassName ? ` ${containerClassName}` : ''}`}>
     <pre ref={overlay} className="highlight-editor-overlay mono syntax-code" aria-hidden="true"><code dangerouslySetInnerHTML={{ __html: highlight }} /></pre>
     <UndoableTextarea
       textareaRef={editorRef}
@@ -124,7 +140,7 @@ export function HighlightedEditor({ text, onChange, headers, responsePath, class
       historyKey={historyKey}
       aria-label={label}
       readOnly={readOnly}
-      wrap="soft"
+      wrap={wrap ? 'soft' : 'off'}
       spellCheck={false}
       onValueChange={onChange}
       onContextMenu={onContextMenu}
@@ -150,6 +166,8 @@ export function HighlightedBody({
   query = '',
   activeIndex = null,
   offset = 0,
+  showLineEndings = false,
+  wrap = true,
 }: {
   text: string;
   headers: SyntaxHeaders;
@@ -159,10 +177,12 @@ export function HighlightedBody({
   query?: string;
   activeIndex?: number | null;
   offset?: number;
+  showLineEndings?: boolean;
+  wrap?: boolean;
 }) {
   const language = bodyLanguage(headers, text, fallbackMime, responsePath);
-  return <pre className={`body mono syntax-code${className ? ` ${className}` : ''}`}><code>
-    <SyntaxFragment text={text} language={language} query={query} activeIndex={activeIndex} offset={offset} />
+  return <pre className={`body mono syntax-code code-wrap-${wrap ? 'on' : 'off'}${className ? ` ${className}` : ''}`}><code>
+    <SyntaxFragment text={text} language={language} query={query} activeIndex={activeIndex} offset={offset} showLineEndings={showLineEndings} />
   </code></pre>;
 }
 
@@ -175,6 +195,8 @@ export function HighlightedMessage({
   http = true,
   query = '',
   activeIndex = null,
+  showLineEndings = false,
+  wrap = true,
 }: {
   text: string;
   headers: SyntaxHeaders;
@@ -184,14 +206,16 @@ export function HighlightedMessage({
   http?: boolean;
   query?: string;
   activeIndex?: number | null;
+  showLineEndings?: boolean;
+  wrap?: boolean;
 }) {
   const { separator } = useMemo(() => splitMessage(text), [text]);
   const html = useMemo(() => {
     const source = http && separator
       ? messageHtml(text, headers, responsePath, fallbackMime)
       : escapeHtml(text);
-    return markHighlightedHtml(source, query, activeIndex);
-  }, [text, separator, http, headers, responsePath, fallbackMime, query, activeIndex]);
+    return withLineEndings(markHighlightedHtml(source, query, activeIndex), showLineEndings);
+  }, [text, separator, http, headers, responsePath, fallbackMime, query, activeIndex, showLineEndings]);
   const selectAll = (event: React.KeyboardEvent<HTMLPreElement>) => {
     if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'a') return;
     const selection = window.getSelection();
@@ -203,5 +227,5 @@ export function HighlightedMessage({
     selection.addRange(range);
   };
 
-  return <pre className={`${className} syntax-code`} tabIndex={0} onKeyDown={selectAll}><code dangerouslySetInnerHTML={{ __html: html }} /></pre>;
+  return <pre className={`${className} syntax-code code-wrap-${wrap ? 'on' : 'off'}`} tabIndex={0} onKeyDown={selectAll}><code dangerouslySetInnerHTML={{ __html: html }} /></pre>;
 }

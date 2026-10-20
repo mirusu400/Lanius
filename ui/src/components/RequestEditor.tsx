@@ -26,6 +26,7 @@ import {
 import { useT } from '../i18n';
 import { HighlightedEditor, HighlightedMessage } from './SyntaxCode';
 import { messageHeaders } from './syntaxLanguage';
+import { CodeDisplayControls } from './CodeDisplayControls';
 
 const VIEWS: BodyView[] = ['pretty', 'raw', 'hex'];
 
@@ -58,6 +59,8 @@ export function RequestEditor({
 }) {
   const t = useT();
   const [view, setView] = useState<BodyView>('pretty');
+  const [showLineEndings, setShowLineEndings] = useState(false);
+  const [wrap, setWrap] = useState(true);
 
   const shown = useMemo(() => {
     if (view === 'raw') return value;
@@ -74,6 +77,8 @@ export function RequestEditor({
   return (
     <div className="request-editor">
       <div className="request-editor-bar">
+        <CodeDisplayControls showLineEndings={showLineEndings} onShowLineEndings={setShowLineEndings}
+          wrap={wrap} onWrap={setWrap} disabled={view === 'hex'} />
         <div className="view-switch" role="tablist" aria-label={t('editor.views')}>
           {VIEWS.map((option) => (
             <button
@@ -136,11 +141,13 @@ export function RequestEditor({
           onSelect={onSelectionChange}
           onKeyUp={onSelectionChange}
           onMouseUp={onSelectionChange}
+          showLineEndings={showLineEndings}
+          wrap={wrap}
         />
       ) : (
         <div className="request-editor-view" onContextMenu={onContextMenu}>
           {view === 'pretty'
-            ? <HighlightedMessage className={className || ''} text={shown} headers={headers} />
+            ? <HighlightedMessage className={className || ''} text={shown} headers={headers} showLineEndings={showLineEndings} wrap={wrap} />
             : <pre className={className} data-view={view}>{shown}</pre>}
           {truncated > 0 && (
             <p className="muted">

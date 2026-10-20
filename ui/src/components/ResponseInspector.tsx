@@ -8,6 +8,7 @@ import { formatBytes } from '../tabs/proxyModel';
 import { HighlightedMessage } from './SyntaxCode';
 import { messageHeaders } from './syntaxLanguage';
 import { formatMessageBody, hexPreview, type BodyView } from './bodyFormat';
+import { CodeDisplayControls } from './CodeDisplayControls';
 
 type View = BodyView | 'preview';
 const VIEWS: View[] = ['pretty', 'raw', 'hex', 'preview'];
@@ -32,6 +33,8 @@ export function ResponseInspector({
 }) {
   const t = useT();
   const [view, setView] = useState<View>('pretty');
+  const [showLineEndings, setShowLineEndings] = useState(false);
+  const [wrap, setWrap] = useState(true);
   const [loaded, setLoaded] = useState<{ flowId: string; raw?: string; error?: string; bodyOmitted?: boolean; bodySize?: number } | null>(null);
 
   useEffect(() => {
@@ -59,6 +62,8 @@ export function ResponseInspector({
   return <section className="response-inspector">
     <div className="response-inspector-bar">
       <span className="detail-half-title">{title ?? t('detail.response')}</span>
+      {flowId && <CodeDisplayControls showLineEndings={showLineEndings} onShowLineEndings={setShowLineEndings}
+        wrap={wrap} onWrap={setWrap} disabled={view === 'preview' || view === 'hex'} />}
       {flowId && <div className="view-switch" role="tablist">
         {VIEWS.map((option) => <button
           key={option}
@@ -85,7 +90,7 @@ export function ResponseInspector({
                   {t('detail.hexTruncated', { count: String(hex.truncated) })}
                 </p>}
               </>
-              : <HighlightedMessage className="replay-response mono" text={shown ?? ''} headers={messageHeaders(rawText)} />}
+              : <HighlightedMessage className="replay-response mono" text={shown ?? ''} headers={messageHeaders(rawText)} showLineEndings={showLineEndings} wrap={wrap} />}
     </div>
   </section>;
 }
