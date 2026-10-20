@@ -12,12 +12,13 @@ import contextlib
 import json
 import math
 import os
+import re
 import sqlite3
 import stat
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import asdict, dataclass, field
 from dataclasses import fields as dataclasses_fields
 from pathlib import Path
@@ -515,13 +516,24 @@ class FlowStore:
         self._read_lock = threading.RLock() if self.path != ":memory:" else self._lock
         if self.path == ":memory:":
             self._read_conn = self._conn
+            self._history_conn = self._conn
+            self._history_lock = self._lock
         else:
             uri = Path(self.path).resolve().as_uri() + "?mode=ro"
             self._read_conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
             self._read_conn.row_factory = sqlite3.Row
             self._read_conn.execute("PRAGMA query_only=ON")
+            # A slow search must not serialize detail panes, settings reads or
+            # dashboard queries behind the history connection's lock.
+            self._history_lock = threading.RLock()
+            self._history_conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
+            self._history_conn.row_factory = sqlite3.Row
+            self._history_conn.execute("PRAGMA query_only=ON")
 
     def close(self) -> None:
+        if self._history_conn is not self._conn:
+            with self._history_lock:
+                self._history_conn.close()
         if self._read_conn is not self._conn:
             with self._read_lock:
                 self._read_conn.close()
@@ -553,7 +565,7 @@ class FlowStore:
         Keep the same connection object for payload stores and capture writers.
         The proxy must be stopped and drained before this method is called.
         """
-        with self._read_lock, self._lock:
+        with self._history_lock, self._read_lock, self._lock:
             with contextlib.closing(sqlite3.connect(path)) as source:
                 with source:
                     for key in preserve_settings:
@@ -1209,6 +1221,24 @@ class FlowStore:
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         return where, params
 
+    @contextlib.contextmanager
+    def _history_reader(
+        self,
+        scope_predicate: Callable[[str | None, str | None, int | None, str | None], bool] | None,
+    ) -> Iterator[sqlite3.Connection]:
+        with self._history_lock:
+            if scope_predicate is not None:
+                self._history_conn.create_function(
+                    "lanius_history_scope", 4,
+                    lambda scheme, host, port, path: int(scope_predicate(scheme, host, port, path)),
+                )
+            try:
+                yield self._history_conn
+            finally:
+                # Do not retain the engine or reuse a previous request's scope.
+                if scope_predicate is not None:
+                    self._history_conn.create_function("lanius_history_scope", 4, None)
+
     def page_summaries(
         self, *, limit: int = 200, offset: int = 0,
         anchor: int | None = None,
@@ -1225,8 +1255,8 @@ class FlowStore:
     ) -> dict[str, Any]:
         """A bounded page over small history rows, without touching body pages.
 
-        Scope rules may depend on arbitrary paths, so apply them while
-        streaming the SQL result before counting the requested page offset.
+        Scope rules may depend on arbitrary paths. Evaluate them before SQL
+        pagination and before reading text in the bounded search probe.
         """
         if cursor is not None and offset:
             raise ValueError("cursor and offset cannot be combined")
@@ -1244,32 +1274,43 @@ class FlowStore:
         if cursor is not None and not default_sort:
             raise ValueError("cursor is only available for newest-first history")
         direction = "DESC" if sort_desc else "ASC"
-        order = f"{sort_columns[sort_by]} {direction}, rowid {direction}"
+        order = f"{sort_columns[sort_by]} {direction}, flows.rowid {direction}"
         where, params = self._flow_filters(
             host=host, method=method, status_code=status_code, search=search,
             methods=methods, status_classes=status_classes,
             extensions=extensions, exclude_extensions=exclude_extensions,
             bookmarked_only=bookmarked_only, annotation_color=annotation_color,
         )
-        items: list[dict[str, Any]] = []
-        matched = 0
-        with self._read_lock:
+        scope_sql = "lanius_history_scope(scheme, host, port, path) = 1"
+        with self._history_reader(scope_predicate) as conn:
             if anchor is None:
-                anchor = int(self._read_conn.execute(
+                anchor = int(conn.execute(
                     "SELECT COALESCE(MAX(rowid), 0) FROM flow_history"
                 ).fetchone()[0])
             where = f"{where} {'AND' if where else 'WHERE'} rowid <= ?"
             params.append(anchor)
+            if scope_predicate is not None:
+                where += f" AND {scope_sql}"
             if cursor is not None:
                 cursor_sql, cursor_params = _cursor_filter(cursor)
                 where += f" AND {cursor_sql}"
                 params.extend(cursor_params)
             # A common search term can match millions of rows. Probe a
-            # bounded newest slice first, so the usual first few pages do
+            # bounded slice in display order first, so the first few pages do
             # not materialize every matching FTS rowid. If the slice does
             # not prove has_more, the complete index query below decides.
             needed = offset + limit + 1
-            if default_sort and search and scope_predicate is None and needed <= 1000:
+            probe_search = bool(search) and needed <= 1000
+            if probe_search and search and (scope_predicate is not None or not default_sort):
+                # Sorting/scoping the history slice can itself be expensive.
+                # A bounded FTS check avoids that work for rare/absent terms.
+                # Without a literal trigram this check would scan all text;
+                # leave those queries on the existing full-scan path instead.
+                probe_search = bool(re.search(r"[^*?\[\x00]{3}", search.casefold())) and conn.execute(
+                    "SELECT 1 FROM flow_search WHERE text GLOB ? LIMIT 1 OFFSET ?",
+                    (f"*{_glob_literal(search.casefold())}*", needed - 1),
+                ).fetchone() is not None
+            if probe_search and search:
                 base_where, base_params = self._flow_filters(
                     host=host, method=method, status_code=status_code,
                     methods=methods, status_classes=status_classes,
@@ -1280,18 +1321,20 @@ class FlowStore:
                 base_where = (
                     f"{base_where} {'AND' if base_where else 'WHERE'} rowid <= ?"
                 )
+                if scope_predicate is not None:
+                    base_where += f" AND {scope_sql}"
                 if cursor is not None:
                     base_where += f" AND {cursor_sql}"
                 probe = max(needed, 300)
-                recent = self._read_conn.execute(
+                recent = conn.execute(
                     "WITH recent AS MATERIALIZED ("
                     f" SELECT rowid FROM flow_history AS flows {base_where}"
-                    " ORDER BY started_at DESC, rowid DESC LIMIT ?)"
+                    f" ORDER BY {order} LIMIT ?)"
                     f" SELECT {_SUMMARY_COLUMNS} FROM flow_history AS flows"
                     " JOIN recent ON flows.rowid = recent.rowid"
                     " WHERE EXISTS (SELECT 1 FROM flow_search AS hit"
                     " WHERE hit.rowid = flows.rowid AND instr(hit.text, ?) > 0)"
-                    " ORDER BY started_at DESC, flows.rowid DESC LIMIT ?",
+                    f" ORDER BY {order} LIMIT ?",
                     (*base_params, anchor,
                      *(cursor_params if cursor is not None else []), probe,
                      search.casefold(), needed),
@@ -1300,37 +1343,18 @@ class FlowStore:
                     return {
                         "items": [_summary_row(row) for row in recent[offset:offset + limit]],
                         "has_more": True, "anchor": anchor,
-                        "next_cursor": _history_cursor(recent[offset + limit - 1]),
+                        "next_cursor": _history_cursor(recent[offset + limit - 1]) if default_sort else None,
                     }
-            if scope_predicate is None:
-                rows = self._read_conn.execute(
-                    f"SELECT {_SUMMARY_COLUMNS} FROM flow_history AS flows {where}"
-                    f" ORDER BY {order} LIMIT ? OFFSET ?",
-                    (*params, limit + 1, offset),
-                ).fetchall()
-                return {"items": [_summary_row(row) for row in rows[:limit]],
-                        "has_more": len(rows) > limit, "anchor": anchor,
-                        "next_cursor": (_history_cursor(rows[limit - 1])
-                        if len(rows) >= limit else (_history_cursor(rows[-1]) if rows else None))
-                        if default_sort else None}
-            last_cursor: str | None = None
-            rows_cursor = self._read_conn.execute(
+            rows = conn.execute(
                 f"SELECT {_SUMMARY_COLUMNS} FROM flow_history AS flows {where}"
-                f" ORDER BY {order}", params,
-            )
-            for row in rows_cursor:
-                if not scope_predicate(row["scheme"], row["host"], row["port"], row["path"]):
-                    continue
-                if matched < offset:
-                    matched += 1
-                    continue
-                if len(items) == limit:
-                    return {"items": items, "has_more": True, "anchor": anchor,
-                            "next_cursor": last_cursor}
-                items.append(_summary_row(row))
-                last_cursor = _history_cursor(row) if default_sort else None
-        return {"items": items, "has_more": False, "anchor": anchor,
-                "next_cursor": last_cursor}
+                f" ORDER BY {order} LIMIT ? OFFSET ?",
+                (*params, limit + 1, offset),
+            ).fetchall()
+            return {"items": [_summary_row(row) for row in rows[:limit]],
+                    "has_more": len(rows) > limit, "anchor": anchor,
+                    "next_cursor": (_history_cursor(rows[limit - 1])
+                    if len(rows) >= limit else (_history_cursor(rows[-1]) if rows else None))
+                    if default_sort else None}
 
     def count(self) -> int:
         with self._read_lock:

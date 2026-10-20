@@ -118,14 +118,14 @@ def test_history_backfills_old_projects_and_never_reads_body_pages(tmp_path) -> 
     def body_access_forbidden(operation, table, _column, _database, _trigger):
         return sqlite3.SQLITE_DENY if operation == sqlite3.SQLITE_READ and table == "flows" else sqlite3.SQLITE_OK
 
-    store._read_conn.set_authorizer(body_access_forbidden)
+    store._history_conn.set_authorizer(body_access_forbidden)
     try:
         assert store.page_summaries()["items"][0]["id"] == "large"
         assert store.page_summaries(search="api/items")["items"][0]["id"] == "large"
         assert store.page_summaries(sort_by="response_size")["items"][0]["id"] == "large"
         assert store.page_summaries(scope_predicate=lambda *_: True)["items"][0]["id"] == "large"
     finally:
-        store._read_conn.set_authorizer(None)
+        store._history_conn.set_authorizer(None)
         store.close()
 
 
