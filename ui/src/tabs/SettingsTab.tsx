@@ -21,6 +21,7 @@ import { ListenerSection } from "./settings/ListenerSection";
 import { McpSection } from "./settings/McpSection";
 import { MatchReplaceSection } from "./settings/MatchReplaceSection";
 import { ProjectSection } from "./settings/ProjectSection";
+import { DocumentCacheSection } from './settings/DocumentCacheSection';
 import { ProjectCompactSection } from "./settings/ProjectCompactSection";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { TlsSection } from "./settings/TlsSection";
@@ -151,6 +152,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
         onProjectImported?.();
       }} />,
     'media-storage': <CaptureStorageSection key={importRevision} />,
+    'document-cache': <DocumentCacheSection />,
     compact: <ProjectCompactSection key={importRevision} />,
     about: <AboutSection />,
     updates: <UpdatesSection />,

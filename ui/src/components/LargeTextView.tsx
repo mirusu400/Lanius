@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Compartment, EditorState, Text } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, drawSelection, keymap, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 import { defaultKeymap } from '@codemirror/commands';
 
@@ -8,6 +8,7 @@ import { useT } from '../i18n';
 import { LoadingPane } from './Spinner';
 import { DOCUMENT_SELECTION_EVENT, registerTextDocument } from './textDocument';
 import { runTextDocumentTask } from './textDocumentTask';
+import { prepareCachedTextDocument } from './preparedTextDocument';
 
 class LineEnding extends WidgetType {
   label: string;
@@ -78,11 +79,11 @@ export default function LargeTextView({ text, className, query = '', activeIndex
     // Let the loading indicator paint before constructing the view.
     const frame = requestAnimationFrame(() => {
       setReadyText(null);
-      void runTextDocumentTask({ kind: 'document', text }, controller.signal).then(result => {
-        if (controller.signal.aborted || !mount.current || !('lines' in result)) return;
+      void prepareCachedTextDocument(text, controller.signal).then(doc => {
+        if (controller.signal.aborted || !mount.current) return;
         view = new EditorView({
           parent: mount.current,
-          state: EditorState.create({ doc: Text.of(result.lines), extensions: [
+          state: EditorState.create({ doc, extensions: [
             EditorState.readOnly.of(true), EditorState.lineSeparator.of('\n'),
             EditorView.contentAttributes.of({ 'aria-readonly': 'true', 'aria-label': t('detail.body') }),
             EditorView.theme({ '&': { fontSize: 'inherit', height: '100%' }, '.cm-scroller': { fontFamily: 'inherit', lineHeight: '1.5', overflow: 'auto' }, '.cm-content': { padding: '8px', caretColor: 'transparent' }, '.cm-line': { padding: '0' }, '&.cm-focused': { outline: 'none' }, '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: 'var(--accent-dim)' } }),

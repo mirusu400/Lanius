@@ -12,8 +12,9 @@ import { markHighlightedHtml } from './searchHighlight';
 import { UndoableTextarea } from './UndoableText';
 import { LoadingPane } from './Spinner';
 import { LARGE_TEXT_THRESHOLD } from './textDocumentModel';
+import { loadLargeTextView } from './largeTextViewLoader';
 
-const LargeTextView = lazy(() => import('./LargeTextView'));
+const LargeTextView = lazy(loadLargeTextView);
 
 // Register only the grammars used by captured HTTP bodies. XML also handles
 // HTML and its embedded script/style elements.

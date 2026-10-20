@@ -37,6 +37,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'lockdown', group: 'security', title: 'lockdown.title', prefixes: ['lockdown.'], aliases: 'egress offline scope security outbound 네트워크 보안 외부 연결 범위' },
   { id: 'project', group: 'project', title: 'project.section', prefixes: ['project.'], keys: ['startup.switch'], aliases: 'project import export backup JSON SQLite save 프로젝트 가져오기 내보내기 백업 저장 경로' },
   { id: 'media-storage', group: 'project', title: 'captureStorage.section', prefixes: ['captureStorage.'], aliases: 'media storage body limit image audio video 5MB 미디어 본문 저장 용량 제한 이미지 오디오 비디오' },
+  { id: 'document-cache', group: 'project', title: 'documentCache.section', prefixes: ['documentCache.'], aliases: 'HTTP History request response preview document memory cache MiB 요청 응답 미리보기 문서 메모리 캐시 비우기' },
   { id: 'compact', group: 'project', title: 'compact.title', prefixes: ['compact.'], aliases: 'compact vacuum disk storage delete database 용량 압축 정리 삭제 디스크 데이터베이스' },
   { id: 'about', group: 'about', title: 'about.section', prefixes: ['about.'], aliases: 'version build commit release 버전 빌드 커밋 정보' },
   { id: 'updates', group: 'about', title: 'updates.section', prefixes: ['updates.'], aliases: 'update upgrade stable nightly automatic 업데이트 자동 릴리스' },

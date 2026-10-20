@@ -49,6 +49,7 @@ import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
 import { useReportBusy } from '../components/busy';
 import { Busy } from '../components/Spinner';
 import { useToast } from '../components/Toast';
+import { scheduleLargeTextViewPreload } from '../components/largeTextViewLoader';
 
 const DEFAULT_RULES: InterceptRules = {
   enabled: false,
@@ -133,6 +134,11 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   // progress over the list; background traffic stays unobtrusive.
   const [loading, setLoading] = useState(true);
   useReportBusy('proxy', loading);
+
+  useEffect(() => {
+    if (view !== 'history' || loading) return;
+    return scheduleLargeTextViewPreload();
+  }, [view, loading]);
 
   const invalidateHistoryRequest = useCallback(() => {
     requestGeneration.current += 1;
