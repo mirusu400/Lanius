@@ -1,6 +1,7 @@
 /** The bundled browser, already pointed at the proxy. */
 
 import { useEffect, useState } from 'react';
+import { useToast } from '../../components/Toast';
 import {
   clearBrowserProfile,
   getBrowserState,
@@ -17,6 +18,7 @@ import {
 
 export function BrowserSection() {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const [state, setState] = useState<BrowserState | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Message | null>(null);
@@ -37,6 +39,8 @@ export function BrowserSection() {
     try {
       const launched = await openBrowser();
       setNote(msg('browser.opened', { name: launched.name }));
+      showToast({ message: `${t('browser.section')}: ${t('browser.opened', { name: launched.name })}`,
+        tone: 'success', category: 'browser' });
     } catch (err) {
       setError(msg('browser.failed', { message: (err as Error).message }));
     } finally {
@@ -52,6 +56,7 @@ export function BrowserSection() {
     try {
       await clearBrowserProfile();
       setNote(msg('browser.cleared'));
+      showToast({ message: `${t('browser.section')}: ${t('browser.cleared')}`, tone: 'success', category: 'browser' });
     } catch (err) {
       setError(rawMsg((err as Error).message));
     } finally {

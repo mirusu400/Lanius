@@ -8,10 +8,12 @@ export function showLocalSourceIpColumn(): boolean {
   catch { return false; }
 }
 
-export function setShowLocalSourceIpColumn(value: boolean): void {
+export function setShowLocalSourceIpColumn(value: boolean): boolean {
+  let persisted = true;
   try { window.localStorage.setItem(KEY, value ? '1' : '0'); }
-  catch { /* The current window still updates. */ }
+  catch { persisted = false; }
   window.dispatchEvent(new CustomEvent(EVENT, { detail: value }));
+  return persisted;
 }
 
 export function useLocalSourceIpColumn(): boolean {

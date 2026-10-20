@@ -6,9 +6,11 @@ import { getUpstream, setUpstream } from '../../api/client';
 import type { UpstreamState } from '../../api/types';
 import { msg, rawMsg, renderMessage, useI18n, type Message } from '../../i18n';
 import { UndoableInput } from '../../components/UndoableText';
+import { useSettingsToast } from '../../components/useSettingsToast';
 
 export function UpstreamSection() {
   const { t } = useI18n();
+  const savedToast = useSettingsToast('upstream.section');
   const [saved, setSaved] = useState<UpstreamState | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [hops, setHops] = useState<string[]>(['']);
@@ -51,6 +53,7 @@ export function UpstreamSection() {
     try {
       const state = await setUpstream(configured);
       load(state);
+      savedToast();
       setNote(msg('upstream.applied'));
     } catch (err) {
       setError(msg('upstream.failed', { message: (err as Error).message }));

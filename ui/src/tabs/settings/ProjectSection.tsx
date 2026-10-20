@@ -16,6 +16,7 @@ import { flushAutosaves, replaceWorkspace } from '../autosave';
 import type { Project } from '../../projects';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Spinner } from '../../components/Spinner';
+import { useToast } from '../../components/Toast';
 import {
   msg,
   rawMsg,
@@ -35,6 +36,7 @@ interface ProjectSectionProps {
 /** Export and import, plus a reminder that work is saved as you go. */
 export function ProjectSection({ project, onSwitchProject, switchingProject = false, switchError, onProjectImported }: ProjectSectionProps = {}) {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
   const [activeExport, setActiveExport] = useState<'database' | 'json' | 'noFlows' | null>(null);
   const [note, setNote] = useState<Message | null>(null);
@@ -56,7 +58,10 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
           database ? 'database' : 'json', includeFlows, filename,
           t(database ? 'project.backupDatabase' : includeFlows ? 'project.export' : 'project.exportNoFlows'),
         );
-        if (path) setNote(msg('project.savedFile', { path }));
+        if (path) {
+          setNote(msg('project.savedFile', { path }));
+          showToast({ message: `${t('project.section')}: ${t('project.savedFile', { path })}`, tone: 'success', category: 'project' });
+        }
         return;
       }
       const blob = database ? await downloadProjectBackup()
@@ -68,6 +73,7 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
       link.href = url;
       link.download = filename;
       link.click();
+      showToast({ message: t('toast.exportReady', { filename }), tone: 'success', category: 'project' });
       // Revoking immediately can cancel the download in some browsers.
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
     } catch (err) {
@@ -92,15 +98,20 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
         }),
       );
       if (result.warnings?.length) setError(rawMsg(result.warnings.join('; ')));
+      let warning = result.warnings?.join('; ') ?? '';
       try {
         const lockdown = await getLockdown();
         if (lockdown.effective) resetUpdates();
         if (lockdown.project_enabled) await restartProjectEngine();
       } catch (err) {
-        setError(rawMsg(String(err instanceof Error ? err.message : err)));
+        const detail = String(err instanceof Error ? err.message : err);
+        warning = [warning, detail].filter(Boolean).join('; ');
+        setError(rawMsg(warning));
       } finally {
         notifyLockdownChanged();
       }
+      const message = t('toast.importCompleted', { flows: result.flows ?? 0, scope: result.scope ?? 0 });
+      showToast({ message: warning ? `${message} ${warning}` : message, tone: warning ? 'info' : 'success', category: 'project' });
     } catch (err) {
       setError(msg('project.importFailed', { message: (err as Error).message }));
     } finally {

@@ -17,9 +17,11 @@ import { Spinner } from '../../components/Spinner';
 import { notifyLockdownChanged } from '../../lockdownEvents';
 import { useT } from '../../i18n';
 import { resetUpdates } from '../../updates';
+import { useSettingsToast } from '../../components/useSettingsToast';
 
 export function LockdownSection() {
   const t = useT();
+  const saved = useSettingsToast('lockdown.title');
   const [status, setStatus] = useState<LockdownStatus | null>(null);
   const [global, setGlobal] = useState<GlobalLockdownStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,6 +49,7 @@ export function LockdownSection() {
         if (enabled) await restartProjectEngine();
       } else await setScopeEgress(enabled);
       await refresh();
+      saved();
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err));
       await refresh().catch(() => undefined);

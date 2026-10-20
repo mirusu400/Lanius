@@ -25,19 +25,22 @@ import {
 } from '../../i18n';
 import { SizeField } from '../../components/SizeField';
 import { setShowLocalSourceIpColumn, useLocalSourceIpColumn } from '../../historySourceColumn';
+import { useSettingsToast } from '../../components/useSettingsToast';
 
 /** Turns OS-level capture on and off. Kept separate because it owns its
  *  own request state and does not share anything with the rest of the tab. */
 export function AppearanceSection() {
   const { t } = useI18n();
+  const saved = useSettingsToast('appearance.section');
   const [settings, setSettings] = useState<Appearance>(() => loadAppearance());
   const showSourceIp = useLocalSourceIpColumn();
 
   const update = (patch: Partial<Appearance>) => {
     const next = normaliseAppearance({ ...settings, ...patch });
+    if (JSON.stringify(next) === JSON.stringify(settings)) return;
     setSettings(next);
     applyAppearance(next);
-    saveAppearance(next);
+    saved({ persisted: saveAppearance(next), delayMs: 500 });
   };
 
   // Following the system means reacting when the system changes.
@@ -63,7 +66,7 @@ export function AppearanceSection() {
 
       <div className="settings-row">
         <label><input type="checkbox" checked={showSourceIp}
-          onChange={(event) => setShowLocalSourceIpColumn(event.target.checked)} />{' '}
+          onChange={(event) => saved({ persisted: setShowLocalSourceIpColumn(event.target.checked) })} />{' '}
           {t('appearance.showLocalSourceIp')}</label>
       </div>
       <p className="muted">{t('appearance.showLocalSourceIpHelp')}</p>

@@ -43,6 +43,7 @@ import { getFuzzerWorkspace, openFuzzerRun, resetTarget } from "./tabs/fuzzerSto
 import { BusyProvider } from "./components/busy";
 import { Spinner, useDelayedBusy } from "./components/Spinner";
 import { useToast } from "./components/Toast";
+import { useFuzzerCompletionToast } from "./components/useFuzzerCompletionToast";
 import { DesktopClose } from "./components/DesktopClose";
 import { useShortcut, useShortcuts } from "./useShortcut";
 import { autoCheck, useUpdates } from "./updates";
@@ -70,7 +71,7 @@ export default function App() {
       await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
       try {
         await captureWindowToClipboard();
-        showToast({ message: t('screenshot.copied'), tone: 'success' });
+        showToast({ message: t('screenshot.copied'), tone: 'success', category: 'screenshot' });
       } catch (error) {
         console.error('Window capture failed', error);
         showToast({ message: t('screenshot.failed'), tone: 'error' });
@@ -165,6 +166,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   const updateAvailable = updates?.update_available ?? false;
   const [lockdownActive, setLockdownActive] = useState(false);
   const { showToast } = useToast();
+  const notifyFuzzerFinished = useFuzzerCompletionToast();
 
   const refreshScannerAvailability = useCallback(() => {
     void getScannerState()
@@ -185,6 +187,10 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
 
   useEffect(() => connectStream({
     onEvent: (event) => {
+      if (event.type === 'fuzzer.finished') {
+        notifyFuzzerFinished(event.data);
+        return;
+      }
       if (event.type === 'plugins.changed') {
         refreshScannerAvailability();
         return;
@@ -198,7 +204,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
         tone: 'error',
       });
     },
-  }), [project?.id, refreshScannerAvailability, showToast, t]);
+  }), [project?.id, refreshScannerAvailability, showToast, t, notifyFuzzerFinished]);
 
   useEffect(() => {
     let live = true;

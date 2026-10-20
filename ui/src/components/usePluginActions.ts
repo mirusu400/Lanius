@@ -52,7 +52,7 @@ export function usePluginActions(
         if (result && typeof result === 'object' &&
           'check_ids' in result && Array.isArray(result.check_ids) &&
           'id' in result && typeof result.id === 'string') {
-          showToast({ message: t('issues.scanStarted'), tone: 'success' });
+          showToast({ message: t('issues.scanStarted'), tone: 'success', category: 'scanner' });
         }
       } catch (error) {
         onError?.((error as Error).message);

@@ -10,9 +10,11 @@ import {
 import { msg, rawMsg, renderMessage, useI18n, type Message } from '../../i18n';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { UndoableInput } from '../../components/UndoableText';
+import { useSettingsToast } from '../../components/useSettingsToast';
 
 export function TlsExceptionsSection() {
   const { t } = useI18n();
+  const saved = useSettingsToast('tlsExceptions.section');
   const [hosts, setHosts] = useState<string[] | null>(null);
   const [insecure, setInsecure] = useState<boolean | null>(null);
   const [host, setHost] = useState('');
@@ -35,6 +37,7 @@ export function TlsExceptionsSection() {
     try {
       setHosts((await setTlsExceptions(next)).hosts);
       setHost('');
+      saved();
       setNote(done);
     } catch (err) {
       setError(rawMsg((err as Error).message));
@@ -50,6 +53,7 @@ export function TlsExceptionsSection() {
     setError(null);
     try {
       setInsecure((await setTlsInsecure(enabled)).enabled);
+      saved();
       setNote(msg(enabled ? 'tlsExceptions.insecureEnabled' : 'tlsExceptions.insecureDisabled'));
     } catch (err) {
       setError(rawMsg((err as Error).message));

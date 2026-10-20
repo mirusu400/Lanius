@@ -31,7 +31,7 @@ export function useAddRequestScopeRule() {
   return async (url: string, kind: ScopeKind, target: ScopeTarget, onAdded?: () => void) => {
     try {
       await addScopeRule(requestScopeRule(url, kind, target));
-      showToast({ message: t('menu.scopeRuleAdded'), tone: 'success' });
+      showToast({ message: t('menu.scopeRuleAdded'), tone: 'success', category: 'scope' });
       onAdded?.();
     } catch (error) {
       showToast({ message: t('menu.scopeRuleFailed', { message: (error as Error).message }), tone: 'error' });

@@ -31,6 +31,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'ca', group: 'browser', title: 'settings.caSection', keys: ['settings.caHelp', 'settings.caDownload', 'settings.caMitmit'], aliases: 'certificate trust HTTPS mitm.it PEM CER P12 인증서 신뢰 설치 다운로드' },
   { id: 'browser-help', group: 'browser', title: 'settings.browserSection', keys: ['settings.browserHelp'], aliases: 'manual browser proxy setup 브라우저 수동 프록시 설정' },
   { id: 'appearance', group: 'appearance', title: 'appearance.section', prefixes: ['appearance.'], aliases: 'font theme dark light size source IP 폰트 글꼴 테마 화면 크기 다크 라이트' },
+  { id: 'toasts', group: 'appearance', title: 'toast.section', prefixes: ['toast.'], aliases: 'notification notifications alert 알림 토스트 메시지 켜기 끄기' },
   { id: 'language', group: 'appearance', title: 'settings.languageSection', keys: ['settings.language', 'settings.languageHelp'], aliases: 'language locale English Korean 언어 한국어 영어' },
   { id: 'mcp', group: 'integrations', title: 'mcp.section', prefixes: ['mcp.'], aliases: 'MCP API agent Codex Claude port 토큰 에이전트 연동 포트' },
   { id: 'lockdown', group: 'security', title: 'lockdown.title', prefixes: ['lockdown.'], aliases: 'egress offline scope security outbound 네트워크 보안 외부 연결 범위' },

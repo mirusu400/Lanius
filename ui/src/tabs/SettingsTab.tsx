@@ -6,6 +6,7 @@ import { useT } from "../i18n";
 import type { Project } from "../projects";
 import { AboutSection } from "./settings/AboutSection";
 import { AppearanceSection } from "./settings/AppearanceSection";
+import { ToastSection } from "./settings/ToastSection";
 import { BrowserHelpSection } from "./settings/BrowserHelpSection";
 import { BrowserSection } from "./settings/BrowserSection";
 import { BodyDisplaySection } from "./settings/BodyDisplaySection";
@@ -139,6 +140,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
     ca: <CaSection onError={setError} />,
     'browser-help': <BrowserHelpSection />,
     appearance: <AppearanceSection />,
+    toasts: <ToastSection />,
     language: <LanguageSection />,
     mcp: <McpSection />,
     lockdown: <LockdownSection />,

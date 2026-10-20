@@ -62,12 +62,14 @@ function read(key: string): string | null {
   }
 }
 
-function write(key: string, value: string | null): void {
+function write(key: string, value: string | null): boolean {
   try {
-    if (value === null) window.localStorage?.removeItem(key);
-    else window.localStorage?.setItem(key, value);
+    if (value === null) window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, value);
+    return true;
   } catch {
     // The setting applies for this session even if it cannot be saved.
+    return false;
   }
 }
 
@@ -79,8 +81,8 @@ export function channelPreference(): UpdateChannel | null {
   return stored === 'stable' || stored === 'nightly' ? stored : null;
 }
 
-export function setChannelPreference(channel: UpdateChannel | null): void {
-  write(CHANNEL_KEY, channel);
+export function setChannelPreference(channel: UpdateChannel | null): boolean {
+  return write(CHANNEL_KEY, channel);
 }
 
 /** Automatic checks are on unless turned off. */
@@ -88,8 +90,8 @@ export function autoCheckEnabled(): boolean {
   return read(AUTO_KEY) !== 'off';
 }
 
-export function setAutoCheckEnabled(enabled: boolean): void {
-  write(AUTO_KEY, enabled ? 'on' : 'off');
+export function setAutoCheckEnabled(enabled: boolean): boolean {
+  return write(AUTO_KEY, enabled ? 'on' : 'off');
 }
 
 /** When the last check actually reached GitHub, as epoch milliseconds. */

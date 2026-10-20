@@ -1,6 +1,7 @@
 /** Which client the proxy looks like on the wire. */
 
 import { useEffect, useState } from 'react';
+import { useSettingsToast } from '../../components/useSettingsToast';
 import {
   getTlsState,
   setTlsProfile,
@@ -18,6 +19,7 @@ import { UndoableInput } from '../../components/UndoableText';
 /** Reshapes the handshake Lanius makes towards the server. */
 export function TlsSection() {
   const { t } = useI18n();
+  const saved = useSettingsToast('tls.section');
   const [state, setState] = useState<TlsState | null>(null);
   const [custom, setCustom] = useState('');
   const [busy, setBusy] = useState(false);
@@ -47,6 +49,7 @@ export function TlsSection() {
         setCustom(next.custom_ciphers ?? '');
       }
       setNote(msg('tls.applied'));
+      saved();
     } catch (err) {
       setError(rawMsg((err as Error).message));
     } finally {

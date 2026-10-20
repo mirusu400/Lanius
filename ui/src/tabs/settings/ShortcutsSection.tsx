@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { useT } from '../../i18n';
+import { useSettingsToast } from '../../components/useSettingsToast';
 import {
   formatShortcut,
   getShortcut,
@@ -14,6 +15,7 @@ import {
 
 export function ShortcutsSection() {
   const t = useT();
+  const saved = useSettingsToast('shortcuts.section');
   const [bindings, setBindings] = useState<Record<string, KeyboardShortcut | null>>(
     () => Object.fromEntries(SHORTCUTS.map(({ id }) => [id, getShortcut(id)])),
   );
@@ -55,28 +57,31 @@ export function ShortcutsSection() {
         return;
       }
 
-      saveShortcut(capturing, candidate);
+      const persisted = saveShortcut(capturing, candidate);
       setBindings((current) => ({ ...current, [capturing]: candidate }));
       setCapturing(null);
       setError(null);
+      saved({ persisted });
     };
 
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [capturing, t]);
+  }, [capturing, t, saved]);
 
   const clear = (id: string) => {
-    saveShortcut(id, null);
+    const persisted = saveShortcut(id, null);
     setBindings((current) => ({ ...current, [id]: null }));
     setCapturing(null);
     setError(null);
+    saved({ persisted });
   };
 
   const reset = (id: string) => {
-    resetShortcut(id);
+    const persisted = resetShortcut(id);
     setBindings((current) => ({ ...current, [id]: getShortcut(id) }));
     setCapturing(null);
     setError(null);
+    saved({ persisted });
   };
 
   return (

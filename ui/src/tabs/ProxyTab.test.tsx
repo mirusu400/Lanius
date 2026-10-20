@@ -2,7 +2,7 @@
  * Renders the real ProxyTab against a mocked engine (fetch + WebSocket) and
  * asserts the live history table and detail pane behave as expected.
  */
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { fireShortcut, renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import { useI18n, type Locale } from '../i18n';
 import userEvent from '@testing-library/user-event';
@@ -12,6 +12,13 @@ import { ProxyTab } from './ProxyTab';
 import { clearSelection } from './selectionStore';
 import { getTabs, resetTabs } from './replayStore';
 import type { FlowSummary } from '../api/types';
+import { useToast } from '../components/Toast';
+import { TOAST_PREFERENCES_KEY } from '../toastPreferences';
+
+function ToastControls() {
+  const { dismissToast } = useToast();
+  return <button onClick={dismissToast}>Dismiss feedback</button>;
+}
 
 const seeded: FlowSummary = {
   id: 'seed-1',
@@ -342,17 +349,19 @@ describe('ProxyTab', () => {
 
     await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'needle');
     const progress = await screen.findByRole('status', { name: t('proxy.searching') });
+    expect(screen.queryByText(t('toast.searchCompleted'))).toBeNull();
     expect(progress.closest('.split-pane')).toBe(document.querySelector('.proxy-split > .split-pane'));
     expect(screen.getByText('seeded.test')).toBeTruthy();
 
     finishSearch(jsonResponse({ items: [{ ...seeded, id: 'match', host: 'needle.test' }], count: 1 }));
     await waitFor(() => expect(document.querySelector('.flow-table tbody tr')?.textContent).toContain('needle.test'));
     await waitFor(() => expect(screen.queryByRole('status', { name: t('proxy.searching') })).toBeNull());
+    expect(screen.getByText(t('toast.searchCompleted'))).toBeTruthy();
   });
 
   it('does not show search progress for a background reload caused by a new flow', async () => {
     const user = userEvent.setup();
-    render(<ProxyTab />);
+    render(<><ProxyTab /><ToastControls /></>);
     await screen.findByText('seeded.test');
 
     let finishSearch!: (response: Response) => void;
@@ -371,6 +380,8 @@ describe('ProxyTab', () => {
     ).toBeNull());
 
     let finishBackground!: (response: Response) => void;
+    expect(screen.getByText(t('toast.searchCompleted'))).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Dismiss feedback' }));
     searchResponse = new Promise<Response>((resolve) => { finishBackground = resolve; });
     MockSocket.instances[0].emit('flow.request', { ...live, host: 'needle-live.test' });
     await new Promise((resolve) => window.setTimeout(resolve, 800));
@@ -383,6 +394,23 @@ describe('ProxyTab', () => {
     await waitFor(() => expect(
       document.querySelector('.flow-table tbody tr')?.textContent,
     ).toContain('needle-live.test'));
+    expect(screen.queryByText(t('toast.searchCompleted'))).toBeNull();
+  });
+
+  it('reports an empty completed search and honors the search notification preference', async () => {
+    const user = userEvent.setup();
+    const view = render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    searchResponse = Promise.resolve(jsonResponse({ items: [], has_more: false }));
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'missing');
+    expect(await screen.findByText(t('toast.searchEmpty'))).toBeTruthy();
+    view.unmount();
+    localStorage.setItem(TOAST_PREFERENCES_KEY, JSON.stringify({ search: false }));
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'missing');
+    await waitFor(() => expect(document.querySelector('.flow-table tbody tr')?.textContent).not.toContain('seeded.test'));
+    expect(screen.queryByText(t('toast.searchEmpty'))).toBeNull();
   });
 
   it('keeps search progress when a background reload supersedes a pending user search', async () => {
@@ -437,7 +465,19 @@ describe('ProxyTab', () => {
     await waitFor(() => expect(
       screen.queryByRole('status', { name: t('proxy.searching') }),
     ).toBeNull());
-    finishSearch(jsonResponse({ items: [], count: 0 }));
+    await act(async () => finishSearch(jsonResponse({ items: [], count: 0 })));
+    expect(screen.queryByText(t('toast.searchCompleted'))).toBeNull();
+    expect(screen.queryByText(t('toast.searchEmpty'))).toBeNull();
+  });
+
+  it('does not announce success when the latest search fails', async () => {
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    failListFlows = true;
+    await userEvent.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'needle');
+    await screen.findByText(t('proxy.engineUnreachable', { message: 'engine down' }));
+    expect(screen.queryByText(t('toast.searchCompleted'))).toBeNull();
+    expect(screen.queryByText(t('toast.searchEmpty'))).toBeNull();
   });
 
   it('shows search progress while sorting searched history', async () => {

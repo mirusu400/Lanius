@@ -1,15 +1,26 @@
-.app-toast {
+.app-toasts {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 100;
-  max-width: min(360px, calc(100vw - 36px));
+  inset: auto 18px 18px auto;
+  z-index: 1000;
+  width: min(360px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.app-toast {
+  margin-top: 8px;
   padding: 11px 15px;
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
   border-radius: 5px;
   background: var(--bg-alt);
   color: var(--fg);
+  overflow-wrap: anywhere;
   box-shadow: 0 8px 24px var(--shadow);
   pointer-events: none;
 }

@@ -115,6 +115,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   const historyCursors = useRef<Record<number, string>>({});
   const [nextHistoryCursor, setNextHistoryCursor] = useState<string | null>(null);
   const requestGeneration = useRef(0);
+  const pendingSearchNotification = useRef<string | null>(null);
   // State changes are reloaded by the effect below, so remember when the
   // change came from a person interacting with searched history. Background
   // flow events must not start progress on their own.
@@ -131,6 +132,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
 
   const reload = useCallback(async ({ showSearchProgress = false } = {}) => {
     const generation = ++requestGeneration.current;
+    const searchKey = JSON.stringify([filtersRef.current, historyPageRef.current, historySortRef.current]);
+    if (showSearchProgress && filtersRef.current.search?.trim()) pendingSearchNotification.current = searchKey;
     // A background refresh can supersede an interactive request. Do not let
     // it hide progress that is already explaining the user's wait; the newest
     // request will clear the indicator when it settles.
@@ -150,8 +153,14 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
       setHasMoreHistory(page.has_more);
       setNextHistoryCursor(page.next_cursor ?? null);
       setError(null);
+      if (pendingSearchNotification.current === searchKey) {
+        pendingSearchNotification.current = null;
+        showToast({ message: t(!page.items.length && historyPageRef.current === 0 ? 'toast.searchEmpty' : 'toast.searchCompleted'),
+          tone: 'success', category: 'search', id: 'search:proxy' });
+      }
     } catch (err) {
       if (generation === requestGeneration.current) {
+        pendingSearchNotification.current = null;
         setError(msg('proxy.engineUnreachable', { message: (err as Error).message }));
       }
     } finally {
@@ -161,7 +170,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
         setSearchLoading(false);
       }
     }
-  }, [historySort]);
+  }, [historySort, showToast, t]);
 
   const onSortHistory = (key: HistorySortKey) => {
     if (filtersRef.current.search) nextReloadShowsSearchProgress.current = true;
@@ -185,6 +194,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
       return;
     }
     requestGeneration.current += 1;
+    pendingSearchNotification.current = null;
     const timer = window.setTimeout(
       () => void reload({ showSearchProgress: true }),
       300,
@@ -445,7 +455,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
       setHasMoreHistory(false);
       clearSelection();
       setError(null);
-      showToast({ message: t('proxy.cleared'), tone: 'success' });
+      showToast({ message: t('proxy.cleared'), tone: 'success', category: 'history' });
     } catch (err) {
       showToast({
         message: t('proxy.clearFailed', { message: (err as Error).message }),

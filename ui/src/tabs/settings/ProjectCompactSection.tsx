@@ -13,6 +13,7 @@ import {
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { CompactProgressDialog } from './CompactProgressDialog';
 import { useT } from '../../i18n';
+import { useToast } from '../../components/Toast';
 import { formatBytes } from '../dashboardModel';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../../components/ResizableColumns';
 import { UndoableInput } from '../../components/UndoableText';
@@ -21,6 +22,7 @@ const siteKey = (site: CompactSite) => JSON.stringify([site.scheme, site.host, s
 
 export function ProjectCompactSection() {
   const t = useT();
+  const { showToast } = useToast();
   const columns = useResizableColumns('lanius.columns.compact', [360, 130, 110, 150]);
   const [overview, setOverview] = useState<CompactOverview | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -76,6 +78,7 @@ export function ProjectCompactSection() {
         failures = 0;
         setProgress(snapshot);
         if (attached && !snapshot.active) {
+          if (snapshot.phase !== 'failed') showToast({ message: t('toast.cleanupCompleted'), tone: 'success', category: 'cleanup', id: `cleanup:${operationId}` });
           await release(snapshot.phase === 'failed' ? t('compact.phase.failed') : null);
         }
       } catch {
@@ -91,7 +94,7 @@ export function ProjectCompactSection() {
     void poll();
     const timer = window.setInterval(() => void poll(), 700);
     return () => { active = false; window.clearInterval(timer); };
-  }, [operationId, attached, refresh, t]);
+  }, [operationId, attached, refresh, t, showToast]);
 
   const selectedSites = useMemo(
     () => overview?.sites.filter((site) => selected.has(siteKey(site))) ?? [],
@@ -120,6 +123,9 @@ export function ProjectCompactSection() {
       if (data.reclaim_error) {
         setError(t('compact.reclaimFailed', { message: data.reclaim_error }));
       }
+      showToast({ message: data.reclaim_error ? t('compact.reclaimFailed', { message: data.reclaim_error })
+        : `${t('toast.cleanupCompleted')} ${formatBytes(data.reclaimed_bytes)}`,
+        tone: data.reclaim_error ? 'info' : 'success', category: 'cleanup', id: `cleanup:${id}` });
       setSelected(new Set());
       await refresh();
     } catch (err) {

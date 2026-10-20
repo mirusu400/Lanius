@@ -21,7 +21,7 @@ import {
 
 interface I18nValue {
   locale: Locale;
-  setLocale: (locale: Locale) => void;
+  setLocale: (locale: Locale) => boolean;
   t: Translator;
 }
 
@@ -45,7 +45,11 @@ export function I18nProvider({
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);
-    if (typeof window !== 'undefined') saveLocale(next, window.localStorage);
+    try {
+      return typeof window !== 'undefined' && saveLocale(next, window.localStorage);
+    } catch {
+      return false;
+    }
   }, []);
 
   // Keep the document language in sync for accessibility and font selection.

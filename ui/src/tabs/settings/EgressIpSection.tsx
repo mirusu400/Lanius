@@ -5,6 +5,7 @@ import type { EgressIpObservation, EgressIpState } from '../../api/types';
 import { Dialog } from '../../components/Dialog';
 import { UndoableInput } from '../../components/UndoableText';
 import { useT } from '../../i18n';
+import { useSettingsToast } from '../../components/useSettingsToast';
 
 const DEFAULT_IPV4_URL = 'https://api.ipify.org';
 const DEFAULT_IPV6_URL = 'https://api6.ipify.org';
@@ -26,6 +27,7 @@ function observed(item: EgressIpObservation | null, never: string): string {
 
 export function EgressIpSection() {
   const t = useT();
+  const saved = useSettingsToast('egressIp.section');
   const [state, setState] = useState<EgressIpState | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [interval, setIntervalValue] = useState<Interval>(180);
@@ -89,6 +91,7 @@ export function EgressIpSection() {
         ipv6_url: ipv6Url.trim(),
       });
       load(next, true);
+      saved(next.enabled && next.blocked_by_lockdown ? { detail: t('egressIp.lockdown') } : {});
       if (next.enabled && !next.blocked_by_lockdown) {
         window.setTimeout(() => void refresh(false), 1000);
       }

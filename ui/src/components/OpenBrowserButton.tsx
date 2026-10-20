@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { getBrowserState, openBrowser } from '../api/client';
 import type { BrowserState } from '../api/types';
 import { useT } from '../i18n';
+import { useToast } from './Toast';
 
 /** A globe, drawn rather than typed.
  *
@@ -37,6 +38,7 @@ function GlobeIcon() {
 
 export function OpenBrowserButton() {
   const t = useT();
+  const { showToast } = useToast();
   const [state, setState] = useState<BrowserState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +57,8 @@ export function OpenBrowserButton() {
     setBusy(true);
     setError(null);
     try {
-      await openBrowser();
+      const launched = await openBrowser();
+      showToast({ message: `${t('browser.section')}: ${t('browser.opened', { name: launched.name })}`, tone: 'success', category: 'browser' });
     } catch (err) {
       setError((err as Error).message);
     } finally {

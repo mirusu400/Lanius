@@ -188,10 +188,10 @@ export function getShortcut(id: string): KeyboardShortcut | null {
   return definition?.defaults[currentPlatform()] ?? null;
 }
 
-export function saveShortcut(id: string, value: KeyboardShortcut | null): void {
+export function saveShortcut(id: string, value: KeyboardShortcut | null): boolean {
   const overrides = readOverrides();
   const definition = SHORTCUTS.find((entry) => entry.id === id);
-  if (!definition) return;
+  if (!definition) return false;
 
   const defaultValue = definition.defaults[currentPlatform()];
   if (sameShortcut(value, defaultValue)) delete overrides[id];
@@ -200,20 +200,24 @@ export function saveShortcut(id: string, value: KeyboardShortcut | null): void {
 
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides));
+    return true;
   } catch {
     // The shortcut still works for this session if browser storage is full
     // or disabled; it will simply not persist after a reload.
+    return false;
   }
 }
 
-export function resetShortcut(id: string): void {
+export function resetShortcut(id: string): boolean {
   const overrides = readOverrides();
   delete overrides[id];
   memoryOverrides = overrides;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides));
+    return true;
   } catch {
     // See saveShortcut: settings remain usable for the current session.
+    return false;
   }
 }
 

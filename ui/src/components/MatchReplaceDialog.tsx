@@ -4,6 +4,7 @@ import { getMatchReplaceRules, previewMatchReplace, putMatchReplaceRules } from 
 import type { MatchReplaceRule } from '../api/types';
 import { errorMessage, renderMessage, useT, type Message } from '../i18n';
 import { Dialog } from './Dialog';
+import { useSettingsToast } from './useSettingsToast';
 import { Split } from './Split';
 import { UndoableInput, UndoableTextarea } from './UndoableText';
 
@@ -43,6 +44,7 @@ export function MatchReplaceDialog({
 }) {
   const t = useT();
   const [rules, setRules] = useState<MatchReplaceRule[]>([]);
+  const saved = useSettingsToast('matchReplace.title');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Message | null>(null);
   const [previewPhase, setPreviewPhase] = useState<MatchReplaceRule['phase']>('request');
@@ -96,6 +98,7 @@ export function MatchReplaceDialog({
     setError(null);
     try {
       setRules(await putMatchReplaceRules(rules));
+      saved();
       onClose();
     } catch (err) {
       setError(errorMessage(err));

@@ -109,11 +109,13 @@ export function load(): Appearance {
   }
 }
 
-export function save(appearance: Appearance): void {
+export function save(appearance: Appearance): boolean {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(appearance));
+    return true;
   } catch {
     // Private mode, or a full quota: the setting still applies for now.
+    return false;
   }
 }
 

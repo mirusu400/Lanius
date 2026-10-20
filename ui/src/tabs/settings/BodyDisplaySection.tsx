@@ -5,9 +5,13 @@ import {
   setBodyDisplaySettings,
 } from '../../api/client';
 import { useT } from '../../i18n';
+import { useToast } from '../../components/Toast';
+import { useSettingsToast } from '../../components/useSettingsToast';
 
 export function BodyDisplaySection() {
   const t = useT();
+  const saved = useSettingsToast('bodyDisplay.section');
+  const { showToast } = useToast();
   const [enabled, setEnabled] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -25,8 +29,10 @@ export function BodyDisplaySection() {
     try {
       const state = await setBodyDisplaySettings(next);
       setEnabled(state.auto_decompress);
-    } catch {
+      saved();
+    } catch (error) {
       setEnabled(!next);
+      showToast({ message: `${t('bodyDisplay.section')}: ${(error as Error).message}`, tone: 'error' });
     } finally {
       setBusy(false);
     }

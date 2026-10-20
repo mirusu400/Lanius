@@ -40,11 +40,14 @@ export function detectLocale(
 export function saveLocale(
   locale: Locale,
   storage?: Pick<Storage, 'setItem'>,
-): void {
+): boolean {
   try {
-    storage?.setItem(STORAGE_KEY, locale);
+    if (!storage) return false;
+    storage.setItem(STORAGE_KEY, locale);
+    return true;
   } catch {
     // ignore: the choice still applies for this session
+    return false;
   }
 }
 

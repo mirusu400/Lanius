@@ -87,6 +87,7 @@ describe('Lockdown settings', () => {
       statusText: 'OK',
       json: async () => status(),
     } as Response);
-    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('status', { name: t('common.loading') })).toBeNull());
+    expect(screen.getByText(t('toast.settingsApplied', { section: t('lockdown.title') }))).toBeTruthy();
   });
 });

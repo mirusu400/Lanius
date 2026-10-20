@@ -34,6 +34,7 @@ import type {
 import { PluginFrame } from '../components/PluginFrame';
 import { PluginLogConsole } from '../components/PluginLogConsole';
 import { useToast } from '../components/Toast';
+import { useSettingsToast } from '../components/useSettingsToast';
 import { useReportBusy } from '../components/busy';
 import { usePluginActions } from '../components/usePluginActions';
 import { UndoableInput } from '../components/UndoableText';
@@ -111,6 +112,7 @@ function CatalogueCard({ item, busy, onInstall, onRollback }: {
 export function PluginsTab() {
   const t = useT();
   const { showToast } = useToast();
+  const saved = useSettingsToast('plugins.section');
   const [surface, setSurface] = useState<Surface>('installed');
   const [detailTab, setDetailTab] = useState<DetailTab>('overview');
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
@@ -207,6 +209,7 @@ export function PluginsTab() {
     try {
       const updated = await setPluginEnabled(plugin.name, !plugin.enabled);
       setPlugins((current) => replacePlugin(current, updated));
+      saved(updated.error ? { detail: updated.error } : {});
       setPluginError(plugin.name, null);
       await refreshActions();
     } catch (reason) {
@@ -221,6 +224,7 @@ export function PluginsTab() {
     try {
       const updated = await reloadPlugin(plugin.name);
       setPlugins((current) => replacePlugin(current, updated));
+      if (!updated.error) showToast({ message: t('toast.pluginReloaded', { name: plugin.name }), tone: 'success', category: 'plugins' });
       setPluginError(plugin.name, null);
       await refreshActions();
     } catch (reason) {
@@ -239,6 +243,7 @@ export function PluginsTab() {
     setBusyPlugin(plugin.name);
     try {
       setPlugins((await setPluginOrder(names)).items);
+      saved();
       setPluginError(plugin.name, null);
     } catch (reason) {
       setPluginError(plugin.name, (reason as Error).message);
@@ -252,6 +257,7 @@ export function PluginsTab() {
     try {
       const updated = await setPluginAutoReload(plugin.name, !plugin.auto_reload);
       setPlugins((current) => replacePlugin(current, updated));
+      saved();
       setPluginError(plugin.name, null);
     } catch (reason) {
       setPluginError(plugin.name, (reason as Error).message);
@@ -285,6 +291,7 @@ export function PluginsTab() {
       setSettings(data);
       setSettingsDraft(data.values);
       setPluginError(settings.plugin, null);
+      saved();
     } catch (reason) {
       setPluginError(settings.plugin, (reason as Error).message);
     } finally {
@@ -309,6 +316,7 @@ export function PluginsTab() {
   const installPackage = async (file: File) => {
     try {
       const result = await installPluginPackage(file);
+      if (!result.plugin.error) showToast({ message: t('toast.pluginInstalled', { name: result.plugin.name }), tone: 'success', category: 'plugins' });
       await Promise.all([refresh(), refreshSamples()]);
       setSelectedName(result.plugin.name);
       setSurface('installed');
@@ -324,6 +332,7 @@ export function PluginsTab() {
     setSampleBusy(sample.id);
     try {
       const result = await installPluginSample(sample.id);
+      if (!result.plugin.error) showToast({ message: t('toast.pluginInstalled', { name: result.plugin.name }), tone: 'success', category: 'plugins' });
       await Promise.all([refresh(), refreshSamples()]);
       setSelectedName(result.plugin.name);
       setSurface('installed');
@@ -339,6 +348,7 @@ export function PluginsTab() {
     if (!developmentPath.trim()) return;
     try {
       const result = await installDevelopmentPlugin(developmentPath.trim());
+      if (!result.plugin.error) showToast({ message: t('toast.pluginInstalled', { name: result.plugin.name }), tone: 'success', category: 'plugins' });
       setDevelopmentPath('');
       await refresh();
       setSelectedName(result.plugin.name);
@@ -352,6 +362,7 @@ export function PluginsTab() {
     setBusyPlugin(plugin.name);
     try {
       await uninstallPluginPackage(plugin.name);
+      showToast({ message: t('toast.pluginRemoved', { name: plugin.name }), tone: 'success', category: 'plugins' });
       if (activeView?.plugin.name === plugin.name) setActiveView(null);
       await Promise.all([refresh(), refreshSamples()]);
       setError(null);
@@ -387,6 +398,7 @@ export function PluginsTab() {
     setCatalogueBusy('sources');
     try {
       await savePluginCatalogueSources(sources);
+      saved();
       setCatalogue(await getPluginCatalogue());
       setError(null);
     } catch (reason) {
@@ -416,10 +428,10 @@ export function PluginsTab() {
     setCatalogueBusy(item.id);
     try {
       const result = await installCataloguePlugin(item.source, item.id, version);
-      if (item.installed_version) {
+      if (!result.plugin.error) {
         showToast({
-          message: t('plugins.updateCompleted', { name: result.plugin.package?.name ?? item.name }),
-          tone: 'success',
+          message: t(item.installed_version ? 'plugins.updateCompleted' : 'toast.pluginInstalled', { name: result.plugin.package?.name ?? item.name }),
+          tone: 'success', category: 'plugins',
         });
       }
       await Promise.all([refresh(), refreshCatalogue(false), refreshSamples()]);
@@ -436,7 +448,8 @@ export function PluginsTab() {
   const rollbackFromCatalogue = async (item: PluginCatalogueItem) => {
     setCatalogueBusy(item.id);
     try {
-      await rollbackPlugin(item.id);
+      const result = await rollbackPlugin(item.id);
+      if (!result.plugin.error) showToast({ message: t('toast.pluginRolledBack', { name: item.name }), tone: 'success', category: 'plugins' });
       await Promise.all([refresh(), refreshCatalogue(false)]);
       setError(null);
     } catch (reason) {

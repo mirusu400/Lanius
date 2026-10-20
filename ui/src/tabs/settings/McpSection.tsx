@@ -1,6 +1,7 @@
 /** The MCP endpoint that lets an agent read the capture. */
 
 import { useEffect, useRef, useState } from 'react';
+import { useSettingsToast } from '../../components/useSettingsToast';
 import {
   getMcpState,
   isDesktop,
@@ -21,6 +22,7 @@ import { writeClipboardText } from '../../clipboard';
 
 export function McpSection() {
   const { t } = useI18n();
+  const saved = useSettingsToast('mcp.section');
   const [state, setState] = useState<McpState | null>(null);
   const [port, setPort] = useState('');
   const [busy, setBusy] = useState(false);
@@ -63,6 +65,7 @@ export function McpSection() {
       const next = await setMcpEnabled(enabled);
       ++generation.current;
       setState({ ...next, tools: next.tools ?? [] });
+      saved();
     } catch (err) {
       setError(rawMsg((err as Error).message));
     } finally {
@@ -87,6 +90,7 @@ export function McpSection() {
       setState({ ...next, tools: next.tools ?? [] });
       setPort(String(next.port));
       setNote(msg('mcp.portApplied', { port: next.port }));
+      saved();
     } catch (err) {
       setError(rawMsg((err as Error).message));
     } finally {

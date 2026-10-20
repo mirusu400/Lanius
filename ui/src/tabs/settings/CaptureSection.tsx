@@ -1,6 +1,7 @@
 /** Capturing traffic from apps that ignore proxy settings. */
 
 import { useEffect, useState } from 'react';
+import { useSettingsToast } from '../../components/useSettingsToast';
 import {
   getStatus,
   listProcesses,
@@ -22,6 +23,7 @@ import { UndoableInput } from '../../components/UndoableText';
 
 export function CaptureSection() {
   const { t } = useI18n();
+  const saved = useSettingsToast('capture.section');
   const [mode, setMode] = useState<'off' | 'all' | 'filtered'>('off');
   const [rules, setRules] = useState<CaptureRule[]>([]);
   const [state, setState] = useState<LocalCaptureState | null>(null);
@@ -69,6 +71,7 @@ export function CaptureSection() {
         next === 'off' ? null : next === 'all' ? '' : rulesToSpec(nextRules);
       const result = await setLocalCapture(spec);
       setState(result);
+      saved(result.restart_required ? { detail: t('capture.restartNeeded') } : {});
       setNote(
         result.restart_required ? t('capture.restartNeeded') : t('capture.applied'),
       );

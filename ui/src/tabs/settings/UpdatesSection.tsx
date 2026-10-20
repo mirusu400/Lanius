@@ -27,6 +27,7 @@ import {
   type UpdateRelease,
 } from '../../api/client';
 import { flushAutosaves } from '../autosave';
+import { useSettingsToast } from '../../components/useSettingsToast';
 
 /** How often the download is asked how far it has got. Often enough to
  *  look live, rarely enough to be free. */
@@ -48,6 +49,7 @@ function published(value: string | null): string | null {
 
 export function UpdatesSection() {
   const t = useT();
+  const saved = useSettingsToast('updates.section');
   const { result, error, busy } = useUpdates();
   const [channel, setChannel] = useState<UpdateChannel | 'auto'>(
     () => channelPreference() ?? 'auto',
@@ -98,7 +100,7 @@ export function UpdatesSection() {
   const chooseChannel = (next: UpdateChannel | 'auto') => {
     setChannel(next);
     setOffer(null);
-    setChannelPreference(next === 'auto' ? null : next);
+    saved({ persisted: setChannelPreference(next === 'auto' ? null : next) });
     // The answer depends on the channel, so the one on screen is now
     // about a question nobody asked.
     void runCheck({ refresh: false });
@@ -106,7 +108,7 @@ export function UpdatesSection() {
 
   const toggleAuto = (enabled: boolean) => {
     setAuto(enabled);
-    setAutoCheckEnabled(enabled);
+    saved({ persisted: setAutoCheckEnabled(enabled) });
   };
 
   const install = async () => {

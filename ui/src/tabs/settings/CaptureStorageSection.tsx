@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { getCaptureStorageSettings, setCaptureStorageSettings } from '../../api/client';
 import { useT } from '../../i18n';
+import { useSettingsToast } from '../../components/useSettingsToast';
 import { UndoableInput } from '../../components/UndoableText';
 
 export function CaptureStorageSection() {
   const t = useT();
+  const savedToast = useSettingsToast('captureStorage.section');
   const [value, setValue] = useState('5');
   const [saved, setSaved] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -24,6 +26,7 @@ export function CaptureStorageSection() {
       const state = await setCaptureStorageSettings(limit);
       setSaved(state.media_body_limit_mb);
       setValue(String(state.media_body_limit_mb));
+      savedToast();
     } catch (err) {
       setError((err as Error).message);
     } finally {

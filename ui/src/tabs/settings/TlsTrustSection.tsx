@@ -5,9 +5,11 @@ import { getTlsTrust, setTlsTrust } from '../../api/client';
 import type { TlsTrustState } from '../../api/types';
 import { msg, rawMsg, renderMessage, useI18n, type Message } from '../../i18n';
 import { UndoableTextarea } from '../../components/UndoableText';
+import { useSettingsToast } from '../../components/useSettingsToast';
 
 export function TlsTrustSection() {
   const { t } = useI18n();
+  const savedToast = useSettingsToast('tlsTrust.section');
   const [saved, setSaved] = useState<TlsTrustState | null>(null);
   const [pem, setPem] = useState('');
   const [busy, setBusy] = useState(false);
@@ -27,6 +29,7 @@ export function TlsTrustSection() {
     try {
       setSaved(await setTlsTrust(value));
       setPem('');
+      savedToast();
       setNote(msg(value.trim() ? 'tlsTrust.applied' : 'tlsTrust.removed'));
     } catch (err) {
       setError(rawMsg((err as Error).message));

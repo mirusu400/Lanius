@@ -21,6 +21,7 @@ import {
   type Message,
 } from '../../i18n';
 import { UndoableInput } from '../../components/UndoableText';
+import { useSettingsToast } from '../../components/useSettingsToast';
 
 const LOOPBACK = '127.0.0.1';
 const ALL_INTERFACES = '0.0.0.0';
@@ -61,6 +62,7 @@ function isLoopback(host: string): boolean {
 
 export function ListenerSection() {
   const { t } = useI18n();
+  const saved = useSettingsToast('listener.section');
   const [state, setState] = useState<ListenersState | null>(null);
   const [draft, setDraft] = useState<ListenerDraft | null>(null);
   const [busy, setBusy] = useState(false);
@@ -118,6 +120,7 @@ export function ListenerSection() {
         : await addListener(draft.host, port);
       load(next);
       setDraft(null);
+      saved();
       setNote(msg(draft.id ? 'listener.updated' : 'listener.added', {
         host: draft.host,
         port: draft.port,
@@ -141,6 +144,7 @@ export function ListenerSection() {
     setError(null);
     try {
       load(await deleteListener(listener.id));
+      saved();
       if (draft?.id === listener.id) setDraft(null);
       setNote(msg('listener.removed', { host: listener.host, port: listener.port }));
     } catch (err) {
@@ -156,6 +160,7 @@ export function ListenerSection() {
     setError(null);
     try {
       load(await setPrimaryListener(listener.id));
+      saved();
       setNote(msg('listener.primaryChanged', {
         host: listener.host,
         port: listener.port,
