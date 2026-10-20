@@ -153,6 +153,31 @@ def test_forward_applies_response_edits() -> None:
     assert flow.response.content == b"teapot"
 
 
+@pytest.mark.parametrize("phase", ["request", "response"])
+def test_rejected_edits_keep_the_original_flow_paused_and_retryable(phase) -> None:
+    a = addon(enabled=True, intercept_responses=True)
+    flow = make_flow(with_response=True)
+    if phase == "request":
+        a.request(flow)
+        message = flow.request
+        edits = {"path": "/changed", "request_headers": [["X-New", "1"], ["invalid"]]}
+    else:
+        a.response(flow)
+        message = flow.response
+        edits = {"status_code": 418, "response_headers": [["X-New", "1"], ["invalid"]]}
+    original = message.get_state()
+
+    with pytest.raises(InterceptError, match="invalid header"):
+        a.forward(flow.id, edits)
+
+    assert flow.id in a.paused
+    assert flow.intercepted
+    assert message.get_state() == original
+    a.forward(flow.id)
+    assert not flow.intercepted
+    assert flow.id not in a.paused
+
+
 def test_body_edit_updates_content_length() -> None:
     flow = make_flow()
     flow.request.headers["content-length"] = "0"

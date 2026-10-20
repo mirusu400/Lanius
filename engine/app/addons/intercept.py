@@ -220,7 +220,10 @@ class InterceptAddon:
         return payload
 
     def forward(self, flow_id: str, edits: dict[str, Any] | None = None) -> None:
-        flow, phase = self._take(flow_id)
+        entry = self.paused.get(flow_id)
+        if entry is None:
+            raise InterceptError(f"flow {flow_id} is not paused")
+        flow, phase = entry
         allowed = True
         if edits:
             apply_edits(
@@ -231,6 +234,8 @@ class InterceptAddon:
             )
             if self.on_forwarded is not None:
                 allowed = self.on_forwarded(flow) is not False
+        # Invalid edits must leave the request available for retry or Drop.
+        self._take(flow_id)
         # Resume before kill: kill() clears ``intercepted`` without waking
         # wait_for_resume(), which would otherwise leave the hook hung.
         flow.resume()
@@ -293,8 +298,24 @@ def apply_edits(
     body_is_decoded: bool = True,
 ) -> None:
     """Apply UI edits to a paused flow before resuming."""
+    message = flow.request if phase == "request" else flow.response
+    if message is None:
+        raise InterceptError("flow has no response to edit")
+    edited = message.copy()
+    try:
+        _edit_message(edited, phase, edits, body_is_decoded=body_is_decoded)
+    except (TypeError, ValueError) as exc:
+        raise InterceptError(f"invalid {phase} edits: {exc}") from exc
+    # Preserve the message object held by the proxy while committing all
+    # edits together. A rejected header/body must not partially alter it.
+    message.set_state(edited.get_state())
+
+
+def _edit_message(
+    message: Any, phase: Phase, edits: dict[str, Any], *, body_is_decoded: bool,
+) -> None:
     if phase == "request":
-        req = flow.request
+        req = message
         if (method := edits.get("method")) is not None:
             req.method = method
         if (path := edits.get("path")) is not None:
@@ -309,9 +330,7 @@ def apply_edits(
             _set_body(req, body, decoded=body_is_decoded)
         return
 
-    if flow.response is None:
-        raise InterceptError("flow has no response to edit")
-    resp = flow.response
+    resp = message
     if (status := edits.get("status_code")) is not None:
         resp.status_code = int(status)
     if (reason := edits.get("reason")) is not None:
