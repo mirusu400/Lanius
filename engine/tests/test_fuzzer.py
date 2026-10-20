@@ -24,7 +24,7 @@ from app.addons.fuzzer import (
 )
 from app.api.server import create_app
 from app.config import Settings
-from app.db.store import FlowStore
+from app.db.store import FlowRecord, FlowStore
 
 OPEN, CLOSE = "{{", "}}"
 
@@ -267,6 +267,42 @@ def test_single_position_run_finds_the_valid_password(client, target) -> None:
     assert by_payload["letmein"]["length"] == len(b"welcome admin")
     # every payload really hit the server
     assert len(Target.hits) >= 3
+
+
+@pytest.mark.parametrize("restrict_capture", [False, True])
+def test_concurrent_run_recovers_stale_request_numbers(client, target, restrict_capture) -> None:
+    client.patch("/api/scope", json={"restrict_capture": restrict_capture})
+    store = client.app.state.store
+    store.upsert(FlowRecord(id="collision", request_number=2801))
+    store.upsert(FlowRecord(id="latest", request_number=3164))
+    with store._lock, store._conn:
+        store._conn.execute("UPDATE flow_request_sequence SET next_value = 2801")
+
+    payloads = [f"guess-{index}" for index in range(31)] + ["letmein"]
+    started = client.post("/api/fuzzer/runs", json={
+        "url": target,
+        "template": f"GET /login?user=admin&pw={OPEN}guess{CLOSE} HTTP/1.1\nHost: t\n\n",
+        "payload_sets": [payloads],
+        "concurrency": 8,
+    })
+    assert started.status_code == 200
+    done = wait_for(client, started.json()["id"])
+    assert done["status"] == "completed"
+    assert done["completed"] == len(payloads)
+    assert len(done["results"]) == len(payloads)
+    assert all(result["error"] is None for result in done["results"])
+    assert [result["status_code"] for result in done["results"]] == [403] * 31 + [200]
+
+    flow_ids = [result["flow_id"] for result in done["results"]]
+    assert len(set(flow_ids)) == len(payloads)
+    records = [store.get(flow_id) for flow_id in flow_ids]
+    assert all(record is not None and record.source == "replay" for record in records)
+    assert sorted(record.request_number for record in records) == list(range(3165, 3197))
+    assert store.get("collision").request_number == 2801
+    assert store.get("latest").request_number == 3164
+    assert client.portal is not None
+    client.portal.call(client.app.state.engine.capture.flush)
+    assert client.app.state.engine.capture.writer_status()["write_failures"] == 0
 
 
 def test_cartesian_run_sends_every_combination(client, target) -> None:
