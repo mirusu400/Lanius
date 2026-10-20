@@ -1,10 +1,10 @@
 /** Decoder tab: multiple payloads, chains, and the raw view. */
-import { cleanup, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DecoderTab } from './DecoderTab';
-import { resetDecoderTabs } from './decoderStore';
+import { addDecoderTab, getDecoderTabs, patchDecoderTab, resetDecoderTabs } from './decoderStore';
 import { renderWithI18n as render, t } from '../test-utils';
 
 let lastChain: { value: string; steps: unknown[] } | null = null;
@@ -144,6 +144,39 @@ describe('tabs outlive the view', () => {
 });
 
 describe('decoder chain', () => {
+  it.each(['edit', 'reset', 'switch'] as const)('ignores an old decode response after %s', async (action) => {
+    const pending = new Map<string, (response: Response) => void>();
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes('/api/decode')) {
+        const body = JSON.parse(String(init?.body)) as { value: string };
+        return new Promise<Response>((resolve) => pending.set(body.value, resolve));
+      }
+      return { ok: true, status: 200, json: async () => ({ codecs: ['base64'], hashes: [] }) } as Response;
+    }));
+    const first = getDecoderTabs()[0];
+    patchDecoderTab(first.id, { input: 'first', steps: [{ codec: 'base64', direction: 'decode' }] });
+    render(<DecoderTab />);
+    await waitFor(() => expect(pending.has('first')).toBe(true));
+
+    act(() => {
+      if (action === 'edit') patchDecoderTab(first.id, { input: 'second' });
+      else if (action === 'reset') patchDecoderTab(first.id, { steps: [] });
+      else patchDecoderTab(addDecoderTab().id, { input: 'second' });
+    });
+    const decoded = (value: string) => ({
+      ok: true, status: 200,
+      json: async () => ({ steps: [{ codec: 'base64', direction: 'decode', value }] }),
+    }) as Response;
+    if (action === 'edit') {
+      await waitFor(() => expect(pending.has('second')).toBe(true));
+      await act(async () => pending.get('second')!(decoded('SECOND')));
+    }
+    const expected = action === 'edit' ? 'SECOND' : action === 'reset' ? 'first' : 'second';
+    expect(document.querySelector('.decoder-raw')?.textContent).toBe(expected);
+    await act(async () => pending.get('first')!(decoded('FIRST')));
+    expect(document.querySelector('.decoder-raw')?.textContent).toBe(expected);
+  });
+
   it('sends the active tab’s input and steps', async () => {
     render(<DecoderTab />);
     await userEvent.type(input(), 'aGk=');

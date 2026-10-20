@@ -26,6 +26,11 @@ interface StepOutput {
   value: string;
 }
 
+interface DecodeResult extends Pick<DecoderTabState, 'id' | 'input' | 'steps'> {
+  outputs: StepOutput[];
+  error: string | null;
+}
+
 export function DecoderTab() {
   const t = useT();
   // Tabs live in a store so switching to another tab of the app does not
@@ -41,10 +46,9 @@ export function DecoderTab() {
       }),
     [],
   );
-  const [outputs, setOutputs] = useState<StepOutput[]>([]);
+  const [result, setResult] = useState<DecodeResult | null>(null);
   const [codecs, setCodecs] = useState<string[]>([]);
   const [hashes, setHashes] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
 
   const active = useMemo(
     () => tabs.find((tab) => tab.id === activeId) ?? tabs[0],
@@ -66,26 +70,21 @@ export function DecoderTab() {
   }, []);
 
   const { input, steps } = active;
-
-  const run = useCallback(async () => {
-    if (steps.length === 0) {
-      setOutputs([]);
-      setError(null);
-      return;
-    }
-    try {
-      const data = await decodeChain(input, steps);
-      setOutputs(data.steps);
-      setError(null);
-    } catch (err) {
-      setOutputs([]);
-      setError((err as Error).message);
-    }
-  }, [input, steps]);
+  const matches = result?.id === active.id && result.input === input && result.steps === steps;
+  const outputs = matches ? result.outputs : [];
+  const error = matches ? result.error : null;
 
   useEffect(() => {
-    void run();
-  }, [run]);
+    let current = true;
+    if (steps.length === 0) return;
+    const request = { id: active.id, input, steps };
+    void decodeChain(input, steps).then((data) => {
+      if (current) setResult({ ...request, outputs: data.steps, error: null });
+    }).catch((err: unknown) => {
+      if (current) setResult({ ...request, outputs: [], error: (err as Error).message });
+    });
+    return () => { current = false; };
+  }, [active.id, input, steps]);
 
   const all = [...codecs, ...hashes];
   const finalValue = outputs.length > 0 ? outputs[outputs.length - 1].value : input;
