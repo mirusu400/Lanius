@@ -21,7 +21,10 @@ let counter = 0;
 
 export function nextDecoderId(): string {
   counter += 1;
-  return `d${counter}`;
+  const unique = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10);
+  return `d${counter}-${unique}`;
 }
 
 export function emptyDecoderTab(): DecoderTabState {

@@ -4,7 +4,7 @@
  * that send a value here from another tab.
  */
 
-import { emptyDecoderTab, type DecoderTabState } from './decoderModel';
+import { emptyDecoderTab, nextDecoderId, type DecoderTabState } from './decoderModel';
 
 type Listener = (tabs: DecoderTabState[], activeId: string) => void;
 
@@ -62,7 +62,13 @@ export function removeDecoderTab(id: string): void {
 /** Replace the whole list, for restoring a saved workspace. */
 export function setDecoderTabs(next: DecoderTabState[]): void {
   if (!Array.isArray(next) || next.length === 0) return;
-  tabs = next;
+  const seen = new Set<string>();
+  tabs = next.map((tab) => {
+    let id = tab.id;
+    while (!id || seen.has(id)) id = nextDecoderId();
+    seen.add(id);
+    return id === tab.id ? tab : { ...tab, id };
+  });
   activeId = tabs.some((tab) => tab.id === activeId) ? activeId : tabs[0].id;
   emit();
 }
