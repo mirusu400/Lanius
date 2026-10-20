@@ -615,6 +615,10 @@ class FlowStore:
             except Exception:
                 self._conn.rollback()
                 raise
+            # A failed batch may be retried after another writer commits.
+            # Only expose numbers that actually survived the transaction.
+            for record, number in zip(records, request_numbers, strict=True):
+                record.request_number = number
             return request_numbers
 
     def prepare_capture_record(self, record: FlowRecord) -> FlowRecord:
@@ -622,32 +626,39 @@ class FlowStore:
         return prepare_record(record, self.media_body_limit_mb)
 
     def _upsert_uncommitted(self, record: FlowRecord) -> int:
+        request_number = record.request_number
         existing = self._conn.execute(
             "SELECT COALESCE(request_number, rowid) AS request_number FROM flows WHERE id = ?",
             (record.id,),
         ).fetchone()
         if existing is not None and existing["request_number"] is not None:
-            record.request_number = int(existing["request_number"])
-        elif record.request_number is None:
+            request_number = int(existing["request_number"])
+        elif request_number is None:
+            # Older projects can have a counter behind their captured rows.
+            # Reserve above both stored numbers and legacy rowid numbers,
+            # using indexed maxima without reading capture bodies. Keep the
+            # counter's high-water mark even after History is cleared.
             row = self._conn.execute(
-                "SELECT next_value FROM flow_request_sequence WHERE singleton = 1"
+                "UPDATE flow_request_sequence SET next_value = MAX("
+                "next_value, "
+                "COALESCE((SELECT MAX(request_number) FROM flows "
+                "WHERE request_number IS NOT NULL), 0) + 1, "
+                "COALESCE((SELECT MAX(rowid) FROM flows), 0) + 1"
+                ") + 1 WHERE singleton = 1 "
+                "RETURNING next_value - 1 AS request_number"
             ).fetchone()
-            record.request_number = int(row["next_value"])
-            self._conn.execute(
-                "UPDATE flow_request_sequence SET next_value = next_value + 1 "
-                "WHERE singleton = 1"
-            )
+            request_number = int(row["request_number"])
         else:
             if (
-                isinstance(record.request_number, bool)
-                or not isinstance(record.request_number, int)
-                or record.request_number < 1
+                isinstance(request_number, bool)
+                or not isinstance(request_number, int)
+                or request_number < 1
             ):
                 raise ValueError("request_number must be a positive integer")
             self._conn.execute(
                 "UPDATE flow_request_sequence "
                 "SET next_value = MAX(next_value, ?) WHERE singleton = 1",
-                (record.request_number + 1,),
+                (request_number + 1,),
             )
         values = (
             record.id,
@@ -683,7 +694,7 @@ class FlowStore:
             int(record.modified),
             int(record.request_body_omitted),
             int(record.response_body_omitted),
-            record.request_number,
+            request_number,
         )
         placeholders = ", ".join(["?"] * len(values))
         updates = ", ".join(
@@ -697,8 +708,7 @@ class FlowStore:
             f" ON CONFLICT(id) DO UPDATE SET {updates}",
             values,
         )
-        assert record.request_number is not None
-        return record.request_number
+        return request_number
 
     def log_event(self, ts: float, level: str, message: str) -> None:
         with self._lock:

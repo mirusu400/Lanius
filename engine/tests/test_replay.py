@@ -248,6 +248,33 @@ def test_repeated_sends_are_independent(client, echo_server) -> None:
     assert "/two" in second["body"]
 
 
+@pytest.mark.parametrize("restrict_capture", [False, True])
+def test_replay_recovers_stale_request_numbers(client, echo_server, restrict_capture) -> None:
+    client.patch("/api/scope", json={"restrict_capture": restrict_capture})
+    store = client.app.state.store
+    store.upsert(FlowRecord(id="collision", request_number=2801))
+    store.upsert(FlowRecord(id="latest", request_number=3164))
+    with store._lock, store._conn:
+        store._conn.execute("UPDATE flow_request_sequence SET next_value = 2801")
+
+    for number in (3165, 3166):
+        response = client.post(
+            "/api/replay/send",
+            json={"url": f"{echo_server}/recovered-{number}"},
+            headers={"Origin": "tauri://localhost"},
+        )
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == "tauri://localhost"
+        data = response.json()
+        assert data["status_code"] == 200
+        assert f"/recovered-{number}" in data["body"]
+        saved = store.get(data["id"])
+        assert saved.request_number == number
+        assert saved.source == "replay"
+    assert store.get("collision").request_number == 2801
+    assert store.get("latest").request_number == 3164
+
+
 def test_build_flow_rejects_malformed_header_entry() -> None:
     with pytest.raises(ReplayError):
         build_flow(url="http://example.com/", headers=[["only-one"]])
