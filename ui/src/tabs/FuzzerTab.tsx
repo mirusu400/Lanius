@@ -15,6 +15,7 @@ import {
   clearMarkers,
   countPositions,
   estimateRequests,
+  estimateRequestsFromCounts,
   markOutliers,
   parsePayloads,
   requiredSets,
@@ -455,46 +456,55 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
         storageKey="lanius.split.fuzzer"
         initial={0.46}
         className="fuzzer-split"
-        first={<div className="fuzzer-left">
-          <h4>{t('fuzzer.template')}</h4>
-          <RequestEditor
-            editorRef={editorRef}
-            label={t('fuzzer.templateLabel')}
-            className="fuzzer-editor mono"
-            highlightClassName="fuzzer-highlight-editor"
-            value={template}
-            onChange={setTemplate}
-            onContextMenu={editorMenu.open}
-            onSelectionChange={rememberSelection}
-          />
-          {editorMenu.element}
-          <h4>
-            {t('fuzzer.payloadSets')}{' '}
-            <span className="muted">
-              {(() => {
-                const hint = RUN_MODES.find(
-                  (type) => type.value === mode,
-                )?.hint;
-                return hint ? t(hint) : '';
-              })()}
-            </span>
-          </h4>
-          <div className="payload-sets">
-            {payloadText.map((text, index) => (
-              <PayloadPicker
-                key={index}
-                index={index}
-                idPrefix={`${draft.id}-`}
-                value={text}
-                onChange={(next) =>
-                  setPayloadText((prev) =>
-                    prev.map((existing, i) => (i === index ? next : existing)),
-                  )
-                }
-              />
-            ))}
-          </div>
-        </div>}
+        first={<Split
+          direction="vertical"
+          storageKey="lanius.split.fuzzer.payloads"
+          initial={0.6}
+          first={<div className="fuzzer-left">
+            <h4>{t('fuzzer.template')}</h4>
+            <RequestEditor
+              editorRef={editorRef}
+              label={t('fuzzer.templateLabel')}
+              className="fuzzer-editor mono"
+              highlightClassName="fuzzer-highlight-editor"
+              value={template}
+              onChange={setTemplate}
+              onContextMenu={editorMenu.open}
+              onSelectionChange={rememberSelection}
+            />
+            {editorMenu.element}
+          </div>}
+          second={<div className="fuzzer-left">
+            <h4>
+              {t('fuzzer.payloadSets')}{' '}
+              <span className="muted">
+                {(() => {
+                  const hint = RUN_MODES.find(
+                    (type) => type.value === mode,
+                  )?.hint;
+                  return hint ? t(hint) : '';
+                })()}
+              </span>
+            </h4>
+            <div className="payload-sets">
+              {payloadText.map((text, index) => (
+                <PayloadPicker
+                  key={index}
+                  index={index}
+                  idPrefix={`${draft.id}-`}
+                  value={text}
+                  requestCount={(count) => estimateRequestsFromCounts(mode, positions,
+                    sets.map((set, i) => i === index ? count : set.length))}
+                  onChange={(next) =>
+                    setPayloadText((prev) =>
+                      prev.map((existing, i) => (i === index ? next : existing)),
+                    )
+                  }
+                />
+              ))}
+            </div>
+          </div>}
+        />}
         second={<div className="fuzzer-results">
           <div className="results-header">
             {run ? (

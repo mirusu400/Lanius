@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { listPayloadSets, savePayloadSet } from '../api/client';
 import { PayloadLibrary } from './PayloadLibrary';
+import { PayloadMaker } from './PayloadMaker';
 import { errorMessage, renderMessage, type Message } from '../i18n/message';
 import { useT } from '../i18n';
 import { UndoableTextarea } from './UndoableText';
@@ -17,15 +18,18 @@ export function PayloadPicker({
   value,
   onChange,
   idPrefix = '',
+  requestCount,
 }: {
   /** Which position this list fills, for the heading. */
   index: number;
   value: string;
   onChange: (payloads: string) => void;
   idPrefix?: string;
+  requestCount?: (count: number) => number;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [makerOpen, setMakerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Message | null>(null);
 
@@ -64,6 +68,9 @@ export function PayloadPicker({
           {t('payloads.count', { count: String(count) })}
         </span>
         <div className="spacer" />
+        <button type="button" onClick={() => setMakerOpen(true)}>
+          {t('payloadMaker.title')}
+        </button>
         <button type="button" disabled={busy || !count} onClick={() => void save()}>
           {t('payloads.save')}
         </button>
@@ -87,6 +94,13 @@ export function PayloadPicker({
         open={open}
         onClose={() => setOpen(false)}
         onUse={onChange}
+      />
+      <PayloadMaker
+        open={makerOpen}
+        value={value}
+        onClose={() => setMakerOpen(false)}
+        onUse={onChange}
+        requestCount={requestCount}
       />
     </div>
   );

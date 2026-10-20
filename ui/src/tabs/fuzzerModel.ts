@@ -84,21 +84,26 @@ export function estimateRequests(
   positions: number,
   sets: string[][],
 ): number {
-  if (positions <= 0 || sets.length === 0) return 0;
+  return estimateRequestsFromCounts(mode, positions, sets.map((set) => set.length));
+}
+
+/** Also used by Payload Maker before a potentially large list exists. */
+export function estimateRequestsFromCounts(mode: RunMode, positions: number, counts: readonly number[]): number {
+  if (positions <= 0 || counts.length === 0) return 0;
   switch (mode) {
     case 'single_position':
-      return positions * (sets[0]?.length ?? 0);
+      return positions * (counts[0] ?? 0);
     case 'shared_payload':
-      return sets[0]?.length ?? 0;
+      return counts[0] ?? 0;
     case 'lockstep': {
-      const used = sets.slice(0, positions);
+      const used = counts.slice(0, positions);
       if (used.length < positions) return 0;
-      return Math.min(...used.map((s) => s.length));
+      return Math.min(...used);
     }
     case 'cartesian': {
-      const used = sets.slice(0, positions);
+      const used = counts.slice(0, positions);
       if (used.length < positions) return 0;
-      return used.reduce((total, s) => total * s.length, 1);
+      return used.reduce((total, count) => total * count, 1);
     }
   }
 }
