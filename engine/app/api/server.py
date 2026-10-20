@@ -173,6 +173,10 @@ class EgressIpPatch(BaseModel):
     ipv6_url: str
 
 
+class EgressIpEstimatesBody(BaseModel):
+    flow_ids: list[str] = Field(max_length=1000)
+
+
 class WebSocketRulesPatch(BaseModel):
     enabled: bool | None = None
     client_messages: bool | None = None
@@ -633,6 +637,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return await asyncio.to_thread(egress_ip.state)
+
+    @app.post("/api/egress-ip/estimates")
+    async def egress_ip_estimates(payload: EgressIpEstimatesBody) -> dict[str, str | None]:
+        return await asyncio.to_thread(store.estimate_egress_ips, payload.flow_ids)
 
     @app.put("/api/lockdown/scope-egress")
     async def set_scope_egress(body: LockdownPatch) -> dict[str, Any]:

@@ -59,7 +59,7 @@ it('reorders headers and their cells by drag and drop and remembers the order', 
   expect(row.cells[3].textContent).toBe('example.test');
   expect(row.cells[4].textContent).toBe('GET');
   await waitFor(() => expect(JSON.parse(window.localStorage.getItem('lanius.columns.history.layout') ?? '{}').order)
-    .toEqual([0, 1, 2, 4, 3, 5, 6, 7, 8, 9]));
+    .toEqual([0, 1, 2, 4, 3, 5, 6, 7, 8, 9, 10]));
 
   first.unmount();
   render(<FlowTable flows={[flow]} selectedId={null} onSelect={() => undefined} />);

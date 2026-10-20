@@ -1133,6 +1133,14 @@ export function getEgressIpState(historyLimit?: number): Promise<import('./types
   return request(`/api/egress-ip${query}`);
 }
 
+export function getEgressIpEstimates(flowIds: string[]): Promise<Record<string, string | null>> {
+  return request('/api/egress-ip/estimates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ flow_ids: flowIds }),
+  });
+}
+
 export function setEgressIpState(settings: {
   enabled: boolean;
   interval_seconds: 60 | 180 | 300;

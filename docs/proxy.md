@@ -65,6 +65,15 @@ of the shown-request count to switch between side-by-side panes and a
 history-above-detail layout. The selected layout and each layout's pane position
 are remembered on this machine.
 
+The **Public IP (estimated)** column is hidden by default. Right-click a History
+header and check it to display estimates from **Settings → Observed public IP**
+records. Each request uses the latest preceding observation for its upstream
+connection's IPv4/IPv6 family, up to five minutes after that address was last
+confirmed. Missing connections, missing observations, and stale observations
+show `—`. The observer and target may use different routes, so this is an
+estimate rather than proof of the address the target saw. Showing the column
+reads saved records only and does not contact an external IP service.
+
 ## Context menus
 
 Right-click a request to send it to [Replay](replay.md) or the

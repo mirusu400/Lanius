@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from app import egress_ip
 from app.api.server import create_app
 from app.config import Settings
-from app.db.store import FlowStore
+from app.db.store import FlowRecord, FlowStore
 
 
 def free_port() -> int:
@@ -89,6 +89,61 @@ def test_current_addresses_are_not_limited_by_history_page(client) -> None:
     assert len(state["history"]) == 1
     assert state["current"]["ipv4"]["ip"] == "8.8.8.3"
     assert state["current"]["ipv6"]["ip"] == "2001:4860:4860::8888"
+
+
+def test_estimates_match_request_time_family_and_expire(client) -> None:
+    store = client.app.state.store
+    for family, ip, timestamp in (
+        (4, "8.8.8.8", 10), (4, "8.8.8.8", 20),
+        (6, "2001:4860:4860::8888", 10), (4, "1.1.1.1", 40),
+    ):
+        store.record_egress_ip_observation(
+            family=family, ip=ip, observed_at=timestamp,
+            observer_url=egress_ip.DEFAULT_IPV4_URL,
+        )
+    cases = [
+        ("before", 9, "203.0.113.1:443", None),
+        ("first", 10, "203.0.113.1:443", "8.8.8.8"),
+        ("between", 30, "203.0.113.1:443", "8.8.8.8"),
+        ("changed", 40, "203.0.113.1:443", "1.1.1.1"),
+        ("v6", 40, "2001:db8::1:443", "2001:4860:4860::8888"),
+        ("bracketed", 40, "[2001:db8::1]:443", "2001:4860:4860::8888"),
+        ("mapped", 40, "::ffff:203.0.113.1:443", "1.1.1.1"),
+        ("boundary", 340, "203.0.113.1:443", "1.1.1.1"),
+        ("stale", 341, "203.0.113.1:443", None),
+        ("unknown", 40, None, None),
+        ("hostname", 40, "example.com:443", None),
+        ("no-time", None, "203.0.113.1:443", None),
+    ]
+    for flow_id, timestamp, peer, _expected in cases:
+        store.upsert(FlowRecord(id=flow_id, started_at=timestamp, server_addr=peer))
+    with mock.patch.object(egress_ip, "_request_ip") as observer:
+        assert client.put("/api/lockdown/project", json={"enabled": True}).status_code == 200
+        response = client.post("/api/egress-ip/estimates", json={
+            "flow_ids": [case[0] for case in cases] + ["missing"],
+        })
+        observer.assert_not_called()
+    assert response.status_code == 200
+    assert response.json() == {**{case[0]: case[3] for case in cases}, "missing": None}
+
+
+def test_estimates_use_old_history_without_loading_bodies_or_history_limit(client) -> None:
+    store = client.app.state.store
+    store.upsert(FlowRecord(id="old", started_at=1, server_addr="203.0.113.1:443"))
+    for index in range(1002):
+        store.record_egress_ip_observation(
+            family=4, ip="8.8.8.8" if index % 2 == 0 else "1.1.1.1",
+            observed_at=index + 1, observer_url=egress_ip.DEFAULT_IPV4_URL,
+        )
+    statements: list[str] = []
+    store._read_conn.set_trace_callback(statements.append)
+    try:
+        assert store.estimate_egress_ips(["old"]) == {"old": "8.8.8.8"}
+    finally:
+        store._read_conn.set_trace_callback(None)
+    assert not any("body" in query.lower() for query in statements)
+    assert client.post("/api/egress-ip/estimates", json={"flow_ids": []}).json() == {}
+    assert client.post("/api/egress-ip/estimates", json={"flow_ids": ["old"] * 1001}).status_code == 422
 
 
 def test_defaults_are_disabled_and_custom_endpoints_are_saved(client) -> None:

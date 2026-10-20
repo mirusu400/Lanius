@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { FlowSummary, HistorySortKey } from '../api/types';
 import { useT } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
@@ -11,6 +11,7 @@ import {
 } from '../tabs/proxyModel';
 import { MarkedText } from './MarkedText';
 import { useLocalSourceIpColumn } from '../historySourceColumn';
+import { useEgressIpEstimates } from '../useEgressIpEstimates';
 
 interface Props {
   flows: FlowSummary[];
@@ -32,6 +33,12 @@ const SORT_KEYS: HistorySortKey[] = [
 export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQuery = '', sortBy, sortDesc, onSort, onToggleBookmark }: Props) {
   const t = useT();
   const showSourceIp = useLocalSourceIpColumn();
+  const publicIpIndex = showSourceIp ? 11 : 10;
+  const [showPublicIp, setShowPublicIp] = useState(false);
+  const hiddenChanged = useCallback((hidden: number[]) => {
+    setShowPublicIp(!hidden.includes(publicIpIndex));
+  }, [publicIpIndex]);
+  const publicIps = useEgressIpEstimates(flows, showPublicIp);
   const rows = useRef(new Map<string, HTMLTableRowElement>());
   const selectAdjacent = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
@@ -47,8 +54,8 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
     rows.current.get(id)?.focus();
     rows.current.get(id)?.scrollIntoView?.({ block: 'nearest' });
   };
-  const baseColumns = useResizableColumns('lanius.columns.history', [64, 48, 84, 70, 180, 260, 66, 82, 78, 84]);
-  const sourceColumns = useResizableColumns('lanius.columns.history.source', [64, 48, 84, 70, 180, 260, 66, 82, 78, 84, 135]);
+  const baseColumns = useResizableColumns('lanius.columns.history', [64, 48, 84, 70, 180, 260, 66, 82, 78, 84, 180]);
+  const sourceColumns = useResizableColumns('lanius.columns.history.source', [64, 48, 84, 70, 180, 260, 66, 82, 78, 84, 135, 180]);
   const columns = showSourceIp ? sourceColumns : baseColumns;
   const headers = [
     t('flow.time'), t('flow.method'), t('flow.host'), t('flow.url'),
@@ -56,7 +63,8 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
   ];
   return (
     <div className="flow-table-wrap" tabIndex={0} onKeyDown={selectAdjacent}>
-      <ResizableTable columns={columns} className="flow-table">
+      <ResizableTable columns={columns} className="flow-table"
+        defaultHidden={[publicIpIndex]} onHiddenChange={hiddenChanged}>
         <thead>
           <tr>
             <ResizableHeader
@@ -90,13 +98,15 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
             ))}
             {showSourceIp && <ResizableHeader label={t('flow.localSourceIp')} index={10} columns={columns}
               resizeLabel={t('table.resizeColumn', { column: t('flow.localSourceIp') })} />}
+            <ResizableHeader label={t('flow.publicIpEstimate')} index={publicIpIndex} columns={columns}
+              resizeLabel={t('table.resizeColumn', { column: t('flow.publicIpEstimate') })} />
             <ResizableFillHeader />
           </tr>
         </thead>
         <tbody>
           {flows.length === 0 && (
             <tr>
-              <td colSpan={showSourceIp ? 11 : 10} className="empty">
+              <td colSpan={columns.widths.length} className="empty">
                 {t('proxy.emptyTable')}
               </td>
               <ResizableFillCell />
@@ -150,6 +160,9 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
               {showSourceIp && <td className="mono" title={t('flow.localSourceIpHint')}>
                 {flow.local_source_ip || '—'}
               </td>}
+              <td className="mono" title={t('flow.publicIpEstimateHint')}>
+                {publicIps[flow.id] || '—'}
+              </td>
               <ResizableFillCell />
             </tr>
           ))}

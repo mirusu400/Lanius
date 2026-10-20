@@ -23,8 +23,8 @@ function clamp(width: number): number {
 function loadWidths(key: string, defaults: number[]): number[] {
   try {
     const saved = JSON.parse(window.localStorage.getItem(key) ?? 'null');
-    if (Array.isArray(saved) && saved.length === defaults.length && saved.every((width) => typeof width === 'number' && Number.isFinite(width))) {
-      return saved.map(clamp);
+    if (Array.isArray(saved) && saved.length <= defaults.length && saved.every((width) => typeof width === 'number' && Number.isFinite(width))) {
+      return [...saved.map(clamp), ...defaults.slice(saved.length)];
     }
   } catch {
     // Storage may be disabled, or may contain a value from an older layout.
@@ -115,12 +115,19 @@ function normalizeLayout(value: unknown, count: number): ColumnLayout {
   return { order, hidden };
 }
 
-function loadLayout(key: string, count: number): ColumnLayout {
+function loadLayout(key: string, count: number, defaultHidden: number[]): ColumnLayout {
+  let saved: unknown;
   try {
-    return normalizeLayout(JSON.parse(window.localStorage.getItem(key) ?? 'null'), count);
+    saved = JSON.parse(window.localStorage.getItem(key) ?? 'null');
   } catch {
-    return normalizeLayout(null, count);
+    // Fall back to the default layout when storage is unavailable.
   }
+  const layout = normalizeLayout(saved, count);
+  const order = (saved as Partial<ColumnLayout> | null)?.order;
+  const previousOrder = Array.isArray(order) ? order : [];
+  // New optional columns stay hidden when upgrading an existing layout, too.
+  return normalizeLayout({ ...layout, hidden: [...layout.hidden,
+    ...defaultHidden.filter((index) => !previousOrder.includes(index))] }, count);
 }
 
 function sameLayout(left: ColumnLayout, right: ColumnLayout): boolean {
@@ -159,10 +166,14 @@ export function ResizableTable({
   columns,
   className,
   children,
+  defaultHidden = [],
+  onHiddenChange,
 }: {
   columns: ResizableColumns;
   className: string;
   children: React.ReactNode;
+  defaultHidden?: number[];
+  onHiddenChange?: (hidden: number[]) => void;
 }) {
   const table = useRef<HTMLTableElement | null>(null);
   const [available, setAvailable] = useState(0);
@@ -172,11 +183,11 @@ export function ResizableTable({
   const layoutKey = `${columns.key}.layout`;
   const [layoutState, setLayoutState] = useState(() => ({
     key: layoutKey,
-    value: loadLayout(layoutKey, count),
+    value: loadLayout(layoutKey, count, defaultHidden),
   }));
   const loadedLayout = layoutState.key === layoutKey
     ? layoutState.value
-    : loadLayout(layoutKey, count);
+    : loadLayout(layoutKey, count, defaultHidden);
   const normalizedLayout = normalizeLayout(loadedLayout, count);
   const layout = sameLayout(loadedLayout, normalizedLayout)
     ? loadedLayout
@@ -193,6 +204,10 @@ export function ResizableTable({
   };
 
   const visible = layout.order.filter((index) => !layout.hidden.includes(index));
+  const hiddenKey = layout.hidden.join(',');
+  useEffect(() => {
+    onHiddenChange?.(hiddenKey ? hiddenKey.split(',').map(Number) : []);
+  }, [onHiddenChange, hiddenKey]);
 
   useEffect(() => {
     const parent = table.current?.parentElement;

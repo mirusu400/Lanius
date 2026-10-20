@@ -8,7 +8,9 @@ mitmproxy asyncio loop must go through :mod:`app.db.async_store` (or
 from __future__ import annotations
 
 import base64
+from bisect import bisect_right
 import contextlib
+import ipaddress
 import json
 import math
 import os
@@ -35,6 +37,7 @@ logger = logging.getLogger(__name__)
 ANNOTATION_COLORS = frozenset({"red", "orange", "yellow", "green", "blue", "purple"})
 DEFAULT_ANNOTATION_COLOR = "yellow"
 COMPACT_DELETE_BATCH_SIZE = 250
+EGRESS_IP_ESTIMATE_GRACE_SECONDS = 300
 
 from .schema import migrate
 from .search_index import MIGRATION as SEARCH_MIGRATION
@@ -1544,6 +1547,48 @@ class FlowStore:
             )
 
     # --- observed public egress addresses -------------------------------
+    def estimate_egress_ips(self, flow_ids: Sequence[str]) -> dict[str, str | None]:
+        """Match saved observations to request times; never perform IP lookups.
+
+        Use the upstream peer's address family and the latest observation at
+        or before the request. Allow at most five minutes (the longest polling
+        interval) after its last confirmation, including when recording stops.
+        These are estimates: a target can use a different route than the observer.
+        """
+        estimates: dict[str, str | None] = dict.fromkeys(flow_ids)
+        if not flow_ids:
+            return estimates
+        with self._read_lock:
+            rows = self._read_conn.execute(
+                "SELECT id, type, started_at, server_addr FROM flow_history WHERE id IN ("
+                + ",".join("?" for _ in flow_ids) + ")", tuple(flow_ids),
+            ).fetchall()
+            times = [row["started_at"] for row in rows if row["started_at"] is not None]
+            if not times:
+                return estimates
+            observations = self._read_conn.execute(
+                "SELECT family, ip, first_seen_at, last_seen_at FROM egress_ip_observations "
+                "WHERE first_seen_at <= ? AND last_seen_at >= ? ORDER BY first_seen_at, id",
+                (max(times), min(times) - EGRESS_IP_ESTIMATE_GRACE_SECONDS),
+            ).fetchall()
+        for family in (4, 6):
+            periods = [row for row in observations if row["family"] == family]
+            starts = [row["first_seen_at"] for row in periods]
+            for flow in rows:
+                if flow["type"] != "http" or flow["started_at"] is None or not flow["server_addr"]:
+                    continue
+                try:
+                    peer = ipaddress.ip_address(flow["server_addr"].rsplit(":", 1)[0].strip("[]"))
+                except ValueError:
+                    continue
+                version = 4 if isinstance(peer, ipaddress.IPv6Address) and peer.ipv4_mapped else peer.version
+                if version != family:
+                    continue
+                index = bisect_right(starts, flow["started_at"]) - 1
+                if index >= 0 and flow["started_at"] <= periods[index]["last_seen_at"] + EGRESS_IP_ESTIMATE_GRACE_SECONDS:
+                    estimates[flow["id"]] = periods[index]["ip"]
+        return estimates
+
     def record_egress_ip_observation(
         self,
         *,

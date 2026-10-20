@@ -81,6 +81,8 @@ const en = {
   'flow.duration': 'Duration',
   'flow.modified': 'Modified',
   'flow.localSourceIp': 'Local source IP',
+  'flow.publicIpEstimate': 'Public IP (estimated)',
+  'flow.publicIpEstimateHint': 'Estimated from the latest public IP observation before this request, matching the upstream connection’s IPv4/IPv6 family. Shown up to 5 minutes after the last confirmation. The target may see a different IP; missing or stale observations show —.',
   'flow.localSourceIpHint': 'The address on Lanius’s upstream socket. NAT, VPN, or an upstream proxy may make the target see a different IP.',
 
   // --- flow detail ---
@@ -1418,6 +1420,8 @@ const ko: Catalogue = {
   'flow.duration': '소요 시간',
   'flow.modified': 'Modified',
   'flow.localSourceIp': '로컬 출발 IP',
+  'flow.publicIpEstimate': '공인 IP (예측)',
+  'flow.publicIpEstimateHint': '요청 시각 이전의 최근 공인 IP 관측 기록과 외부 연결의 IPv4/IPv6를 대조한 예측입니다. 마지막 확인 후 5분까지만 표시합니다. 대상 서버가 보는 IP와 다를 수 있으며, 기록이 없거나 오래되면 —로 표시합니다.',
   'flow.localSourceIpHint': 'Lanius의 외부 연결 소켓에 할당된 주소입니다. NAT·VPN·상위 프록시를 지나면 대상 서버가 보는 IP는 다를 수 있습니다.',
 
   'detail.selectPrompt': 'flow를 선택하면 상세 내용이 표시됩니다.',
