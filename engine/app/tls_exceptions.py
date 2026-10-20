@@ -1,9 +1,11 @@
-"""Explicit per-host exceptions to upstream certificate verification.
+"""Explicit exceptions to upstream certificate verification.
 
 Upstream TLS stays verified by default. A project can name exact hosts whose
 certificate is known to be wrong (a hostname mismatch, a self-signed test
-server) so an authorized user can still inspect them. Each exception is a
-whole hostname or IP address: no wildcards, no global switch.
+server) so an authorized user can still inspect them. Each host exception is a
+whole hostname or IP address: no wildcards. An intentionally conspicuous
+project setting can also disable verification for every upstream when a lab
+contains many deliberately invalid certificates.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from OpenSSL import SSL
 logger = logging.getLogger(__name__)
 
 TLS_EXCEPTIONS_SETTING = "tls_verify_exceptions"
+TLS_INSECURE_SETTING = "tls_verify_insecure"
 MAX_EXCEPTIONS = 100
 
 _LABEL = re.compile(r"^(?!-)[a-z0-9_-]{1,63}(?<!-)$")
@@ -76,14 +79,23 @@ def dump_setting(hosts: list[str]) -> str:
     return json.dumps(hosts)
 
 
-def _server_host(server: connection.Server) -> str | None:
-    name = server.sni or (server.address[0] if server.address else None)
-    if not name:
-        return None
-    try:
-        return normalize_host(str(name))
-    except ValueError:
-        return None
+def _server_hosts(server: connection.Server) -> frozenset[str]:
+    """Every exact name by which this upstream connection is identified.
+
+    A CONNECT target may be an IP address while TLS carries a different SNI.
+    Accepting only SNI made a correctly entered IP exception appear broken.
+    Both are properties of the same concrete connection, so either exact value
+    may authorize the exception without introducing wildcard matching.
+    """
+    hosts: set[str] = set()
+    for value in (server.sni, server.address[0] if server.address else None):
+        if value is None:
+            continue
+        try:
+            hosts.add(normalize_host(str(value)))
+        except ValueError:
+            continue
+    return frozenset(hosts)
 
 
 class UpstreamTlsExceptionsAddon:
@@ -100,8 +112,7 @@ class UpstreamTlsExceptionsAddon:
     def _excepted(self, conn: connection.Connection) -> str | None:
         if not self.hosts or not isinstance(conn, connection.Server):
             return None
-        host = _server_host(conn)
-        return host if host in self.hosts else None
+        return next(iter(_server_hosts(conn) & self.hosts), None)
 
     def tls_start_server(self, data: tls.TlsData) -> None:
         if data.ssl_conn is None or (host := self._excepted(data.conn)) is None:

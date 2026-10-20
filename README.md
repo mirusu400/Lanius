@@ -158,7 +158,8 @@ or revocation responses.
 **Settings > Proxy > Upstream CA certificates** lets a project add other VPN or
 private CAs when needed. Choose a PEM file or paste its public CA certificates,
 then apply. These supplement system trust on Windows and macOS; other platforms
-extend the default public CA list. Server certificate verification stays enabled.
+extend the default public CA list. Server certificate verification stays enabled
+by default.
 Applying or removing it restarts proxy connections and cancels active
 Replay/Fuzzer requests. CA certificates are saved in the project database,
 but importing a project keeps the current CA trust: new trust anchors must be
@@ -174,6 +175,13 @@ project; every other host stays verified. When verification fails, the browser
 gets a Lanius page that names the certificate error instead of a bare 502, and
 the request detail shows the same error. Exceptions are saved in the project
 database, but importing a project never adds them.
+
+For authorized labs with many deliberately invalid certificates, the same
+section can disable verification for every upstream HTTPS server after a
+warning confirmation. This accepts all certificate failures, including unknown
+issuers, hostname mismatches and expired certificates, not only self-signed
+certificates. The choice is saved for the current project, but importing a
+project never turns it on or off.
 
 ### Where the proxy listens
 

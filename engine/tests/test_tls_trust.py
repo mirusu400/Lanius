@@ -33,9 +33,13 @@ from app.tls_trust import (
 from .test_proxy import engine, free_port
 
 
-def certificate(*, ca: bool = True, expired: bool = False, issuer=None):
+def certificate(
+    *, ca: bool = True, expired: bool = False, issuer=None, hostname: str = "localhost"
+):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Private test CA" if ca else "localhost")])
+    name = x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, "Private test CA" if ca else hostname)
+    ])
     now = datetime.now(timezone.utc)
     cert = (x509.CertificateBuilder().subject_name(name)
             .issuer_name(issuer[0].subject if issuer else name)
@@ -49,7 +53,7 @@ def certificate(*, ca: bool = True, expired: bool = False, issuer=None):
                 crl_sign=ca, encipher_only=None, decipher_only=None,
             ), critical=True)
             .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
-            .add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost")]), critical=False)
+            .add_extension(x509.SubjectAlternativeName([x509.DNSName(hostname)]), critical=False)
             .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
             .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(
                 issuer[1].public_key() if issuer else key.public_key()

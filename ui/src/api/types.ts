@@ -845,6 +845,11 @@ export interface TlsExceptionsState {
   hosts: string[];
 }
 
+/** Project-local escape hatch that skips every upstream certificate check. */
+export interface TlsInsecureState {
+  enabled: boolean;
+}
+
 export interface TlsTrustState {
   system_trust: 'macos' | 'windows' | 'linux' | 'certifi';
   certificates: {

@@ -236,6 +236,10 @@ const en: DocPage[] = [
             kind: 'text',
             body: 'A trusted CA cannot fix a hostname mismatch. For a host you are authorized to test whose certificate is known to be wrong, add the exact host in Settings > Proxy > Upstream certificate exceptions, or use Allow this host on the failed request. Only that host skips verification in this project, and project imports never add exceptions.',
           },
+          {
+            kind: 'text',
+            body: 'For an authorized lab with many deliberately invalid certificates, the same section can disable verification for every upstream HTTPS server after a warning confirmation. This accepts unknown issuers, hostname mismatches and expired certificates, not only self-signed certificates. Project imports never change this trust choice.',
+          },
         ],
       },
       {

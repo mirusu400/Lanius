@@ -2,7 +2,7 @@
 
 mitmproxy answers a failed upstream connection with a bare "502 Bad Gateway"
 page, which reads like the origin's own 502. When upstream certificate
-verification is the cause, say so and point at the per-host exception.
+verification is the cause, say so and point at the available trust controls.
 """
 
 from __future__ import annotations
@@ -27,7 +27,10 @@ _PAGE = """<!doctype html>
     authorized to test this host and its certificate is known to be wrong,
     add the exact host under
     <b>Settings &rsaquo; Proxy &rsaquo; Upstream certificate exceptions</b>
-    in Lanius, or use <b>Allow this host</b> on the request in HTTP history.</p>
+    in Lanius, or use <b>Allow this host</b> on the request in HTTP history.
+    For an authorized lab with many deliberately invalid certificates, that
+    Settings section also has a confirmed option to disable verification for
+    every upstream server.</p>
 </body>
 </html>
 """

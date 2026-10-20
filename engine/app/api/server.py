@@ -60,7 +60,7 @@ from .. import codegen
 from .. import inspector
 from ..build_info import build_info
 from ..lockdown import BLOCKED_DETAIL, PROJECT_SETTING, SCOPE_EGRESS_SETTING, LockdownBlocked, LockdownPolicy
-from ..tls_exceptions import TLS_EXCEPTIONS_SETTING
+from ..tls_exceptions import TLS_EXCEPTIONS_SETTING, TLS_INSECURE_SETTING
 from ..tls_trust import TRUSTED_CA_SETTING
 from .. import updates
 from ..addons.scope import ScopeError, rule_from_url
@@ -826,7 +826,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await _apply_lockdown_to_plugins(True)
             await asyncio.to_thread(
                 store.restore_database, prepared.path,
-                preserve_settings=(TRUSTED_CA_SETTING, TLS_EXCEPTIONS_SETTING),
+                preserve_settings=(
+                    TRUSTED_CA_SETTING,
+                    TLS_EXCEPTIONS_SETTING,
+                    TLS_INSECURE_SETTING,
+                ),
                 keep_enabled=(PROJECT_SETTING, SCOPE_EGRESS_SETTING),
             )
             can_resume = False
@@ -908,7 +912,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # add a CA or switch off verification for a host on its own.
                 kept = {
                     key: store.get_setting(key)
-                    for key in (TRUSTED_CA_SETTING, TLS_EXCEPTIONS_SETTING)
+                    for key in (
+                        TRUSTED_CA_SETTING,
+                        TLS_EXCEPTIONS_SETTING,
+                        TLS_INSECURE_SETTING,
+                    )
                 }
                 await engine.fuzzer.stop_all()
                 await engine.replay.cancel_active()
@@ -1128,6 +1136,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return await engine.set_tls_exceptions(hosts)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except (OSError, ProxyStartError) as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/tls/insecure")
+    async def tls_insecure_state() -> dict[str, bool]:
+        return {"enabled": engine.tls_insecure()}
+
+    @app.put("/api/tls/insecure")
+    async def set_tls_insecure(payload: dict[str, Any]) -> dict[str, bool]:
+        enabled = payload.get("enabled")
+        if not isinstance(enabled, bool):
+            raise HTTPException(status_code=422, detail="enabled must be a boolean")
+        try:
+            return await engine.set_tls_insecure(enabled)
         except (OSError, ProxyStartError) as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 

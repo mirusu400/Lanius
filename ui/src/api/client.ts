@@ -1203,6 +1203,18 @@ export function setTlsExceptions(hosts: string[]): Promise<import('./types').Tls
   });
 }
 
+export function getTlsInsecure(): Promise<import('./types').TlsInsecureState> {
+  return request('/api/tls/insecure');
+}
+
+export function setTlsInsecure(enabled: boolean): Promise<import('./types').TlsInsecureState> {
+  return request('/api/tls/insecure', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 /** Add one host to the project's upstream certificate exceptions. */
 export async function addTlsException(host: string): Promise<import('./types').TlsExceptionsState> {
   const { hosts } = await getTlsExceptions();

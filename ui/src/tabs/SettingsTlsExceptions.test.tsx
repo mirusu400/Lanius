@@ -8,13 +8,25 @@ import { TlsExceptionsSection } from './settings/TlsExceptionsSection';
 
 let hosts: string[];
 let puts: unknown[];
+let insecure: boolean;
+let insecurePuts: unknown[];
 let reject: string | null;
 
 beforeEach(() => {
   hosts = [];
   puts = [];
+  insecure = false;
+  insecurePuts = [];
   reject = null;
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/api/tls/insecure')) {
+      if (init?.method === 'PUT') {
+        const body = JSON.parse(String(init.body));
+        insecurePuts.push(body);
+        insecure = body.enabled;
+      }
+      return { ok: true, status: 200, json: async () => ({ enabled: insecure }) } as Response;
+    }
     expect(url).toContain('/api/tls/exceptions');
     if (init?.method === 'PUT') {
       const body = JSON.parse(String(init.body));
@@ -51,6 +63,24 @@ describe('Upstream certificate exceptions', () => {
     await user.type(screen.getByLabelText(t('tlsExceptions.host')), '*.example.test');
     await user.click(screen.getByRole('button', { name: t('tlsExceptions.add') }));
     expect((await screen.findByRole('alert')).textContent).toContain('wildcards are not allowed');
+  });
+
+  it('requires confirmation before disabling verification for every host', async () => {
+    const user = userEvent.setup();
+    render(<TlsExceptionsSection />);
+    const toggle = await screen.findByRole('checkbox', { name: t('tlsExceptions.insecure') });
+
+    await user.click(toggle);
+    expect(screen.getByRole('dialog', { name: t('tlsExceptions.insecureConfirmTitle') })).toBeTruthy();
+    expect(insecurePuts).toEqual([]);
+
+    await user.click(screen.getByRole('button', { name: t('tlsExceptions.insecureConfirm') }));
+    await waitFor(() => expect(insecurePuts).toEqual([{ enabled: true }]));
+    expect(await screen.findByText(t('tlsExceptions.insecureActive'))).toBeTruthy();
+
+    await user.click(toggle);
+    await waitFor(() => expect(insecurePuts).toEqual([{ enabled: true }, { enabled: false }]));
+    expect(screen.queryByText(t('tlsExceptions.insecureActive'))).toBeNull();
   });
 });
 

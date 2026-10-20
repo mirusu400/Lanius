@@ -51,6 +51,7 @@ from .upstream import UpstreamBridge
 from . import error_page
 from .tls_exceptions import (
     TLS_EXCEPTIONS_SETTING,
+    TLS_INSECURE_SETTING,
     UpstreamTlsExceptionsAddon,
     dump_setting as dump_tls_exceptions,
     normalize_hosts as normalize_tls_exceptions,
@@ -578,6 +579,7 @@ class ProxyEngine:
         custom = self.store.get_setting(self.TLS_CIPHERS_SETTING) or None
         master.options.update(**options_for(profile, custom))
         master.options.update(
+            ssl_insecure=self.tls_insecure(),
             ssl_verify_upstream_trusted_ca=upstream_ca_file(
                 self.settings.data_dir,
                 self.store.get_setting(TRUSTED_CA_SETTING) or "",
@@ -942,6 +944,27 @@ class ProxyEngine:
     def tls_exceptions(self) -> list[str]:
         """Hosts whose upstream certificate is deliberately not verified."""
         return parse_tls_exceptions(self.store.get_setting(TLS_EXCEPTIONS_SETTING))
+
+    def tls_insecure(self) -> bool:
+        """Whether this project deliberately skips all upstream TLS checks."""
+        return self.store.get_setting(TLS_INSECURE_SETTING) == "1"
+
+    async def set_tls_insecure(self, enabled: bool) -> dict[str, bool]:
+        previous = self.tls_insecure()
+        if enabled == previous:
+            return {"enabled": enabled}
+        await self._restart_with_setting(
+            TLS_INSECURE_SETTING,
+            "1" if enabled else "",
+            "1" if previous else "",
+        )
+        logger.warning(
+            "upstream certificate verification for all hosts: %s",
+            "disabled" if enabled else "enabled",
+        )
+        state = {"enabled": enabled}
+        self.broker.publish("engine.tls_insecure_changed", state)
+        return state
 
     async def set_tls_exceptions(self, hosts: list[str]) -> dict[str, Any]:
         normalized = normalize_tls_exceptions(hosts)
