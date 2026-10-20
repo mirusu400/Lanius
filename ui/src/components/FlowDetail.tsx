@@ -449,20 +449,15 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
 
   const sendRequest = (
     selected: FlowSummary | null,
-    loaded: FlowDetail | null,
     send: (flow: FlowSummary, detail: FlowDetail) => void,
   ) => {
     if (!selected) return;
-    if (loaded?.id === selected.id && !loaded.request_body_truncated) {
-      send(selected, loaded);
-      return;
-    }
-    // Detail responses are bounded previews.  Fetch the request-only model so
-    // a truncated upload is never silently sent and the response BLOB is never
-    // selected merely to open Replay/Fuzzer.
+    // The displayed detail may have masked headers or a truncated body.
+    // Editors always need the complete, unmasked request, independently of
+    // the reveal toggle. Fetch only the request to avoid the response BLOB.
     void getReplayRequest(
       selected.id,
-      reveal,
+      true,
       selected.id === currentFlowId ? requestCharsetOverride : null,
     )
       .then((fetched) => send(selected, fetched))
@@ -500,8 +495,8 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     onSentToReplay?.();
   };
   useShortcuts({
-    'request.sendToReplay': () => sendRequest(flow, detail, openInReplay),
-    'request.sendToFuzzer': () => sendRequest(flow, detail, sendToFuzzer),
+    'request.sendToReplay': () => sendRequest(flow, openInReplay),
+    'request.sendToFuzzer': () => sendRequest(flow, sendToFuzzer),
   }, Boolean(flow));
 
   if (!flow) {
@@ -565,11 +560,11 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     sendToReplay: () => {
       const captured = menu.target;
       if (!captured) return;
-      sendRequest(captured.flow, captured.detail, openInReplay);
+      sendRequest(captured.flow, openInReplay);
     },
     sendToFuzzer: () => {
       const captured = menu.target;
-      if (captured) sendRequest(captured.flow, captured.detail, sendToFuzzer);
+      if (captured) sendRequest(captured.flow, sendToFuzzer);
     },
     copyAs: codegen.buildMenu({ flow_id: menuFlow.id }),
     pluginActions: pluginMenu,
@@ -759,7 +754,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
           <InspectorPanel
             selection={selection}
             request={isTcp ? '' : rawRequest(flow, detail)}
-            onEditInReplay={isTcp ? undefined : () => sendRequest(flow, detail, openInReplay)}
+            onEditInReplay={isTcp ? undefined : () => sendRequest(flow, openInReplay)}
           />
         }
       />

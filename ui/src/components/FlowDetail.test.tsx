@@ -9,7 +9,7 @@ import { FlowDetailView } from './FlowDetail';
 import { toHex } from './bodyFormat';
 import type { FlowSummary } from '../api/types';
 import { getTabs, resetTabs } from '../tabs/replayStore';
-import { resetTarget, subscribeTarget, type FuzzerTarget } from '../tabs/fuzzerStore';
+import { getFuzzerWorkspace, resetTarget, subscribeTarget, type FuzzerTarget } from '../tabs/fuzzerStore';
 
 const httpFlow: FlowSummary = {
   id: 'h1',
@@ -199,6 +199,7 @@ describe('FlowDetailView', () => {
     render(<FlowDetailView flow={codeFlow} onSentToReplay={onSentToReplay} />);
     await waitFor(() => expect(bodyText(1)).toBe('const answer = 42;'));
     fireShortcut('request.sendToReplay');
+    await waitFor(() => expect(getTabs()).toHaveLength(1));
     expect(getTabs()[0].text).toContain('POST /x HTTP/1.1');
     expect(getTabs()[0].text).toContain('Content-Type: text/html');
     expect(getTabs()[0].text).toContain('<main class="card">Hi</main>');
@@ -207,10 +208,67 @@ describe('FlowDetailView', () => {
     const sent: { target: FuzzerTarget | null } = { target: null };
     const unsubscribe = subscribeTarget((target) => { sent.target = target; });
     fireShortcut('request.sendToFuzzer');
+    await waitFor(() => expect(sent.target).not.toBeNull());
     unsubscribe();
     expect(sent.target?.template).toBe(getTabs()[0].text.replace(/\r\n/g, '\n'));
     expect(sent.target?.url).toBe('https://api.test');
     expect(screen.getByText(t('toast.requestTransferred', { tool: 'Fuzzer' }))).toBeTruthy();
+  });
+
+  describe.each(['Replay', 'Fuzzer'] as const)('sending unmasked requests to %s', (tool) => {
+    it.each(['menu', 'shortcut'] as const)('preserves sensitive headers through the %s while the detail stays masked', async (action) => {
+      vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input));
+        const reveal = url.searchParams.get('reveal') === 'true';
+        return { ok: true, status: 200, json: async () => ({
+          ...httpFlow,
+          request_headers: [
+            ['Host', 'api.test'],
+            ['Authorization', reveal ? 'Bearer original-token' : '<redacted>'],
+            ['Cookie', reveal ? 'session=original-session' : '<redacted>'],
+          ],
+          request_body: 'original body', response_headers: [], response_body: '',
+        }) } as Response;
+      });
+      render(<FlowDetailView flow={httpFlow} />);
+      await waitFor(() => expect(screen.getAllByText('<redacted>')).toHaveLength(2));
+      expect(screen.getByRole('checkbox')).toHaveProperty('checked', false);
+
+      if (action === 'menu') {
+        fireEvent.contextMenu(half(0)!);
+        fireEvent.click(screen.getByRole('menuitem', { name: t(`menu.sendTo${tool}`) }));
+      } else {
+        fireShortcut(`request.sendTo${tool}`);
+      }
+
+      const sentText = () => tool === 'Replay'
+        ? getTabs()[0]?.text
+        : getFuzzerWorkspace().tabs[0]?.template;
+      await waitFor(() => expect(sentText()).toContain('Authorization: Bearer original-token'));
+      expect(sentText()).toContain('Cookie: session=original-session');
+      expect(sentText()).toContain('original body');
+      expect(sentText()).not.toContain('<redacted>');
+      expect(screen.getAllByText('<redacted>')).toHaveLength(2);
+      expect(screen.queryByText('Bearer original-token')).toBeNull();
+      const request = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes('/replay-request'));
+      expect(new URL(String(request?.[0])).searchParams.get('reveal')).toBe('true');
+    });
+  });
+
+  it('preserves the selected request charset when fetching the unmasked editor request', async () => {
+    render(<FlowDetailView flow={httpFlow} />);
+    await waitFor(() => expect(bodyText(1)).toBe('ok'));
+    await userEvent.selectOptions(screen.getByRole('combobox', {
+      name: t('detail.charsetFor', { pane: t('detail.request') }),
+    }), 'cp949');
+    await waitFor(() => expect(bodyText(0)).toBe('decoded request as cp949'));
+    fireShortcut('request.sendToReplay');
+    await waitFor(() => expect(getTabs()).toHaveLength(1));
+    expect(getTabs()[0].text).toContain('decoded request as cp949');
+    const request = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes('/replay-request'));
+    const params = new URL(String(request?.[0])).searchParams;
+    expect(params.get('request_charset')).toBe('cp949');
+    expect(params.get('reveal')).toBe('true');
   });
 
   it('shows the success toast only after the request finishes transferring', async () => {
@@ -250,7 +308,7 @@ describe('FlowDetailView', () => {
     expect(getTabs()).toHaveLength(0);
     rerender(<Activity mode="visible"><FlowDetailView flow={httpFlow} /></Activity>);
     fireShortcut('request.sendToReplay');
-    expect(getTabs()).toHaveLength(1);
+    await waitFor(() => expect(getTabs()).toHaveLength(1));
   });
 
   const half = (index: number) => document.querySelectorAll('.detail-half')[index];
