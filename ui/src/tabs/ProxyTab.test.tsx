@@ -625,7 +625,7 @@ describe('ProxyTab', () => {
     expect(screen.queryByText(t('toast.searchEmpty'))).toBeNull();
   });
 
-  it('keeps search progress when a background reload supersedes a pending user search', async () => {
+  it('finishes a slow user search before coalescing incoming traffic into one refresh', async () => {
     const user = userEvent.setup();
     render(<ProxyTab />);
     await screen.findByText('seeded.test');
@@ -636,19 +636,33 @@ describe('ProxyTab', () => {
     await screen.findByRole('status', { name: t('proxy.searching') });
 
     const searchCalls = calls.filter(({ url }) => url.includes('search=needle')).length;
-    MockSocket.instances[0].emit('flow.request', { ...live, host: 'needle-live.test' });
-    await waitFor(() => expect(
-      calls.filter(({ url }) => url.includes('search=needle')).length,
-    ).toBeGreaterThan(searchCalls));
+    const original = calls.find(({ url }) => url.includes('search=needle'))!;
+    for (let index = 0; index < 3; index += 1) {
+      act(() => MockSocket.instances[0].emit('flow.request', { ...live, id: `slow-${index}` }));
+      await act(async () => { await new Promise((resolve) => window.setTimeout(resolve, 550)); });
+    }
+    expect(calls.filter(({ url }) => url.includes('search=needle'))).toHaveLength(searchCalls);
+    expect(original.signal?.aborted).toBe(false);
     expect(screen.getByRole('status', { name: t('proxy.searching') })).toBeTruthy();
 
+    let finishBackground!: (response: Response) => void;
+    searchResponse = new Promise<Response>((resolve) => { finishBackground = resolve; });
     finishSearch(jsonResponse({
-      items: [{ ...seeded, id: 'background', host: 'needle-live.test' }],
-      count: 1,
+      items: [{ ...seeded, host: 'needle-first.test' }], anchor: 12, count: 1,
     }));
+    await waitFor(() => expect(document.querySelector('.flow-table tbody tr')?.textContent)
+      .toContain('needle-first.test'));
     await waitFor(() => expect(
       screen.queryByRole('status', { name: t('proxy.searching') }),
     ).toBeNull());
+    await waitFor(() => expect(
+      calls.filter(({ url }) => url.includes('search=needle')),
+    ).toHaveLength(searchCalls + 1));
+    const refresh = calls.filter(({ url }) => url.includes('search=needle')).at(-1)!;
+    expect(new URL(refresh.url).searchParams.has('anchor')).toBe(false);
+    finishBackground(jsonResponse({ items: [{ ...live, host: 'needle-live.test' }], count: 1 }));
+    await waitFor(() => expect(document.querySelector('.flow-table tbody tr')?.textContent)
+      .toContain('needle-live.test'));
   });
 
   it('keeps search progress while clearing a pending search restores history', async () => {

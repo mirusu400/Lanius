@@ -39,6 +39,10 @@ DEFAULT_ANNOTATION_COLOR = "yellow"
 COMPACT_DELETE_BATCH_SIZE = 250
 EGRESS_IP_ESTIMATE_GRACE_SECONDS = 300
 
+
+class HistoryQueryCancelled(Exception):
+    """The requesting client no longer needs this history page."""
+
 from .schema import migrate
 from .search_index import MIGRATION as SEARCH_MIGRATION
 from typing import TYPE_CHECKING
@@ -1241,22 +1245,42 @@ class FlowStore:
     def _history_reader(
         self,
         scope_predicate: Callable[[str | None, str | None, int | None, str | None], bool] | None,
+        cancel_event: threading.Event | None = None,
     ) -> Iterator[sqlite3.Connection]:
-        with self._history_lock:
+        # A disconnected request must leave the queue as well as stop active
+        # SQL. Never interrupt the shared connection from another thread:
+        # it might already be serving a different client by then.
+        while not self._history_lock.acquire(timeout=0.05):
+            if cancel_event is not None and cancel_event.is_set():
+                raise HistoryQueryCancelled
+        try:
+            if cancel_event is not None and cancel_event.is_set():
+                raise HistoryQueryCancelled
             if scope_predicate is not None:
                 self._history_conn.create_function(
                     "lanius_history_scope", 4,
                     lambda scheme, host, port, path: int(scope_predicate(scheme, host, port, path)),
                 )
             try:
+                if cancel_event is not None:
+                    self._history_conn.set_progress_handler(cancel_event.is_set, 1000)
                 yield self._history_conn
+            except sqlite3.OperationalError as exc:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise HistoryQueryCancelled from exc
+                raise
             finally:
+                if cancel_event is not None:
+                    self._history_conn.set_progress_handler(None, 0)
                 # Do not retain the engine or reuse a previous request's scope.
                 if scope_predicate is not None:
                     self._history_conn.create_function("lanius_history_scope", 4, None)
+        finally:
+            self._history_lock.release()
 
     def page_summaries(
         self, *, limit: int = 200, offset: int = 0,
+        cancel_event: threading.Event | None = None,
         anchor: int | None = None,
         cursor: str | None = None,
         sort_by: str = "started_at", sort_desc: bool = True,
@@ -1291,14 +1315,20 @@ class FlowStore:
             raise ValueError("cursor is only available for newest-first history")
         direction = "DESC" if sort_desc else "ASC"
         order = f"{sort_columns[sort_by]} {direction}, flows.rowid {direction}"
+        # One/two-character terms have no trigram postings. In newest-first
+        # order, scan text by history row and stop as soon as the page is full
+        # instead of materializing matches across the entire project.
+        folded_search = (search or "").casefold()
+        ordered_text_scan = 0 < len(folded_search) < 3 and default_sort
         where, params = self._flow_filters(
-            host=host, method=method, status_code=status_code, search=search,
+            host=host, method=method, status_code=status_code,
+            search=None if ordered_text_scan else search,
             methods=methods, status_classes=status_classes,
             extensions=extensions, exclude_extensions=exclude_extensions,
             bookmarked_only=bookmarked_only, annotation_color=annotation_color,
         )
         scope_sql = "lanius_history_scope(scheme, host, port, path) = 1"
-        with self._history_reader(scope_predicate) as conn:
+        with self._history_reader(scope_predicate, cancel_event) as conn:
             if anchor is None:
                 anchor = int(conn.execute(
                     "SELECT COALESCE(MAX(rowid), 0) FROM flow_history"
@@ -1311,21 +1341,32 @@ class FlowStore:
                 cursor_sql, cursor_params = _cursor_filter(cursor)
                 where += f" AND {cursor_sql}"
                 params.extend(cursor_params)
+            if ordered_text_scan:
+                where += (" AND EXISTS (SELECT 1 FROM flow_search AS hit"
+                          " WHERE hit.rowid = flows.rowid AND instr(hit.text, ?) > 0)")
+                params.append(folded_search)
             # A common search term can match millions of rows. Probe a
             # bounded slice in display order first, so the first few pages do
             # not materialize every matching FTS rowid. If the slice does
             # not prove has_more, the complete index query below decides.
             needed = offset + limit + 1
-            probe_search = bool(search) and needed <= 1000
-            if probe_search and search and (scope_predicate is not None or not default_sort):
-                # Sorting/scoping the history slice can itself be expensive.
-                # A bounded FTS check avoids that work for rare/absent terms.
-                # Without a literal trigram this check would scan all text;
-                # leave those queries on the existing full-scan path instead.
-                probe_search = bool(re.search(r"[^*?\[\x00]{3}", search.casefold())) and conn.execute(
-                    "SELECT 1 FROM flow_search WHERE text GLOB ? LIMIT 1 OFFSET ?",
-                    (f"*{_glob_literal(search.casefold())}*", needed - 1),
-                ).fetchone() is not None
+            probe_search = bool(search) and not ordered_text_scan and needed <= 1000
+            if probe_search and search:
+                folded = search.casefold()
+                if len(folded) >= 3 and "\x00" not in folded:
+                    # MATCH reads postings without loading stored HTTP text.
+                    # Skip the body-heavy recent probe for rare/absent terms,
+                    # even in the default order. This is only a candidate
+                    # count; instr/GLOB below still decide literal matches.
+                    phrase = '"' + folded.replace('"', '""') + '"'
+                    probe_search = conn.execute(
+                        "SELECT 1 FROM flow_search WHERE flow_search MATCH ? LIMIT 1 OFFSET ?",
+                        (phrase, needed - 1),
+                    ).fetchone() is not None
+                elif scope_predicate is not None or not default_sort:
+                    # Short terms have no trigram. Avoid scanning all text
+                    # just to decide whether to sort/scope a recent slice.
+                    probe_search = False
             if probe_search and search:
                 base_where, base_params = self._flow_filters(
                     host=host, method=method, status_code=status_code,

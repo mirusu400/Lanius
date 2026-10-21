@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from app.db.store import FlowRecord, FlowStore
+from app.db.store import FlowRecord, FlowStore, HistoryQueryCancelled
 
 
 SORTS = {
@@ -164,4 +164,93 @@ def test_history_reader_sees_external_writes_clear_and_restore(tmp_path):
     finally:
         source.close()
         peer.close()
+        store.close()
+
+
+def test_cancelled_search_leaves_queue_without_waiting_for_active_reader(tmp_path):
+    store = FlowStore(tmp_path / "cancel-queued.sqlite")
+    store.upsert(FlowRecord(id="first"))
+    entered, release, cancelled = threading.Event(), threading.Event(), threading.Event()
+
+    def pause(*_args):
+        entered.set()
+        assert release.wait(timeout=5)
+        return True
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            active = pool.submit(store.page_summaries, scope_predicate=pause)
+            try:
+                assert entered.wait(timeout=2)
+                queued = pool.submit(store.page_summaries, cancel_event=cancelled)
+                cancelled.set()
+                with pytest.raises(HistoryQueryCancelled):
+                    queued.result(timeout=1)
+            finally:
+                release.set()
+            assert active.result(timeout=2)["items"][0]["id"] == "first"
+        assert store.page_summaries()["items"][0]["id"] == "first"
+    finally:
+        release.set()
+        store.close()
+
+
+def test_cancellation_interrupts_sql_and_cleans_up_reader(history):
+    cancelled = threading.Event()
+    visited = 0
+
+    def cancel_during_scan(*_args):
+        nonlocal visited
+        visited += 1
+        cancelled.set()
+        return False
+
+    with pytest.raises(HistoryQueryCancelled):
+        history.page_summaries(scope_predicate=cancel_during_scan, cancel_event=cancelled)
+    assert 0 < visited < 1430
+    assert len(history.page_summaries(limit=7)["items"]) == 7
+
+
+def test_already_cancelled_search_does_not_execute_sql(history):
+    cancelled = threading.Event()
+    cancelled.set()
+    with pytest.raises(HistoryQueryCancelled):
+        history.page_summaries(search="common", cancel_event=cancelled)
+    assert history.page_summaries(search="common", limit=7)["has_more"]
+
+
+@pytest.mark.parametrize("term,expected", [("oldest", ["0"]), ("absent-needle", [])])
+def test_rare_search_skips_body_probe_in_default_order(history, term, expected):
+    statements = []
+    history._history_conn.set_trace_callback(statements.append)
+    try:
+        page = history.page_summaries(search=term, limit=7)
+    finally:
+        history._history_conn.set_trace_callback(None)
+    assert [item["id"] for item in page["items"]] == expected
+    assert any("flow_search MATCH" in sql for sql in statements)
+    assert not any("WITH recent" in sql for sql in statements)
+
+
+def test_short_search_stops_reading_text_when_page_is_full(tmp_path):
+    store = FlowStore(tmp_path / "short-search.sqlite")
+    try:
+        store.upsert_many([
+            FlowRecord(id=str(i), started_at=float(i), response_body=b"qq" if i % 3 == 0 else b"body")
+            for i in range(2000)
+        ])
+        visited = 0
+
+        def counted_instr(text, needle):
+            nonlocal visited
+            visited += 1
+            return text.find(needle) + 1
+
+        store._history_conn.create_function("instr", 2, counted_instr)
+        page = store.page_summaries(search="qq", limit=7)
+        assert [item["id"] for item in page["items"]] == [str(i) for i in range(1998, 1977, -3)]
+        assert page["has_more"]
+        # Eight hits (including has_more) are within the newest 24 rows.
+        assert 0 < visited <= 24
+    finally:
         store.close()

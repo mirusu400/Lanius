@@ -80,6 +80,7 @@ from ..events import EventBroker
 from ..processes import list_processes
 from ..proxy import ProxyEngine, ProxyStartError, local_capture_state
 from ..preview import MAX_PREVIEW_BYTES, response_preview
+from .history import history_page
 
 logger = logging.getLogger(__name__)
 
@@ -1409,6 +1410,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/flows")
     async def list_flows(
+        request: Request,
         limit: int = Query(100, ge=1, le=1000),
         offset: int = Query(0, ge=0),
         anchor: int | None = Query(None, ge=0),
@@ -1430,8 +1432,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         annotation_color: str | None = None,
     ) -> dict[str, Any]:
         try:
-            page = await asyncio.to_thread(
-                store.page_summaries,
+            page = await history_page(
+                request, store,
                 limit=limit,
                 offset=offset,
                 anchor=anchor,

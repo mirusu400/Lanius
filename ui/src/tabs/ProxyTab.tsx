@@ -126,6 +126,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   const nextReloadShowsProgress = useRef(false);
   const searchReloadTimer = useRef<number | null>(null);
   const scopeReloadTimer = useRef<number | null>(null);
+  const backgroundReloadPending = useRef(false);
   const previousSearch = useRef(filters.search);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
@@ -152,7 +153,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
     nextReloadShowsProgress.current = true;
   };
 
-  const reload = useCallback(async ({ showProgress = false } = {}) => {
+  const reload = useCallback(async ({ showProgress = false, background = false } = {}) => {
     // A scheduled search already includes incoming traffic. A background
     // response must not settle progress before that search has even started.
     if (searchReloadTimer.current !== null) {
@@ -160,15 +161,23 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
       window.clearTimeout(searchReloadTimer.current);
       searchReloadTimer.current = null;
     }
+    // Let a slow query finish even when capture produces events faster than
+    // it can run. Coalesce those events into one refresh after completion.
+    if (background && historyRequest.current) {
+      backgroundReloadPending.current = true;
+      return;
+    }
+    backgroundReloadPending.current = false;
+    if (background && historyPageRef.current === 0) {
+      historyAnchor.current = undefined;
+      historyCursors.current = {};
+    }
     invalidateHistoryRequest();
     const generation = requestGeneration.current;
     const controller = new AbortController();
     historyRequest.current = controller;
     const searchKey = JSON.stringify([filtersRef.current, historyPageRef.current, historyPageSizeRef.current, historySortRef.current]);
     if (showProgress && filtersRef.current.search?.trim()) pendingSearchNotification.current = searchKey;
-    // A background refresh can supersede an interactive request. Do not let
-    // it hide progress that is already explaining the user's wait; the newest
-    // request will clear the indicator when it settles.
     if (showProgress) setQueryLoading(true);
     setHistoryLoading(true);
     try {
@@ -202,6 +211,12 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
         setLoading(false);
         setHistoryLoading(false);
         setQueryLoading(false);
+        if (backgroundReloadPending.current && scopeReloadTimer.current === null) {
+          scopeReloadTimer.current = window.setTimeout(() => {
+            scopeReloadTimer.current = null;
+            void reload({ background: true });
+          }, 500);
+        }
       }
     }
   }, [historySort, invalidateHistoryRequest, showToast, t]);
@@ -305,7 +320,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
     if (scopeReloadTimer.current !== null) return;
     scopeReloadTimer.current = window.setTimeout(() => {
       scopeReloadTimer.current = null;
-      void reload();
+      void reload({ background: true });
     }, 500);
   };
 
