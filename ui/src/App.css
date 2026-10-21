@@ -5444,44 +5444,99 @@ pre.response-preview-text {
   width: 100px;
 }
 
-.listener-list {
-  display: grid;
-  gap: 8px;
-  margin: 14px 0;
+.listener-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.listener-item,
+.listener-heading h3 {
+  margin: 0;
+}
+
+.listener-list {
+  margin: 14px 0;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.listener-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+}
+
+.listener-table th,
+.listener-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.listener-table th {
+  background: var(--bg-alt);
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.listener-table th:last-child {
+  text-align: right;
+}
+
+.listener-table th:not(:first-child),
+.listener-table td:not(:first-child) {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.listener-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.listener-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.listener-address,
+.listener-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.listener-address {
+  flex-wrap: wrap;
+}
+
+.listener-address > .mono {
+  overflow-wrap: anywhere;
+}
+
+.listener-error {
+  margin: 4px 0 0;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.listener-actions {
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .listener-editor {
+  margin-top: 14px;
   background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 12px;
 }
 
-.listener-summary,
-.listener-actions {
-  align-items: center;
-  display: flex;
+.listener-editor .listener-actions {
   flex-wrap: wrap;
-  gap: 8px;
-}
-
-.listener-summary {
-  min-height: 28px;
-}
-
-.listener-summary > .mono {
-  font-weight: 600;
-  margin-right: auto;
-}
-
-.listener-actions {
-  justify-content: flex-end;
   margin-top: 10px;
-}
-
-.listener-editor {
-  margin-top: 14px;
 }
 
 .listener-editor h4 {

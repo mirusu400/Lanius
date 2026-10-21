@@ -991,6 +991,7 @@ const en = {
   'listener.help':
     'Addresses where the proxy accepts connections. Add listeners for multiple tools, devices, or interfaces; they share this project’s proxy settings.',
   'listener.add': 'Add listener',
+  'listener.actions': 'Actions',
   'listener.addTitle': 'Add proxy listener',
   'listener.edit': 'Edit',
   'listener.editTitle': 'Edit proxy listener',
@@ -2383,6 +2384,7 @@ const ko: Catalogue = {
   'listener.help':
     '프록시가 연결을 받는 주소입니다. 여러 도구·기기·인터페이스용 리스너를 추가할 수 있으며 모두 이 프로젝트의 프록시 설정을 공유합니다.',
   'listener.add': '리스너 추가',
+  'listener.actions': '작업',
   'listener.addTitle': '프록시 리스너 추가',
   'listener.edit': '편집',
   'listener.editTitle': '프록시 리스너 편집',

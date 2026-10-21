@@ -174,56 +174,74 @@ export function ListenerSection() {
 
   return (
     <section>
-      <h3>{t('listener.section')}</h3>
+      <div className="listener-heading">
+        <h3>{t('listener.section')}</h3>
+        {!draft && (
+          <button type="button" disabled={busy || state.listeners.length >= 16} onClick={beginAdd}>
+            {t('listener.add')}
+          </button>
+        )}
+      </div>
       <p className="muted">{t('listener.help')}</p>
 
       <div className="listener-list">
-        {state.listeners.map((listener) => (
-          <div className="listener-item" key={listener.id}>
-            <div className="listener-summary">
-              <span className="mono">{listener.host}:{listener.port}</span>
-              <span className={listener.running ? 'pill ok' : 'pill bad'}>
-                {listener.running ? t('listener.running') : t('listener.stopped')}
-              </span>
-              {listener.primary && <span className="pill">{t('listener.primary')}</span>}
-              {listener.exposed && <span className="pill warn">{t('listener.exposedShort')}</span>}
-            </div>
-            {listener.error && (
-              <div className="banner error">
-                {t('listener.down', { message: listener.error })}
-              </div>
-            )}
-            <div className="listener-actions">
-              {!listener.primary && (
-                <button
-                  type="button"
-                  disabled={busy || !listener.running}
-                  onClick={() => void makePrimary(listener)}
-                >
-                  {t('listener.makePrimary')}
-                </button>
-              )}
-              <button type="button" disabled={busy} onClick={() => beginEdit(listener)}>
-                {t('listener.edit')}
-              </button>
-              <button
-                type="button"
-                className="danger"
-                disabled={busy || state.listeners.length === 1}
-                onClick={() => void remove(listener)}
-              >
-                {t('common.delete')}
-              </button>
-            </div>
-          </div>
-        ))}
+        <table className="listener-table" aria-label={t('listener.section')}>
+          <thead>
+            <tr>
+              <th scope="col">{t('common.address')}</th>
+              <th scope="col">{t('common.status')}</th>
+              <th scope="col">{t('listener.actions')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {state.listeners.map((listener) => (
+              <tr key={listener.id}>
+                <td>
+                  <div className="listener-address">
+                    <span className="mono">{listener.host}:{listener.port}</span>
+                    {listener.primary && <span className="pill">{t('listener.primary')}</span>}
+                    {listener.exposed && <span className="pill warn">{t('listener.exposedShort')}</span>}
+                  </div>
+                  {listener.error && (
+                    <p className="listener-error">
+                      {t('listener.down', { message: listener.error })}
+                    </p>
+                  )}
+                </td>
+                <td>
+                  <span className={listener.running ? 'pill ok' : 'pill bad'}>
+                    {listener.running ? t('listener.running') : t('listener.stopped')}
+                  </span>
+                </td>
+                <td>
+                  <div className="listener-actions">
+                    {!listener.primary && (
+                      <button
+                        type="button"
+                        disabled={busy || !listener.running}
+                        onClick={() => void makePrimary(listener)}
+                      >
+                        {t('listener.makePrimary')}
+                      </button>
+                    )}
+                    <button type="button" disabled={busy} onClick={() => beginEdit(listener)}>
+                      {t('listener.edit')}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      disabled={busy || state.listeners.length === 1}
+                      onClick={() => void remove(listener)}
+                    >
+                      {t('common.delete')}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-
-      {!draft && (
-        <button type="button" disabled={busy || state.listeners.length >= 16} onClick={beginAdd}>
-          {t('listener.add')}
-        </button>
-      )}
 
       {draft && (
         <div className="listener-editor">
