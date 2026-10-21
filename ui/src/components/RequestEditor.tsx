@@ -41,6 +41,7 @@ export function RequestEditor({
   extraControls,
   onSelectionChange,
   historyKey,
+  highlightPattern,
 }: {
   /** The raw request. Always exactly what will be sent. */
   value: string;
@@ -56,6 +57,8 @@ export function RequestEditor({
   onSelectionChange?: () => void;
   /** A different document must not inherit the previous document's undo stack. */
   historyKey?: string;
+  /** A global pattern to emphasize in the Raw and Pretty views. */
+  highlightPattern?: RegExp;
 }) {
   const t = useT();
   const [view, setView] = useState<BodyView>('pretty');
@@ -143,11 +146,12 @@ export function RequestEditor({
           onMouseUp={onSelectionChange}
           showLineEndings={showLineEndings}
           wrap={wrap}
+          highlightPattern={highlightPattern}
         />
       ) : (
         <div className="request-editor-view" onContextMenu={onContextMenu}>
           {view === 'pretty'
-            ? <HighlightedMessage className={className || ''} text={shown} headers={headers} showLineEndings={showLineEndings} wrap={wrap} />
+            ? <HighlightedMessage className={className || ''} text={shown} headers={headers} showLineEndings={showLineEndings} wrap={wrap} highlightPattern={highlightPattern} />
             : <pre className={className} data-view={view}>{shown}</pre>}
           {truncated > 0 && (
             <p className="muted">

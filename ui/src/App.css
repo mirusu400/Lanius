@@ -2165,6 +2165,12 @@ pre.raw-view:focus-visible {
   font: inherit;
 }
 
+.syntax-code .code-highlight {
+  border-radius: 2px;
+  background: #ffe36e;
+  color: #17212d;
+}
+
 .code-display-controls {
   display: inline-flex;
   flex: 0 0 auto;

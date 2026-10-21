@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Compartment, EditorState } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, drawSelection, keymap, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 import { defaultKeymap, selectAll } from '@codemirror/commands';
@@ -30,7 +30,7 @@ function lowerBound(starts: Uint32Array, value: number): number {
 }
 
 /** Decorations only cover rendered ranges, including partial long lines. */
-function decorations(starts: Uint32Array, queryLength: number, active: number | null, offset: number, endings: boolean) {
+function decorations(starts: Uint32Array, queryLength: number, active: number | null, offset: number, endings: boolean, patternStarts: Uint32Array, patternEnds: Uint32Array) {
   return ViewPlugin.fromClass(class {
     decorations: DecorationSet;
     constructor(view: EditorView) { this.decorations = this.build(view); }
@@ -38,6 +38,10 @@ function decorations(starts: Uint32Array, queryLength: number, active: number | 
     build(view: EditorView) {
       const ranges = [];
       for (const { from, to } of view.visibleRanges) {
+        for (let i = lowerBound(patternEnds, from + 1); i < patternStarts.length && patternStarts[i] < to; i++) {
+          ranges.push(Decoration.mark({ tagName: 'mark', class: 'code-highlight' })
+            .range(Math.max(from, patternStarts[i]), Math.min(to, patternEnds[i])));
+        }
         for (let i = lowerBound(starts, from - queryLength + 1); i < starts.length && starts[i] < to; i++) {
           const start = Math.max(from, starts[i]), end = Math.min(to, starts[i] + queryLength);
           if (end > start) ranges.push(Decoration.mark({ tagName: 'mark', class: i + offset === active ? 'find-current' : '', attributes: { 'data-find-index': String(i + offset) } }).range(start, end));
@@ -54,9 +58,10 @@ function decorations(starts: Uint32Array, queryLength: number, active: number | 
   }, { decorations: value => value.decorations });
 }
 
-export default function LargeTextView({ text, className, query = '', activeIndex = null, offset = 0, showLineEndings = false, wrap = true, onMatchCount }: {
+export default function LargeTextView({ text, className, query = '', activeIndex = null, offset = 0, showLineEndings = false, wrap = true, onMatchCount, highlightPattern }: {
   text: string; className: string; query?: string; activeIndex?: number | null; offset?: number;
   showLineEndings?: boolean; wrap?: boolean; onMatchCount?: (count: number) => void;
+  highlightPattern?: RegExp;
 }) {
   const t = useT();
   const mount = useRef<HTMLDivElement>(null);
@@ -69,6 +74,10 @@ export default function LargeTextView({ text, className, query = '', activeIndex
   const [found, setFound] = useState<{ text: string; query: string; starts: Uint32Array } | null>(null);
   const ready = readyText === text;
   const matchesReady = !query || (found?.text === text && found.query === query);
+  const [patternStarts, patternEnds] = useMemo(() => {
+    const matches = highlightPattern ? Array.from(text.matchAll(highlightPattern)) : [];
+    return [Uint32Array.from(matches, match => match.index), Uint32Array.from(matches, match => match.index + match[0].length)];
+  }, [text, highlightPattern]);
 
   useEffect(() => { initialWrap.current = wrap; }, [wrap]);
 
@@ -135,10 +144,10 @@ export default function LargeTextView({ text, className, query = '', activeIndex
     if (!ready || !view) return;
     const starts = found?.text === text && found.query === query ? found.starts : new Uint32Array();
     const index = activeIndex === null ? -1 : activeIndex - offset;
-    const effects = [marksConfig.current.reconfigure(decorations(starts, query.length, activeIndex, offset, showLineEndings))];
+    const effects = [marksConfig.current.reconfigure(decorations(starts, query.length, activeIndex, offset, showLineEndings, patternStarts, patternEnds))];
     if (index >= 0 && index < starts.length) effects.push(EditorView.scrollIntoView(starts[index], { y: 'center' }));
     view.dispatch({ effects });
-  }, [ready, text, query, found, activeIndex, offset, showLineEndings]);
+  }, [ready, text, query, found, activeIndex, offset, showLineEndings, patternStarts, patternEnds]);
 
   return <div className={`${className} large-text-view`} aria-busy={!ready || !matchesReady}>
     <div ref={mount} className="large-text-mount" style={{ visibility: ready ? 'visible' : 'hidden' }} />

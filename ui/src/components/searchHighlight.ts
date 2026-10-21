@@ -22,6 +22,21 @@ export function matchCount(text: string, query: string): number {
 /** Add marks to trusted syntax-highlighter markup, including matches crossing token spans. */
 export function markHighlightedHtml(html: string, query: string, activeIndex: number | null, offset = 0): string {
   if (!query) return html.replace(/\r/g, '&#13;');
+  return markHtmlMatches(html, text => findMatches(text, query), (mark, index) => {
+    mark.dataset.findIndex = String(offset + index);
+    if (offset + index === activeIndex) mark.className = 'find-current';
+  });
+}
+
+/** Highlight a global pattern without changing syntax tokens or source text. */
+export function markPatternHighlightedHtml(html: string, pattern?: RegExp): string {
+  if (!pattern) return html;
+  return markHtmlMatches(html, text => Array.from(text.matchAll(pattern), match => ({
+    start: match.index, end: match.index + match[0].length,
+  })), mark => { mark.className = 'code-highlight'; });
+}
+
+function markHtmlMatches(html: string, find: (text: string) => MatchRange[], decorate: (mark: HTMLElement, index: number) => void): string {
   const template = document.createElement('template');
   // HTML parsing normalises literal CRLF. Entities preserve captured raw bytes.
   template.innerHTML = html.replace(/\r/g, '&#13;');
@@ -29,7 +44,7 @@ export function markHighlightedHtml(html: string, query: string, activeIndex: nu
   const nodes: Text[] = [];
   let node: Node | null;
   while ((node = walker.nextNode())) nodes.push(node as Text);
-  const matches = findMatches(template.content.textContent || '', query);
+  const matches = find(template.content.textContent || '');
   if (!matches.length) return html.replace(/\r/g, '&#13;');
   let position = 0;
   let index = 0;
@@ -45,8 +60,7 @@ export function markHighlightedHtml(html: string, query: string, activeIndex: nu
       const endInNode = Math.min(value.length, match.end - position);
       if (startInNode > cursor) replacement.append(value.slice(cursor, startInNode));
       const mark = document.createElement('mark');
-      mark.dataset.findIndex = String(offset + i);
-      if (offset + i === activeIndex) mark.className = 'find-current';
+      decorate(mark, i);
       mark.textContent = value.slice(startInNode, endInNode);
       replacement.append(mark);
       cursor = endInNode;

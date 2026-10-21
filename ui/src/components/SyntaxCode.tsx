@@ -8,7 +8,7 @@ import xml from 'highlight.js/lib/languages/xml';
 
 import { splitMessage } from './bodyFormat';
 import { bodyLanguage, HIGHLIGHT_LIMIT, type SyntaxHeaders, type SyntaxLanguage } from './syntaxLanguage';
-import { markHighlightedHtml } from './searchHighlight';
+import { markHighlightedHtml, markPatternHighlightedHtml } from './searchHighlight';
 import { UndoableTextarea } from './UndoableText';
 import { LoadingPane } from './Spinner';
 import { LARGE_TEXT_THRESHOLD } from './textDocumentModel';
@@ -117,7 +117,7 @@ function messageHtml(text: string, headers: SyntaxHeaders, responsePath?: string
 }
 
 /** An editable raw message with inert syntax colours behind the textarea. */
-export function HighlightedEditor({ text, onChange, headers, responsePath, className, containerClassName, readOnly = false, label, historyKey, editorRef, onContextMenu, onSelect, onKeyUp, onMouseUp, showLineEndings = false, wrap = true }: {
+export function HighlightedEditor({ text, onChange, headers, responsePath, className, containerClassName, readOnly = false, label, historyKey, editorRef, onContextMenu, onSelect, onKeyUp, onMouseUp, showLineEndings = false, wrap = true, highlightPattern }: {
   text: string;
   onChange: (text: string) => void;
   headers: SyntaxHeaders;
@@ -134,8 +134,9 @@ export function HighlightedEditor({ text, onChange, headers, responsePath, class
   onMouseUp?: React.MouseEventHandler<HTMLTextAreaElement>;
   showLineEndings?: boolean;
   wrap?: boolean;
+  highlightPattern?: RegExp;
 }) {
-  const highlight = useMemo(() => withLineEndings(messageHtml(text, headers, responsePath), showLineEndings, true), [text, headers, responsePath, showLineEndings]);
+  const highlight = useMemo(() => withLineEndings(markPatternHighlightedHtml(messageHtml(text, headers, responsePath), highlightPattern), showLineEndings, true), [text, headers, responsePath, showLineEndings, highlightPattern]);
   const overlay = useRef<HTMLPreElement>(null);
   return <div className={`highlight-editor code-wrap-${wrap ? 'on' : 'off'}${containerClassName ? ` ${containerClassName}` : ''}`}>
     <pre ref={overlay} className="highlight-editor-overlay mono syntax-code" aria-hidden="true"><code dangerouslySetInnerHTML={{ __html: highlight }} /></pre>
@@ -209,6 +210,7 @@ export function HighlightedMessage(props: {
   activeIndex?: number | null;
   showLineEndings?: boolean;
   wrap?: boolean;
+  highlightPattern?: RegExp;
 }) {
   if (props.text.length >= LARGE_TEXT_THRESHOLD) return <Suspense fallback={<LoadingPane />}>
     <LargeTextView {...props} className={`${props.className} syntax-code`} />
@@ -227,6 +229,7 @@ function SmallHighlightedMessage({
   activeIndex = null,
   showLineEndings = false,
   wrap = true,
+  highlightPattern,
 }: {
   text: string;
   headers: SyntaxHeaders;
@@ -238,13 +241,14 @@ function SmallHighlightedMessage({
   activeIndex?: number | null;
   showLineEndings?: boolean;
   wrap?: boolean;
+  highlightPattern?: RegExp;
 }) {
   const { separator } = useMemo(() => splitMessage(text), [text]);
   const html = useMemo(() => {
     const source = http && separator
       ? messageHtml(text, headers, responsePath, fallbackMime)
       : escapeHtml(text);
-    return withLineEndings(markHighlightedHtml(source, query, activeIndex), showLineEndings);
-  }, [text, separator, http, headers, responsePath, fallbackMime, query, activeIndex, showLineEndings]);
+    return withLineEndings(markHighlightedHtml(markPatternHighlightedHtml(source, highlightPattern), query, activeIndex), showLineEndings);
+  }, [text, separator, http, headers, responsePath, fallbackMime, query, activeIndex, showLineEndings, highlightPattern]);
   return <pre {...selectableTextProps} className={`${className} syntax-code code-wrap-${wrap ? 'on' : 'off'}`}><code dangerouslySetInnerHTML={{ __html: html }} /></pre>;
 }

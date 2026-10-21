@@ -49,6 +49,8 @@ import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable
 import { useShortcut } from '../useShortcut';
 import { EditableTabTitle } from '../components/EditableTabTitle';
 
+const PAYLOAD_MARKERS = /\{\{[\s\S]*?\}\}/g;
+
 export function FuzzerTab() {
   const t = useT();
   const [workspace, setWorkspace] = useState(getFuzzerWorkspace);
@@ -472,6 +474,7 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
               label={t('fuzzer.templateLabel')}
               className="fuzzer-editor mono"
               highlightClassName="fuzzer-highlight-editor"
+              highlightPattern={PAYLOAD_MARKERS}
               value={template}
               onChange={setTemplate}
               onContextMenu={editorMenu.open}
