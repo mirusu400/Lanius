@@ -400,7 +400,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const addRequestScopeRule = useAddRequestScopeRule();
   const [detail, setDetail] = useState<FlowDetail | null>(null);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
-  const [reveal, setReveal] = useState(false);
+  const [reveal, setReveal] = useState(true);
   const layoutStorageKey = `${splitStorageKey}.layout`;
   const [exchangeDirection, setExchangeDirection] = useState<'horizontal' | 'vertical'>(() =>
     window.localStorage.getItem(layoutStorageKey) === 'horizontal' ? 'horizontal' : 'vertical');

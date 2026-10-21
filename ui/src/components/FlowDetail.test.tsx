@@ -255,6 +255,7 @@ describe('FlowDetailView', () => {
         }) } as Response;
       });
       render(<FlowDetailView flow={httpFlow} />);
+      await userEvent.click(screen.getByRole('checkbox'));
       await waitFor(() => expect(screen.getAllByText('<redacted>')).toHaveLength(2));
       expect(screen.getByRole('checkbox')).toHaveProperty('checked', false);
 
@@ -520,12 +521,13 @@ describe('FlowDetailView', () => {
     expect(url!.contains(toggle!)).toBe(false);
   });
 
-  it('can reveal the headers it masks by default', async () => {
+  it('shows sensitive headers by default and lets the user hide them', async () => {
     render(<FlowDetailView flow={httpFlow} />);
     await screen.findByText(t('detail.request'));
     const toggle = screen.getByRole('checkbox');
-    await userEvent.click(toggle);
     expect((toggle as HTMLInputElement).checked).toBe(true);
+    await userEvent.click(toggle);
+    expect((toggle as HTMLInputElement).checked).toBe(false);
   });
 
   it('lays out a JSON body, which arrives as one line', async () => {
