@@ -33,6 +33,7 @@ import { copyTextToClipboard } from '../clipboard';
 import { CodeDisplayControls } from './CodeDisplayControls';
 import { LoadingPane } from './Spinner';
 import { selectedText } from './textDocument';
+import { selectableTextProps, selectAllText } from './selectAllText';
 
 interface Props {
   flow: FlowSummary | null;
@@ -246,6 +247,7 @@ function Half({
 
   return (
     <section className="detail-half" ref={sectionRef} onContextMenu={onContextMenu}
+      onKeyDown={selectAllText}
       onPointerDownCapture={onActivate}
       onFocusCapture={onActivate}>
       <div className="detail-half-bar">
@@ -380,7 +382,7 @@ function Half({
         )}
         {view === 'hex' && (
           <>
-            <pre className="body mono"><MarkedText text={hex?.text || t('common.empty')} query={query} activeIndex={selectedIndex} /></pre>
+            <pre {...selectableTextProps} className="body mono"><MarkedText text={hex?.text || t('common.empty')} query={query} activeIndex={selectedIndex} /></pre>
             {hex && hex.truncated > 0 && (
               <p className="muted">
                 {t('detail.hexTruncated', { count: String(hex.truncated) })}

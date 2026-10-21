@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorSelection, EditorState, Text } from '@codemirror/state';
-import { documentSelection, registerTextDocument, selectedText } from './textDocument';
+import { documentSelection, registerTextDocument, selectedText, selectAllTextDocument } from './textDocument';
 import { prepareTextDocument } from './textDocumentModel';
 import { runTextDocumentTask } from './textDocumentTask';
 
@@ -34,6 +34,20 @@ describe('virtual HTTP documents', () => {
     expect(documentSelection(document.createElement('section'), visible)).toBeNull();
     unregister();
     expect(documentSelection(pane, visible)).toBeNull();
+  });
+
+  it('delegates select-all to the logical document and removes the action when unregistered', () => {
+    const viewer = document.createElement('div');
+    viewer.textContent = 'visible fragment';
+    document.body.append(viewer);
+    let selection = { text: '', start: 0, end: 0 };
+    const unregister = registerTextDocument(viewer, () => selection, () => {
+      selection = { text: SOURCE, start: 0, end: SOURCE.length };
+    });
+    expect(selectAllTextDocument(viewer)).toBe(true);
+    expect(selectedText(document.body, viewer)).toBe(SOURCE);
+    unregister();
+    expect(selectAllTextDocument(viewer)).toBe(false);
   });
 
   it('terminates a superseded worker instead of allowing stale work to complete', async () => {

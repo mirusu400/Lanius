@@ -1,4 +1,5 @@
-import { cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { renderWithI18n as render, t } from '../test-utils';
@@ -6,6 +7,7 @@ import { ResponsePreview } from './ResponsePreview';
 
 afterEach(() => {
   cleanup();
+  window.getSelection()?.removeAllRanges();
   vi.unstubAllGlobals();
 });
 
@@ -40,6 +42,35 @@ it('searches displayed CSV cells and reports the visible match count', async () 
   await waitFor(() => expect(onMatchCount).toHaveBeenLastCalledWith(2));
   expect(document.querySelectorAll('.preview-grid mark')).toHaveLength(2);
   expect(document.querySelector('.preview-grid mark.find-current')?.textContent).toBe('ONE');
+});
+
+it('limits select-all to the displayed preview grid', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: true,
+    json: async () => ({ kind: 'csv', rows: [['one', 'two'], ['three', 'four']] }),
+  })));
+  render(<><p>outside preview</p><ResponsePreview flowId="csv" /></>);
+  const cell = await screen.findByText('three');
+  await userEvent.click(cell);
+  expect(document.activeElement?.className).toBe('preview-grid-scroll');
+  fireEvent.keyDown(document.activeElement!, { key: 'a', ctrlKey: true });
+  expect(window.getSelection()?.toString()).toBe(document.querySelector('.preview-grid')?.textContent);
+  expect(window.getSelection()?.toString()).not.toContain('outside preview');
+});
+
+it('selects only the opened archive entry when its file button has focus', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: true,
+    json: async () => ({ kind: 'archive', total_entries: 2, entries: [
+      { name: 'first.txt', directory: false, size: 5, text: 'first' },
+      { name: 'second.txt', directory: false, size: 6, text: 'second' },
+    ] }),
+  })));
+  render(<ResponsePreview flowId="archive" />);
+  const file = await screen.findByRole('option', { name: /second.txt/ });
+  await userEvent.click(file);
+  fireEvent.keyDown(file, { key: 'a', metaKey: true });
+  expect(window.getSelection()?.toString()).toBe('second');
 });
 
 it('colours a text preview using its response MIME while keeping search marks', async () => {

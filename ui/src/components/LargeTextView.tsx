@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Compartment, EditorState } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, drawSelection, keymap, type DecorationSet, type ViewUpdate } from '@codemirror/view';
-import { defaultKeymap } from '@codemirror/commands';
+import { defaultKeymap, selectAll } from '@codemirror/commands';
 
 import { copyTextToClipboard } from '../clipboard';
 import { useT } from '../i18n';
@@ -87,7 +87,7 @@ export default function LargeTextView({ text, className, query = '', activeIndex
             EditorState.readOnly.of(true), EditorState.lineSeparator.of('\n'),
             EditorView.contentAttributes.of({ 'aria-readonly': 'true', 'aria-label': t('detail.body') }),
             EditorView.theme({ '&': { fontSize: 'inherit', height: '100%' }, '.cm-scroller': { fontFamily: 'inherit', lineHeight: '1.5', overflow: 'auto' }, '.cm-content': { padding: '8px', caretColor: 'transparent' }, '.cm-line': { padding: '0' }, '&.cm-focused': { outline: 'none' }, '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: 'var(--accent-dim)' } }),
-            keymap.of(defaultKeymap), drawSelection(),
+            keymap.of([{ key: 'Ctrl-a', run: selectAll }, { key: 'Meta-a', run: selectAll }, ...defaultKeymap]), drawSelection(),
             wrapConfig.current.of(initialWrap.current ? EditorView.lineWrapping : []), marksConfig.current.of([]),
             EditorView.updateListener.of(update => {
               if (update.selectionSet) document.dispatchEvent(new Event(DOCUMENT_SELECTION_EVENT));
@@ -98,7 +98,7 @@ export default function LargeTextView({ text, className, query = '', activeIndex
         unregister = registerTextDocument(view.dom, () => {
           const { from, to } = view!.state.selection.main;
           return { text: text.slice(from, to), start: from, end: to };
-        });
+        }, () => { view!.focus(); selectAll(view!); });
         // Native and application-menu Copy both use document offsets. The
         // DOM may contain gaps, and must never be the clipboard source.
         view.dom.addEventListener('copy', event => {

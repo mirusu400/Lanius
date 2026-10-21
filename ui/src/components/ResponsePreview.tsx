@@ -10,6 +10,7 @@ import { markHtmlPreview } from './htmlPreviewSearch';
 import { HighlightedBody } from './SyntaxCode';
 import { LoadingPane } from './Spinner';
 import { LARGE_TEXT_THRESHOLD } from './textDocumentModel';
+import { selectableTextProps, selectAllText } from './selectAllText';
 
 const PREVIEW_CSP = "default-src 'none'; script-src 'none'; connect-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'; navigate-to 'none'";
 const NOOP_MATCH_COUNT = () => {};
@@ -65,7 +66,7 @@ function Grid({ rows, query, activeIndex, offset = 0 }: { rows: GridRows; query:
     preparedRows.push({ number: row.number, cells: preparedCells });
   }
   return (
-    <div className="preview-grid-scroll">
+    <div {...selectableTextProps} className="preview-grid-scroll">
       <table className="preview-grid">
         <thead><tr><th aria-label="Row" />{Array.from({ length: columns }, (_, i) => <th key={i}>{columnName(i)}</th>)}</tr></thead>
         <tbody>
@@ -172,7 +173,7 @@ function PreviewContent({ preview, query, activeIndex, onMatchCount }: {
           })}
         </div>
         <div className="response-preview-file-detail">
-          {item && <><strong>{item.name}</strong><p className="muted">{t('detail.preview.fileSize', { size: item.size.toLocaleString() })}</p><pre className="mono"><MarkedText text={item.text ?? t('detail.preview.binaryFile')} query={item.text === null ? '' : query} activeIndex={activeIndex} offset={itemTextOffset} /></pre></>}
+          {item && <><strong>{item.name}</strong><p className="muted">{t('detail.preview.fileSize', { size: item.size.toLocaleString() })}</p><pre {...selectableTextProps} className="mono"><MarkedText text={item.text ?? t('detail.preview.binaryFile')} query={item.text === null ? '' : query} activeIndex={activeIndex} offset={itemTextOffset} /></pre></>}
         </div>
       </div>
     </div>;
@@ -203,5 +204,5 @@ export function ResponsePreview({ flowId, charset, query = '', activeIndex = nul
   if (result?.flowId !== flowId || result.charset !== (charset ?? null)) return <LoadingPane label={t('detail.preview.loading')} />;
   if (result.error) return <p className="banner error">{t('detail.preview.failed', { message: result.error })}</p>;
   if (!result.preview) return <LoadingPane label={t('detail.preview.loading')} />;
-  return <div className="response-preview"><PreviewContent preview={result.preview} query={query} activeIndex={activeIndex} onMatchCount={onMatchCount} /></div>;
+  return <div className="response-preview" onKeyDown={selectAllText}><PreviewContent preview={result.preview} query={query} activeIndex={activeIndex} onMatchCount={onMatchCount} /></div>;
 }

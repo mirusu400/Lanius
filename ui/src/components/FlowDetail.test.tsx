@@ -126,6 +126,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  window.getSelection()?.removeAllRanges();
   vi.unstubAllGlobals();
 });
 
@@ -607,6 +608,60 @@ describe('FlowDetailView', () => {
     await waitFor(() => expect(half(0)?.querySelector('pre.body')?.textContent).toContain('<main'));
     expect(half(0)?.querySelector('pre.body mark')?.textContent).toBe('main');
     expect(half(0)?.querySelector('pre.body .hljs-name')).toBeTruthy();
+  });
+
+  it.each([false, true])('selects only the request body in Pretty (Command=%s)', async (metaKey) => {
+    const user = userEvent.setup();
+    render(<FlowDetailView flow={codeFlow} />);
+    await waitFor(() => expect(bodyText(0)).toContain('<main'));
+    const body = half(0)!.querySelector<HTMLElement>('pre.body')!;
+    await user.click(body.querySelector('.hljs-name')!);
+    expect(document.activeElement).toBe(body);
+    fireEvent.keyDown(document.activeElement!, { key: 'a', ctrlKey: !metaKey, metaKey });
+    expect(window.getSelection()?.toString()).toBe(body.textContent);
+    expect(window.getSelection()?.toString()).not.toContain('api.test');
+    expect(window.getSelection()?.toString()).not.toContain('const answer');
+  });
+
+  it('selects only the raw request immediately after switching its view', async () => {
+    const user = userEvent.setup();
+    render(<FlowDetailView flow={codeFlow} />);
+    await waitFor(() => expect(bodyText(0)).toContain('<main'));
+    const tab = screen.getAllByRole('tab', { name: t('detail.view.raw') })[0];
+    await user.click(tab);
+    fireEvent.keyDown(tab, { key: 'a', ctrlKey: true });
+    const raw = half(0)!.querySelector('pre.raw-view')!;
+    expect(window.getSelection()?.toString()).toBe(raw.textContent);
+    expect(window.getSelection()?.toString()).toContain('POST /x HTTP/1.1');
+    expect(window.getSelection()?.toString()).not.toContain('const answer');
+  });
+
+  it('selects only the response text preview immediately after switching its view', async () => {
+    const baseFetch = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation((input, init) => String(input).includes('/response-preview')
+      ? Promise.resolve({ ok: true, json: async () => ({ kind: 'text', text: 'preview content', mime: 'text/plain' }) } as Response)
+      : baseFetch(input, init));
+    const user = userEvent.setup();
+    render(<FlowDetailView flow={codeFlow} />);
+    await waitFor(() => expect(bodyText(0)).toContain('<main'));
+    const tab = screen.getByRole('tab', { name: t('detail.view.preview') });
+    await user.click(tab);
+    await screen.findByText('preview content');
+    fireEvent.keyDown(tab, { key: 'a', metaKey: true });
+    expect(window.getSelection()?.toString()).toBe('preview content');
+    expect(document.activeElement?.classList.contains('response-preview-text')).toBe(true);
+  });
+
+  it('keeps select-all native inside the pane search field', async () => {
+    const user = userEvent.setup();
+    render(<FlowDetailView flow={codeFlow} />);
+    await waitFor(() => expect(bodyText(0)).toContain('<main'));
+    await user.click(screen.getByRole('button', { name: t('detail.findIn', { pane: t('detail.request') }) }));
+    const input = half(0)!.querySelector<HTMLInputElement>('input[type="search"]')!;
+    await user.type(input, 'main');
+    expect(fireEvent.keyDown(input, { key: 'a', ctrlKey: true })).toBe(true);
+    expect(document.activeElement).toBe(input);
+    expect(window.getSelection()?.toString()).toBe('');
   });
 
   it('opens a scoped find with Ctrl+F, navigates matches, and restores history highlights on close', async () => {

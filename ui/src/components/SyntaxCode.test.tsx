@@ -53,12 +53,16 @@ it('routes oversized HTTP messages to the asynchronous viewer without truncating
   expect(container.querySelectorAll('.hljs-string')).toHaveLength(0);
 });
 
-it('selects the whole highlighted message with the keyboard', () => {
+it.each([
+  { key: 'a', metaKey: true },
+  { key: 'a', ctrlKey: true },
+  { key: 'ㅁ', code: 'KeyA', ctrlKey: true },
+])('selects the whole highlighted message with the keyboard (%j)', (shortcut) => {
   const source = 'GET / HTTP/1.1\nHost: example.test\n\n';
   const { container } = render(<HighlightedMessage text={source} headers={[]} className="raw-view" />);
   const pre = container.querySelector('pre')!;
   pre.focus();
-  fireEvent.keyDown(pre, { key: 'a', metaKey: true });
+  fireEvent.keyDown(pre, shortcut);
   expect(window.getSelection()?.toString()).toBe(source);
   window.getSelection()?.removeAllRanges();
 });

@@ -13,6 +13,7 @@ import { UndoableTextarea } from './UndoableText';
 import { LoadingPane } from './Spinner';
 import { LARGE_TEXT_THRESHOLD } from './textDocumentModel';
 import { loadLargeTextView } from './largeTextViewLoader';
+import { selectableTextProps } from './selectAllText';
 
 const LargeTextView = lazy(loadLargeTextView);
 
@@ -192,7 +193,7 @@ export function HighlightedBody({
       query={query} activeIndex={activeIndex} offset={offset} showLineEndings={showLineEndings} wrap={wrap} onMatchCount={onMatchCount} />
   </Suspense>;
   const language = bodyLanguage(headers, text, fallbackMime, responsePath);
-  return <pre className={`body mono syntax-code code-wrap-${wrap ? 'on' : 'off'}${className ? ` ${className}` : ''}`}><code>
+  return <pre {...selectableTextProps} className={`body mono syntax-code code-wrap-${wrap ? 'on' : 'off'}${className ? ` ${className}` : ''}`}><code>
     <SyntaxFragment text={text} language={language} query={query} activeIndex={activeIndex} offset={offset} showLineEndings={showLineEndings} />
   </code></pre>;
 }
@@ -245,16 +246,5 @@ function SmallHighlightedMessage({
       : escapeHtml(text);
     return withLineEndings(markHighlightedHtml(source, query, activeIndex), showLineEndings);
   }, [text, separator, http, headers, responsePath, fallbackMime, query, activeIndex, showLineEndings]);
-  const selectAll = (event: React.KeyboardEvent<HTMLPreElement>) => {
-    if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'a') return;
-    const selection = window.getSelection();
-    if (!selection) return;
-    event.preventDefault();
-    const range = document.createRange();
-    range.selectNodeContents(event.currentTarget);
-    selection.removeAllRanges();
-    selection.addRange(range);
-  };
-
-  return <pre className={`${className} syntax-code code-wrap-${wrap ? 'on' : 'off'}`} tabIndex={0} onKeyDown={selectAll}><code dangerouslySetInnerHTML={{ __html: html }} /></pre>;
+  return <pre {...selectableTextProps} className={`${className} syntax-code code-wrap-${wrap ? 'on' : 'off'}`}><code dangerouslySetInnerHTML={{ __html: html }} /></pre>;
 }
