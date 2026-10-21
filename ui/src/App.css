@@ -1705,7 +1705,13 @@ table.resizable-table th {
 
 table.resizable-table th.column-reorderable {
   cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
+
+table.resizable-table th.column-reorderable .column-sort { cursor: grab; }
+table.resizable-table th.column-reordering .column-sort { cursor: grabbing; }
 
 table.resizable-table th.column-reordering {
   cursor: grabbing;

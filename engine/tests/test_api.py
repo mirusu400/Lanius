@@ -341,6 +341,28 @@ def test_history_sort_applies_before_pagination(client) -> None:
     assert client.get("/api/flows?sort_by=unknown").status_code == 422
 
 
+@pytest.mark.parametrize("descending", [False, True])
+def test_request_number_sort_uses_displayed_numbers_before_pagination(client, descending) -> None:
+    # Number, insertion order and timestamps deliberately disagree. Older
+    # projects may still have NULL numbers, displayed using their rowid.
+    seed(client, "high", request_number=30, started_at=1)
+    seed(client, "legacy", started_at=3)
+    seed(client, "middle", request_number=10, started_at=2)
+    with client.app.state.store._conn:
+        client.app.state.store._conn.execute("UPDATE flows SET request_number = NULL WHERE id = 'legacy'")
+    query = f"sort_by=request_number&sort_desc={str(descending).lower()}&limit=2&search=body"
+    first_response = client.get(f"/api/flows?{query}")
+    assert first_response.status_code == 200
+    first = first_response.json()
+    expected = [30, 10, 2] if descending else [2, 10, 30]
+    assert [item["request_number"] for item in first["items"]] == expected[:2]
+    assert first["has_more"] is True
+    assert first["next_cursor"] is None
+    second = client.get(f"/api/flows?{query}&offset=2&anchor={first['anchor']}").json()
+    assert [item["request_number"] for item in second["items"]] == expected[2:]
+    assert second["has_more"] is False
+
+
 def test_full_text_search_anchor_and_raw_body_endpoint(client) -> None:
     seed(client, "old", started_at=1, path="/other", request_body=b"\xffneedle-tail")
     seed(client, "next", started_at=2, path="/other", response_headers=[("X-Trace", "search-header")])

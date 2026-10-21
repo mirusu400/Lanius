@@ -74,6 +74,8 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
               columns={columns}
               className="history-number-header"
               resizeLabel={t('table.resizeColumn', { column: t('flow.requestNumber') })}
+              onSort={onSort ? () => onSort('request_number') : undefined}
+              sortDirection={sortBy === 'request_number' ? (sortDesc ? 'descending' : 'ascending') : undefined}
             />
             <ResizableHeader
               label="★"

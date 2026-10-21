@@ -41,7 +41,7 @@ export interface FlowSummary {
 
 export type HistoryColor = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
 
-export type HistorySortKey = 'started_at' | 'method' | 'host' | 'url' |
+export type HistorySortKey = 'request_number' | 'started_at' | 'method' | 'host' | 'url' |
   'status_code' | 'modified' | 'response_size' | 'duration_ms';
 
 export interface RequestVariant {

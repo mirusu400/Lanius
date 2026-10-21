@@ -4,6 +4,7 @@ import {
   Children,
   cloneElement,
   isValidElement,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -144,14 +145,16 @@ interface HeaderProps {
   resizeLabel: string;
   onSort?: () => void;
   sortDirection?: 'ascending' | 'descending';
-  draggable?: boolean;
+  reorderable?: boolean;
   reordering?: boolean;
   dropPosition?: 'before' | 'after';
   onContextMenu?: React.MouseEventHandler<HTMLTableCellElement>;
-  onDragStart?: React.DragEventHandler<HTMLTableCellElement>;
-  onDragOver?: React.DragEventHandler<HTMLTableCellElement>;
-  onDrop?: React.DragEventHandler<HTMLTableCellElement>;
-  onDragEnd?: React.DragEventHandler<HTMLTableCellElement>;
+}
+
+interface ColumnReorder {
+  source: number;
+  target: number;
+  position: 'before' | 'after';
 }
 
 function elements(children: ReactNode): ReactElement[] {
@@ -178,9 +181,14 @@ export function ResizableTable({
   const table = useRef<HTMLTableElement | null>(null);
   const [available, setAvailable] = useState(0);
   const [menu, setMenu] = useState<MenuPosition | null>(null);
-  const [reorder, setReorder] = useState<{ source: number; target: number; position: 'before' | 'after' } | null>(null);
+  const [reorder, setReorder] = useState<ColumnReorder | null>(null);
+  const [pointerDrag, setPointerDrag] = useState<{
+    source: number; x: number; y: number; pointerId: number; key: string;
+  } | null>(null);
+  const suppressSortClick = useRef(false);
   const count = columns.widths.length;
   const layoutKey = `${columns.key}.layout`;
+  const activeReorder = pointerDrag?.key === layoutKey ? reorder : null;
   const [layoutState, setLayoutState] = useState(() => ({
     key: layoutKey,
     value: loadLayout(layoutKey, count, defaultHidden),
@@ -193,7 +201,7 @@ export function ResizableTable({
     ? loadedLayout
     : normalizedLayout;
 
-  const saveLayout = (next: ColumnLayout) => {
+  const saveLayout = useCallback((next: ColumnLayout) => {
     const normalized = normalizeLayout(next, count);
     try {
       window.localStorage.setItem(layoutKey, JSON.stringify(normalized));
@@ -201,7 +209,66 @@ export function ResizableTable({
       // Reordering and hiding still work in this session without persistence.
     }
     setLayoutState({ key: layoutKey, value: normalized });
-  };
+  }, [layoutKey, count]);
+
+  // Native HTML drag events are not consistently delivered by desktop
+  // webviews. Track the pointer so dragging also works from a sort button.
+  useEffect(() => {
+    if (!pointerDrag || pointerDrag.key !== layoutKey) return;
+    let active = false;
+    let drop: ColumnReorder | null = null;
+    const previous = document.body.style.userSelect;
+    const move = (event: PointerEvent) => {
+      if (event.pointerId !== pointerDrag.pointerId) return;
+      if (!active && Math.hypot(event.clientX - pointerDrag.x, event.clientY - pointerDrag.y) < 5) return;
+      active = true;
+      suppressSortClick.current = true;
+      event.preventDefault();
+      document.body.style.userSelect = 'none';
+      drop = null;
+      for (const header of table.current?.querySelectorAll<HTMLTableCellElement>('thead th[data-column-index]') ?? []) {
+        const box = header.getBoundingClientRect();
+        if (event.clientX >= box.left && event.clientX <= box.right
+          && event.clientY >= box.top && event.clientY <= box.bottom) {
+          drop = {
+            source: pointerDrag.source,
+            target: Number(header.dataset.columnIndex),
+            position: event.clientX > box.left + box.width / 2 ? 'after' : 'before',
+          };
+          break;
+        }
+      }
+      setReorder(drop ?? { source: pointerDrag.source, target: pointerDrag.source, position: 'before' });
+    };
+    const finish = (apply: boolean) => {
+      if (apply && drop && drop.source !== drop.target) {
+        const { source, target, position } = drop;
+        const order = layout.order.filter((index) => index !== source);
+        order.splice(order.indexOf(target) + (position === 'after' ? 1 : 0), 0, source);
+        saveLayout({ ...layout, order });
+      }
+      setPointerDrag(null);
+      setReorder(null);
+    };
+    const stop = (event: PointerEvent) => {
+      if (event.pointerId === pointerDrag.pointerId) finish(event.type === 'pointerup');
+    };
+    const cancel = () => finish(false);
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') cancel(); };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+    window.addEventListener('blur', cancel);
+    window.addEventListener('keydown', key);
+    return () => {
+      document.body.style.userSelect = previous;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+      window.removeEventListener('blur', cancel);
+      window.removeEventListener('keydown', key);
+    };
+  }, [pointerDrag, layoutKey, layout, saveLayout]);
 
   const visible = layout.order.filter((index) => !layout.hidden.includes(index));
   const hiddenKey = layout.hidden.join(',');
@@ -230,55 +297,20 @@ export function ResizableTable({
     ? elements((headRow.props as { children?: ReactNode }).children).slice(0, count)
     : [];
 
-  const moveColumn = () => {
-    if (!reorder || reorder.source === reorder.target) return;
-    const order = layout.order.filter((index) => index !== reorder.source);
-    const target = order.indexOf(reorder.target);
-    order.splice(target + (reorder.position === 'after' ? 1 : 0), 0, reorder.source);
-    saveLayout({ ...layout, order });
-  };
-
   const headerCell = (cell: ReactElement, index: number) => {
     const props = cell.props as HeaderProps;
     return cloneElement(cell as ReactElement<HeaderProps>, {
       key: cell.key ?? `column-${index}`,
-      draggable: true,
-      reordering: reorder?.source === index,
-      dropPosition: reorder?.target === index && reorder.source !== index
-        ? reorder.position
+      reorderable: true,
+      reordering: activeReorder?.source === index,
+      dropPosition: activeReorder?.target === index && activeReorder.source !== index
+        ? activeReorder.position
         : undefined,
       onContextMenu: (event) => {
         event.preventDefault();
         event.stopPropagation();
         setMenu({ x: event.clientX, y: event.clientY });
       },
-      onDragStart: (event) => {
-        if ((event.target as HTMLElement).closest('.column-resize-handle')) {
-          event.preventDefault();
-          return;
-        }
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', String(index));
-        setMenu(null);
-        setReorder({ source: index, target: index, position: 'before' });
-      },
-      onDragOver: (event) => {
-        if (!reorder) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'move';
-        const box = event.currentTarget.getBoundingClientRect();
-        setReorder((current) => current && ({
-          ...current,
-          target: index,
-          position: event.clientX > box.left + box.width / 2 ? 'after' : 'before',
-        }));
-      },
-      onDrop: (event) => {
-        event.preventDefault();
-        moveColumn();
-        setReorder(null);
-      },
-      onDragEnd: () => setReorder(null),
       // Retain a caller-supplied menu label for the checkbox list.
       menuLabel: props.menuLabel,
     });
@@ -332,7 +364,27 @@ export function ResizableTable({
   });
 
   return <>
-    <table ref={table} className={`${className} resizable-table`} style={{ width: `${total + fill}px` }}>
+    <table
+      ref={table}
+      className={`${className} resizable-table`}
+      style={{ width: `${total + fill}px` }}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        suppressSortClick.current = false;
+        const target = event.target as HTMLElement;
+        const header = target.closest<HTMLTableCellElement>('thead th[data-column-index]');
+        if (!header || target.closest('.column-resize-handle')) return;
+        setMenu(null);
+        setPointerDrag({ source: Number(header.dataset.columnIndex), x: event.clientX, y: event.clientY, pointerId: event.pointerId, key: layoutKey });
+      }}
+      onClickCapture={(event) => {
+        if (suppressSortClick.current && event.detail > 0) {
+          event.preventDefault();
+          event.stopPropagation();
+          suppressSortClick.current = false;
+        }
+      }}
+    >
       <colgroup>
         {visible.map((index) => <col key={index} style={{ width: columns.widths[index] }} />)}
         <col style={{ width: fill }} />
@@ -363,18 +415,14 @@ export function ResizableHeader({
   resizeLabel,
   onSort,
   sortDirection,
-  draggable,
+  reorderable,
   reordering,
   dropPosition,
   onContextMenu,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
 }: HeaderProps) {
   const classes = [
     className,
-    draggable ? 'column-reorderable' : '',
+    reorderable ? 'column-reorderable' : '',
     reordering ? 'column-reordering' : '',
     dropPosition ? `column-drop-${dropPosition}` : '',
   ].filter(Boolean).join(' ') || undefined;
@@ -383,12 +431,9 @@ export function ResizableHeader({
       className={classes}
       scope="col"
       aria-sort={sortDirection}
-      draggable={draggable}
+      data-column-index={index}
       onContextMenu={onContextMenu}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
+      onDragStart={(event) => event.preventDefault()}
     >
       {onSort ? <button type="button" className="column-sort" onClick={onSort}>
         {label}{sortDirection && <span aria-hidden="true">{sortDirection === 'ascending' ? ' ▲' : ' ▼'}</span>}

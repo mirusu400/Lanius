@@ -1303,6 +1303,7 @@ class FlowStore:
         if annotation_color is not None and annotation_color not in ANNOTATION_COLORS:
             raise ValueError("invalid annotation color")
         sort_columns = {
+            "request_number": "COALESCE(request_number, flows.rowid)",
             "started_at": "started_at", "method": "method", "host": "host",
             "url": "path || COALESCE('?' || query, '')", "status_code": "status_code",
             "modified": "modified", "response_size": "response_size",

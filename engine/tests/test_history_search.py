@@ -11,6 +11,7 @@ from app.db.store import FlowRecord, FlowStore, HistoryQueryCancelled
 
 
 SORTS = {
+    "request_number": "COALESCE(request_number, flows.rowid)",
     "started_at": "started_at", "method": "method", "host": "host",
     "url": "path || COALESCE('?' || query, '')", "status_code": "status_code",
     "modified": "modified", "response_size": "response_size", "duration_ms": "duration_ms",

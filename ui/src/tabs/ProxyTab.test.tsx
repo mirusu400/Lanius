@@ -315,6 +315,27 @@ describe('ProxyTab', () => {
     })).toBe(true));
   });
 
+  it('toggles request-number sorting from the # header', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    const number = screen.getByRole('button', { name: '#' });
+    await user.click(number);
+    await waitFor(() => expect(calls.some((call) => {
+      const url = new URL(call.url);
+      return url.searchParams.get('sort_by') === 'request_number'
+        && url.searchParams.get('sort_desc') === 'false';
+    })).toBe(true));
+    expect(number.closest('th')?.getAttribute('aria-sort')).toBe('ascending');
+    await user.click(number);
+    await waitFor(() => expect(calls.some((call) => {
+      const url = new URL(call.url);
+      return url.searchParams.get('sort_by') === 'request_number'
+        && url.searchParams.get('sort_desc') === 'true';
+    })).toBe(true));
+    expect(number.closest('th')?.getAttribute('aria-sort')).toBe('descending');
+  });
+
   it('selects adjacent history rows with arrow keys', async () => {
     const user = userEvent.setup();
     render(<ProxyTab />);
