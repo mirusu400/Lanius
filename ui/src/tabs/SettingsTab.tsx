@@ -9,6 +9,7 @@ import { AppearanceSection } from "./settings/AppearanceSection";
 import { ToastSection } from "./settings/ToastSection";
 import { BrowserHelpSection } from "./settings/BrowserHelpSection";
 import { BrowserSection } from "./settings/BrowserSection";
+import { HttpProtocolSection } from "./settings/HttpProtocolSection";
 import { BodyDisplaySection } from "./settings/BodyDisplaySection";
 import { CaptureStorageSection } from "./settings/CaptureStorageSection";
 import { CaSection } from "./settings/CaSection";
@@ -132,6 +133,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
     'tls-trust': <TlsTrustSection />,
     'tls-exceptions': <TlsExceptionsSection />,
     'body-display': <BodyDisplaySection />,
+    'http-protocol': <HttpProtocolSection />,
     'match-replace': <MatchReplaceSection />,
     engine: <EngineSection />,
     capture: <CaptureSection />,

@@ -1,5 +1,7 @@
 /** Shared types mirroring the engine's flow model (engine/app/db/store.py). */
 
+export type HttpMode = 'auto' | 'http1.0' | 'http1.1' | 'http2';
+
 export interface FlowSummary {
   id: string;
   request_number?: number | null;
@@ -14,6 +16,9 @@ export interface FlowSummary {
   path: string | null;
   query: string | null;
   http_version: string | null;
+  http_mode?: HttpMode | null;
+  upstream_http_version?: string | null;
+  response_http_version?: string | null;
   request_size: number;
   started_at: number | null;
   status_code: number | null;
@@ -400,6 +405,7 @@ export interface RunResult {
 }
 
 export interface RunSummary {
+  http_mode?: HttpMode | null;
   id: string;
   mode: RunMode;
   url: string;

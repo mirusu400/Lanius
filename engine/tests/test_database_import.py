@@ -79,6 +79,7 @@ def test_older_backup_is_upgraded_on_a_copy(tmp_path, version):
             from app.db.history_index import MIGRATION
             for statement in MIGRATION:
                 source._conn.execute(statement)
+        remove_http_protocol_columns(source._conn)
         source._conn.execute(f"PRAGMA user_version={version}")
     source.close()
     prepared = prepare_database(path)
@@ -129,6 +130,7 @@ def test_rejects_legacy_backup_with_colliding_fuzzer_table(tmp_path):
         source._conn.execute("DROP TABLE fuzzer_results")
         source._conn.execute("DROP TABLE fuzzer_runs")
         source._conn.execute("CREATE TABLE fuzzer_runs (id TEXT PRIMARY KEY, started_at REAL)")
+        remove_http_protocol_columns(source._conn)
         source._conn.execute("PRAGMA user_version=13")
     source.close()
 
@@ -155,3 +157,11 @@ def test_restore_preserves_current_trust_and_enabled_lockdown(tmp_path, trusted_
     finally:
         current.close()
         prepared.cleanup()
+
+
+def remove_http_protocol_columns(conn):
+    # These fixtures deliberately reconstruct an old schema from a fresh DB.
+    for column in ("http_mode", "upstream_http_version", "response_http_version"):
+        conn.execute(f"ALTER TABLE flows DROP COLUMN {column}")
+    if "http_mode" in {row[1] for row in conn.execute("PRAGMA table_info(fuzzer_runs)")}:
+        conn.execute("ALTER TABLE fuzzer_runs DROP COLUMN http_mode")

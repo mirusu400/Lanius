@@ -1,3 +1,4 @@
+import { HttpModeSelect } from '../components/HttpModeSelect';
 import { useEffect, useRef, useState } from 'react';
 
 import { sendReplayRequest } from '../api/client';
@@ -72,8 +73,8 @@ function redirectFor(
   }
 }
 
-function redirectSignature(request: Pick<ReplaySnapshot, 'url' | 'text'>): string {
-  const payload = toSendPayload(request.url, request.text);
+function redirectSignature(request: Pick<ReplaySnapshot, 'url' | 'text' | 'httpMode'>): string {
+  const payload = toSendPayload(request.url, request.text, request.httpMode);
   return `${payload.method.toUpperCase()} ${payload.url}`;
 }
 
@@ -190,7 +191,7 @@ export function ReplayTabView() {
       addScopeRule: activeUrl
         ? (kind, target) => void addRequestScopeRule(activeUrl, kind, target)
         : undefined,
-      sendToFuzzer: active ? () => sendTextToFuzzer(active.url, active.text) : undefined,
+      sendToFuzzer: active ? () => sendTextToFuzzer(active.url, active.text, active.httpMode) : undefined,
       copyAs: codegen.buildMenu(codegenTarget()),
       pluginActions: pluginMenu,
     }),
@@ -219,7 +220,7 @@ export function ReplayTabView() {
 
   const sendChain = async (
     requestId: string,
-    initialRequest: Pick<ReplaySnapshot, 'url' | 'text'>,
+    initialRequest: Pick<ReplaySnapshot, 'url' | 'text' | 'httpMode'>,
     initialIndex: number | null,
     followAutomatically: boolean,
   ) => {
@@ -233,7 +234,7 @@ export function ReplayTabView() {
         let response: ReplayResponse;
         try {
           response = trimResponse(await sendReplayRequest(
-            toSendPayload(request.url, request.text),
+            toSendPayload(request.url, request.text, request.httpMode),
           ));
         } catch (err) {
           finishReplaySend(
@@ -253,7 +254,7 @@ export function ReplayTabView() {
         // with an automatically generated redirect request.
         const shown = getTabs().find((tab) => tab.id === requestId);
         if (!shown || shown.url !== request.url || shown.text !== request.text ||
-            shown.response?.id !== response.id) break;
+            (shown.httpMode ?? null) !== (request.httpMode ?? null) || shown.response?.id !== response.id) break;
 
         if (redirectsFollowed >= MAX_AUTO_REDIRECTS) {
           updateTab(requestId, {
@@ -269,7 +270,7 @@ export function ReplayTabView() {
 
         seen.add(signature);
         redirectsFollowed += 1;
-        request = { url: next.url, text: next.text };
+        request = { url: next.url, text: next.text, httpMode: request.httpMode ?? null };
         startedIndex = null;
         editReplayTab(requestId, request);
         updateTab(requestId, { sending: true, error: null });
@@ -282,13 +283,13 @@ export function ReplayTabView() {
 
   const startSend = async (
     requestId: string,
-    request: Pick<ReplaySnapshot, 'url' | 'text'>,
+    request: Pick<ReplaySnapshot, 'url' | 'text' | 'httpMode'>,
     startedIndex: number | null,
   ) => {
     if (sendingIds.current.has(requestId)) return;
     try {
       // Fail before changing the tab to a sending state.
-      toSendPayload(request.url, request.text);
+      toSendPayload(request.url, request.text, request.httpMode);
     } catch (err) {
       updateTab(requestId, { error: errorMessage(err) });
       return;
@@ -304,21 +305,21 @@ export function ReplayTabView() {
     if (!active || active.sending) return;
     await startSend(
       active.id,
-      { url: active.url, text: active.text },
+      { url: active.url, text: active.text, httpMode: active.httpMode ?? null },
       active.historyIndex ?? null,
     );
   };
 
   const followRedirect = async () => {
     if (!active || active.sending || !activeRedirect) return;
-    const request = { url: activeRedirect.url, text: activeRedirect.text };
+    const request = { url: activeRedirect.url, text: activeRedirect.text, httpMode: active.httpMode ?? null };
     editReplayTab(active.id, request);
     await startSend(active.id, request, null);
   };
 
   useShortcut('replay.send', send, Boolean(active && !active.sending));
   useShortcut('request.sendToFuzzer', () => {
-    if (active) sendTextToFuzzer(active.url, active.text);
+    if (active) sendTextToFuzzer(active.url, active.text, active.httpMode);
   }, Boolean(active));
   useShortcut('replay.new', createTab);
   useShortcut('replay.duplicate', () => {
@@ -446,6 +447,7 @@ export function ReplayTabView() {
               onValueChange={(value) => editReplayTab(active.id, { url: value })}
               placeholder={t('replay.targetPlaceholder')}
             />
+            <HttpModeSelect value={active.httpMode} onChange={(httpMode) => editReplayTab(active.id, { httpMode })} />
             {(active.history?.length ?? 0) > 0 && (
               <div className="replay-history-controls" role="group" aria-label={t('replay.history')}>
                 <button type="button" aria-label={t('replay.previousHistory')}
@@ -512,6 +514,7 @@ export function ReplayTabView() {
             </label>
             {active.response && (
               <span className="resp-meta mono">
+                {active.response.upstream_http_version && <span title={t('httpProtocol.actual', { version: active.response.upstream_http_version })}>{active.response.upstream_http_version} · </span>}
                 {active.response.status_code ?? 'ERR'} ·{' '}
                 {active.response.size} B ·{' '}
                 {active.response.duration_ms === null

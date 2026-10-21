@@ -18,6 +18,7 @@ from mitmproxy.addons.clientplayback import ReplayHandler
 from mitmproxy.connection import Client, Server
 from mitmproxy.options import Options
 
+from ..http_protocol import REPLAY_MODE, HttpMode, project_mode, validate_mode
 from .. import charset
 from ..content_encoding import (
     auto_decompress_enabled,
@@ -47,6 +48,8 @@ def build_flow(
     encode_content_body: bool = True,
 ) -> http.HTTPFlow:
     """Construct a standalone flow ready for replay."""
+    if http_version not in ("HTTP/1.0", "HTTP/1.1", "HTTP/2", "HTTP/2.0", "HTTP/3", "HTTP/3.0"):
+        raise ReplayError(f"unsupported HTTP version: {http_version!r}")
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
         raise ReplayError(f"invalid url: {url!r}")
@@ -95,7 +98,7 @@ def build_flow(
             raise ReplayError(f"invalid Content-Encoding: {exc}") from exc
     flow.request = http.Request.make(method.upper(), url, body_bytes)
     flow.request.path = path
-    flow.request.http_version = http_version
+    flow.request.http_version = {"HTTP/2": "HTTP/2.0", "HTTP/3.0": "HTTP/3"}.get(http_version, http_version)
     if headers:
         # The editor's headers are authoritative (an explicit Host must win
         # over the one derived from the URL).
@@ -124,7 +127,7 @@ class ReplayAddon:
         self.store = store
         self.options: Options | None = None
         self._active: set[asyncio.Task[Any]] = set()
-        self._policy_cancelled: set[asyncio.Task[Any]] = set()
+        self._policy_cancelled: dict[asyncio.Task[Any], str] = {}
 
     @property
     def auto_decompress(self) -> bool:
@@ -147,24 +150,30 @@ class ReplayAddon:
         self.options = options
 
     async def send(
-        self, flow: http.HTTPFlow, timeout: float = DEFAULT_TIMEOUT
+        self, flow: http.HTTPFlow, timeout: float = DEFAULT_TIMEOUT,
+        http_mode: HttpMode | None = None,
     ) -> FlowRecord:
         if self.options is None:
             raise ReplayError("proxy engine is not running")
 
+        try:
+            mode = validate_mode(http_mode) if http_mode is not None else project_mode(self.store)
+        except ValueError as exc:
+            raise ReplayError(str(exc)) from exc
         flow.is_replay = "request"
         handler = ReplayHandler(flow, self.options)
         task = asyncio.current_task()
         if task is not None:
             self._active.add(task)
         started = time.time()
+        token = REPLAY_MODE.set(mode)
         try:
             await asyncio.wait_for(handler.replay(), timeout=timeout)
         except TimeoutError as exc:
             raise ReplayError(f"request timed out after {timeout}s") from exc
         except asyncio.CancelledError:
             if task is not None and task in self._policy_cancelled:
-                raise ReplayError("request cancelled by the Lockdown scope guard") from None
+                raise ReplayError(f"request cancelled by {self._policy_cancelled[task]}") from None
             raise
         finally:
             # ReplayHandler normally closes these after response/error. A
@@ -179,19 +188,20 @@ class ReplayAddon:
                 active.cancel("Lockdown scope guard changed")
             if handlers:
                 await asyncio.gather(*handlers, return_exceptions=True)
+            REPLAY_MODE.reset(token)
             if task is not None:
                 self._active.discard(task)
-                self._policy_cancelled.discard(task)
+                self._policy_cancelled.pop(task, None)
 
         record = _to_record(flow, started)
         await asyncio.to_thread(self.store.upsert, record)
         return record
 
-    async def cancel_active(self) -> None:
+    async def cancel_active(self, reason: str = "the Lockdown scope guard") -> None:
         """Cancel standalone Replay/Fuzzer connections during policy changes."""
         current = asyncio.current_task()
         tasks = [task for task in self._active if task is not current and not task.done()]
-        self._policy_cancelled.update(tasks)
+        self._policy_cancelled.update({task: reason for task in tasks})
         for task in tasks:
             task.cancel()
         if tasks:
@@ -255,6 +265,9 @@ def render_raw(
         shown = charset.complete_characters(shown, body_charset)
     return {
         "id": record.id,
+        "http_mode": record.http_mode,
+        "upstream_http_version": record.upstream_http_version,
+        "response_http_version": record.response_http_version,
         "status_code": record.status_code,
         "reason": record.reason,
         "headers": record.response_headers or [],

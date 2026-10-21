@@ -13,6 +13,7 @@ from typing import Any, Sequence
 
 from ..addons.intercept import InterceptError
 from ..addons.replay import ReplayError, build_flow
+from ..http_protocol import HttpMode
 from ..addons.scope import ScopeError
 from ..db.store import ANNOTATION_COLORS, FlowRecord, FlowStore
 
@@ -97,6 +98,9 @@ def flow_detail(
         "path": record.path,
         "query": record.query,
         "http_version": record.http_version,
+        "http_mode": record.http_mode,
+        "upstream_http_version": record.upstream_http_version,
+        "response_http_version": record.response_http_version,
         "request_headers": redact_headers(record.request_headers, reveal=reveal),
         "request_body": _body_preview(record.request_body, record.request_size),
         "response_headers": redact_headers(record.response_headers, reveal=reveal),
@@ -345,7 +349,9 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
     @server.tool(
         description=(
             "Send a request through the proxy engine (Replay). Returns the "
-            "response with redacted headers unless reveal_secrets is true."
+            "response with redacted headers unless reveal_secrets is true. "
+            "http_mode overrides the project default: auto, http1.0, http1.1, http2. "
+            "Forced HTTP/2 requires HTTPS and fails without h2 negotiation."
         )
     )
     async def send_request(
@@ -354,6 +360,7 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
         headers: list[list[str]] | None = None,
         body: str = "",
         reveal_secrets: bool = False,
+        http_mode: HttpMode | None = None,
     ) -> dict[str, Any]:
         if engine is None:
             return {"error": "engine not available"}
@@ -361,19 +368,20 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
             flow = build_flow(
                 url=url, method=method, headers=headers or [], body=body
             )
-            record = await engine.replay.send(flow)
+            record = await engine.replay.send(flow, http_mode=http_mode)
         except ReplayError as exc:
             return {"error": str(exc)}
         return flow_detail(record, reveal=reveal_secrets)
 
     @server.tool(
-        description="Replay a previously captured flow by id, optionally editing it."
+        description="Replay a captured flow, optionally editing it. http_mode overrides the project default (auto, http1.0, http1.1, http2); forced HTTP/2 requires HTTPS and never falls back."
     )
     async def replay_flow(
         flow_id: str,
         method: str | None = None,
         body: str | None = None,
         reveal_secrets: bool = False,
+        http_mode: HttpMode | None = None,
     ) -> dict[str, Any]:
         if engine is None:
             return {"error": "engine not available"}
@@ -391,11 +399,12 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
                 url=url,
                 method=method or record.method or "GET",
                 headers=[[k, v] for k, v in record.request_headers],
+                http_version=record.http_version or "HTTP/1.1",
                 body=body
                 if body is not None
                 else (record.request_body or b"").decode("utf-8", errors="replace"),
             )
-            replayed = await engine.replay.send(flow)
+            replayed = await engine.replay.send(flow, http_mode=http_mode)
         except ReplayError as exc:
             return {"error": str(exc)}
         return flow_detail(replayed, reveal=reveal_secrets)
@@ -409,6 +418,21 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
         try:
             return {"output": transform(value, codec, direction)}  # type: ignore[arg-type]
         except CodecError as exc:
+            return {"error": str(exc)}
+
+    @server.tool(description="Read the project upstream HTTP mode: auto, http1.0, http1.1 or http2. Forced HTTP/2 requires HTTPS and never falls back.")
+    async def get_http_mode() -> dict[str, Any]:
+        if engine is None:
+            return {"error": "engine not available"}
+        return engine.http_protocol_state()
+
+    @server.tool(description="Set the project upstream HTTP mode (auto, http1.0, http1.1, http2). Restarts proxy connections and stops active Replay/Fuzzer requests. Per-request http_mode overrides this default.")
+    async def set_http_mode(mode: HttpMode) -> dict[str, Any]:
+        if engine is None:
+            return {"error": "engine not available"}
+        try:
+            return await engine.set_http_protocol(mode)
+        except (ValueError, RuntimeError) as exc:
             return {"error": str(exc)}
 
     return server
@@ -426,6 +450,7 @@ WRITING_TOOLS = frozenset(
         "replay_flow",
         "send_request",
         "set_intercept",
+        "set_http_mode",
     }
 )
 

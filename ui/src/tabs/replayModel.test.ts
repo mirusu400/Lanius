@@ -371,3 +371,10 @@ describe('the bytes that go on the wire', () => {
     expect(toSendPayload('https://a', text).body).toBe(body);
   });
 });
+
+
+it('carries the raw HTTP version and explicit protocol override to the engine', () => {
+  const payload = toSendPayload('https://example.test', 'GET / HTTP/1.0\n\n', 'http2');
+  expect(payload.http_version).toBe('HTTP/1.0');
+  expect(payload.http_mode).toBe('http2');
+});

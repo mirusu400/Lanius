@@ -402,12 +402,13 @@ async def test_stop_during_final_save_remains_stopped(tmp_path):
     class Replay:
         auto_decompress = False
 
-        async def send(self, flow):
+        async def send(self, flow, *, http_mode=None):
             return type("Record", (), dict(
                 status_code=200, response_size=0, duration_ms=1, error=None, id="flow"
             ))()
 
     store = Store()
+    store.get_setting = lambda key: None
     addon = FuzzerAddon(Replay(), store=store)
     run = await addon.start(
         url="http://example.test", template="GET /{{x}} HTTP/1.1\nHost: example.test\n\n",

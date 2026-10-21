@@ -422,7 +422,17 @@ export function clearWebSocketMessages(): Promise<{ ok: boolean }> {
 
 // --- replay (M3) --------------------------------------------------------
 
+export function getHttpProtocol(): Promise<{ mode: import('./types').HttpMode }> {
+  return request('/api/http-protocol');
+}
+
+export function setHttpProtocol(mode: import('./types').HttpMode): Promise<{ mode: import('./types').HttpMode }> {
+  return request('/api/http-protocol', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ mode }) });
+}
+
 export function sendReplayRequest(payload: {
+  http_mode?: import('./types').HttpMode | null;
+  http_version?: string;
   url: string;
   method: string;
   headers: [string, string][];
@@ -574,6 +584,7 @@ export function getPositions(
 }
 
 export interface RunConfig {
+  http_mode?: import('./types').HttpMode | null;
   url: string;
   template: string;
   mode: import('./types').RunMode;

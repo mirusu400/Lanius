@@ -1,11 +1,14 @@
 /** Replay state: raw HTTP request text <-> engine send payload. */
 
 import { rawRequest } from '../components/rawHttp';
-import type { FlowDetail, FlowSummary } from '../api/types';
+import type { HttpMode, FlowDetail, FlowSummary } from '../api/types';
 import { ParseError } from '../i18n/ParseError';
 import type { Message } from '../i18n/message';
 
 export interface ReplayResponse {
+  http_mode?: HttpMode | null;
+  upstream_http_version?: string | null;
+  response_http_version?: string | null;
   id: string;
   status_code: number | null;
   reason: string | null;
@@ -26,6 +29,7 @@ export interface ReplayResponse {
 }
 
 export interface ReplaySnapshot {
+  httpMode?: HttpMode | null;
   url: string;
   text: string;
   response: ReplayResponse | null;
@@ -37,6 +41,7 @@ export interface ReplayHistoryEntry extends ReplaySnapshot {
 }
 
 export interface ReplayTab {
+  httpMode?: HttpMode | null;
   id: string;
   title: string;
   url: string;
@@ -58,7 +63,7 @@ export interface ReplayTab {
 export const REPLAY_HISTORY_LIMIT = 50;
 
 export function replaySnapshot(tab: ReplayTab): ReplaySnapshot {
-  return { url: tab.url, text: tab.text, response: tab.response, error: tab.error };
+  return { url: tab.url, text: tab.text, httpMode: tab.httpMode ?? null, response: tab.response, error: tab.error };
 }
 
 export function canStepReplayHistory(tab: ReplayTab, step: -1 | 1): boolean {
@@ -69,6 +74,8 @@ export function canStepReplayHistory(tab: ReplayTab, step: -1 | 1): boolean {
 }
 
 export interface SendPayload {
+  http_mode?: HttpMode | null;
+  http_version: string;
   url: string;
   method: string;
   headers: [string, string][];
@@ -203,15 +210,15 @@ export function emptyTab(): ReplayTab {
 }
 
 /** Turn the raw editor text plus the tab origin into a send payload. */
-export function toSendPayload(url: string, text: string): SendPayload {
-  const { method, target, headers, body } = parseReplayRequest(text);
+export function toSendPayload(url: string, text: string, httpMode?: HttpMode | null): SendPayload {
+  const { method, target, headers, body, httpVersion } = parseReplayRequest(text);
 
   const base = url.replace(/\/+$/, '');
   const absolute = /^https?:\/\//i.test(target)
     ? target
     : `${base}${target.startsWith('/') ? '' : '/'}${target}`;
 
-  return { url: absolute, method, headers, body };
+  return { url: absolute, method, headers, body, http_version: httpVersion, http_mode: httpMode ?? null };
 }
 
 interface ParsedReplayRequest {
@@ -361,7 +368,7 @@ export function renderResponseText(
   if (response.error && response.status_code === null) {
     return `[error] ${response.error}`;
   }
-  const status = `HTTP ${response.status_code ?? ''} ${
+  const status = `${response.response_http_version ?? 'HTTP'} ${response.status_code ?? ''} ${
     response.reason ?? ''
   }`.trimEnd();
   const headers = response.headers.map(([k, v]) => `${k}: ${v}`).join('\n');

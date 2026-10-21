@@ -536,3 +536,14 @@ describe('result context menu', () => {
     ).toBe(true);
   });
 });
+
+
+it('persists the HTTP mode in the Fuzzer draft and sends it in the run configuration', async () => {
+  render(<FuzzerTab />);
+  const select = await screen.findByRole('combobox', { name: t('httpProtocol.section') });
+  fireEvent.change(select, { target: { value: 'http2' } });
+  await waitFor(() => expect(getFuzzerWorkspace().tabs[0].httpMode).toBe('http2'));
+  fireEvent.click(screen.getByRole('button', { name: t('fuzzer.start') }));
+  await waitFor(() => expect(started).toHaveLength(1));
+  expect(started[0]).toMatchObject({ http_mode: 'http2' });
+});

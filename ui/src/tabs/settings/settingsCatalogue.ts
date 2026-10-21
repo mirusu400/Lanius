@@ -21,6 +21,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'egress-ip', group: 'proxy', title: 'egressIp.section', prefixes: ['egressIp.'], aliases: 'public external source egress IP VPN polling 공인 외부 출발 아이피 주소 관측 기록' },
   { id: 'tls-trust', group: 'proxy', title: 'tlsTrust.section', prefixes: ['tlsTrust.'], aliases: 'certificate cert CA VPN PEM Keychain 인증서 신뢰 키체인' },
   { id: 'tls-exceptions', group: 'proxy', title: 'tlsExceptions.section', prefixes: ['tlsExceptions.'], aliases: 'certificate verify hostname mismatch insecure self-signed exception 인증서 검증 예외 호스트 불일치 자체 서명' },
+  { id: 'http-protocol', group: 'proxy', title: 'httpProtocol.section', prefixes: ['httpProtocol.'], aliases: 'HTTP version protocol HTTP/1.0 HTTP/1.1 HTTP/2 force ALPN 버전 프로토콜 강제' },
   { id: 'body-display', group: 'proxy', title: 'bodyDisplay.section', prefixes: ['bodyDisplay.'], aliases: 'gzip deflate Brotli Zstandard 압축 해제' },
   { id: 'match-replace', group: 'proxy', title: 'matchReplace.title', prefixes: ['matchReplace.'], aliases: 'regex rewrite replace 정규식 치환 변경 규칙' },
   { id: 'engine', group: 'proxy', title: 'settings.proxySection', keys: ['settings.projectDb', 'settings.capturedFlows', 'settings.engineUnreachable', 'common.status', 'common.version', 'common.address'], aliases: 'engine status database sqlite 엔진 상태 버전 주소 데이터베이스' },

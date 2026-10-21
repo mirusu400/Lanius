@@ -111,6 +111,7 @@ def test_history_backfills_old_projects_and_never_reads_body_pages(tmp_path) -> 
         original._conn.execute("ALTER TABLE flows DROP COLUMN request_number")
         original._conn.execute("ALTER TABLE flows DROP COLUMN request_body_omitted")
         original._conn.execute("ALTER TABLE flows DROP COLUMN response_body_omitted")
+        remove_http_protocol_columns(original._conn)
         original._conn.execute("PRAGMA user_version=11")
     original.close()
 
@@ -147,6 +148,7 @@ def test_request_number_migration_never_rewrites_captured_rows(tmp_path) -> None
         original._conn.execute("DROP TABLE flow_request_sequence")
         original._conn.execute("ALTER TABLE flows DROP COLUMN request_number")
         original._conn.execute("ALTER TABLE flow_history DROP COLUMN request_number")
+        remove_http_protocol_columns(original._conn)
         original._conn.execute("PRAGMA user_version=15")
     original.close()
 
@@ -259,6 +261,7 @@ def test_default_scope_migration_preserves_explicit_capture_opt_out(tmp_path) ->
     conn.execute(
         "UPDATE settings SET value='0' WHERE key='scope.restrict_capture'"
     )
+    remove_http_protocol_columns(conn)
     conn.execute("PRAGMA user_version = 16")
     conn.commit()
 
@@ -819,3 +822,11 @@ def test_file_reader_does_not_hold_capture_write_lock(tmp_path) -> None:
         reader.join(timeout=3)
         writer.join(timeout=3)
         store.close()
+
+
+def remove_http_protocol_columns(conn):
+    # These fixtures deliberately reconstruct an old schema from a fresh DB.
+    for column in ("http_mode", "upstream_http_version", "response_http_version"):
+        conn.execute(f"ALTER TABLE flows DROP COLUMN {column}")
+    if "http_mode" in {row[1] for row in conn.execute("PRAGMA table_info(fuzzer_runs)")}:
+        conn.execute("ALTER TABLE fuzzer_runs DROP COLUMN http_mode")

@@ -130,6 +130,9 @@ class FlowRecord:
     path: str | None = None
     query: str | None = None
     http_version: str | None = None
+    http_mode: str | None = None
+    upstream_http_version: str | None = None
+    response_http_version: str | None = None
     request_headers: list[tuple[str, str]] = field(default_factory=list)
     request_body: bytes = b""
     request_size: int = 0
@@ -379,7 +382,7 @@ _COLUMNS = (
     " status_code, reason, response_headers, response_body, response_size,"
     " response_mime, completed_at, duration_ms, error, source, comment,"
     " request_original, request_auto_modified, auto_modified, modified, request_body_omitted, response_body_omitted,"
-    " request_number"
+    " request_number, http_mode, upstream_http_version, response_http_version"
 )
 # Rows from before schema 16 have no stored number; theirs is the rowid.
 _SELECT_COLUMNS = _COLUMNS.replace(
@@ -694,7 +697,7 @@ class FlowStore:
             int(record.modified),
             int(record.request_body_omitted),
             int(record.response_body_omitted),
-            request_number,
+            request_number, record.http_mode, record.upstream_http_version, record.response_http_version,
         )
         placeholders = ", ".join(["?"] * len(values))
         updates = ", ".join(
@@ -1676,15 +1679,15 @@ class FlowStore:
             self._conn.execute(
                 """INSERT INTO fuzzer_runs
                 (id, mode, url, template, payload_sets, concurrency, delay, total,
-                 status, started_at, finished_at, error)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 status, started_at, finished_at, error, http_mode)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     status=excluded.status, finished_at=excluded.finished_at,
                     error=excluded.error""",
                 (run["id"], run["mode"], run["url"], run["template"],
                  json.dumps(run["payload_sets"]), run["speed"]["concurrency"],
                  run["speed"]["delay"], run["total"], run["status"],
-                 run["started_at"], run["finished_at"], run["error"]),
+                 run["started_at"], run["finished_at"], run["error"], run.get("http_mode")),
             )
             self._conn.commit()
 
@@ -1723,7 +1726,7 @@ class FlowStore:
             })
         return [{
             "id": row["id"], "mode": row["mode"], "url": row["url"],
-            "template": row["template"],
+            "template": row["template"], "http_mode": row["http_mode"],
             "payload_sets": json.loads(row["payload_sets"]),
             "speed": {"concurrency": row["concurrency"], "delay": row["delay"]},
             "total": row["total"], "status": row["status"],
@@ -1857,12 +1860,12 @@ class FlowStore:
                     self._conn.execute(
                         """INSERT INTO fuzzer_runs
                         (id, mode, url, template, payload_sets, concurrency, delay,
-                         total, status, started_at, finished_at, error)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                         total, status, started_at, finished_at, error, http_mode)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (run["id"], run["mode"], run["url"], run["template"],
                          json.dumps(run.get("payload_sets", [])), speed.get("concurrency", 5),
                          speed.get("delay", 0), run["total"], run["status"],
-                         run["started_at"], run.get("finished_at"), run.get("error")),
+                         run["started_at"], run.get("finished_at"), run.get("error"), run.get("http_mode")),
                     )
                     for result in run.get("results", []):
                         self._conn.execute(
@@ -2657,6 +2660,9 @@ def _row_to_record(row: sqlite3.Row) -> FlowRecord:
         path=row["path"],
         query=row["query"],
         http_version=row["http_version"],
+        http_mode=row["http_mode"],
+        upstream_http_version=row["upstream_http_version"],
+        response_http_version=row["response_http_version"],
         request_headers=_load_headers(row["request_headers"]) or [],
         request_body=row["request_body"] or b"",
         request_size=row["request_size"] or 0,

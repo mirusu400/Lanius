@@ -14,7 +14,7 @@ async def test_result_storage_failure_finishes_a_run_with_a_full_queue(tmp_path,
     class Replay:
         auto_decompress = True
 
-        async def send(self, flow):
+        async def send(self, flow, *, http_mode=None):
             return SimpleNamespace(
                 id=flow.id, status_code=200, response_size=0,
                 duration_ms=1, error=None,

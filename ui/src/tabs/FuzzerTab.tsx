@@ -1,3 +1,5 @@
+import { HttpModeSelect } from '../components/HttpModeSelect';
+import type { HttpMode } from '../api/types';
 import { Activity, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -131,6 +133,7 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
   const resultColumns = useResizableColumns('lanius.columns.fuzzer', [70, 340, 85, 90, 110]);
   const [url, setUrl] = useState(draft.url);
   const [template, setTemplate] = useState(draft.template);
+  const [httpMode, setHttpMode] = useState<HttpMode | null>(draft.httpMode ?? null);
   const [mode, setRunMode] = useState<RunMode>(draft.mode);
   const [payloadText, setPayloadText] = useState(draft.payloadText);
   const [run, setRun] = useState<FuzzRun | null>(null);
@@ -144,8 +147,8 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
   const runIdRef = useRef<string | null>(draft.runId);
   const refreshVersionRef = useRef(0);
   useEffect(() => {
-    patchFuzzerDraft(draft.id, { url, template, mode, payloadText, concurrency, delay });
-  }, [draft.id, url, template, mode, payloadText, concurrency, delay]);
+    patchFuzzerDraft(draft.id, { url, template, mode, httpMode, payloadText, concurrency, delay });
+  }, [draft.id, url, template, mode, httpMode, payloadText, concurrency, delay]);
 
   const positions = countPositions(template);
   const sets = useMemo(
@@ -333,6 +336,7 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
       url,
       template,
       mode: mode,
+      http_mode: httpMode,
       payload_sets: sets,
       concurrency,
       delay,
@@ -395,6 +399,7 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
             </option>
           ))}
         </select>
+        <HttpModeSelect value={httpMode} onChange={setHttpMode} disabled={running} />
         <button onClick={mark}>{t('fuzzer.addMarker')}</button>
         <button onClick={() => setTemplate(clearMarkers(template))}>
           {t('fuzzer.clearMarkers')}

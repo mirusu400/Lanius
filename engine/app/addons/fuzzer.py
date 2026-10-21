@@ -15,6 +15,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Literal, Sequence
 
+from ..http_protocol import HttpMode, project_mode, validate_mode
+
 logger = logging.getLogger(__name__)
 
 OPEN_MARKER = "{{"
@@ -236,6 +238,7 @@ class FuzzRun:
     url: str
     template: str
     total: int
+    http_mode: HttpMode | None = None
     payload_sets: list[list[str]] = field(default_factory=list)
     speed: RunSpeed = field(default_factory=lambda: RunSpeed())
     results: list[RunResult] = field(default_factory=list)
@@ -253,6 +256,7 @@ class FuzzRun:
         return {
             "id": self.id,
             "mode": self.mode,
+            "http_mode": self.http_mode,
             "url": self.url,
             "status": self.status,
             "total": self.total,
@@ -275,7 +279,7 @@ class FuzzRun:
     def from_dict(cls, data: dict[str, Any]) -> "FuzzRun":
         return cls(
             id=data["id"], mode=data["mode"], url=data["url"],
-            template=data["template"], total=data["total"],
+            template=data["template"], total=data["total"], http_mode=data.get("http_mode"),
             payload_sets=data["payload_sets"], speed=RunSpeed(**data["speed"]),
             results=[RunResult(**item) for item in data.get("results", [])],
             completed_count=data.get("completed", len(data.get("results", []))),
@@ -312,7 +316,8 @@ def parse_request_template(url: str, text: str) -> dict[str, Any]:
         if target.lower().startswith(("http://", "https://"))
         else f"{base}{'' if target.startswith('/') else '/'}{target}"
     )
-    return {"url": absolute, "method": method, "headers": headers, "body": body}
+    return {"url": absolute, "method": method, "headers": headers, "body": body,
+            "http_version": parts[2] if len(parts) > 2 else "HTTP/1.1"}
 
 
 class FuzzerAddon:
@@ -385,15 +390,21 @@ class FuzzerAddon:
         mode: RunMode = "single_position",
         payload_sets: Sequence[Sequence[str]],
         speed: RunSpeed | None = None,
+        http_mode: HttpMode | None = None,
     ) -> FuzzRun:
         total = self.plan(
             mode=mode, template=template, payload_sets=payload_sets
         )
+        try:
+            selected_mode = validate_mode(http_mode) if http_mode is not None else (project_mode(self.store) if self.store else "auto")
+        except ValueError as exc:
+            raise FuzzerError(str(exc)) from exc
         run = FuzzRun(
             id=uuid.uuid4().hex[:12],
             mode=mode,
             url=url,
             template=template,
+            http_mode=selected_mode,
             total=total,
             payload_sets=[list(items) for items in payload_sets],
             # Falls back to the addon's configured default, so an
@@ -471,7 +482,7 @@ class FuzzerAddon:
                     **payload,
                     encode_content_body=self.replay.auto_decompress,
                 )
-                record = await self.replay.send(flow)
+                record = await self.replay.send(flow, http_mode=run.http_mode)
                 result.status_code = record.status_code
                 result.length = record.response_size
                 result.duration_ms = record.duration_ms

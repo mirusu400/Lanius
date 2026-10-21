@@ -16,7 +16,7 @@ from .history_index import (
     REQUEST_NUMBER_MIGRATION,
 )
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -262,6 +262,12 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
            WHERE NOT EXISTS (
                SELECT 1 FROM settings WHERE key='scope.restrict_capture'
            )""",
+    ),
+    18: (
+        "ALTER TABLE flows ADD COLUMN http_mode TEXT",
+        "ALTER TABLE flows ADD COLUMN upstream_http_version TEXT",
+        "ALTER TABLE flows ADD COLUMN response_http_version TEXT",
+        "ALTER TABLE fuzzer_runs ADD COLUMN http_mode TEXT",
     ),
 }
 

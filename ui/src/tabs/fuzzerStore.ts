@@ -4,7 +4,7 @@ import type { FlowDetail, FlowSummary, FuzzRun } from '../api/types';
 import { templateFromFlow } from './fuzzerModel';
 import { nextTabId } from './replayModel';
 import { notifyRequestTransferred } from '../requestTransfers';
-import type { RunMode } from '../api/types';
+import type { HttpMode, RunMode } from '../api/types';
 
 export interface FuzzerTarget {
   url: string;
@@ -19,6 +19,7 @@ let seq = 0;
 const listeners = new Set<Listener>();
 
 export interface FuzzerDraft {
+  httpMode?: HttpMode | null;
   id: string;
   title?: string;
   url: string;
@@ -70,7 +71,7 @@ export function mergeFuzzerWorkspace(saved: FuzzerWorkspace, changed: FuzzerWork
     const pristineAutoDraft = tab.id === autoDraftId && saved.tabs.length > 0 &&
       !tab.title?.trim() &&
       tab.url === DEFAULT_URL && tab.template === DEFAULT_TEMPLATE &&
-      tab.mode === 'single_position' && tab.payloadText.length === 1 &&
+      (tab.httpMode ?? null) === null && tab.mode === 'single_position' && tab.payloadText.length === 1 &&
       tab.payloadText[0] === 'a\nb\nc' && tab.concurrency === 5 &&
       tab.delay === 0 && tab.runId === null;
     if (!pristineAutoDraft) byId.set(tab.id, tab);
@@ -131,6 +132,7 @@ export function openFuzzerRun(run: FuzzRun): void {
   addFuzzerDraft({
     ...newFuzzerDraft(run.url, run.template),
     mode: run.mode,
+    httpMode: run.http_mode ?? null,
     payloadText: run.payload_sets.map((items) => items.join('\n')),
     concurrency: run.speed.concurrency,
     delay: run.speed.delay,
@@ -150,10 +152,10 @@ export function subscribeTarget(listener: Listener): () => void {
  * was no way to carry it into Fuzzer without going back to the history
  * and losing the edits.
  */
-export function sendTextToFuzzer(url: string, template: string): FuzzerTarget {
+export function sendTextToFuzzer(url: string, template: string, httpMode?: HttpMode | null): FuzzerTarget {
   seq += 1;
   current = { url, template, seq };
-  addFuzzerDraft(newFuzzerDraft(url, template));
+  addFuzzerDraft({ ...newFuzzerDraft(url, template), httpMode: httpMode ?? null });
   for (const listener of listeners) listener(current);
   notifyRequestTransferred('Fuzzer');
   return current;

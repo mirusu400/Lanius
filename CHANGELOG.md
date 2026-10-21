@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Choose Auto, forced HTTP/1.0, HTTP/1.1, or HTTP/2 for upstream traffic,
+  with project defaults, saved Replay/Fuzzer overrides, MCP controls, and
+  actual upstream protocol reporting. Forced HTTP/2 fails without h2 negotiation.
+
 - Reorder headed table columns with drag and drop, hide or restore them from a
   header context menu, remember each table's layout, and clear the automatic
   highlight when an HTTP History bookmark is removed.

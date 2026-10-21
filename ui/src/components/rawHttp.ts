@@ -42,7 +42,7 @@ export function rawResponse(
   detail: FlowDetail | null | undefined,
 ): string {
   if (flow.status_code == null && !detail?.response_headers?.length) return '';
-  const version = flow.http_version ?? detail?.http_version ?? 'HTTP/1.1';
+  const version = detail?.response_http_version ?? flow.response_http_version ?? flow.http_version ?? detail?.http_version ?? 'HTTP/1.1';
   // The reason phrase is optional in HTTP and often absent over HTTP/2,
   // so it is left off rather than invented.
   const reason = detail?.reason ? ` ${detail.reason}` : '';

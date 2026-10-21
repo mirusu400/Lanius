@@ -114,7 +114,7 @@ export function renameTab(id: string, title: string): void {
 }
 
 /** Editing a sent pair starts a draft; the recorded request stays immutable. */
-export function editReplayTab(id: string, patch: Partial<Pick<ReplayTab, 'url' | 'text'>>): void {
+export function editReplayTab(id: string, patch: Partial<Pick<ReplayTab, 'url' | 'text' | 'httpMode'>>): void {
   tabs = tabs.map((tab) => {
     if (tab.id !== id) return tab;
     const edited = { ...tab, ...patch, historyIndex: null };
@@ -134,7 +134,7 @@ export function stepReplayHistory(id: string, step: -1 | 1): void {
     const draft = tab.historyIndex === null ? replaySnapshot(tab) : tab.draft ?? null;
     const snapshot = next === history.length ? draft : history[next];
     if (!snapshot) return tab;
-    return { ...tab, ...snapshot, historyIndex: next === history.length ? null : next, draft };
+    return { ...tab, ...snapshot, httpMode: snapshot.httpMode ?? null, historyIndex: next === history.length ? null : next, draft };
   });
   emit();
 }
@@ -142,7 +142,7 @@ export function stepReplayHistory(id: string, step: -1 | 1): void {
 /** Record the exact request and its outcome, even if the editor changed in flight. */
 export function finishReplaySend(
   id: string,
-  request: Pick<ReplaySnapshot, 'url' | 'text'>,
+  request: Pick<ReplaySnapshot, 'url' | 'text' | 'httpMode'>,
   startedIndex: number | null,
   response: ReplayResponse | null,
   error: Message | null,
@@ -153,6 +153,7 @@ export function finishReplaySend(
     const dropped = Math.max(0, fullHistory.length - REPLAY_HISTORY_LIMIT);
     const history = fullHistory.slice(-REPLAY_HISTORY_LIMIT);
     const stillShowingRequest = tab.url === request.url && tab.text === request.text
+      && (tab.httpMode ?? null) === (request.httpMode ?? null)
       && (tab.historyIndex ?? null) === startedIndex;
     if (stillShowingRequest) {
       return {

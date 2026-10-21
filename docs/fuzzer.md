@@ -54,3 +54,9 @@ an engine restart are marked stopped when the project is reopened.
 **Copy as** reflects your edits, so the generated curl, `fetch` or Python
 `requests` code repeats exactly the request you are fuzzing. See
 [proxy history](proxy.md) for details.
+
+The HTTP version selector applies a project default or explicit Auto,
+HTTP/1.0, HTTP/1.1, or HTTP/2 mode to every request in the run. It is saved with
+the draft and run history. The effective mode is fixed when the run starts.
+Forced HTTP/2 requires HTTPS and fails without h2 negotiation. Open a result's
+flow to inspect the recorded server direction protocol.

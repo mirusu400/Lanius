@@ -48,6 +48,7 @@ from .tls import (
     validate_ciphers,
 )
 from .upstream import UpstreamBridge
+from .http_protocol import HttpProtocolAddon, SETTING as HTTP_MODE_SETTING, project_mode, validate_mode
 from . import error_page
 from .tls_exceptions import (
     TLS_EXCEPTIONS_SETTING,
@@ -323,6 +324,7 @@ class ProxyEngine:
         # stays up so the user can fix the listener from the app itself.
         self.start_error: str | None = None
         self._listener_lock = asyncio.Lock()
+        self.project_lock = asyncio.Lock()
         # A saved listener overrides the defaults and the environment, since
         # it is the one a user chose deliberately.
         self._apply_saved_listener()
@@ -612,6 +614,7 @@ class ProxyEngine:
         master.addons.add(self.websockets)
         master.addons.add(self.scanner)
         master.addons.add(self.capture)
+        master.addons.add(HttpProtocolAddon(self.store))
         master.addons.add(self.replay)
         # Not via the running hook: it does not fire for every mode set.
         self.replay.attach(master.options)
@@ -631,8 +634,9 @@ class ProxyEngine:
         if master is None:
             return
         chain = master.addons.chain
-        for addon in (self.scanner, self.websockets, self.capture):
-            if addon in chain:
+        protocol = master.addons.get("httpprotocoladdon")
+        for addon in (protocol, self.scanner, self.websockets, self.capture):
+            if addon is not None and addon in chain:
                 chain.remove(addon)
                 chain.append(addon)
 
@@ -873,6 +877,19 @@ class ProxyEngine:
     TLS_PROFILE_SETTING = "tls_profile"
     TLS_CIPHERS_SETTING = "tls_ciphers"
 
+    def http_protocol_state(self) -> dict[str, str]:
+        return {"mode": project_mode(self.store)}
+
+    async def set_http_protocol(self, mode: str) -> dict[str, str]:
+        async with self.project_lock:
+            validate_mode(mode)
+            previous = self.store.get_setting(HTTP_MODE_SETTING) or ""
+            if mode != project_mode(self.store):
+                await self._restart_with_setting(HTTP_MODE_SETTING, mode, previous)
+            state = self.http_protocol_state()
+            self.broker.publish("engine.http_protocol_changed", state)
+            return state
+
     def tls_state(self) -> dict[str, Any]:
         """The upstream TLS profile in use, and what is available."""
         profile = self.store.get_setting(self.TLS_PROFILE_SETTING) or DEFAULT_PROFILE
@@ -992,8 +1009,10 @@ class ProxyEngine:
         Restores the previous value if the proxy cannot start with the new one.
         """
         was_running = self.running
+        # Refuse new sends while old connections are being drained.
+        self.replay.options = None
         await self.fuzzer.stop_all()
-        await self.replay.cancel_active()
+        await self.replay.cancel_active("proxy connection settings change")
         if was_running:
             await self.stop()
 
@@ -1204,6 +1223,7 @@ class ProxyEngine:
         return self.replay.options is not None
 
     async def stop(self) -> None:
+        self.replay.options = None
         if self.scope_egress.active:
             self.intercept.drop_all()
             self.websockets.drop_all()
@@ -1260,3 +1280,16 @@ class ProxyEngine:
                 await server.stop()
             except Exception:  # pragma: no cover - already going away
                 logger.debug("listener did not stop cleanly", exc_info=True)
+        # Stopping listening sockets does not stop mitmproxy's live client
+        # handlers. Close both ends before changing protocol/trust/scope policy,
+        # otherwise a browser can keep using the old negotiated connection.
+        tasks: set[asyncio.Task[Any]] = set()
+        for handler in list(getattr(proxyserver, "connections", {}).values()):
+            for transport in list(handler.transports.values()):
+                if transport.writer is not None:
+                    transport.writer.close()
+                if transport.handler is not None and not transport.handler.done():
+                    tasks.add(transport.handler)
+                    transport.handler.cancel("proxy connection settings changed")
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)

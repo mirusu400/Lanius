@@ -64,6 +64,32 @@ yet. SOCKS5 routing covers TCP connections; UDP relay is not part of the
 browser listener. Multi-hop and SOCKS5 routing use a bundled GOST bridge on a
 loopback port.
 
+## Upstream HTTP version
+
+**Settings > Proxy > Upstream HTTP version** sets the project default for
+requests Lanius sends to target servers. Choose **Auto**, **Force HTTP/1.0**,
+**Force HTTP/1.1**, or **Force HTTP/2**. This controls the origin connection,
+independently of the browser-to-Lanius protocol and the upstream proxy's CONNECT
+connection. Product update checks and other control requests are unaffected.
+
+Auto preserves browser negotiation; standalone Replay/Fuzzer sends offer h2 and
+HTTP/1.1 over HTTPS. HTTP/1.0 uses a Content-Length body and closes the connection.
+Forced HTTP/2 requires HTTPS and successful h2 negotiation; it never silently
+falls back to HTTP/1.1. Plaintext h2c is unsupported. WebSocket upgrades require
+Auto or HTTP/1.1. Forced modes buffer streamed uploads before applying request
+version and body framing changes. Plugins using callable request stream
+transforms must use Auto.
+
+Changing the default closes proxy connections and stops active Replay/Fuzzer
+sends. The choice is saved in the project database and included in exports.
+Replay tabs and Fuzzer drafts can inherit it or override it for a request/run.
+A Fuzzer run records the effective mode when started. Scope and Lockdown checks
+still apply before DNS or socket creation.
+
+History details and Replay results display the actual server direction protocol.
+Older captures have no recorded upstream protocol; their request-line version
+alone does not establish how Lanius connected to the server.
+
 ## Observed public IP
 
 **Settings > Proxy > Observed public IP** can keep an audit trail of the

@@ -165,6 +165,8 @@ describe('ReplayTab', () => {
       method: 'POST',
       headers: [['Host', 'echo.test']],
       body: 'a=1',
+      http_version: 'HTTP/1.1',
+      http_mode: null,
     });
     expect(screen.getByText(/201 · 4 B · 9 ms/)).toBeTruthy();
   });
@@ -645,4 +647,20 @@ describe('ReplayTab', () => {
     await user.click(screen.getByLabelText(t('replay.closeTab', { title: 'GET /hello' })));
     await waitFor(() => expect(getTabs()).toHaveLength(0));
   });
+});
+
+
+it('sends and saves the selected HTTP mode with each Replay exchange', async () => {
+  sendToReplay(flow);
+  render(<ReplayTabView />);
+  await waitFor(() => expect(editor()).toBeTruthy());
+  fireEvent.change(screen.getByRole('combobox', { name: t('httpProtocol.section') }), { target: { value: 'http1.0' } });
+  fireEvent.change(editor(), { target: { value: 'GET / HTTP/1.0\nHost: echo.test\n\n' } });
+  fireEvent.click(screen.getByRole('button', { name: t('replay.send') }));
+  await waitFor(() => expect(getTabs()[0].history).toHaveLength(1));
+  expect(sent[0]).toMatchObject({ http_mode: 'http1.0', http_version: 'HTTP/1.0' });
+  expect(getTabs()[0].history?.[0].httpMode).toBe('http1.0');
+  fireEvent.change(screen.getByRole('combobox', { name: t('httpProtocol.section') }), { target: { value: 'http2' } });
+  fireEvent.click(screen.getByRole('button', { name: t('replay.previousHistory') }));
+  expect((screen.getByRole('combobox', { name: t('httpProtocol.section') }) as HTMLSelectElement).value).toBe('http1.0');
 });

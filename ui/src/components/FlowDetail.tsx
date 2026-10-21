@@ -736,6 +736,9 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
             {exchangeDirection === 'horizontal' ? <path d="M3 10h14" /> : <path d="M10 3v14" />}
           </svg>
         </button>
+        {detail?.upstream_http_version && <span className="mono" title={t('httpProtocol.actual', { version: detail.upstream_http_version })}>
+          {detail.upstream_http_version}
+        </span>}
         <label className="reveal">
           <input
             type="checkbox"

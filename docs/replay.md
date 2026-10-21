@@ -29,3 +29,10 @@ The option is saved on this device and is off by default.
 **Copy as** reflects your edits, so the generated curl, `fetch` or Python
 `requests` code repeats exactly what you are about to send. See
 [proxy history](proxy.md) for details.
+
+Use the HTTP version selector beside the target URL to inherit the project
+default or choose Auto, forced HTTP/1.0, HTTP/1.1, or HTTP/2. The choice is saved
+with each draft and sent exchange, including redirect hops. A forced mode takes
+precedence over the request-line version; changing that line alone does not
+force HTTP/2 negotiation. Responses show the protocol used toward the server.
+Forced HTTP/2 requires HTTPS and fails if the server does not negotiate h2.

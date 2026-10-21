@@ -62,6 +62,7 @@ from ..build_info import build_info
 from ..lockdown import BLOCKED_DETAIL, PROJECT_SETTING, SCOPE_EGRESS_SETTING, LockdownBlocked, LockdownPolicy
 from ..tls_exceptions import TLS_EXCEPTIONS_SETTING, TLS_INSECURE_SETTING
 from ..tls_trust import TRUSTED_CA_SETTING
+from ..http_protocol import HttpMode
 from .. import updates
 from ..addons.scope import ScopeError, rule_from_url
 from .. import browser, ca_trust
@@ -136,12 +137,17 @@ class ForwardBody(BaseModel):
     response_body: str | None = None
 
 
+class HttpProtocolPatch(BaseModel):
+    mode: HttpMode
+
+
 class ReplayRequest(BaseModel):
     url: str
     method: str = "GET"
     headers: list[list[str]] = []
     body: str = ""
     http_version: str = "HTTP/1.1"
+    http_mode: HttpMode | None = None
     timeout: float = 30.0
 
 
@@ -278,6 +284,7 @@ class CaptureRestriction(BaseModel):
 
 
 class FuzzRunBody(BaseModel):
+    http_mode: HttpMode | None = None
     url: str
     template: str
     mode: str = "single_position"
@@ -800,7 +807,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             background=BackgroundTask(Path(path).unlink, missing_ok=True),
         )
 
-    project_import_lock = asyncio.Lock()
+    project_import_lock = engine.project_lock
 
     async def apply_imported_project(was_locked: bool, was_scope_egress: bool) -> None:
         # Apply policy before reloading plugins or starting the proxy again.
@@ -1277,6 +1284,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store.set_setting(MCP_ENABLED_SETTING, "1" if enabled else "0")
         broker.publish("mcp.toggled", {"enabled": enabled})
         return mcp_state()
+
+    @app.get("/api/http-protocol")
+    async def http_protocol() -> dict[str, str]:
+        return engine.http_protocol_state()
+
+    @app.put("/api/http-protocol")
+    async def set_http_protocol(body: HttpProtocolPatch) -> dict[str, str]:
+        try:
+            return await engine.set_http_protocol(body.mode)
+        except (ValueError, ProxyStartError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/listener")
     async def listener() -> dict[str, Any]:
@@ -1951,7 +1969,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 http_version=req.http_version,
                 encode_content_body=auto_decompress_enabled(store),
             )
-            record = await engine.replay.send(flow, timeout=req.timeout)
+            record = await engine.replay.send(flow, timeout=req.timeout, http_mode=req.http_mode)
         except ReplayError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return render_raw(
@@ -2234,6 +2252,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     mode=body.mode,  # type: ignore[arg-type]
                     payload_sets=_resolve_payload_sets(body),
                     speed=_speed(body),
+                    http_mode=body.http_mode,
                 )
         except FuzzerError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

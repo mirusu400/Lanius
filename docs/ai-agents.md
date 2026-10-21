@@ -67,3 +67,23 @@ if the current port is busy. A launch-time override is also available:
 ```bash
 LANIUS_API_PORT=8091 open -a Lanius
 ```
+
+## HTTP version control
+
+`send_request` and `replay_flow` accept an optional `http_mode`:
+`"auto"`, `"http1.0"`, `"http1.1"`, or `"http2"`. Omit it (or send null) to
+inherit the project default. Forced HTTP/2 requires HTTPS and successful h2
+negotiation; it never falls back to HTTP/1.1. h2c is unsupported.
+
+For example, call `send_request` with
+`{"url":"https://example.test/","http_mode":"http1.1"}`.
+Results include `http_mode`, `upstream_http_version` and
+`response_http_version`; `http_version` describes the request object, which can
+differ from the protocol used toward the server. A null upstream version means
+it was not recorded, including captures made before this feature.
+
+`get_http_mode` reads the project default. `set_http_mode` takes
+`{"mode":"http2"}` (or another supported mode), saves it in the project and
+restarts proxy connections, stopping active Replay/Fuzzer sends. Setting it to
+`"auto"` restores automatic selection. These changes are available through
+the running app's HTTP MCP endpoint; standalone MCP cannot change the engine.

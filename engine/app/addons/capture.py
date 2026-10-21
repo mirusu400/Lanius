@@ -21,6 +21,7 @@ from mitmproxy import tcp
 
 from ..db.store import FlowRecord, FlowStore, RequestSnapshot
 from ..events import EventBroker
+from ..http_protocol import MODE_KEY, WIRE_KEY
 from ..request_history import AUTO_MODIFIED, ORIGINAL, request_changed, snapshot
 
 logger = logging.getLogger(__name__)
@@ -331,6 +332,9 @@ def flow_to_record(flow: http.HTTPFlow) -> FlowRecord:
         path=req.path.split("?", 1)[0],
         query=req.path.split("?", 1)[1] if "?" in req.path else None,
         http_version=req.http_version,
+        http_mode=flow.metadata.get(MODE_KEY),
+        upstream_http_version=flow.metadata.get(WIRE_KEY),
+        response_http_version=flow.response.http_version if flow.response else None,
         request_headers=[(k, v) for k, v in req.headers.items(multi=True)],
         request_body=req.raw_content or b"",
         request_size=len(req.raw_content or b""),
