@@ -23,6 +23,27 @@ Drag the divider between the site tree and request detail to resize either
 pane. Endpoint and Scope table columns can also be resized from their header
 edges. These sizes are remembered on this machine.
 
+## Graph view
+
+Switch from **Tree** to **Graph** to explore connections between paths. The
+Host list shows request and path counts; select multiple hosts to display their
+graphs together, or deselect a host to remove it. Searching the list keeps
+selected graphs visible.
+
+Larger circles have more path connections. Drag nodes to rearrange the graph,
+scroll to zoom, and click a node to inspect its requests and immediate child
+paths below. Clicking a child path selects it in the graph; clicking a request
+opens its request and response. The lower panel stays visible even when empty,
+and its divider and the Host list divider can be dragged to resize the panes.
+
+The canvas displays at most 400 nodes across all selected hosts. Selecting a
+path brings it, its ancestors and nearby children into the budget; other paths
+remain available through the lists. This display limit does not remove captured
+requests. **Show more branches** expands the graph up to that limit.
+**Pause motion** stops the layout calculation while keeping navigation and zoom
+available; **Resume motion** starts it again. Layout also pauses while the page
+is hidden, and larger graphs reduce labels and transition effects.
+
 ## Endpoints
 
 Click an endpoint to browse every captured request in that group, inspect its

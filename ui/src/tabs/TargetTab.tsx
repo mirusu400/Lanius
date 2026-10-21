@@ -22,6 +22,7 @@ import type {
   Site,
   SitePath,
 } from '../api/types';
+import { SitemapGraph } from '../components/SitemapGraph';
 import { ScopeEditor } from '../components/ScopeEditor';
 import {
   SitemapTree,
@@ -69,6 +70,8 @@ export function TargetTab() {
   const t = useT();
   const addRequestScopeRule = useAddRequestScopeRule();
   const [view, setView] = useState<View>('sitemap');
+  const [sitemapView, setSitemapView] = useState<'tree' | 'graph'>('tree');
+  const [graphHosts, setGraphHosts] = useState<string[] | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
   const [sitePaths, setSitePaths] = useState<Record<string, SitePath[]>>({});
   const [pages, setPages] = useState<Record<string, SitePageState>>({});
@@ -81,6 +84,7 @@ export function TargetTab() {
   useEffect(() => { pagesRef.current = pages; }, [pages]);
   const loadingPages = useRef(new Set<string>());
   const pageGeneration = useRef(0);
+  const [graphResetKey, setGraphResetKey] = useState(0);
   const [trees, setTrees] = useState<SiteTree[]>([]);
   const [selectedFlow, setSelectedFlow] = useState<SitePath | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -128,6 +132,7 @@ export function TargetTab() {
 
   const selectRow = (event: React.MouseEvent, target: SitemapRowTarget) => {
     const key = sitemapRowKey(target);
+    if (target.kind === 'node' && target.node.site) setGraphHosts([siteLabel(target.node.site)]);
     const additive = event.ctrlKey || event.metaKey;
     if (event.shiftKey) {
       event.preventDefault();
@@ -193,8 +198,11 @@ export function TargetTab() {
 
   const resetPages = useCallback(() => {
     pageGeneration.current += 1;
+    setGraphResetKey((key) => key + 1);
     loadingPages.current.clear();
     loadingFolders.current.clear();
+    pagesRef.current = {};
+    folderPagesRef.current = {};
     setSitePaths({});
     setPages({});
     setSiteFolders({});
@@ -528,7 +536,11 @@ export function TargetTab() {
           />
           {t('target.inScopeOnly')}
         </label>
-        {view === 'sitemap' && (expansion.anyOpen ||
+        {view === 'sitemap' && <div className="sitemap-view-toggle" role="group" aria-label={t('target.sitemapView')}>
+          <button aria-pressed={sitemapView === 'tree'} onClick={() => setSitemapView('tree')}>{t('target.treeView')}</button>
+          <button aria-pressed={sitemapView === 'graph'} onClick={() => { setSitemapView('graph'); setSelectedFlow(null); }}>{t('target.graphView')}</button>
+        </div>}
+        {view === 'sitemap' && sitemapView === 'tree' && (expansion.anyOpen ||
           (sites.length <= 20 && sites.every((site) => site.flows <= 200))) && (
           <button
             onClick={() => {
@@ -604,10 +616,23 @@ export function TargetTab() {
       ) : (
         <Split
           direction="horizontal"
-          storageKey="lanius.split.sitemap"
-          initial={0.46}
+          storageKey={sitemapView === 'graph' ? 'lanius.split.sitemap.graph.detail' : 'lanius.split.sitemap'}
+          initial={sitemapView === 'graph' ? 0.7 : 0.46}
           className="proxy-split"
-          first={<div className="sitemap-pane">
+          secondHidden={sitemapView === 'graph' && !selectedFlow}
+          first={<div className={sitemapView === 'graph' ? 'sitemap-pane graph-mode' : 'sitemap-pane'}>
+            {sitemapView === 'graph' ? <SitemapGraph
+              trees={trees}
+              resetKey={graphResetKey}
+              hosts={graphHosts}
+              onHostsChange={(hosts) => { setGraphHosts(hosts); setSelectedFlow(null); }}
+              pages={pages}
+              folderPages={folderPages}
+              onOpenNode={openNode}
+              onLoadMore={(node) => void loadPage(node)}
+              onLoadMoreFolders={(node) => void loadFolders(node)}
+              onSelectFlow={setSelectedFlow}
+            /> : <>
             <p className="sitemap-selection-hint">
               {selectedRows.length > 1
                 ? t('target.selectedRows', { count: selectedRows.length })
@@ -625,6 +650,7 @@ export function TargetTab() {
               onRowContextMenu={openRowMenu}
               expansion={expansion}
             />
+            </>}
             <ConfirmDialog
               open={deletion !== null}
               title={t('menu.deleteFlow')}
@@ -670,6 +696,7 @@ export function TargetTab() {
             />
           </div>}
           second={<div className="site-detail">
+            {sitemapView === 'graph' && selectedFlow && <button className="sitemap-graph-close" onClick={() => setSelectedFlow(null)}>{t('target.graphCloseRequest')}</button>}
             {selectedDetail && selectedDetail.id === selectedFlow?.id && <FlowDetailView flow={selectedDetail} splitStorageKey="lanius.split.sitemap.detail" initialSplit={0.35} />}
           </div>}
         />

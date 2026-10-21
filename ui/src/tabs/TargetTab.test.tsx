@@ -7,6 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TargetTab } from './TargetTab';
 import type { ScopeRule } from '../api/types';
 
+vi.mock('../components/SitemapForceGraph', () => ({
+  default: ({ selectedPath, nodes }: { selectedPath: string; nodes: { node: { path: string } }[] }) =>
+    <div data-testid="force-graph" data-selected-path={selectedPath} data-selected-visible={nodes.some(({ node }) => node.path === selectedPath)} data-node-paths={JSON.stringify(nodes.map(({ node }) => node.path))} />,
+}));
+
 let rules: ScopeRule[] = [];
 let restrict = false;
 let calls: { url: string; method: string; body?: unknown }[] = [];
@@ -102,6 +107,7 @@ function jsonResponse(body: unknown) {
 }
 
 beforeEach(() => {
+  window.localStorage.removeItem('lanius.split.sitemap.graph.requests');
   extraPaths = [];
   discoveredFolders = [];
   rules = [];
@@ -255,6 +261,137 @@ describe('TargetTab', () => {
     await user.click(screen.getByRole('button', { name: t('target.expandAll') }));
     await waitFor(() => expect(treeRows().length).toBeGreaterThan(4));
   };
+
+  it('switches the selected host to a graph and opens captured requests', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await user.click(await screen.findByText('http://cdn.test'));
+    await user.click(screen.getByRole('button', { name: t('target.graphView') }));
+    expect((screen.getByRole('checkbox', { name: 'http://cdn.test' }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('checkbox', { name: 'https://api.test' }) as HTMLInputElement).checked).toBe(false);
+    await user.selectOptions(await screen.findByRole('combobox', { name: t('target.graphSelectPath') }), 'http://cdn.test/api');
+    await user.selectOptions(await screen.findByRole('combobox', { name: t('target.graphSelectPath') }), 'http://cdn.test/api/v1');
+    await user.selectOptions(await screen.findByRole('combobox', { name: t('target.graphSelectPath') }), 'http://cdn.test/api/v1/users');
+    await user.click(screen.getByRole('button', { name: 'GET /api/v1/users?page=1 200' }));
+    await waitFor(() => expect(calls.some((call) => call.url.includes('/api/flows/cdn-p3'))).toBe(true));
+    await user.click(screen.getByRole('button', { name: t('target.graphCloseRequest') }));
+    expect(screen.queryByRole('button', { name: t('target.graphCloseRequest') })).toBeNull();
+    expect(calls.filter((call) => call.url.includes('/api/sitemap/paths')).every((call) => new URL(call.url).searchParams.get('host') === 'cdn.test')).toBe(true);
+    await user.click(screen.getByRole('button', { name: t('target.treeView') }));
+    expect(rowFor('http://cdn.test')?.classList.contains('selected')).toBe(true);
+  });
+
+  it('lists immediate child paths alongside requests and selects their graph nodes', async () => {
+    extraPaths = [
+      { ...paths[0], id: 'root', path: '/' },
+      { ...paths[0], id: 'json1', path: '/api/apitest.json' },
+      { ...paths[0], id: 'json2', path: '/api/apitest2.json' },
+    ];
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await screen.findByText('https://api.test');
+    await user.click(screen.getByRole('button', { name: t('target.graphView') }));
+    const panel = within(screen.getByRole('region', { name: t('target.graphRequests') }));
+    await user.click(await panel.findByRole('button', { name: 'GET / 200' }));
+    await waitFor(() => expect(calls.some((call) => call.url.includes('/api/flows/root'))).toBe(true));
+    expect(panel.queryByRole('button', { name: 'https://api.test/api/apitest.json' })).toBeNull();
+    await user.click(panel.getByRole('button', { name: 'https://api.test/api' }));
+    expect(screen.getByTestId('force-graph').getAttribute('data-selected-path')).toBe('https://api.test/api');
+    expect(screen.queryByRole('button', { name: t('target.graphCloseRequest') })).toBeNull();
+    expect(panel.getByRole('button', { name: 'https://api.test/api/apitest.json' })).toBeTruthy();
+    expect(panel.getByRole('button', { name: 'https://api.test/api/apitest2.json' })).toBeTruthy();
+    await user.click(panel.getByRole('button', { name: 'https://api.test/api/apitest.json' }));
+    await user.click(panel.getByRole('button', { name: 'GET /api/apitest.json 200' }));
+    await waitFor(() => expect(calls.some((call) => call.url.includes('/api/flows/json1'))).toBe(true));
+  });
+
+  it('keeps an empty request panel pinned and remembers its dragged height', async () => {
+    discoveredFolders = ['/empty'];
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await screen.findByText('https://api.test');
+    await user.click(screen.getByRole('button', { name: t('target.graphView') }));
+    const panel = within(screen.getByRole('region', { name: t('target.graphRequests') }));
+    await user.click(await panel.findByRole('button', { name: 'https://api.test/empty' }));
+    await panel.findByText(t('target.graphNoRequests'));
+    const split = document.querySelector('.sitemap-graph-split') as HTMLElement;
+    split.getBoundingClientRect = () => ({ left: 0, top: 100, width: 1000, height: 600 }) as DOMRect;
+    const separator = within(split).getByRole('separator');
+    fireEvent.mouseDown(separator);
+    fireEvent.mouseMove(window, { clientY: 400 });
+    fireEvent.mouseUp(window);
+    expect(separator.getAttribute('aria-valuenow')).toBe('50');
+    expect(window.localStorage.getItem('lanius.split.sitemap.graph.requests')).toBe('0.5');
+    await user.click(screen.getByRole('button', { name: t('target.treeView') }));
+    await user.click(screen.getByRole('button', { name: t('target.graphView') }));
+    expect(within(document.querySelector('.sitemap-graph-split') as HTMLElement).getByRole('separator').getAttribute('aria-valuenow')).toBe('50');
+    expect(screen.getByRole('region', { name: t('target.graphRequests') })).toBeTruthy();
+  });
+
+  it('adds and removes host graphs independently and keeps the panel with no selection', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await screen.findByText('https://api.test');
+    await user.click(screen.getByRole('button', { name: t('target.graphView') }));
+    const graphPaths = () => JSON.parse(screen.getByTestId('force-graph').getAttribute('data-node-paths') ?? '[]') as string[];
+    await waitFor(() => expect(graphPaths()).toContain('https://api.test/api/v1/users'));
+    expect(calls.filter((call) => call.url.includes('/api/sitemap/paths')).every((call) => new URL(call.url).searchParams.get('host') === 'api.test')).toBe(true);
+    const table = within(screen.getByRole('table', { name: t('target.graphHosts') }));
+    expect(table.getByRole('columnheader', { name: t('target.graphHostRequests') })).toBeTruthy();
+    expect(table.getByRole('columnheader', { name: t('target.graphHostPaths') })).toBeTruthy();
+    const cdn = table.getByRole('checkbox', { name: 'http://cdn.test' });
+    await user.click(cdn);
+    await waitFor(() => expect(graphPaths()).toContain('http://cdn.test/api/v1/users'));
+    expect(graphPaths()).toContain('https://api.test/api/v1/users');
+    expect(screen.getByTestId('force-graph').getAttribute('data-selected-path')).toBe('http://cdn.test');
+    await user.click(cdn);
+    expect(graphPaths().every((path) => path.startsWith('https://api.test'))).toBe(true);
+    await user.click(table.getByRole('checkbox', { name: 'https://api.test' }));
+    expect(screen.queryByTestId('force-graph')).toBeNull();
+    expect(screen.getByRole('region', { name: t('target.graphRequests') })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('common.refresh') }));
+    await waitFor(() => expect((screen.getByRole('checkbox', { name: 'https://api.test' }) as HTMLInputElement).checked).toBe(false));
+    expect(screen.queryByTestId('force-graph')).toBeNull();
+    await user.click(screen.getByRole('button', { name: t('target.treeView') }));
+    await user.click(screen.getByRole('button', { name: t('target.graphView') }));
+    expect(screen.queryByTestId('force-graph')).toBeNull();
+    await user.click(screen.getByRole('checkbox', { name: 'http://cdn.test' }));
+    await waitFor(() => expect(graphPaths()).toContain('http://cdn.test/api/v1/users'));
+    expect(graphPaths().some((path) => path.startsWith('https://api.test'))).toBe(false);
+  });
+
+  it('searches the host list without hiding selected graphs', async () => {
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await screen.findByText('https://api.test');
+    await user.click(screen.getByRole('button', { name: t('target.graphView') }));
+    await user.click(screen.getByRole('checkbox', { name: 'http://cdn.test' }));
+    await user.type(screen.getByRole('textbox', { name: t('target.graphSearchHosts') }), 'cdn');
+    expect(screen.queryByRole('checkbox', { name: 'https://api.test' })).toBeNull();
+    expect(screen.getByTestId('force-graph').getAttribute('data-node-paths')).toContain('https://api.test');
+    await user.click(screen.getByRole('button', { name: t('target.graphClearHosts') }));
+    expect(screen.queryByTestId('force-graph')).toBeNull();
+  });
+
+  it('keeps graph pagination and scope filtering available', async () => {
+    extraPaths = Array.from({ length: 205 }, (_, index) => ({ ...paths[0], id: `extra-${index}`, path: `/item-${index}` }));
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await screen.findByText('https://api.test');
+    await user.click(screen.getByRole('button', { name: t('target.graphView') }));
+    await user.click(await screen.findByRole('button', { name: t('target.loadMore') }));
+    await waitFor(() => expect(calls.some((call) => call.url.includes('/api/sitemap/paths') && call.url.includes('offset=200'))).toBe(true));
+    await user.click(screen.getByRole('button', { name: t('target.graphMoreBranches') }));
+    await user.click(screen.getByRole('checkbox', { name: 'http://cdn.test' }));
+    await user.click(screen.getByRole('checkbox', { name: t('target.inScopeOnly') }));
+    await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'http://cdn.test' })).toBeNull());
+    expect((screen.getByRole('checkbox', { name: 'https://api.test' }) as HTMLInputElement).checked).toBe(true);
+    await waitFor(() => expect(calls.some((call) => call.url.includes('/api/sitemap/paths') && call.url.includes('in_scope_only=true'))).toBe(true));
+    const requestsBeforeRefresh = calls.filter((call) => call.url.includes('/api/sitemap/paths')).length;
+    await user.click(screen.getByRole('button', { name: t('common.refresh') }));
+    await waitFor(() => expect(calls.filter((call) => call.url.includes('/api/sitemap/paths')).length).toBeGreaterThan(requestsBeforeRefresh));
+    expect(await screen.findByRole('button', { name: t('target.loadMore') })).toBeTruthy();
+  });
 
   it('does not make a request per host', async () => {
     // It used to: sixty hosts meant sixty requests and sixty queries, so
