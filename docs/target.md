@@ -37,7 +37,10 @@ lines and its editor height can be adjusted.
 
 Define a **scope** with include and exclude rules to keep your attention on the
 application under test. Scope rules persist across restarts, and you can tell
-Lanius to stop recording out of scope traffic entirely.
+Lanius to stop recording out of scope traffic entirely. This capture
+restriction is enabled by default. New and existing projects also receive
+enabled `*.googleapis.com`, `*.google.com`, and `*.gvt1.com` exclude rules once
+by default; each rule can still be edited, disabled, or removed.
 
 The Scope field accepts full URLs or scheme-free host patterns. A plain domain
 matches any host containing that text, on both HTTP and HTTPS. In the default

@@ -24,7 +24,7 @@ See the [v0.4.0 release notes](docs/releases/v0.4.0.md) for downloads and instal
 - Share editor undo history and request context menus, highlight HTTP details in Replay and Fuzzer, and add configurable shortcuts for sending requests to them.
 - Search settings, configure media body storage limits, and import SQLite project databases with faster history access.
 - Optionally record public IPv4 and IPv6 changes at one, three, or five minute intervals, inspect their history in Settings or over MCP, and use configurable HTTPS observers with no polling or observation writes during Lockdown Mode.
-- Exclude `*.googleapis.com` from scope by default in every project while keeping the rule editable and removable.
+- Exclude `*.googleapis.com`, `*.google.com`, and `*.gvt1.com` from scope by default in every project, and default to not recording out-of-scope traffic, while keeping each setting editable.
 - Trust platform certificate roots for upstream TLS on Linux and Windows, improve Windows CA detection, and help open macOS network extension settings when capture needs approval.
 - Improve signed updates across release channels and installers, and fix startup in affected VMware WebKit environments.
 

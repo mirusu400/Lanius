@@ -130,12 +130,17 @@ def manager(tmp_path):
     store.close()
 
 
-def test_manager_starts_with_default_googleapis_exclusion(manager) -> None:
+def test_manager_starts_with_default_google_exclusions_and_capture_restriction(manager) -> None:
     assert [(item.kind, item.host) for item in manager.scope.rules] == [
-        ("exclude", "*.googleapis.com")
+        ("exclude", "*.googleapis.com"),
+        ("exclude", "*.google.com"),
+        ("exclude", "*.gvt1.com"),
     ]
+    assert manager.scope.restrict_capture is True
     assert manager.contains("https", "any.com", 443, "/") is True
     assert manager.contains("https", "storage.googleapis.com", 443, "/") is False
+    assert manager.contains("https", "accounts.google.com", 443, "/") is False
+    assert manager.contains("https", "redirector.gvt1.com", 443, "/") is False
 
 
 def test_manager_persists_rules(tmp_path) -> None:
@@ -146,7 +151,7 @@ def test_manager_persists_rules(tmp_path) -> None:
 
     reopened = FlowStore(tmp_path / "p.sqlite")
     restored = ScopeManager(reopened)
-    assert len(restored.scope.rules) == 2
+    assert len(restored.scope.rules) == 4
     assert restored.contains("https", "t.com", 443, "/api/x") is True
     assert restored.contains("https", "t.com", 443, "/x") is False
     reopened.close()
@@ -160,7 +165,11 @@ def test_manager_update_and_delete(manager) -> None:
     assert manager.contains("https", "other.com", 443, "/") is True
 
     manager.delete_rule(added.id)
-    assert [item.host for item in manager.scope.rules] == ["*.googleapis.com"]
+    assert [item.host for item in manager.scope.rules] == [
+        "*.googleapis.com",
+        "*.google.com",
+        "*.gvt1.com",
+    ]
 
 
 def test_manager_rejects_unknown_rule_ids(manager) -> None:
@@ -192,6 +201,8 @@ def test_restrict_capture_is_persisted(tmp_path) -> None:
 
 def test_should_capture_respects_restriction(manager) -> None:
     manager.add_rule(host="t.com")
+    assert manager.should_capture("https", "other.com", 443, "/") is False
+    manager.set_restrict_capture(False)
     assert manager.should_capture("https", "other.com", 443, "/") is True
     manager.set_restrict_capture(True)
     assert manager.should_capture("https", "other.com", 443, "/") is False

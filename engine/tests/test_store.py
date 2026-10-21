@@ -230,10 +230,49 @@ def test_migrate_upgrades_a_v1_database(tmp_path) -> None:
     }
     assert {"scope_rules", "settings"} <= tables
     assert conn.execute("SELECT id FROM flows").fetchone()[0] == "legacy"
-    default_rule = conn.execute(
-        "SELECT kind, host FROM scope_rules WHERE host='*.googleapis.com'"
-    ).fetchone()
-    assert default_rule == ("exclude", "*.googleapis.com")
+    default_rules = conn.execute(
+        "SELECT kind, host FROM scope_rules ORDER BY id"
+    ).fetchall()
+    assert default_rules == [
+        ("exclude", "*.googleapis.com"),
+        ("exclude", "*.google.com"),
+        ("exclude", "*.gvt1.com"),
+    ]
+    assert conn.execute(
+        "SELECT value FROM settings WHERE key='scope.restrict_capture'"
+    ).fetchone() == ("1",)
+    conn.close()
+
+
+def test_default_scope_migration_preserves_explicit_capture_opt_out(tmp_path) -> None:
+    path = tmp_path / "v16.sqlite"
+    store = FlowStore(path)
+    store.close()
+
+    conn = sqlite3.connect(path)
+    conn.execute("DELETE FROM scope_rules WHERE host IN ('*.google.com', '*.gvt1.com')")
+    conn.execute(
+        """INSERT INTO scope_rules
+           (kind, host, path, protocol, port, match_type, enabled)
+           VALUES ('exclude', '*.google.com', '/*', 'any', NULL, 'glob', 0)"""
+    )
+    conn.execute(
+        "UPDATE settings SET value='0' WHERE key='scope.restrict_capture'"
+    )
+    conn.execute("PRAGMA user_version = 16")
+    conn.commit()
+
+    assert migrate(conn) == SCHEMA_VERSION
+    assert conn.execute(
+        "SELECT value FROM settings WHERE key='scope.restrict_capture'"
+    ).fetchone() == ("0",)
+    assert conn.execute(
+        "SELECT host, path, enabled FROM scope_rules ORDER BY id"
+    ).fetchall() == [
+        ("*.googleapis.com", "*", 1),
+        ("*.google.com", "/*", 0),
+        ("*.gvt1.com", "*", 1),
+    ]
     conn.close()
 
 

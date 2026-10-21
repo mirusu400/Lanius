@@ -100,7 +100,7 @@ class Scope:
     """The active rule set."""
 
     rules: list[ScopeRule] = field(default_factory=list)
-    restrict_capture: bool = False
+    restrict_capture: bool = True
 
     @property
     def includes(self) -> list[ScopeRule]:
@@ -251,7 +251,7 @@ class ScopeManager:
 
     def reload(self) -> Scope:
         rules = [ScopeRule(**row) for row in self.store.list_scope_rules()]
-        restrict = self.store.get_setting(RESTRICT_CAPTURE_KEY, "0") == "1"
+        restrict = self.store.get_setting(RESTRICT_CAPTURE_KEY, "1") == "1"
         self.scope = Scope(rules=rules, restrict_capture=restrict)
         return self.scope
 

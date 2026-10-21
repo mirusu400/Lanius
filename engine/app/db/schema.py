@@ -16,7 +16,7 @@ from .history_index import (
     REQUEST_NUMBER_MIGRATION,
 )
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -236,6 +236,31 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
                WHERE kind='exclude' AND host='*.googleapis.com'
                  AND path='*' AND protocol='any' AND port IS NULL
                  AND match_type='glob'
+           )""",
+    ),
+    17: (
+        """INSERT INTO scope_rules
+           (kind, host, path, protocol, port, match_type, enabled)
+           SELECT 'exclude', '*.google.com', '*', 'any', NULL, 'glob', 1
+           WHERE NOT EXISTS (
+               SELECT 1 FROM scope_rules
+               WHERE kind='exclude' AND host='*.google.com'
+                 AND path IN ('*', '/*') AND protocol='any' AND port IS NULL
+                 AND match_type='glob'
+           )""",
+        """INSERT INTO scope_rules
+           (kind, host, path, protocol, port, match_type, enabled)
+           SELECT 'exclude', '*.gvt1.com', '*', 'any', NULL, 'glob', 1
+           WHERE NOT EXISTS (
+               SELECT 1 FROM scope_rules
+               WHERE kind='exclude' AND host='*.gvt1.com'
+                 AND path IN ('*', '/*') AND protocol='any' AND port IS NULL
+                 AND match_type='glob'
+           )""",
+        """INSERT INTO settings (key, value)
+           SELECT 'scope.restrict_capture', '1'
+           WHERE NOT EXISTS (
+               SELECT 1 FROM settings WHERE key='scope.restrict_capture'
            )""",
     ),
 }

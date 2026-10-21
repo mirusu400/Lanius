@@ -1035,7 +1035,12 @@ def test_imported_scope_takes_effect_immediately(client) -> None:
     client.post("/api/project/import", json=exported)
 
     rules = client.get("/api/scope").json()["rules"]
-    assert [r["host"] for r in rules] == ["*.googleapis.com", "scoped.example"]
+    assert [r["host"] for r in rules] == [
+        "*.googleapis.com",
+        "*.google.com",
+        "*.gvt1.com",
+        "scoped.example",
+    ]
 
 
 def test_import_refuses_a_document_that_is_not_a_project(client) -> None:
@@ -1093,6 +1098,8 @@ def test_import_sqlite_restores_complete_capture_and_reloads_live_scope(client, 
     assert client.get("/api/workspace/decoder").json()["value"][0]["input"] == "saved payload"
     assert [rule["host"] for rule in client.get("/api/scope").json()["rules"]] == [
         "*.googleapis.com",
+        "*.google.com",
+        "*.gvt1.com",
         "imported.test",
     ]
 

@@ -413,12 +413,13 @@ The request and response panes have a draggable divider; raw text wraps long
 lines and its editor height can be adjusted.
 
 Define a **scope** with include and exclude rules to keep your attention on the
-application under test. Scope rules persist across restarts, and you can tell
-Lanius to stop recording out of scope traffic entirely. In Lockdown settings,
+application under test. Scope rules persist across restarts, and Lanius stops
+recording out-of-scope traffic by default. In Lockdown settings,
 the separate scope egress option can prevent that traffic from being sent at
 all while Lockdown is active.
-New and existing projects receive an enabled `*.googleapis.com` exclude rule
-once by default. It can be edited, disabled or deleted like any other rule.
+New and existing projects receive enabled `*.googleapis.com`, `*.google.com`,
+and `*.gvt1.com` exclude rules once by default. They can be edited, disabled or
+deleted like any other rule.
 The Scope field accepts full URLs or scheme-free host patterns. A plain domain
 matches any host containing that text, on both HTTP and HTTPS. In the default
 mode, `*` matches any number of characters and `?` matches one character.

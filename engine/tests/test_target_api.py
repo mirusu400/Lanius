@@ -51,12 +51,14 @@ def seed(client, **kwargs) -> None:
 # --- scope CRUD -----------------------------------------------------------
 
 
-def test_scope_starts_with_default_googleapis_exclusion(client) -> None:
+def test_scope_starts_with_default_google_exclusions_and_capture_restriction(client) -> None:
     data = client.get("/api/scope").json()
     assert [(rule["kind"], rule["host"]) for rule in data["rules"]] == [
-        ("exclude", "*.googleapis.com")
+        ("exclude", "*.googleapis.com"),
+        ("exclude", "*.google.com"),
+        ("exclude", "*.gvt1.com"),
     ]
-    assert data["restrict_capture"] is False
+    assert data["restrict_capture"] is True
 
 
 def test_add_list_and_delete_a_rule(client) -> None:
@@ -70,7 +72,9 @@ def test_add_list_and_delete_a_rule(client) -> None:
 
     assert client.delete(f"/api/scope/rules/{rule['id']}").status_code == 200
     assert [item["host"] for item in client.get("/api/scope").json()["rules"]] == [
-        "*.googleapis.com"
+        "*.googleapis.com",
+        "*.google.com",
+        "*.gvt1.com",
     ]
 
 
@@ -139,7 +143,12 @@ def test_scope_rules_survive_a_restart(tmp_path) -> None:
     )
     with TestClient(create_app(settings2)) as second:
         rules = second.get("/api/scope").json()["rules"]
-        assert [r["host"] for r in rules] == ["*.googleapis.com", "keeps.com"]
+        assert [r["host"] for r in rules] == [
+            "*.googleapis.com",
+            "*.google.com",
+            "*.gvt1.com",
+            "keeps.com",
+        ]
 
 
 # --- capture restriction --------------------------------------------------
@@ -161,6 +170,7 @@ def test_capture_restriction_filters_flows(client) -> None:
 
 def test_capture_restriction_off_records_everything(client) -> None:
     client.post("/api/scope/rules", json={"host": "wanted.com"})
+    client.patch("/api/scope", json={"restrict_capture": False})
     capture = client.app.state.engine.capture
     capture.response(tflow.tflow(req=tutils.treq(host="noise.com"), resp=tutils.tresp()))
     assert client.get("/api/flows").json()["count"] == 1
