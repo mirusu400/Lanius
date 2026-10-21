@@ -628,7 +628,7 @@ Then paste the public half into `pubkey` in
 never leaves your machine and the secrets; anyone holding it can publish a
 build that every installation will accept, so treat it as the release key it
 is. Nightly builds then carry a version of the form
-`0.4.1-nightly.20261014T1009.42`, and each published channel has a `latest.json`
+`0.5.1-nightly.20261021T1009.42`, and each published channel has a `latest.json`
 for the in-app updater. Stable builds check the latest stable release;
 nightly builds check the rolling nightly release.
 
