@@ -96,7 +96,7 @@ export function TargetTab() {
   const lastEndpointRefresh = useRef(0);
   const [scope, setScope] = useState<ScopeState>({
     rules: [],
-    restrict_capture: false,
+    restrict_capture: true,
   });
   const [inScopeOnly, setInScopeOnly] = useState(false);
   const [error, setError] = useState<Message | null>(null);

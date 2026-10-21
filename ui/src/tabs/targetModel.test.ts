@@ -111,6 +111,15 @@ describe('describeRule', () => {
     );
   });
 
+  it('renders an all-path host glob as a host pattern', () => {
+    expect(describeRule(rule({
+      host: '*.googleapis.com',
+      protocol: 'any',
+      port: null,
+      path: '*',
+    }))).toBe('*.googleapis.com');
+  });
+
   it('marks regex rules', () => {
     expect(describeRule(rule({ match_type: 'regex' }))).toContain('(regex)');
   });

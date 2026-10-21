@@ -139,7 +139,12 @@ export function describeRule(rule: ScopeRule): string {
   if (rule.protocol === 'any' && rule.port === null && rule.path === '.*' && rule.match_type === 'regex') {
     return `${rule.host} (regex)`;
   }
-  if (rule.protocol === 'any' && rule.port === null && rule.path === '/*' && rule.match_type === 'glob') {
+  if (
+    rule.protocol === 'any' &&
+    rule.port === null &&
+    (rule.path === '*' || rule.path === '/*') &&
+    rule.match_type === 'glob'
+  ) {
     return rule.host;
   }
   const proto = rule.protocol === 'any' ? '*' : rule.protocol;
