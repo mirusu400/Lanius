@@ -177,13 +177,18 @@ export async function listFlowPage(
 export function getFlow(
   id: string,
   reveal = false,
-  charsets: { request?: string | null; response?: string | null } = {},
+  charsets: {
+    request?: string | null;
+    response?: string | null;
+    repairResponseMojibake?: boolean;
+  } = {},
   signal?: AbortSignal,
 ): Promise<FlowDetail> {
   const params = new URLSearchParams();
   if (reveal) params.set('reveal', 'true');
   if (charsets.request) params.set('request_charset', charsets.request);
   if (charsets.response) params.set('response_charset', charsets.response);
+  if (charsets.repairResponseMojibake) params.set('repair_response_mojibake', 'true');
   const query = params.size ? `?${params}` : '';
   return request<FlowDetail>(`/api/flows/${encodeURIComponent(id)}${query}`, signal ? { signal } : undefined);
 }
@@ -209,12 +214,32 @@ export function getFlowBodyPreview(
   side: 'request' | 'response',
   offset: number,
   charset?: string | null,
+  repairMojibake = false,
 ): Promise<FlowBodyPreviewChunk> {
   const params = new URLSearchParams({ offset: String(offset) });
   if (charset) params.set('charset', charset);
+  if (repairMojibake) params.set('repair_mojibake', 'true');
   return request<FlowBodyPreviewChunk>(
     `/api/flows/${encodeURIComponent(id)}/body/${side}/preview?${params}`,
   );
+}
+
+/** Read a bounded slice of the BLOB exactly as it is stored. Hex views use
+ * this instead of encoding already-decoded UI text back into UTF-8. */
+export async function getFlowBodyBytes(
+  id: string,
+  side: 'request' | 'response',
+  offset: number,
+  limit: number,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+  const res = await apiFetch(
+    `/api/flows/${encodeURIComponent(id)}/body/${side}?${params}`,
+    signal ? { signal } : undefined,
+  );
+  if (!res.ok) throw new Error(await errorDetail(res));
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 export function patchFlowAnnotation(
@@ -227,8 +252,16 @@ export function patchFlowAnnotation(
   });
 }
 
-export function getResponsePreview(id: string, charset?: string | null, signal?: AbortSignal): Promise<ResponsePreview> {
-  const query = charset ? `?charset=${encodeURIComponent(charset)}` : '';
+export function getResponsePreview(
+  id: string,
+  charset?: string | null,
+  repairMojibake = false,
+  signal?: AbortSignal,
+): Promise<ResponsePreview> {
+  const params = new URLSearchParams();
+  if (charset) params.set('charset', charset);
+  if (repairMojibake) params.set('repair_mojibake', 'true');
+  const query = params.size ? `?${params}` : '';
   return request<ResponsePreview>(`/api/flows/${encodeURIComponent(id)}/response-preview${query}`, signal ? { signal } : undefined);
 }
 

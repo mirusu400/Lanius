@@ -101,7 +101,7 @@ def test_flow_body_charsets_can_be_overridden_independently(client) -> None:
     assert data["response_charset"] == "shift_jis"
 
 
-def test_flow_detail_repairs_double_encoded_utf8_response_only(client) -> None:
+def test_flow_detail_repairs_double_encoded_utf8_response_only_when_requested(client) -> None:
     text = "<title>한국동서발전</title>"
     double_encoded = text.encode("utf-8").decode("latin-1").encode("utf-8")
     seed(
@@ -114,13 +114,36 @@ def test_flow_detail_repairs_double_encoded_utf8_response_only(client) -> None:
     )
 
     data = client.get("/api/flows/double-utf8").json()
-    assert data["response_body"] == text
-    assert data["response_body_mojibake_repaired"] is True
+    assert data["response_body"] != text
+    assert data["response_body_mojibake_detected"] is True
+    assert data["response_body_mojibake_repaired"] is False
     # Requests are editable and must not be silently rewritten on Replay.
     assert data["request_body"] != text
 
-    preview = client.get("/api/flows/double-utf8/response-preview").json()
+    repaired = client.get(
+        "/api/flows/double-utf8?repair_response_mojibake=true"
+    ).json()
+    assert repaired["response_body"] == text
+    assert repaired["response_body_mojibake_repaired"] is True
+
+    preview = client.get(
+        "/api/flows/double-utf8/response-preview?repair_mojibake=true"
+    ).json()
     assert preview == {"kind": "html", "text": text}
+
+
+def test_flow_detail_replaces_only_the_invalid_utf8_sequence(client) -> None:
+    raw = b"<p>" + "한글".encode("utf-8") + b"</p>\xff"
+    seed(
+        client,
+        "mixed-utf8",
+        response_headers=[("Content-Type", "text/html; charset=utf-8")],
+        response_body=raw,
+    )
+
+    data = client.get("/api/flows/mixed-utf8").json()
+    assert data["response_body"] == "<p>한글</p>�"
+    assert data["response_body_decode_had_errors"] is True
 
 
 def test_flow_detail_reads_bounded_body_chunks_and_keeps_total_size(client) -> None:
@@ -401,6 +424,10 @@ def test_full_text_search_anchor_and_raw_body_endpoint(client) -> None:
     assert [item["id"] for item in cursor_page["items"]] == ["old"]
     assert client.get("/api/flows?search=needle-tail").json()["items"][0]["id"] == "old"
     assert client.get("/api/flows/old/body/request").content == b"\xffneedle-tail"
+    bounded = client.get("/api/flows/old/body/request?offset=1&limit=6")
+    assert bounded.status_code == 206
+    assert bounded.content == b"needle"
+    assert bounded.headers["x-lanius-body-total"] == str(len(b"\xffneedle-tail"))
     assert client.get("/api/flows?cursor=invalid").status_code == 422
 
 

@@ -124,7 +124,7 @@ def test_undecodable_bytes_are_not_destroyed() -> None:
     assert charset.encode(charset.decode(raw, "utf-8"), "latin-1") == raw
 
 
-def test_double_encoded_utf8_is_repaired_only_for_read_only_display() -> None:
+def test_double_encoded_utf8_is_repaired_only_when_requested() -> None:
     text = "<title>한국동서발전</title>"
     double_encoded = text.encode("utf-8").decode("latin-1").encode("utf-8")
 
@@ -133,19 +133,35 @@ def test_double_encoded_utf8_is_repaired_only_for_read_only_display() -> None:
     assert broken != text
     assert broken.encode("utf-8") == double_encoded
 
-    displayed, repaired = charset.decode_for_display(double_encoded, "utf-8")
-    assert displayed == text
-    assert repaired is True
+    displayed = charset.decode_for_display(double_encoded, "utf-8")
+    assert displayed.text == broken
+    assert displayed.mojibake_detected is True
+    assert displayed.mojibake_repaired is False
+
+    repaired = charset.decode_for_display(
+        double_encoded, "utf-8", repair_mojibake=True
+    )
+    assert repaired.text == text
+    assert repaired.mojibake_repaired is True
 
 
 def test_display_repair_leaves_normal_text_and_binary_fallback_alone() -> None:
     normal = "한글 ✓".encode("utf-8")
-    assert charset.decode_for_display(normal, "utf-8") == ("한글 ✓", False)
+    assert charset.decode_for_display(normal, "utf-8") == charset.DisplayDecode("한글 ✓")
 
     binary = bytes(range(256))
-    displayed, repaired = charset.decode_for_display(binary, "utf-8")
-    assert repaired is False
-    assert displayed.encode("latin-1") == binary
+    displayed = charset.decode_for_display(binary, "utf-8")
+    assert displayed.had_errors is True
+    assert displayed.mojibake_repaired is False
+
+
+def test_display_decode_does_not_poison_valid_utf8_after_one_bad_byte() -> None:
+    raw = b"<p>" + "한글".encode("utf-8") + b"</p>\xff"
+
+    displayed = charset.decode_for_display(raw, "utf-8")
+
+    assert displayed.text == "<p>한글</p>�"
+    assert displayed.had_errors is True
 
 
 def test_characters_a_charset_cannot_express_are_escaped() -> None:

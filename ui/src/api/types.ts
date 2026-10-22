@@ -89,7 +89,10 @@ export interface FlowDetail extends FlowSummary {
   response_body_decoded?: boolean;
   request_decode_error?: string | null;
   response_decode_error?: string | null;
-  /** A read-only response had an extra UTF-8-via-Latin-1 encoding layer. */
+  /** Invalid sequences were replaced only at their locations for display. */
+  response_body_decode_had_errors?: boolean;
+  /** A read-only response may have an extra UTF-8-via-Latin-1 layer. */
+  response_body_mojibake_detected?: boolean;
   response_body_mojibake_repaired?: boolean;
   request_variants?: {
     original: RequestVariant;
@@ -101,6 +104,8 @@ export interface FlowDetail extends FlowSummary {
 export interface FlowBodyPreviewChunk {
   text: string;
   charset: string;
+  decode_had_errors?: boolean;
+  mojibake_detected?: boolean;
   mojibake_repaired?: boolean;
   offset: number;
   next_offset: number;

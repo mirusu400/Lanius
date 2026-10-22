@@ -72,10 +72,14 @@ beforeEach(() => {
       const isModified = url.href.includes('m1');
       const requestCharset = url.searchParams.get('request_charset');
       const responseCharset = url.searchParams.get('response_charset');
+      const body = url.pathname.includes('/body/request')
+        ? (isTcp ? 'HELLO\r\n' : isCode ? '<main class="card">Hi</main>' : '')
+        : (isTcp ? '220 READY\r\n' : isJson ? '{"a":1,"b":2}' : isCode ? 'const answer = 42;' : 'ok');
       return {
         ok: true,
         status: 200,
         statusText: 'OK',
+        arrayBuffer: async () => new TextEncoder().encode(body).buffer,
         json: async () => ({
           ...(isTcp ? tcpFlow : isModified ? modifiedFlow : isCode ? codeFlow : httpFlow),
           request_headers: isTcp ? [] : isCode
@@ -149,19 +153,29 @@ describe('toHex', () => {
 });
 
 describe('FlowDetailView', () => {
-  it('discloses when UTF-8 mojibake was repaired for display', async () => {
-    vi.mocked(fetch).mockResolvedValue({ ok: true, status: 200, json: async () => ({
-      ...httpFlow,
-      request_headers: [], request_body: '',
-      response_headers: [['Content-Type', 'text/html; charset=utf-8']],
-      response_body: '<title>한국동서발전</title>',
-      response_body_mojibake_repaired: true,
-    }) } as Response);
+  it('offers double-encoding repair without changing captured text by default', async () => {
+    const broken = '<title>í\u0095\u009cêµ\u00adë\u008f\u0099ì\u0084\u009cë°\u009cì \u0084</title>';
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const repaired = new URL(String(input)).searchParams.get('repair_response_mojibake') === 'true';
+      return { ok: true, status: 200, json: async () => ({
+        ...httpFlow,
+        request_headers: [], request_body: '',
+        response_headers: [['Content-Type', 'text/html; charset=utf-8']],
+        response_body: repaired ? '<title>한국동서발전</title>' : broken,
+        response_body_mojibake_detected: true,
+        response_body_mojibake_repaired: repaired,
+      }) } as Response;
+    });
 
     render(<FlowDetailView flow={httpFlow} />);
 
-    expect(await screen.findByText(t('detail.mojibakeRepaired'))).toBeTruthy();
-    expect(screen.getByText('한국동서발전')).toBeTruthy();
+    expect(await screen.findByText(t('detail.repairMojibake'))).toBeTruthy();
+    expect(screen.queryByText('한국동서발전')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: t('detail.repairMojibake') }));
+    expect(await screen.findByText('한국동서발전')).toBeTruthy();
+    expect(screen.getByText(t('detail.mojibakeRepaired'))).toBeTruthy();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) =>
+      new URL(String(url)).searchParams.get('repair_response_mojibake') === 'true')).toBe(true);
   });
 
   it('remembers exchange layout without remounting either message pane', async () => {
@@ -442,6 +456,31 @@ describe('FlowDetailView', () => {
     await userEvent.click(tabs[0]);
     // "GET" in hex.
     await waitFor(() => expect(document.body.textContent).toContain('47 45 54'));
+  });
+
+  it('dumps captured response bytes instead of re-encoding decoded text', async () => {
+    const captured = Uint8Array.from([0xed, 0x95, 0x9c]);
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/body/response?')) {
+        return { ok: true, status: 200, arrayBuffer: async () => captured.buffer } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({
+        ...httpFlow,
+        response_size: captured.length,
+        response_body_captured_size: captured.length,
+        request_headers: [], request_body: '',
+        response_headers: [['Content-Type', 'text/plain; charset=utf-8']],
+        response_body: 'í\u0095\u009c',
+      }) } as Response;
+    });
+
+    render(<FlowDetailView flow={httpFlow} />);
+    const tabs = await screen.findAllByRole('tab', { name: t('detail.view.hex') });
+    await userEvent.click(tabs[1]);
+
+    await waitFor(() => expect(half(1)?.textContent).toContain('ed 95 9c'));
+    expect(half(1)?.textContent).not.toContain('c3 ad c2 95 c2 9c');
   });
 
   it('does not offer to parse a raw TCP stream', async () => {

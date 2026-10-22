@@ -205,21 +205,25 @@ def _text_body(
     body: bytes,
     content_type: str,
     charset_override: str | None,
+    repair_mojibake: bool = False,
 ) -> str:
     selected = (
         charset.normalise(charset_override)
         if charset_override
         else charset.charset_of(content_type, body)
     )
-    return charset.decode_for_display(body, selected)[0]
+    return charset.decode_for_display(
+        body, selected, repair_mojibake=repair_mojibake
+    ).text
 
 
 def _csv_preview(
     body: bytes,
     content_type: str,
     charset_override: str | None,
+    repair_mojibake: bool = False,
 ) -> dict[str, Any]:
-    decoded = _text_body(body, content_type, charset_override)
+    decoded = _text_body(body, content_type, charset_override, repair_mojibake)
     try:
         rows = list(csv.reader(io.StringIO(decoded[:500_000])))[:MAX_SHEET_ROWS]
     except csv.Error:
@@ -230,6 +234,7 @@ def _csv_preview(
 def response_preview(
     record: FlowRecord,
     charset_override: str | None = None,
+    repair_mojibake: bool = False,
 ) -> dict[str, Any]:
     """Return a preview model, never executable captured content."""
     if record.response_body_omitted:
@@ -283,11 +288,11 @@ def response_preview(
     if image_mime or mime in IMAGE_TYPES:
         return {"kind": "image", "mime": image_mime or mime, "data": base64.b64encode(body).decode("ascii")}
 
-    text = _text_body(body, content_type, charset_override)
+    text = _text_body(body, content_type, charset_override, repair_mojibake)
     if mime in {"text/html", "application/xhtml+xml"} or suffix in {".html", ".htm"} or re.match(r"\s*(?:<!doctype html|<html[\s>])", text[:200], re.I):
         return {"kind": "html", "text": text}
     if mime in {"text/csv", "application/csv"} or suffix == ".csv":
-        return _csv_preview(body, content_type, charset_override)
+        return _csv_preview(body, content_type, charset_override, repair_mojibake)
     if mime == "application/json" or mime.endswith("+json") or suffix == ".json":
         try:
             text = json.dumps(json.loads(text), ensure_ascii=False, indent=2)

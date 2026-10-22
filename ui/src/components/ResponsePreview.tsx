@@ -181,27 +181,28 @@ function PreviewContent({ preview, query, activeIndex, onMatchCount }: {
   return null;
 }
 
-export function ResponsePreview({ flowId, charset, query = '', activeIndex = null, onMatchCount = NOOP_MATCH_COUNT }: {
+export function ResponsePreview({ flowId, charset, repairMojibake = false, query = '', activeIndex = null, onMatchCount = NOOP_MATCH_COUNT }: {
   flowId: string;
   charset?: string | null;
+  repairMojibake?: boolean;
   query?: string;
   activeIndex?: number | null;
   onMatchCount?: (count: number) => void;
 }) {
   const t = useT();
-  const [result, setResult] = useState<{ flowId: string; charset: string | null; preview?: PreviewData; error?: string } | null>(null);
+  const [result, setResult] = useState<{ flowId: string; charset: string | null; repairMojibake: boolean; preview?: PreviewData; error?: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
     onMatchCount(0);
-    getResponsePreview(flowId, charset, controller.signal)
-      .then((data) => { if (!cancelled) setResult({ flowId, charset: charset ?? null, preview: data }); })
-      .catch((cause: unknown) => { if (!cancelled) setResult({ flowId, charset: charset ?? null, error: cause instanceof Error ? cause.message : String(cause) }); });
+    getResponsePreview(flowId, charset, repairMojibake, controller.signal)
+      .then((data) => { if (!cancelled) setResult({ flowId, charset: charset ?? null, repairMojibake, preview: data }); })
+      .catch((cause: unknown) => { if (!cancelled) setResult({ flowId, charset: charset ?? null, repairMojibake, error: cause instanceof Error ? cause.message : String(cause) }); });
     return () => { cancelled = true; controller.abort(); };
-  }, [flowId, charset, onMatchCount]);
+  }, [flowId, charset, repairMojibake, onMatchCount]);
 
-  if (result?.flowId !== flowId || result.charset !== (charset ?? null)) return <LoadingPane label={t('detail.preview.loading')} />;
+  if (result?.flowId !== flowId || result.charset !== (charset ?? null) || result.repairMojibake !== repairMojibake) return <LoadingPane label={t('detail.preview.loading')} />;
   if (result.error) return <p className="banner error">{t('detail.preview.failed', { message: result.error })}</p>;
   if (!result.preview) return <LoadingPane label={t('detail.preview.loading')} />;
   return <div className="response-preview" onKeyDown={selectAllText}><PreviewContent preview={result.preview} query={query} activeIndex={activeIndex} onMatchCount={onMatchCount} /></div>;

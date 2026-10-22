@@ -18,7 +18,6 @@ import { rawRequest, rawRequestVariant, rawResponse } from './rawHttp';
 import {
   canReformat,
   formatBody,
-  hexPreview,
   type BodyView,
 } from './bodyFormat';
 import { useT } from '../i18n';
@@ -33,7 +32,8 @@ import { copyTextToClipboard } from '../clipboard';
 import { CodeDisplayControls } from './CodeDisplayControls';
 import { LoadingPane } from './Spinner';
 import { selectedText } from './textDocument';
-import { selectableTextProps, selectAllText } from './selectAllText';
+import { selectAllText } from './selectAllText';
+import { RawHexView } from './RawHexView';
 
 interface Props {
   flow: FlowSummary | null;
@@ -124,7 +124,10 @@ function Half({
   onCharsetOverride,
   encodingLabel,
   decodeError,
+  decodeHadErrors = false,
+  mojibakeDetected = false,
   mojibakeRepaired = false,
+  onToggleMojibake,
   requestStage,
   onRequestStage,
   onContextMenu,
@@ -137,6 +140,8 @@ function Half({
   onActivate,
   isActive,
   searchQuery,
+  rawBodyFlowId,
+  rawBodySide,
 }: {
   title: string;
   note?: string | null;
@@ -161,7 +166,10 @@ function Half({
   onCharsetOverride: (charset: string) => void;
   encodingLabel: string | null;
   decodeError?: string | null;
+  decodeHadErrors?: boolean;
+  mojibakeDetected?: boolean;
   mojibakeRepaired?: boolean;
+  onToggleMojibake?: () => void;
   requestStage?: RequestStage;
   onRequestStage?: (stage: RequestStage) => void;
   onContextMenu: (event: React.MouseEvent) => void;
@@ -176,14 +184,16 @@ function Half({
   onActivate: () => void;
   isActive: () => boolean;
   searchQuery: string;
+  rawBodyFlowId?: string;
+  rawBodySide?: 'request' | 'response';
 }) {
-  const hex = useMemo(() => view === 'hex' ? hexPreview(raw) : null, [raw, view]);
   const [findOpen, setFindOpen] = useState(false);
   const [showLineEndings, setShowLineEndings] = useState(false);
   const [wrap, setWrap] = useState(true);
   const [findQuery, setFindQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const [previewMatches, setPreviewMatches] = useState(0);
+  const [hexMatches, setHexMatches] = useState(0);
   const sectionRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const query = findOpen ? findQuery : searchQuery;
@@ -195,7 +205,7 @@ function Half({
     : 0;
   const matches = !query ? 0 : view === 'parsed' ? headerMatches + matchCount(formattedBody, query)
     : view === 'raw' ? matchCount(raw || t('common.empty'), query)
-      : view === 'hex' ? matchCount(hex?.text || t('common.empty'), query)
+      : view === 'hex' ? hexMatches
         : previewMatches;
   const currentIndex = matches ? activeIndex % matches : 0;
   const selectedIndex = findOpen && query && matches ? currentIndex : null;
@@ -268,6 +278,15 @@ function Half({
           </select>
         </label>}
         {encodingLabel && <span className="pill encoding">{encodingLabel}</span>}
+        {decodeHadErrors && <span className="pill encoding">{t('detail.invalidBytesReplaced')}</span>}
+        {mojibakeDetected && onToggleMojibake && <button
+          type="button"
+          className="link-button"
+          aria-pressed={mojibakeRepaired}
+          onClick={onToggleMojibake}
+        >
+          {t(mojibakeRepaired ? 'detail.showCapturedText' : 'detail.repairMojibake')}
+        </button>}
         {mojibakeRepaired && <span className="pill encoding">{t('detail.mojibakeRepaired')}</span>}
         {requestStage && onRequestStage && (
           <div className="request-variants" role="tablist">
@@ -300,7 +319,11 @@ function Half({
               role="tab"
               aria-selected={view === option}
               className={view === option ? 'active' : ''}
-              onClick={() => { if (option === 'preview') setPreviewMatches(0); onView(option); }}
+              onClick={() => {
+                if (option === 'preview') setPreviewMatches(0);
+                if (option === 'hex') setHexMatches(0);
+                onView(option);
+              }}
             >
               {t(`detail.view.${option}`)}
             </button>
@@ -384,16 +407,19 @@ function Half({
           />
         )}
         {view === 'hex' && (
-          <>
-            <pre {...selectableTextProps} className="body mono"><MarkedText text={hex?.text || t('common.empty')} query={query} activeIndex={selectedIndex} /></pre>
-            {hex && hex.truncated > 0 && (
-              <p className="muted">
-                {t('detail.hexTruncated', { count: String(hex.truncated) })}
-              </p>
-            )}
-          </>
+          <RawHexView
+            flowId={rawBodyFlowId}
+            side={rawBodySide}
+            raw={raw}
+            http={http}
+            bodyBytes={bodyCapturedSize ?? bodySize}
+            bodyOmitted={bodyOmitted}
+            query={query}
+            activeIndex={selectedIndex}
+            onMatchCount={setHexMatches}
+          />
         )}
-        {view === 'preview' && previewFlowId && !bodyOmitted && <ResponsePreview flowId={previewFlowId} charset={charsetOverride || null} query={query} activeIndex={selectedIndex} onMatchCount={setPreviewMatches} />}
+        {view === 'preview' && previewFlowId && !bodyOmitted && <ResponsePreview flowId={previewFlowId} charset={charsetOverride || null} repairMojibake={mojibakeRepaired} query={query} activeIndex={selectedIndex} onMatchCount={setPreviewMatches} />}
         </>}
       </div>
     </section>
@@ -421,6 +447,10 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     request: '',
     response: '',
   });
+  const [responseRepair, setResponseRepair] = useState({
+    flowId: null as string | null,
+    enabled: false,
+  });
   const previousFlowId = useRef<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState<'request' | 'response' | null>(null);
@@ -447,7 +477,10 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   const responseCharsetOverride = charsetChoices.flowId === currentFlowId
     ? charsetChoices.response
     : '';
-  const detailKey = JSON.stringify([currentFlowId, flow?.status_code, flow?.completed_at, flow?.request_size, flow?.response_size, flow?.modified, flow?.error, reveal, requestCharsetOverride, responseCharsetOverride]);
+  const repairResponseMojibake = responseRepair.flowId === currentFlowId
+    ? responseRepair.enabled
+    : false;
+  const detailKey = JSON.stringify([currentFlowId, flow?.status_code, flow?.completed_at, flow?.request_size, flow?.response_size, flow?.modified, flow?.error, reveal, requestCharsetOverride, responseCharsetOverride, repairResponseMojibake]);
   const detailLoading = Boolean(flow && loadedKey !== detailKey);
 
   useEffect(() => {
@@ -464,6 +497,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     getFlow(flow.id, reveal, {
       request: requestCharsetOverride,
       response: responseCharsetOverride,
+      repairResponseMojibake,
     }, controller.signal)
       .then((d) => {
         if (!cancelled) { setDetail(d); setLoadedKey(detailKey); }
@@ -475,7 +509,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       cancelled = true;
       controller.abort();
     };
-  }, [flow, detailKey, reveal, requestCharsetOverride, responseCharsetOverride]);
+  }, [flow, detailKey, reveal, requestCharsetOverride, responseCharsetOverride, repairResponseMojibake]);
 
   const sendRequest = (
     selected: FlowSummary | null,
@@ -502,7 +536,13 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       : responseCharsetOverride;
     setLoadingMore(side);
     setActionError(null);
-    void getFlowBodyPreview(flow.id, side, offset, selectedCharset || null)
+    void getFlowBodyPreview(
+      flow.id,
+      side,
+      offset,
+      selectedCharset || null,
+      side === 'response' && repairResponseMojibake,
+    )
       .then((chunk) => {
         setDetail((current) => {
           if (!current || current.id !== flow.id) return current;
@@ -515,6 +555,12 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
             [`${side}_body_captured_size`]: chunk.total_bytes,
             [`${side}_body_truncated`]: chunk.truncated,
             ...(side === 'response' ? {
+              response_body_decode_had_errors: Boolean(
+                current.response_body_decode_had_errors || chunk.decode_had_errors,
+              ),
+              response_body_mojibake_detected: Boolean(
+                current.response_body_mojibake_detected || chunk.mojibake_detected,
+              ),
               response_body_mojibake_repaired: Boolean(
                 current.response_body_mojibake_repaired || chunk.mojibake_repaired,
               ),
@@ -672,6 +718,8 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       onActivate={activateRequest}
       isActive={isRequestActive}
       searchQuery={searchQuery}
+      rawBodyFlowId={flow.id}
+      rawBodySide={!variants || requestStage === 'modified' ? 'request' : undefined}
     />
   );
 
@@ -713,7 +761,13 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
         detail?.response_content_encoding,
         detail?.response_decode_error,
       )}
+      decodeHadErrors={detail?.response_body_decode_had_errors}
+      mojibakeDetected={detail?.response_body_mojibake_detected}
       mojibakeRepaired={detail?.response_body_mojibake_repaired}
+      onToggleMojibake={() => setResponseRepair({
+        flowId: flow.id,
+        enabled: !repairResponseMojibake,
+      })}
       onContextMenu={(event) => openMenu(event, 'response')}
       fallbackMime={flow.response_mime}
       responsePath={flow.path}
@@ -722,6 +776,8 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       onActivate={activateResponse}
       isActive={isResponseActive}
       searchQuery={searchQuery}
+      rawBodyFlowId={flow.id}
+      rawBodySide="response"
     />
   );
 

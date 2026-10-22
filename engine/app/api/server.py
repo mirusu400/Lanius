@@ -1464,6 +1464,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         reveal: bool = False,
         request_charset: str | None = None,
         response_charset: str | None = None,
+        repair_response_mojibake: bool = False,
     ) -> dict[str, Any]:
         preview = await asyncio.to_thread(
             store.get_preview, flow_id, body_limit=FLOW_BODY_PREVIEW_BYTES
@@ -1480,6 +1481,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             auto_decompress=auto_decompress,
             request_charset_override=_display_charset(request_charset),
             response_charset_override=_display_charset(response_charset),
+            repair_response_mojibake=repair_response_mojibake,
             preview_limit=FLOW_BODY_PREVIEW_BYTES,
             request_body_complete=not body_info["request_body_truncated"],
             response_body_complete=not body_info["response_body_truncated"],
@@ -1585,7 +1587,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return annotation
 
     @app.get("/api/flows/{flow_id}/body/{side}")
-    async def get_flow_body(flow_id: str, side: str) -> StreamingResponse:
+    async def get_flow_body(
+        flow_id: str,
+        side: str,
+        offset: int | None = Query(None, ge=0),
+        limit: int | None = Query(None, ge=1, le=MAX_FLOW_BODY_CHUNK_BYTES),
+    ) -> Response:
         if side not in {"request", "response"}:
             raise HTTPException(status_code=400, detail="side must be request or response")
         metadata = await asyncio.to_thread(
@@ -1594,6 +1601,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if metadata is None or metadata[0] is None or metadata[3]:
             raise HTTPException(status_code=404, detail="body not found")
         total = metadata[1]
+
+        # Hex inspection needs the stored bytes, but loading an arbitrarily
+        # large BLOB merely to show its first screenful defeats the bounded
+        # detail API. Supplying either range parameter opts into one SQL
+        # substring and a non-streaming response; no parameters preserve the
+        # full-body download endpoint used elsewhere.
+        if offset is not None or limit is not None:
+            start = offset or 0
+            count = limit or MAX_FLOW_BODY_CHUNK_BYTES
+            result = await asyncio.to_thread(
+                store.get_body_chunk, flow_id, side, offset=start, limit=count
+            )
+            if result is None or result[0] is None or result[3]:
+                raise HTTPException(status_code=404, detail="body not found")
+            chunk = result[0]
+            end = start + len(chunk)
+            headers = {
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(len(chunk)),
+                "X-Lanius-Body-Total": str(total),
+            }
+            if total and (start > 0 or end < total):
+                headers["Content-Range"] = f"bytes {start}-{max(start, end) - 1}/{total}"
+            return Response(
+                content=chunk,
+                status_code=206 if start > 0 or end < total else 200,
+                media_type="application/octet-stream",
+                headers=headers,
+            )
 
         def chunks() -> Iterable[bytes]:
             offset = 0
@@ -1620,6 +1656,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         offset: int = Query(0, ge=0),
         limit: int = Query(FLOW_BODY_PREVIEW_BYTES, ge=1, le=MAX_FLOW_BODY_CHUNK_BYTES),
         charset_name: str | None = Query(None, alias="charset"),
+        repair_mojibake: bool = False,
     ) -> dict[str, Any]:
         if side not in {"request", "response"}:
             raise HTTPException(status_code=400, detail="side must be request or response")
@@ -1650,10 +1687,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             chunk = charset.complete_characters(chunk, selected)
         next_offset = offset + len(chunk)
         if side == "response":
-            text, mojibake_repaired = charset.decode_for_display(chunk, selected)
+            decoded = charset.decode_for_display(
+                chunk, selected, repair_mojibake=repair_mojibake
+            )
+            text = decoded.text
         else:
             text = charset.decode(chunk, selected)
-            mojibake_repaired = False
+            decoded = charset.DisplayDecode(text)
         payload = {
             "text": text,
             "charset": selected,
@@ -1662,7 +1702,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "total_bytes": total,
             "truncated": next_offset < total,
         }
-        if mojibake_repaired:
+        if decoded.had_errors:
+            payload["decode_had_errors"] = True
+        if decoded.mojibake_detected:
+            payload["mojibake_detected"] = True
+        if decoded.mojibake_repaired:
             payload["mojibake_repaired"] = True
         return payload
 
@@ -1670,6 +1714,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def get_response_preview(
         flow_id: str,
         charset: str | None = None,
+        repair_mojibake: bool = False,
     ) -> dict[str, Any]:
         captured_size = await asyncio.to_thread(store.body_size, flow_id, "response")
         if captured_size is None:
@@ -1685,6 +1730,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             response_preview,
             record,
             _display_charset(charset),
+            repair_mojibake,
         )
 
     @app.get("/api/about")

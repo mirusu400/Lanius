@@ -20,7 +20,7 @@ export type BodyView = 'pretty' | 'raw' | 'hex';
 
 /** Hex costs four characters a byte, so a body that is merely large as
  *  text is unmanageable as a dump. */
-const HEX_LIMIT = 64 * 1024;
+export const HEX_LIMIT = 64 * 1024;
 
 /** Two spaces: deep JSON runs out of width quickly at four. */
 const INDENT = 2;
@@ -121,7 +121,11 @@ export function messageCanReformat(text: string): boolean {
 
 /** Classic hex dump: offset, bytes, printable ASCII. */
 export function toHex(text: string, width = 16): string {
-  const bytes = new TextEncoder().encode(text);
+  return toHexBytes(new TextEncoder().encode(text), width);
+}
+
+/** Classic hex dump for bytes that came from the capture store. */
+export function toHexBytes(bytes: Uint8Array, width = 16): string {
   const lines: string[] = [];
   for (let offset = 0; offset < bytes.length; offset += width) {
     const chunk = bytes.slice(offset, offset + width);
@@ -140,10 +144,17 @@ export function toHex(text: string, width = 16): string {
 /** A hex dump of at most HEX_LIMIT bytes, and whether it was cut. */
 export function hexPreview(text: string): { text: string; truncated: number } {
   const bytes = new TextEncoder().encode(text);
-  if (bytes.length <= HEX_LIMIT) return { text: toHex(text), truncated: 0 };
-  // Decoded back so toHex works on one representation; the slice is on a
-  // byte boundary, so a multi-byte character at the edge shows as the
-  // replacement character rather than shifting every following offset.
-  const head = new TextDecoder().decode(bytes.slice(0, HEX_LIMIT));
-  return { text: toHex(head), truncated: bytes.length - HEX_LIMIT };
+  return hexPreviewBytes(bytes);
+}
+
+/** A bounded dump without decoding and re-encoding the captured bytes. */
+export function hexPreviewBytes(
+  bytes: Uint8Array,
+  totalBytes = bytes.length,
+): { text: string; truncated: number } {
+  const shown = bytes.length > HEX_LIMIT ? bytes.slice(0, HEX_LIMIT) : bytes;
+  return {
+    text: toHexBytes(shown),
+    truncated: Math.max(0, totalBytes - shown.length),
+  };
 }

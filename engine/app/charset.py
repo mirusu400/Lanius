@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import codecs
 import re
+from dataclasses import dataclass
 
 # charset=... in a Content-Type header, quoted or not.
 _CHARSET = re.compile(rb'charset\s*=\s*"?([\w.:+-]+)"?', re.IGNORECASE)
@@ -52,6 +53,16 @@ _BOMS: list[tuple[bytes, str]] = [
     (codecs.BOM_UTF16_LE, "utf-16"),
     (codecs.BOM_UTF16_BE, "utf-16"),
 ]
+
+
+@dataclass(frozen=True)
+class DisplayDecode:
+    """A tolerant, read-only decode and the facts the UI should disclose."""
+
+    text: str
+    had_errors: bool = False
+    mojibake_detected: bool = False
+    mojibake_repaired: bool = False
 
 
 def normalise(name: str | None) -> str:
@@ -181,32 +192,41 @@ def decode(body: bytes | None, charset: str = DEFAULT_CHARSET) -> str:
 def decode_for_display(
     body: bytes | None,
     charset: str = DEFAULT_CHARSET,
-) -> tuple[str, bool]:
-    """Decode read-only text and repair one common UTF-8 mojibake layer.
+    *,
+    repair_mojibake: bool = False,
+) -> DisplayDecode:
+    """Decode read-only text like a browser, optionally repairing mojibake.
 
-    A response sometimes contains ``C3 AD C2 95 C2 9C`` where the intended
-    UTF-8 bytes were ``ED 95 9C`` (``한``).  Choosing another character set
-    cannot fix that because the bytes have already been encoded twice.  For
-    UTF-8 display text, reverse only Latin-1 runs that independently form
-    valid UTF-8 and become non-Latin text.  Invalid and genuinely Latin-1
-    runs remain byte-for-byte visible.
+    A single invalid byte must not make the whole UTF-8 response fall back to
+    Latin-1. Browsers keep the valid text and replace only the malformed
+    sequence, so this path does the same. The byte-reversible ``decode`` above
+    remains the right choice for request editors.
 
-    The boolean tells callers to disclose that the displayed response was
-    repaired.  Do not use this for editable request bodies: rewriting those
-    bytes on send would silently change the captured request.
+    A response can separately contain ``C3 AD C2 95 C2 9C`` where the intended
+    UTF-8 bytes were ``ED 95 9C`` (``한``). That is genuine double encoding,
+    not a charset choice. We detect it but only change the display when the
+    user explicitly asks, because silently normalising captured bytes would
+    hide evidence from a proxy user.
     """
-    text = decode(body, charset)
+    if not body:
+        return DisplayDecode("")
     try:
         resolved = codecs.lookup(charset).name
     except LookupError:
         resolved = DEFAULT_CHARSET
-    if not text or resolved not in {"utf-8", "utf-8-sig"}:
-        return text, False
+    try:
+        text = body.decode(resolved)
+        had_errors = False
+    except UnicodeDecodeError:
+        text = body.decode(resolved, errors="replace")
+        had_errors = True
+    if resolved not in {"utf-8", "utf-8-sig"}:
+        return DisplayDecode(text, had_errors=had_errors)
 
-    repaired = False
+    detected = False
 
     def restore(match: re.Match[str]) -> str:
-        nonlocal repaired
+        nonlocal detected
         value = match.group(0)
         try:
             candidate = value.encode("latin-1").decode("utf-8")
@@ -217,10 +237,16 @@ def decode_for_display(
         # UTF-8 -> Latin-1 -> UTF-8 corruption seen in Korean/CJK pages.
         if candidate == value or not any(ord(char) > 0xFF for char in candidate):
             return value
-        repaired = True
-        return candidate
+        detected = True
+        return candidate if repair_mojibake else value
 
-    return _LATIN1_NON_ASCII_RUN.sub(restore, text), repaired
+    displayed = _LATIN1_NON_ASCII_RUN.sub(restore, text)
+    return DisplayDecode(
+        displayed,
+        had_errors=had_errors,
+        mojibake_detected=detected,
+        mojibake_repaired=detected and repair_mojibake,
+    )
 
 
 def encode(text: str, charset: str = DEFAULT_CHARSET) -> bytes:
@@ -273,6 +299,7 @@ def charset_of_prefix(content_type: str | None, body: bytes | None) -> str:
 
 __all__ = [
     "DEFAULT_CHARSET",
+    "DisplayDecode",
     "SELECTABLE_CHARSETS",
     "charset_from_headers",
     "charset_of",

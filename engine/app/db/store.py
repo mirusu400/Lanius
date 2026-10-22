@@ -176,6 +176,7 @@ class FlowRecord:
         auto_decompress: bool = False,
         request_charset_override: str | None = None,
         response_charset_override: str | None = None,
+        repair_response_mojibake: bool = False,
         body_output_limit: int | None = None,
         preview_limit: int | None = None,
         request_body_complete: bool = True,
@@ -257,11 +258,14 @@ class FlowRecord:
         )
         if response_display is None:
             data["response_body"] = None
-            response_mojibake_repaired = False
+            response_text = charset.DisplayDecode("")
         else:
-            data["response_body"], response_mojibake_repaired = (
-                charset.decode_for_display(response_display, response_charset)
+            response_text = charset.decode_for_display(
+                response_display,
+                response_charset,
+                repair_mojibake=repair_response_mojibake,
             )
+            data["response_body"] = response_text.text
         # So the UI can say how it was read, and reply in the same charset.
         data["request_charset"] = request_charset
         data["response_charset"] = response_charset
@@ -271,7 +275,9 @@ class FlowRecord:
         data["response_body_decoded"] = response_decoded
         data["request_decode_error"] = request_error
         data["response_decode_error"] = response_error
-        data["response_body_mojibake_repaired"] = response_mojibake_repaired
+        data["response_body_decode_had_errors"] = response_text.had_errors
+        data["response_body_mojibake_detected"] = response_text.mojibake_detected
+        data["response_body_mojibake_repaired"] = response_text.mojibake_repaired
         data["request_variants"] = None
         # Request variants are small by construction (see get_preview); give
         # them the same output budget as the main preview.

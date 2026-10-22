@@ -116,7 +116,11 @@ const en = {
   'detail.modifiedRequest': 'Modified request',
   'detail.decompressed': '{encoding} decoded',
   'detail.decodeError': 'Could not decode {encoding}',
+  'detail.invalidBytesReplaced': 'Invalid bytes replaced for display',
+  'detail.repairMojibake': 'Repair double-encoded text',
+  'detail.showCapturedText': 'Show captured text',
   'detail.mojibakeRepaired': 'UTF-8 mojibake repaired',
+  'detail.hexLoading': 'Loading captured bytes…',
 
   // --- intercept ---
   'intercept.on': 'Intercept is on',
@@ -1517,7 +1521,11 @@ const ko: Catalogue = {
   'detail.modifiedRequest': 'Modified request',
   'detail.decompressed': '{encoding} 압축 해제됨',
   'detail.decodeError': '{encoding} 압축을 해제하지 못했습니다',
+  'detail.invalidBytesReplaced': '잘못된 바이트만 대체하여 표시',
+  'detail.repairMojibake': '이중 인코딩 텍스트 복구',
+  'detail.showCapturedText': '캡처 원문 표시',
   'detail.mojibakeRepaired': '깨진 UTF-8 문자 복구됨',
+  'detail.hexLoading': '캡처 바이트 불러오는 중…',
 
   'intercept.on': '인터셉트 켜짐',
   'intercept.off': '인터셉트 꺼짐',
