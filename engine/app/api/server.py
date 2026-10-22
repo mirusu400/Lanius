@@ -1649,14 +1649,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # End on a character boundary so the next chunk starts on one too.
             chunk = charset.complete_characters(chunk, selected)
         next_offset = offset + len(chunk)
-        return {
-            "text": charset.decode(chunk, selected),
+        if side == "response":
+            text, mojibake_repaired = charset.decode_for_display(chunk, selected)
+        else:
+            text = charset.decode(chunk, selected)
+            mojibake_repaired = False
+        payload = {
+            "text": text,
             "charset": selected,
             "offset": offset,
             "next_offset": next_offset,
             "total_bytes": total,
             "truncated": next_offset < total,
         }
+        if mojibake_repaired:
+            payload["mojibake_repaired"] = True
+        return payload
 
     @app.get("/api/flows/{flow_id}/response-preview")
     async def get_response_preview(

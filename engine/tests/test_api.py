@@ -101,6 +101,28 @@ def test_flow_body_charsets_can_be_overridden_independently(client) -> None:
     assert data["response_charset"] == "shift_jis"
 
 
+def test_flow_detail_repairs_double_encoded_utf8_response_only(client) -> None:
+    text = "<title>한국동서발전</title>"
+    double_encoded = text.encode("utf-8").decode("latin-1").encode("utf-8")
+    seed(
+        client,
+        "double-utf8",
+        request_headers=[("Content-Type", "text/html; charset=utf-8")],
+        request_body=double_encoded,
+        response_headers=[("Content-Type", "text/html; charset=utf-8")],
+        response_body=double_encoded,
+    )
+
+    data = client.get("/api/flows/double-utf8").json()
+    assert data["response_body"] == text
+    assert data["response_body_mojibake_repaired"] is True
+    # Requests are editable and must not be silently rewritten on Replay.
+    assert data["request_body"] != text
+
+    preview = client.get("/api/flows/double-utf8/response-preview").json()
+    assert preview == {"kind": "html", "text": text}
+
+
 def test_flow_detail_reads_bounded_body_chunks_and_keeps_total_size(client) -> None:
     body = b"a" * FLOW_BODY_PREVIEW_BYTES + b"second chunk"
     seed(

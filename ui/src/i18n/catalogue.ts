@@ -116,6 +116,7 @@ const en = {
   'detail.modifiedRequest': 'Modified request',
   'detail.decompressed': '{encoding} decoded',
   'detail.decodeError': 'Could not decode {encoding}',
+  'detail.mojibakeRepaired': 'UTF-8 mojibake repaired',
 
   // --- intercept ---
   'intercept.on': 'Intercept is on',
@@ -1516,6 +1517,7 @@ const ko: Catalogue = {
   'detail.modifiedRequest': 'Modified request',
   'detail.decompressed': '{encoding} 압축 해제됨',
   'detail.decodeError': '{encoding} 압축을 해제하지 못했습니다',
+  'detail.mojibakeRepaired': '깨진 UTF-8 문자 복구됨',
 
   'intercept.on': '인터셉트 켜짐',
   'intercept.off': '인터셉트 꺼짐',

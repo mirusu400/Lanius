@@ -124,6 +124,7 @@ function Half({
   onCharsetOverride,
   encodingLabel,
   decodeError,
+  mojibakeRepaired = false,
   requestStage,
   onRequestStage,
   onContextMenu,
@@ -160,6 +161,7 @@ function Half({
   onCharsetOverride: (charset: string) => void;
   encodingLabel: string | null;
   decodeError?: string | null;
+  mojibakeRepaired?: boolean;
   requestStage?: RequestStage;
   onRequestStage?: (stage: RequestStage) => void;
   onContextMenu: (event: React.MouseEvent) => void;
@@ -266,6 +268,7 @@ function Half({
           </select>
         </label>}
         {encodingLabel && <span className="pill encoding">{encodingLabel}</span>}
+        {mojibakeRepaired && <span className="pill encoding">{t('detail.mojibakeRepaired')}</span>}
         {requestStage && onRequestStage && (
           <div className="request-variants" role="tablist">
             {(['original', 'auto_modified', 'modified'] as const).map((stage) => (
@@ -511,6 +514,11 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
             [`${side}_body_preview_size`]: chunk.next_offset,
             [`${side}_body_captured_size`]: chunk.total_bytes,
             [`${side}_body_truncated`]: chunk.truncated,
+            ...(side === 'response' ? {
+              response_body_mojibake_repaired: Boolean(
+                current.response_body_mojibake_repaired || chunk.mojibake_repaired,
+              ),
+            } : {}),
           };
         });
       })
@@ -705,6 +713,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
         detail?.response_content_encoding,
         detail?.response_decode_error,
       )}
+      mojibakeRepaired={detail?.response_body_mojibake_repaired}
       onContextMenu={(event) => openMenu(event, 'response')}
       fallbackMime={flow.response_mime}
       responsePath={flow.path}

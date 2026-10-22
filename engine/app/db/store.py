@@ -255,11 +255,13 @@ class FlowRecord:
             if request_display is None
             else charset.decode(request_display, request_charset)
         )
-        data["response_body"] = (
-            None
-            if response_display is None
-            else charset.decode(response_display, response_charset)
-        )
+        if response_display is None:
+            data["response_body"] = None
+            response_mojibake_repaired = False
+        else:
+            data["response_body"], response_mojibake_repaired = (
+                charset.decode_for_display(response_display, response_charset)
+            )
         # So the UI can say how it was read, and reply in the same charset.
         data["request_charset"] = request_charset
         data["response_charset"] = response_charset
@@ -269,6 +271,7 @@ class FlowRecord:
         data["response_body_decoded"] = response_decoded
         data["request_decode_error"] = request_error
         data["response_decode_error"] = response_error
+        data["response_body_mojibake_repaired"] = response_mojibake_repaired
         data["request_variants"] = None
         # Request variants are small by construction (see get_preview); give
         # them the same output budget as the main preview.

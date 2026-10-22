@@ -211,7 +211,7 @@ def _text_body(
         if charset_override
         else charset.charset_of(content_type, body)
     )
-    return charset.decode(body, selected)
+    return charset.decode_for_display(body, selected)[0]
 
 
 def _csv_preview(

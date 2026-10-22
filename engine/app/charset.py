@@ -22,6 +22,11 @@ _CHARSET = re.compile(rb'charset\s*=\s*"?([\w.:+-]+)"?', re.IGNORECASE)
 _META_CHARSET = re.compile(
     rb'<meta[^>]+charset\s*=\s*["\']?\s*([\w.:+-]+)', re.IGNORECASE
 )
+# Runs produced when UTF-8 bytes were first mistaken for Latin-1 and the
+# resulting characters were encoded as UTF-8 again.  Keeping this repair
+# separate from ``decode`` matters: request editors rely on ``decode`` being
+# byte-reversible, while a captured response is read-only display text.
+_LATIN1_NON_ASCII_RUN = re.compile(r"[\x80-\xff]+")
 
 DEFAULT_CHARSET = "utf-8"
 LEGACY_KOREAN_CHARSET = "cp949"
@@ -173,6 +178,51 @@ def decode(body: bytes | None, charset: str = DEFAULT_CHARSET) -> str:
     return body.decode("latin-1")
 
 
+def decode_for_display(
+    body: bytes | None,
+    charset: str = DEFAULT_CHARSET,
+) -> tuple[str, bool]:
+    """Decode read-only text and repair one common UTF-8 mojibake layer.
+
+    A response sometimes contains ``C3 AD C2 95 C2 9C`` where the intended
+    UTF-8 bytes were ``ED 95 9C`` (``한``).  Choosing another character set
+    cannot fix that because the bytes have already been encoded twice.  For
+    UTF-8 display text, reverse only Latin-1 runs that independently form
+    valid UTF-8 and become non-Latin text.  Invalid and genuinely Latin-1
+    runs remain byte-for-byte visible.
+
+    The boolean tells callers to disclose that the displayed response was
+    repaired.  Do not use this for editable request bodies: rewriting those
+    bytes on send would silently change the captured request.
+    """
+    text = decode(body, charset)
+    try:
+        resolved = codecs.lookup(charset).name
+    except LookupError:
+        resolved = DEFAULT_CHARSET
+    if not text or resolved not in {"utf-8", "utf-8-sig"}:
+        return text, False
+
+    repaired = False
+
+    def restore(match: re.Match[str]) -> str:
+        nonlocal repaired
+        value = match.group(0)
+        try:
+            candidate = value.encode("latin-1").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            return value
+        # A Latin-1 run that happens to be ASCII after decoding is not useful
+        # evidence.  Characters outside Latin-1 are strong evidence of the
+        # UTF-8 -> Latin-1 -> UTF-8 corruption seen in Korean/CJK pages.
+        if candidate == value or not any(ord(char) > 0xFF for char in candidate):
+            return value
+        repaired = True
+        return candidate
+
+    return _LATIN1_NON_ASCII_RUN.sub(restore, text), repaired
+
+
 def encode(text: str, charset: str = DEFAULT_CHARSET) -> bytes:
     """Text back to bytes in the charset this endpoint speaks.
 
@@ -229,6 +279,7 @@ __all__ = [
     "charset_of_prefix",
     "complete_characters",
     "decode",
+    "decode_for_display",
     "decode_body",
     "encode",
     "normalise",

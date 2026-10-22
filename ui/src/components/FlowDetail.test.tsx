@@ -149,6 +149,21 @@ describe('toHex', () => {
 });
 
 describe('FlowDetailView', () => {
+  it('discloses when UTF-8 mojibake was repaired for display', async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, status: 200, json: async () => ({
+      ...httpFlow,
+      request_headers: [], request_body: '',
+      response_headers: [['Content-Type', 'text/html; charset=utf-8']],
+      response_body: '<title>한국동서발전</title>',
+      response_body_mojibake_repaired: true,
+    }) } as Response);
+
+    render(<FlowDetailView flow={httpFlow} />);
+
+    expect(await screen.findByText(t('detail.mojibakeRepaired'))).toBeTruthy();
+    expect(screen.getByText('한국동서발전')).toBeTruthy();
+  });
+
   it('remembers exchange layout without remounting either message pane', async () => {
     const splitStorageKey = 'lanius.test.exchange';
     const layoutKey = `${splitStorageKey}.layout`;

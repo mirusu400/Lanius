@@ -124,6 +124,30 @@ def test_undecodable_bytes_are_not_destroyed() -> None:
     assert charset.encode(charset.decode(raw, "utf-8"), "latin-1") == raw
 
 
+def test_double_encoded_utf8_is_repaired_only_for_read_only_display() -> None:
+    text = "<title>한국동서발전</title>"
+    double_encoded = text.encode("utf-8").decode("latin-1").encode("utf-8")
+
+    # The ordinary decoder remains byte-reversible for request editors.
+    broken = charset.decode(double_encoded, "utf-8")
+    assert broken != text
+    assert broken.encode("utf-8") == double_encoded
+
+    displayed, repaired = charset.decode_for_display(double_encoded, "utf-8")
+    assert displayed == text
+    assert repaired is True
+
+
+def test_display_repair_leaves_normal_text_and_binary_fallback_alone() -> None:
+    normal = "한글 ✓".encode("utf-8")
+    assert charset.decode_for_display(normal, "utf-8") == ("한글 ✓", False)
+
+    binary = bytes(range(256))
+    displayed, repaired = charset.decode_for_display(binary, "utf-8")
+    assert repaired is False
+    assert displayed.encode("latin-1") == binary
+
+
 def test_characters_a_charset_cannot_express_are_escaped() -> None:
     """An emoji cannot be EUC-KR. Dropping it silently would change the
     request; a browser escapes it instead."""
