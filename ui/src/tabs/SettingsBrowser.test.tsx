@@ -47,7 +47,6 @@ beforeEach(() => {
   launchError = null;
   cleared = 0;
 
-  vi.stubGlobal('confirm', () => true);
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -139,6 +138,17 @@ const section = () => {
 };
 
 describe('browser settings', () => {
+  it('keeps the section visible and retries after an initial load failure', async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('engine offline'));
+    const user = userEvent.setup();
+    render(<BrowserSection />);
+
+    expect(await screen.findByText(t('browser.section'))).toBeTruthy();
+    expect(await screen.findByText(t('browser.loadFailed', { message: 'engine offline' }))).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('common.retry') }));
+    expect(await screen.findByText('/home/u/.lanius/browser-profile')).toBeTruthy();
+  });
+
   it('opens a browser through the proxy', async () => {
     const user = userEvent.setup();
     render(<BrowserSection />);
@@ -194,19 +204,23 @@ describe('browser settings', () => {
     await user.click(
       section().getByRole('button', { name: t('browser.clearProfile') }),
     );
+    const dialog = await screen.findByRole('dialog', { name: t('browser.clearProfile') });
+    expect(cleared).toBe(0);
+    await user.click(within(dialog).getByRole('button', { name: t('browser.clearProfile') }));
     await waitFor(() => expect(cleared).toBe(1));
     expect(await screen.findByText(t('browser.cleared'))).toBeTruthy();
   });
 
   it('does not clear anything when the confirmation is declined', async () => {
     const user = userEvent.setup();
-    vi.stubGlobal('confirm', () => false);
     render(<BrowserSection />);
     await waitFor(() => expect(screen.getByText(t('browser.section'))).toBeTruthy());
 
     await user.click(
       section().getByRole('button', { name: t('browser.clearProfile') }),
     );
+    const dialog = await screen.findByRole('dialog', { name: t('browser.clearProfile') });
+    await user.click(within(dialog).getByRole('button', { name: t('common.cancel') }));
     expect(cleared).toBe(0);
   });
 });

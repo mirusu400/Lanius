@@ -14,6 +14,9 @@ let suspended = false;
 let catalogue: PluginCatalogue;
 let samples: PluginSampleInfo[] = [];
 let releaseEnable: (() => void) | null = null;
+let pluginListGate: Promise<void> | null = null;
+let releasePluginList: (() => void) | null = null;
+let pluginListFailures = 0;
 
 const base: PluginInfo = {
   name: 'stamp',
@@ -68,6 +71,9 @@ beforeEach(() => {
   calls = [];
   suspended = false;
   releaseEnable = null;
+  pluginListGate = null;
+  releasePluginList = null;
+  pluginListFailures = 0;
   catalogue = { sources: [], items: [], errors: {}, refreshed: false };
   samples = [{
     id: 'lanius.request-marker',
@@ -91,6 +97,11 @@ beforeEach(() => {
     const url = String(input);
     calls.push(url);
     if (url.endsWith('/api/plugins')) {
+      if (pluginListGate) await pluginListGate;
+      if (pluginListFailures > 0) {
+        pluginListFailures -= 1;
+        return jsonResponse({ detail: 'engine offline' }, false);
+      }
       return jsonResponse({
         items: plugins,
         directory: '/home/u/.lanius/plugins',
@@ -152,6 +163,18 @@ beforeEach(() => {
       plugins = [...plugins, plugin];
       return jsonResponse({ plugin });
     }
+    if (url.endsWith('/api/plugin-catalogue/sources') && init?.method === 'PUT') {
+      const body = JSON.parse(String(init.body)) as { sources: PluginCatalogue['sources'] };
+      catalogue = {
+        ...catalogue,
+        sources: body.sources,
+      };
+      return jsonResponse({ sources: catalogue.sources });
+    }
+    if (url.endsWith('/api/plugins/lanius.request-marker/package') && init?.method === 'DELETE') {
+      plugins = plugins.filter((plugin) => plugin.name !== 'lanius.request-marker');
+      return jsonResponse({ id: 'lanius.request-marker', uninstalled: true });
+    }
     if (url.includes('/broken/enable')) return jsonResponse({ detail: 'RuntimeError: boom' }, false);
     if (url.includes('/stamp/enable')) {
       if (releaseEnable === null) {
@@ -182,6 +205,38 @@ afterEach(() => {
 });
 
 describe('PluginsTab', () => {
+  it('shows loading instead of a false empty state, and reports manual rescans', async () => {
+    const user = userEvent.setup();
+    pluginListGate = new Promise<void>((resolve) => { releasePluginList = resolve; });
+    render(<PluginsTab />);
+
+    expect(screen.queryByText(t('plugins.emptyTitle'))).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe(t('common.loading'));
+    releasePluginList?.();
+    pluginListGate = null;
+    await screen.findByText('/p/stamp.py');
+
+    pluginListGate = new Promise<void>((resolve) => { releasePluginList = resolve; });
+    const rescan = screen.getByRole('button', { name: t('plugins.rescan') });
+    await user.click(rescan);
+    expect((rescan as HTMLButtonElement).disabled).toBe(true);
+    expect(rescan.textContent).toBe(t('common.loading'));
+    releasePluginList?.();
+    pluginListGate = null;
+    await waitFor(() => expect((rescan as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it('shows a retry state when the initial plugin list fails', async () => {
+    pluginListFailures = 1;
+    const user = userEvent.setup();
+    render(<PluginsTab />);
+
+    expect(await screen.findByText(t('plugins.loadFailedTitle'))).toBeTruthy();
+    expect(screen.queryByText(t('plugins.emptyTitle'))).toBeNull();
+    await user.click(screen.getByRole('button', { name: t('common.retry') }));
+    expect(await screen.findByText('/p/stamp.py')).toBeTruthy();
+  });
+
   it('renders a compact installed list and selected plugin details', async () => {
     render(<PluginsTab />);
     expect(await screen.findByTitle('/home/u/.lanius/plugins')).toBeTruthy();
@@ -302,6 +357,23 @@ describe('PluginsTab', () => {
     expect((toggle as HTMLInputElement).checked).toBe(false);
   });
 
+  it('confirms before uninstalling a packaged plugin', async () => {
+    plugins = [{ ...installedSample(), enabled: true, loaded: true }];
+    const user = userEvent.setup();
+    render(<PluginsTab />);
+    await screen.findByText('/plugins/lanius.request-marker/backend/__init__.py');
+
+    await user.click(screen.getByRole('button', { name: t('plugins.uninstall') }));
+    expect(vi.mocked(fetch).mock.calls.some((call) => call[1]?.method === 'DELETE')).toBe(false);
+    const dialog = await screen.findByRole('dialog', {
+      name: t('plugins.uninstallTitle', { name: 'lanius.request-marker' }),
+    });
+    await user.click(within(dialog).getByRole('button', { name: t('plugins.uninstall') }));
+    await waitFor(() => expect(
+      vi.mocked(fetch).mock.calls.some((call) => call[1]?.method === 'DELETE'),
+    ).toBe(true));
+  });
+
   it('explains suspension and blocks enabling while still allowing installed plugins to be inspected', async () => {
     suspended = true;
     plugins = [{ ...base, enabled: false, loaded: false }];
@@ -369,6 +441,27 @@ describe('PluginsTab', () => {
     expect(screen.queryByRole('button', { name: t('plugins.catalogueRefresh') })).toBeNull();
     await user.click(screen.getByRole('button', { name: t('plugins.catalogueManageSources') }));
     expect((document.querySelector('.plugin-catalogue-sources') as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it('confirms before deleting a catalogue source', async () => {
+    catalogue = {
+      sources: [{ id: 'official', title: 'Official', url: 'https://example.test/catalog.json', public_key: 'key', key_id: 'release', enabled: true }],
+      items: [],
+      errors: {},
+      refreshed: true,
+    };
+    const user = userEvent.setup();
+    render(<PluginsTab />);
+    await user.click((await screen.findAllByText(t('plugins.catalogue')))[0]);
+    await user.click(screen.getByText(`${t('plugins.catalogueSources')} (1)`));
+    await user.click(screen.getByRole('button', { name: t('common.delete') }));
+    expect(vi.mocked(fetch).mock.calls.some((call) => call[1]?.method === 'PUT')).toBe(false);
+
+    const dialog = await screen.findByRole('dialog', { name: t('plugins.deleteSourceTitle') });
+    await user.click(within(dialog).getByRole('button', { name: t('common.delete') }));
+    await waitFor(() => expect(
+      vi.mocked(fetch).mock.calls.some((call) => call[1]?.method === 'PUT'),
+    ).toBe(true));
   });
 
   it('lists a packaged plugin view and opens it only when loaded', async () => {

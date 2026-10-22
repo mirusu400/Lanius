@@ -1,5 +1,5 @@
 /** The payload box for one fuzz position. */
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -71,9 +71,12 @@ describe('PayloadPicker', () => {
   });
 
   it('saves a typed list under a name', async () => {
-    vi.stubGlobal('prompt', vi.fn(() => 'my set'));
+    const user = userEvent.setup();
     render(<PayloadPicker index={0} value={'a\nb'} onChange={onChange} />);
-    await userEvent.click(screen.getByRole('button', { name: t('payloads.save') }));
+    await user.click(screen.getByRole('button', { name: t('payloads.save') }));
+    const dialog = await screen.findByRole('dialog', { name: t('payloads.saveTitle') });
+    await user.type(within(dialog).getByLabelText(t('payloads.namePrompt')), 'my set');
+    await user.click(within(dialog).getByRole('button', { name: t('payloads.save') }));
     const posted = vi
       .mocked(fetch)
       .mock.calls.find(
@@ -83,9 +86,11 @@ describe('PayloadPicker', () => {
   });
 
   it('does not save when the name is cancelled', async () => {
-    vi.stubGlobal('prompt', vi.fn(() => null));
+    const user = userEvent.setup();
     render(<PayloadPicker index={0} value={'a\nb'} onChange={onChange} />);
-    await userEvent.click(screen.getByRole('button', { name: t('payloads.save') }));
+    await user.click(screen.getByRole('button', { name: t('payloads.save') }));
+    const dialog = await screen.findByRole('dialog', { name: t('payloads.saveTitle') });
+    await user.click(within(dialog).getByRole('button', { name: t('common.cancel') }));
     expect(fetch).not.toHaveBeenCalled();
   });
 });

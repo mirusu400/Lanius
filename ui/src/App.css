@@ -872,6 +872,31 @@ pre.body,
   line-height: 1.5;
 }
 
+.text-prompt-dialog {
+  width: min(420px, 90vw);
+}
+
+.text-prompt-form {
+  display: grid;
+  gap: 6px;
+}
+
+.text-prompt-form input {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.settings-load-error > button {
+  margin-top: 10px;
+}
+
+.plugin-load-failed {
+  align-content: center;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  text-align: center;
+}
+
 .context-menu button.danger {
   color: var(--danger-soft);
 }

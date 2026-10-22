@@ -89,6 +89,17 @@ afterEach(() => {
 const profileSelect = () => screen.getByLabelText(t('tls.profile')) as HTMLSelectElement;
 
 describe('TLS fingerprint', () => {
+  it('keeps the section visible and retries after an initial load failure', async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('engine offline'));
+    const user = userEvent.setup();
+    render(<TlsSection />);
+
+    expect(await screen.findByText(t('tls.section'))).toBeTruthy();
+    expect(await screen.findByText(t('tls.loadFailed', { message: 'engine offline' }))).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('common.retry') }));
+    await waitFor(() => expect(profileSelect().value).toBe('default'));
+  });
+
   it('starts on the engine default', async () => {
     render(<TlsSection />);
     await waitFor(() => expect(profileSelect().value).toBe('default'));

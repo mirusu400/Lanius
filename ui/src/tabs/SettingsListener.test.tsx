@@ -1,5 +1,5 @@
 /** Multiple proxy listener controls in Settings. */
-import { cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -161,6 +161,22 @@ describe('listener settings', () => {
     await user.click(await screen.findByRole('button', { name: t('listener.makePrimary') }));
     await waitFor(() => expect(state.primary_id).toBe('second'));
     expect(requests.some((request) => request.url.endsWith('/second/primary'))).toBe(true);
+  });
+
+  it('confirms before deleting a listener', async () => {
+    state = {
+      ...state,
+      listeners: [...state.listeners, listener('second', 8090, false)],
+    };
+    const user = userEvent.setup();
+    render(<ListenerSection />);
+    const row = (await screen.findByText('127.0.0.1:8090')).closest('tr')!;
+    await user.click(within(row).getByRole('button', { name: t('common.delete') }));
+    expect(requests.some((request) => request.method === 'DELETE')).toBe(false);
+
+    const dialog = await screen.findByRole('dialog', { name: t('listener.deleteTitle') });
+    await user.click(within(dialog).getByRole('button', { name: t('common.delete') }));
+    await waitFor(() => expect(state.listeners.some((item) => item.id === 'second')).toBe(false));
   });
 
   it('keeps the old collection when an add is rejected', async () => {

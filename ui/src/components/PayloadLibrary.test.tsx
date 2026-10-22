@@ -169,19 +169,28 @@ describe('PayloadLibrary', () => {
   it('renames a set in place', async () => {
     // Saving under a new name would leave two sets, since save is keyed
     // by name.
-    vi.stubGlobal('prompt', vi.fn(() => 'renamed'));
+    const user = userEvent.setup();
     open();
     await screen.findByText('admin paths');
     const row = screen.getByText('admin paths').closest('li')!;
-    await userEvent.click(within(row).getByRole('button', { name: t('payloads.rename') }));
+    await user.click(within(row).getByRole('button', { name: t('payloads.rename') }));
+    const dialog = await screen.findByRole('dialog', { name: t('payloads.renameTitle') });
+    const name = within(dialog).getByLabelText(t('payloads.namePrompt'));
+    await user.clear(name);
+    await user.type(name, 'renamed');
+    await user.click(within(dialog).getByRole('button', { name: t('payloads.rename') }));
     expect(await screen.findByText('renamed')).toBeTruthy();
   });
 
-  it('deletes a set', async () => {
+  it('confirms before deleting a set', async () => {
+    const user = userEvent.setup();
     open();
     await screen.findByText('admin paths');
     const row = screen.getByText('admin paths').closest('li')!;
-    await userEvent.click(within(row).getByRole('button', { name: t('common.delete') }));
+    await user.click(within(row).getByRole('button', { name: t('common.delete') }));
+    expect(vi.mocked(fetch).mock.calls.some((call) => call[1]?.method === 'DELETE')).toBe(false);
+    const dialog = await screen.findByRole('dialog', { name: t('payloads.deleteTitle') });
+    await user.click(within(dialog).getByRole('button', { name: t('common.delete') }));
     await waitFor(() => expect(screen.queryByText('admin paths')).toBeNull());
   });
 

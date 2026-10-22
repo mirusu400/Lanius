@@ -19,6 +19,8 @@ import {
   type WordlistEntry,
 } from '../api/client';
 import { Dialog } from './Dialog';
+import { ConfirmDialog } from './ConfirmDialog';
+import { TextPromptDialog } from './TextPromptDialog';
 import { errorMessage, renderMessage, type Message } from '../i18n/message';
 import { useT } from '../i18n';
 import { Split } from './Split';
@@ -45,6 +47,8 @@ export function PayloadLibrary({
   const [selected, setSelected] = useState<string | null>(null);
   const [preview, setPreview] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [renaming, setRenaming] = useState<PayloadSetSummary | null>(null);
+  const [deleting, setDeleting] = useState<PayloadSetSummary | null>(null);
   const [error, setError] = useState<Message | null>(null);
 
   const refresh = useCallback(async () => {
@@ -72,6 +76,8 @@ export function PayloadLibrary({
       setSelected(null);
       setPreview(null);
       setError(null);
+      setRenaming(null);
+      setDeleting(null);
     }
   }, [open]);
 
@@ -103,9 +109,11 @@ export function PayloadLibrary({
     }
   };
 
-  const rename = async (set: PayloadSetSummary) => {
-    const name = window.prompt(t('payloads.namePrompt'), set.name);
-    if (!name || name === set.name) return;
+  const rename = async (name: string) => {
+    const set = renaming;
+    if (!set) return;
+    setRenaming(null);
+    if (name === set.name) return;
     setBusy(true);
     try {
       await renamePayloadSet(set.id, name);
@@ -117,7 +125,10 @@ export function PayloadLibrary({
     }
   };
 
-  const remove = async (set: PayloadSetSummary) => {
+  const remove = async () => {
+    const set = deleting;
+    if (!set) return;
+    setDeleting(null);
     setBusy(true);
     try {
       await deletePayloadSet(set.id);
@@ -137,7 +148,8 @@ export function PayloadLibrary({
   const chosen = sets.find((s) => s.id === selected) ?? null;
 
   return (
-    <Dialog
+    <>
+      <Dialog
       open={open}
       title={t('payloads.library')}
       onClose={onClose}
@@ -213,7 +225,7 @@ export function PayloadLibrary({
                       type="button"
                       className="link-button"
                       disabled={busy}
-                      onClick={() => void rename(set)}
+                      onClick={() => setRenaming(set)}
                     >
                       {t('payloads.rename')}
                     </button>
@@ -221,7 +233,7 @@ export function PayloadLibrary({
                       type="button"
                       className="link-button danger"
                       disabled={busy}
-                      onClick={() => void remove(set)}
+                      onClick={() => setDeleting(set)}
                     >
                       {t('common.delete')}
                     </button>
@@ -277,7 +289,25 @@ export function PayloadLibrary({
             </>
           )}
         </div>}
+        />
+      </Dialog>
+      <TextPromptDialog
+        open={renaming !== null}
+        title={t('payloads.renameTitle')}
+        label={t('payloads.namePrompt')}
+        initialValue={renaming?.name ?? ''}
+        confirmLabel={t('payloads.rename')}
+        onCancel={() => setRenaming(null)}
+        onConfirm={(name) => void rename(name)}
       />
-    </Dialog>
+      <ConfirmDialog
+        open={deleting !== null}
+        title={t('payloads.deleteTitle')}
+        message={t('payloads.deleteConfirm', { name: deleting?.name ?? '' })}
+        confirmLabel={t('common.delete')}
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => void remove()}
+      />
+    </>
   );
 }

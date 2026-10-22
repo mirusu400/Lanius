@@ -21,6 +21,7 @@ import {
   type Message,
 } from '../../i18n';
 import { UndoableInput } from '../../components/UndoableText';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useSettingsToast } from '../../components/useSettingsToast';
 
 const LOOPBACK = '127.0.0.1';
@@ -65,6 +66,7 @@ export function ListenerSection() {
   const saved = useSettingsToast('listener.section');
   const [state, setState] = useState<ListenersState | null>(null);
   const [draft, setDraft] = useState<ListenerDraft | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ProxyListenerState | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Message | null>(null);
   const [error, setError] = useState<Message | null>(null);
@@ -138,7 +140,10 @@ export function ListenerSection() {
     }
   };
 
-  const remove = async (listener: ProxyListenerState) => {
+  const remove = async () => {
+    const listener = pendingDelete;
+    if (!listener) return;
+    setPendingDelete(null);
     setBusy(true);
     setNote(null);
     setError(null);
@@ -173,7 +178,8 @@ export function ListenerSection() {
   };
 
   return (
-    <section>
+    <>
+      <section>
       <div className="listener-heading">
         <h3>{t('listener.section')}</h3>
         {!draft && (
@@ -231,7 +237,7 @@ export function ListenerSection() {
                       type="button"
                       className="danger"
                       disabled={busy || state.listeners.length === 1}
-                      onClick={() => void remove(listener)}
+                      onClick={() => setPendingDelete(listener)}
                     >
                       {t('common.delete')}
                     </button>
@@ -312,6 +318,18 @@ export function ListenerSection() {
 
       {note && <p className="muted">{renderMessage(note, t)}</p>}
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
-    </section>
+      </section>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={t('listener.deleteTitle')}
+        message={t('listener.deleteConfirm', {
+          host: pendingDelete?.host ?? '',
+          port: String(pendingDelete?.port ?? ''),
+        })}
+        confirmLabel={t('common.delete')}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void remove()}
+      />
+    </>
   );
 }

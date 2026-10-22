@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { listPayloadSets, savePayloadSet } from '../api/client';
 import { PayloadLibrary } from './PayloadLibrary';
 import { PayloadMaker } from './PayloadMaker';
+import { TextPromptDialog } from './TextPromptDialog';
 import { errorMessage, renderMessage, type Message } from '../i18n/message';
 import { useT } from '../i18n';
 import { UndoableTextarea } from './UndoableText';
@@ -30,14 +31,14 @@ export function PayloadPicker({
   const t = useT();
   const [open, setOpen] = useState(false);
   const [makerOpen, setMakerOpen] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Message | null>(null);
 
   const count = value.split('\n').filter((line) => line.trim()).length;
 
-  const save = useCallback(async () => {
-    const name = window.prompt(t('payloads.namePrompt'));
-    if (!name) return;
+  const save = useCallback(async (name: string) => {
+    setSaveOpen(false);
     setBusy(true);
     setError(null);
     try {
@@ -50,7 +51,7 @@ export function PayloadPicker({
     } finally {
       setBusy(false);
     }
-  }, [t, value]);
+  }, [value]);
 
   useEffect(() => {
     if (!error) return;
@@ -71,7 +72,7 @@ export function PayloadPicker({
         <button type="button" onClick={() => setMakerOpen(true)}>
           {t('payloadMaker.title')}
         </button>
-        <button type="button" disabled={busy || !count} onClick={() => void save()}>
+        <button type="button" disabled={busy || !count} onClick={() => setSaveOpen(true)}>
           {t('payloads.save')}
         </button>
         <button type="button" onClick={() => setOpen(true)}>
@@ -101,6 +102,14 @@ export function PayloadPicker({
         onClose={() => setMakerOpen(false)}
         onUse={onChange}
         requestCount={requestCount}
+      />
+      <TextPromptDialog
+        open={saveOpen}
+        title={t('payloads.saveTitle')}
+        label={t('payloads.namePrompt')}
+        confirmLabel={t('payloads.save')}
+        onCancel={() => setSaveOpen(false)}
+        onConfirm={(name) => void save(name)}
       />
     </div>
   );

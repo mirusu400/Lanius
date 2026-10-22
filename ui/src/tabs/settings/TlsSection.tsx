@@ -23,20 +23,43 @@ export function TlsSection() {
   const [state, setState] = useState<TlsState | null>(null);
   const [custom, setCustom] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [note, setNote] = useState<Message | null>(null);
   const [error, setError] = useState<Message | null>(null);
 
   useEffect(() => {
     getTlsState()
       .then((next) => {
-        // Guard the shape: rendering maps over `available`, so a response
-        // without it would take the whole Settings tab down.
-        if (!next || !Array.isArray(next.available)) return;
+        // Rendering maps over `available`, so reject an incomplete response
+        // as a recoverable error instead of taking Settings down.
+        if (!next || !Array.isArray(next.available)) {
+          setError(msg('tls.invalidResponse'));
+          return;
+        }
         setState(next);
         setCustom(next.custom_ciphers ?? '');
       })
-      .catch(() => undefined);
+      .catch((err) => setError(msg('tls.loadFailed', { message: (err as Error).message })))
+      .finally(() => setLoading(false));
   }, []);
+
+  const retry = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await getTlsState();
+      if (!next || !Array.isArray(next.available)) {
+        setError(msg('tls.invalidResponse'));
+        return;
+      }
+      setState(next);
+      setCustom(next.custom_ciphers ?? '');
+    } catch (err) {
+      setError(msg('tls.loadFailed', { message: (err as Error).message }));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const apply = async (profile: string, ciphers: string) => {
     setBusy(true);
@@ -57,7 +80,22 @@ export function TlsSection() {
     }
   };
 
-  if (!state) return null;
+  if (!state) {
+    return (
+      <section>
+        <h3>{t('tls.section')}</h3>
+        <p className="muted">{t('tls.help')}</p>
+        {loading ? (
+          <p className="muted" role="status">{t('common.loading')}</p>
+        ) : (
+          <div className="settings-load-error">
+            {error && <div className="banner error">{renderMessage(error, t)}</div>}
+            <button type="button" onClick={() => void retry()}>{t('common.retry')}</button>
+          </div>
+        )}
+      </section>
+    );
+  }
 
   // The count is what actually reaches the server, so it is the useful
   // confirmation that a profile took effect.

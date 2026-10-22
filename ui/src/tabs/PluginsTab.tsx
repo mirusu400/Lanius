@@ -34,6 +34,7 @@ import type {
 } from '../api/types';
 import { PluginFrame } from '../components/PluginFrame';
 import { PluginLogConsole } from '../components/PluginLogConsole';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import { useSettingsToast } from '../components/useSettingsToast';
 import { useReportBusy } from '../components/busy';
@@ -141,6 +142,10 @@ export function PluginsTab() {
   const [catalogueBusy, setCatalogueBusy] = useState<string | null>(null);
   const [sourceDraft, setSourceDraft] = useState<PluginCatalogueSource>(EMPTY_SOURCE);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
+  const [pendingUninstall, setPendingUninstall] = useState<PluginInfo | null>(null);
+  const [pendingSourceDelete, setPendingSourceDelete] = useState<PluginCatalogueSource | null>(null);
   const packageInput = useRef<HTMLInputElement | null>(null);
   const sourcesPanel = useRef<HTMLDetailsElement | null>(null);
   const refreshGeneration = useRef(0);
@@ -159,7 +164,8 @@ export function PluginsTab() {
     }
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (showProgress = false) => {
+    if (showProgress) setRescanning(true);
     const request = ++refreshGeneration.current;
     try {
       const data = await listPlugins();
@@ -170,6 +176,7 @@ export function PluginsTab() {
       setSuspended(data.suspended);
       setSuspendedReason(data.suspended_reason);
       setDevelopmentMode(data.development_mode);
+      setLoaded(true);
       setListError(null);
       setSelectedName((current) => (
         current && data.items.some((plugin) => plugin.name === current)
@@ -182,7 +189,10 @@ export function PluginsTab() {
         setListError(msg('plugins.listFailed', { message: (reason as Error).message }));
       }
     } finally {
-      if (request === refreshGeneration.current) setLoading(false);
+      if (request === refreshGeneration.current) {
+        setLoading(false);
+        setRescanning(false);
+      }
     }
   }, [refreshActions]);
 
@@ -373,6 +383,7 @@ export function PluginsTab() {
   };
 
   const uninstall = async (plugin: PluginInfo) => {
+    setPendingUninstall(null);
     setBusyPlugin(plugin.name);
     try {
       await uninstallPluginPackage(plugin.name);
@@ -552,15 +563,27 @@ export function PluginsTab() {
           }}
         />
         <button onClick={() => packageInput.current?.click()}>{t('plugins.install')}</button>
-        <button onClick={() => void refresh()}>{t('plugins.rescan')}</button>
+        <button disabled={loading || rescanning} onClick={() => void refresh(true)}>
+          {rescanning ? t('common.loading') : t('plugins.rescan')}
+        </button>
       </header>
 
       {(safeMode || suspended) && <div className="banner warning">{suspendedReason ?? t('plugins.safeMode')}</div>}
-      {listError && <div className="banner error">{renderMessage(listError, t)}</div>}
+      {listError && loaded && <div className="banner error">{renderMessage(listError, t)}</div>}
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
 
       {surface === 'installed' ? (
-        plugins.length === 0 ? (
+        loading ? (
+          <div className="plugin-catalogue-loading" role="status">{t('common.loading')}</div>
+        ) : !loaded ? (
+          <section className="plugin-onboarding plugin-load-failed">
+            <h2>{t('plugins.loadFailedTitle')}</h2>
+            <p className="muted">{listError ? renderMessage(listError, t) : t('plugins.loadFailedHelp')}</p>
+            <button type="button" disabled={rescanning} onClick={() => void refresh(true)}>
+              {rescanning ? t('common.loading') : t('common.retry')}
+            </button>
+          </section>
+        ) : plugins.length === 0 ? (
           <section className="plugin-onboarding" aria-label={t('plugins.emptyTitle')}>
             <div className="plugin-onboarding-copy">
               <span className="plugin-onboarding-icon">⌁</span>
@@ -576,7 +599,9 @@ export function PluginsTab() {
               </div>
               <div className="plugin-onboarding-actions">
                 <button className="primary" onClick={() => packageInput.current?.click()}>{t('plugins.install')}</button>
-                <button onClick={() => void refresh()}>{t('plugins.rescan')}</button>
+                <button disabled={rescanning} onClick={() => void refresh(true)}>
+                  {rescanning ? t('common.loading') : t('plugins.rescan')}
+                </button>
               </div>
               <p className="muted">{t('plugins.fileHelp')}</p>
             </div>
@@ -677,7 +702,7 @@ export function PluginsTab() {
                             <button disabled={selected.order === 0 || busyPlugin === selected.name} onClick={() => void move(selected, -1)}>↑ {t('plugins.moveUp')}</button>
                             <button disabled={selected.order === plugins.length - 1 || busyPlugin === selected.name} onClick={() => void move(selected, 1)}>↓ {t('plugins.moveDown')}</button>
                             <button disabled={busyPlugin === selected.name || suspended} onClick={() => void reload(selected)}>{t('plugins.reload')}</button>
-                            {selected.package && <button className="danger" disabled={busyPlugin === selected.name} onClick={() => void uninstall(selected)}>{t('plugins.uninstall')}</button>}
+                            {selected.package && <button className="danger" disabled={busyPlugin === selected.name} onClick={() => setPendingUninstall(selected)}>{t('plugins.uninstall')}</button>}
                           </div>
                         </div>
                         <div className="plugin-detail-section"><h3>{t('plugins.hooks')}</h3><div className="plugin-chip-list">{selected.hooks.map((hook) => <span key={hook} className="param">{hook}</span>)}{selected.hooks.length === 0 && <span className="muted">{t('common.none')}</span>}</div></div>
@@ -759,7 +784,7 @@ export function PluginsTab() {
           </div>}
           <details ref={sourcesPanel} className="plugin-catalogue-sources">
             <summary>{t('plugins.catalogueSources')} ({catalogue.sources.length})</summary>
-            {catalogue.sources.map((source) => <div key={source.id} className="plugin-source-row"><span><strong>{source.title}</strong> <code>{source.id}</code></span><span className="muted mono">{source.url}</span><button className="danger" disabled={catalogueBusy !== null} onClick={() => void saveSources(catalogue.sources.filter((item) => item.id !== source.id))}>{t('common.delete')}</button></div>)}
+            {catalogue.sources.map((source) => <div key={source.id} className="plugin-source-row"><span><strong>{source.title}</strong> <code>{source.id}</code></span><span className="muted mono">{source.url}</span><button className="danger" disabled={catalogueBusy !== null} onClick={() => setPendingSourceDelete(source)}>{t('common.delete')}</button></div>)}
             <div className="plugin-source-form">
               <UndoableInput value={sourceDraft.id} onValueChange={(value) => setSourceDraft((current) => ({ ...current, id: value }))} placeholder={t('plugins.sourceId')} aria-label={t('plugins.sourceId')} />
               <UndoableInput value={sourceDraft.title} onValueChange={(value) => setSourceDraft((current) => ({ ...current, title: value }))} placeholder={t('plugins.sourceTitle')} aria-label={t('plugins.sourceTitle')} />
@@ -773,6 +798,29 @@ export function PluginsTab() {
       )}
 
       {activeView && <PluginFrame plugin={activeView.plugin} view={activeView.view} onClose={() => setActiveView(null)} />}
+      <ConfirmDialog
+        open={pendingUninstall !== null}
+        title={t('plugins.uninstallTitle', { name: pendingUninstall?.name ?? '' })}
+        message={t('plugins.uninstallConfirm', { name: pendingUninstall?.name ?? '' })}
+        confirmLabel={t('plugins.uninstall')}
+        onCancel={() => setPendingUninstall(null)}
+        onConfirm={() => {
+          if (pendingUninstall) void uninstall(pendingUninstall);
+        }}
+      />
+      <ConfirmDialog
+        open={pendingSourceDelete !== null}
+        title={t('plugins.deleteSourceTitle')}
+        message={t('plugins.deleteSourceConfirm', { name: pendingSourceDelete?.title ?? '' })}
+        confirmLabel={t('common.delete')}
+        onCancel={() => setPendingSourceDelete(null)}
+        onConfirm={() => {
+          const source = pendingSourceDelete;
+          if (!source) return;
+          setPendingSourceDelete(null);
+          void saveSources(catalogue.sources.filter((item) => item.id !== source.id));
+        }}
+      />
     </div>
   );
 }

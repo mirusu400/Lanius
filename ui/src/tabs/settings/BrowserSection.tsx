@@ -1,6 +1,7 @@
 /** The bundled browser, already pointed at the proxy. */
 
 import { useEffect, useState } from 'react';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useToast } from '../../components/Toast';
 import {
   clearBrowserProfile,
@@ -21,16 +22,29 @@ export function BrowserSection() {
   const { showToast } = useToast();
   const [state, setState] = useState<BrowserState | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [note, setNote] = useState<Message | null>(null);
   const [error, setError] = useState<Message | null>(null);
 
   useEffect(() => {
     getBrowserState()
       .then(setState)
-      .catch((err) => setError(rawMsg((err as Error).message)));
+      .catch((err) => setError(msg('browser.loadFailed', { message: (err as Error).message })))
+      .finally(() => setLoading(false));
   }, []);
 
-  if (!state) return null;
+  const retry = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setState(await getBrowserState());
+    } catch (err) {
+      setError(msg('browser.loadFailed', { message: (err as Error).message }));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const open = async () => {
     setBusy(true);
@@ -49,7 +63,7 @@ export function BrowserSection() {
   };
 
   const clear = async () => {
-    if (!window.confirm(t('browser.confirmClear'))) return;
+    setConfirmClear(false);
     setBusy(true);
     setNote(null);
     setError(null);
@@ -65,11 +79,19 @@ export function BrowserSection() {
   };
 
   return (
-    <section>
+    <>
+      <section>
       <h3>{t('browser.section')}</h3>
       <p className="muted">{t('browser.help')}</p>
 
-      {!state.available ? (
+      {loading ? (
+        <p className="muted" role="status">{t('common.loading')}</p>
+      ) : !state ? (
+        <div className="settings-load-error">
+          {error && <div className="banner error">{renderMessage(error, t)}</div>}
+          <button type="button" onClick={() => void retry()}>{t('common.retry')}</button>
+        </div>
+      ) : !state.available ? (
         <div className="banner warn">{t('browser.unavailable')}</div>
       ) : (
         <>
@@ -88,7 +110,7 @@ export function BrowserSection() {
               type="button"
               className="danger"
               disabled={busy}
-              onClick={() => void clear()}
+              onClick={() => setConfirmClear(true)}
             >
               {t('browser.clearProfile')}
             </button>
@@ -96,8 +118,17 @@ export function BrowserSection() {
         </>
       )}
 
-      {note && <p className="muted">{renderMessage(note, t)}</p>}
-      {error && <div className="banner error">{renderMessage(error, t)}</div>}
-    </section>
+      {state && note && <p className="muted">{renderMessage(note, t)}</p>}
+      {state && error && <div className="banner error">{renderMessage(error, t)}</div>}
+      </section>
+      <ConfirmDialog
+        open={confirmClear}
+        title={t('browser.clearProfile')}
+        message={t('browser.confirmClear')}
+        confirmLabel={t('browser.clearProfile')}
+        onCancel={() => setConfirmClear(false)}
+        onConfirm={() => void clear()}
+      />
+    </>
   );
 }
