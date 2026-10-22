@@ -125,6 +125,7 @@ export function PluginsTab() {
   const [developmentMode, setDevelopmentMode] = useState(false);
   const [developmentPath, setDevelopmentPath] = useState('');
   const [error, setError] = useState<Message | null>(null);
+  const [listError, setListError] = useState<Message | null>(null);
   const [operationErrors, setOperationErrors] = useState<Record<string, string>>({});
   const [busyPlugin, setBusyPlugin] = useState<string | null>(null);
   const [settings, setSettings] = useState<PluginSettings | null>(null);
@@ -142,6 +143,7 @@ export function PluginsTab() {
   const [loading, setLoading] = useState(true);
   const packageInput = useRef<HTMLInputElement | null>(null);
   const sourcesPanel = useRef<HTMLDetailsElement | null>(null);
+  const refreshGeneration = useRef(0);
   useReportBusy('plugins', loading);
   const {
     actionsAt,
@@ -158,14 +160,17 @@ export function PluginsTab() {
   }, []);
 
   const refresh = useCallback(async () => {
+    const request = ++refreshGeneration.current;
     try {
       const data = await listPlugins();
+      if (request !== refreshGeneration.current) return;
       setPlugins(data.items);
       setDirectory(data.directory);
       setSafeMode(data.safe_mode);
       setSuspended(data.suspended);
       setSuspendedReason(data.suspended_reason);
       setDevelopmentMode(data.development_mode);
+      setListError(null);
       setSelectedName((current) => (
         current && data.items.some((plugin) => plugin.name === current)
           ? current
@@ -173,9 +178,11 @@ export function PluginsTab() {
       ));
       await refreshActions();
     } catch (reason) {
-      setError(msg('plugins.listFailed', { message: (reason as Error).message }));
+      if (request === refreshGeneration.current) {
+        setListError(msg('plugins.listFailed', { message: (reason as Error).message }));
+      }
     } finally {
-      setLoading(false);
+      if (request === refreshGeneration.current) setLoading(false);
     }
   }, [refreshActions]);
 
@@ -186,6 +193,12 @@ export function PluginsTab() {
       setError(rawMsg((reason as Error).message));
     }).finally(() => setCatalogueLoading(false));
   }, [refresh, refreshSamples]);
+
+  useEffect(() => {
+    const changed = () => void refresh();
+    window.addEventListener('lanius.pluginsChanged', changed);
+    return () => window.removeEventListener('lanius.pluginsChanged', changed);
+  }, [refresh]);
 
   const selected = plugins.find((plugin) => plugin.name === selectedName) ?? null;
 
@@ -543,6 +556,7 @@ export function PluginsTab() {
       </header>
 
       {(safeMode || suspended) && <div className="banner warning">{suspendedReason ?? t('plugins.safeMode')}</div>}
+      {listError && <div className="banner error">{renderMessage(listError, t)}</div>}
       {error && <div className="banner error">{renderMessage(error, t)}</div>}
 
       {surface === 'installed' ? (

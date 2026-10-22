@@ -191,6 +191,24 @@ describe('PluginsTab', () => {
     expect(screen.getAllByText(t('plugins.statusOff')).length).toBeGreaterThan(0);
   });
 
+  it('refreshes installed plugin state after a live plugin change', async () => {
+    plugins = [{ ...base, enabled: true, loaded: true }];
+    render(<PluginsTab />);
+    expect((await screen.findAllByText(t('plugins.statusRunning'))).length).toBeGreaterThan(0);
+
+    suspended = true;
+    plugins = [{
+      ...plugins[0],
+      loaded: false,
+      description: 'metadata refreshed after lockdown',
+    }];
+    fireEvent(window, new Event('lanius.pluginsChanged'));
+
+    expect((await screen.findAllByText(t('plugins.statusSuspended'))).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('metadata refreshed after lockdown')).toHaveLength(2);
+    expect(screen.getByText('Lockdown Mode blocks plugin execution')).toBeTruthy();
+  });
+
   it('opens the plugin directory in the desktop file manager', async () => {
     const open = vi.spyOn(api, 'openDirectory').mockResolvedValue(undefined);
     render(<PluginsTab />);

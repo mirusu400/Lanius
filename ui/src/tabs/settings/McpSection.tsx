@@ -28,6 +28,10 @@ export function McpSection() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Message | null>(null);
   const [error, setError] = useState<Message | null>(null);
+  const [toolQuery, setToolQuery] = useState('');
+  const [openToolGroups, setOpenToolGroups] = useState<Set<string>>(
+    () => new Set(['']),
+  );
   const generation = useRef(0);
 
   useEffect(() => {
@@ -39,6 +43,7 @@ export function McpSection() {
           if (!live || request !== generation.current) return;
           setState({ ...next, tools: next.tools ?? [] });
           setPort((current) => current || String(next.port));
+          setError(null);
         })
         .catch((err) => {
           if (live && request === generation.current) setError(rawMsg((err as Error).message));
@@ -54,7 +59,17 @@ export function McpSection() {
     return () => { live = false; disconnect(); };
   }, []);
 
-  if (!state) return null;
+  if (!state) {
+    return (
+      <section>
+        <h3>{t('mcp.section')}</h3>
+        <p className="muted">{t('mcp.help')}</p>
+        {error
+          ? <div className="banner error">{renderMessage(error, t)}</div>
+          : <p className="muted">{t('common.loading')}</p>}
+      </section>
+    );
+  }
 
   const toggle = async (enabled: boolean) => {
     ++generation.current;
@@ -125,6 +140,33 @@ export function McpSection() {
   };
 
   const acting = state.tools.filter((tool) => tool.writes).length;
+  const normalizedToolQuery = toolQuery.trim().toLowerCase();
+  const visibleTools = state.tools.filter((tool) => !normalizedToolQuery || [
+    tool.name,
+    tool.description,
+    tool.plugin ?? '',
+  ].some((value) => value.toLowerCase().includes(normalizedToolQuery)));
+  const toolGroups = Array.from(visibleTools.reduce((groups, tool) => {
+    const owner = tool.plugin ?? '';
+    const tools = groups.get(owner) ?? [];
+    tools.push(tool);
+    groups.set(owner, tools);
+    return groups;
+  }, new Map<string, McpState['tools']>())).sort(([left], [right]) => {
+    if (!left) return right ? -1 : 0;
+    if (!right) return 1;
+    return left.localeCompare(right);
+  });
+
+  const rememberToolGroup = (owner: string, open: boolean) => {
+    setOpenToolGroups((current) => {
+      if (current.has(owner) === open) return current;
+      const next = new Set(current);
+      if (open) next.add(owner);
+      else next.delete(owner);
+      return next;
+    });
+  };
 
   return (
     <section>
@@ -208,20 +250,63 @@ export function McpSection() {
           {state.tools.length > 0 && (
             <>
               <h4>{t('mcp.toolsHeading', { count: state.tools.length })}</h4>
-              <ul className="mcp-tools">
-                {state.tools.map((tool) => (
-                  <li key={tool.name}>
-                    <code>{tool.name}</code>
-                    <span className="mcp-tool-meta">
-                      {tool.plugin && <span className="pill">{tool.plugin}</span>}
-                      <span className={tool.writes ? 'pill warn' : 'pill'}>
-                        {tool.writes ? t('mcp.writes') : t('mcp.readOnly')}
-                      </span>
-                    </span>
-                    <span className="mcp-tool-description muted">{tool.description}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="mcp-tool-filter" role="search">
+                <input
+                  type="search"
+                  value={toolQuery}
+                  onChange={(event) => setToolQuery(event.target.value)}
+                  aria-label={t('mcp.toolsSearch')}
+                  placeholder={t('mcp.toolsSearch')}
+                />
+                <span className="muted">{visibleTools.length}/{state.tools.length}</span>
+              </div>
+              {toolGroups.length > 0 ? (
+                <div className="mcp-tool-groups">
+                  {toolGroups.map(([owner, tools]) => (
+                    <details
+                      className="mcp-tool-group"
+                      key={owner || 'built-in'}
+                      open={Boolean(normalizedToolQuery) || openToolGroups.has(owner)}
+                      onToggle={(event) => {
+                        if (!normalizedToolQuery) {
+                          rememberToolGroup(owner, event.currentTarget.open);
+                        }
+                      }}
+                    >
+                      <summary>
+                        <span className="mcp-tool-group-summary">
+                          <strong className="mcp-tool-group-label" title={owner || undefined}>
+                            {owner
+                              ? t('mcp.pluginTools', { plugin: owner })
+                              : t('mcp.builtInTools')}
+                          </strong>
+                          <span className="pill">{tools.length}</span>
+                        </span>
+                      </summary>
+                      <ul className="mcp-tools">
+                        {tools.map((tool) => (
+                          <li key={tool.name}>
+                            <code>{tool.name}</code>
+                            <span className="mcp-tool-meta">
+                              {tool.plugin && (
+                                <span className="pill mcp-tool-owner" title={tool.plugin}>
+                                  {tool.plugin}
+                                </span>
+                              )}
+                              <span className={tool.writes ? 'pill warn' : 'pill'}>
+                                {tool.writes ? t('mcp.writes') : t('mcp.readOnly')}
+                              </span>
+                            </span>
+                            <span className="mcp-tool-description muted">{tool.description}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted">{t('mcp.noToolMatches')}</p>
+              )}
               {acting > 0 && (
                 <p className="banner warn">{t('mcp.writesWarning')}</p>
               )}

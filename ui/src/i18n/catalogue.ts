@@ -987,6 +987,10 @@ const en = {
   'mcp.copy': 'Copy client config',
   'mcp.copied': 'Configuration copied.',
   'mcp.toolsHeading': 'What an agent can do ({count} tools)',
+  'mcp.toolsSearch': 'Search tools',
+  'mcp.builtInTools': 'Built-in tools',
+  'mcp.pluginTools': 'Plugin · {plugin}',
+  'mcp.noToolMatches': 'No tools match this search.',
   'mcp.readOnly': 'reads',
   'mcp.writes': 'acts',
   'mcp.writesWarning':
@@ -2386,6 +2390,10 @@ const ko: Catalogue = {
   'mcp.copy': '클라이언트 설정 복사',
   'mcp.copied': '설정을 복사했습니다.',
   'mcp.toolsHeading': '에이전트가 할 수 있는 일 (도구 {count}개)',
+  'mcp.toolsSearch': '도구 검색',
+  'mcp.builtInTools': '기본 도구',
+  'mcp.pluginTools': '플러그인 · {plugin}',
+  'mcp.noToolMatches': '검색과 일치하는 도구가 없습니다.',
   'mcp.readOnly': '읽기',
   'mcp.writes': '실행',
   'mcp.writesWarning':

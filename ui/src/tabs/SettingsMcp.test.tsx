@@ -127,6 +127,19 @@ const mcpSection = () => {
 };
 
 describe('MCP settings', () => {
+  it('shows an initial load failure and clears it after reconnecting', async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('engine offline'));
+    render(<McpSection />);
+
+    expect(await screen.findByText('engine offline')).toBeTruthy();
+    expect(mcpSection().getByText(t('mcp.help'))).toBeTruthy();
+
+    const handlers = vi.mocked(connectStream).mock.calls.at(-1)![0];
+    handlers.onState?.('open');
+    expect(await screen.findByText('list_flows')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('engine offline')).toBeNull());
+  });
+
   it('does not let a delayed catalogue refresh undo the displayed MCP off switch', async () => {
     const user = userEvent.setup();
     render(<McpSection />);
@@ -162,6 +175,33 @@ describe('MCP settings', () => {
     mcp = { ...mcp, tools: TOOLS };
     handlers.onEvent({ type: 'mcp.tools_changed', data: {} });
     await waitFor(() => expect(screen.queryByText('notes.read_note')).toBeNull());
+  });
+
+  it('groups and filters tools while truncating long plugin ownership visually', async () => {
+    const user = userEvent.setup();
+    const owner = `plugin-${'long-'.repeat(24)}owner`;
+    mcp = { ...mcp, tools: [...TOOLS, {
+      name: `${owner}.inspect`,
+      description: 'Inspect private plugin state',
+      writes: false,
+      plugin: owner,
+    }] };
+    render(<McpSection />);
+
+    const builtInGroup = (await screen.findByText(t('mcp.builtInTools'))).closest('details')!;
+    const pluginGroup = screen.getByText(t('mcp.pluginTools', { plugin: owner })).closest('details')!;
+    expect(builtInGroup.open).toBe(true);
+    expect(pluginGroup.open).toBe(false);
+    expect(pluginGroup.querySelector('.mcp-tool-owner')?.getAttribute('title')).toBe(owner);
+
+    await user.type(screen.getByRole('searchbox', { name: t('mcp.toolsSearch') }), 'private');
+    expect(screen.getByText(`${owner}.inspect`)).toBeTruthy();
+    expect(screen.queryByText('list_flows')).toBeNull();
+    expect(pluginGroup.open).toBe(true);
+
+    await user.clear(screen.getByRole('searchbox', { name: t('mcp.toolsSearch') }));
+    await user.type(screen.getByRole('searchbox', { name: t('mcp.toolsSearch') }), 'missing tool');
+    expect(screen.getByText(t('mcp.noToolMatches'))).toBeTruthy();
   });
 
   it('shows where an agent connects', async () => {
