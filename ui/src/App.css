@@ -5405,11 +5405,28 @@ pre.response-preview-text {
   overflow-wrap: anywhere;
 }
 
+.mcp-tool-meta {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
 .mcp-tools .pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1.4;
+}
+
+@media (max-width: 700px) {
+  .mcp-tools li {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  .mcp-tool-description {
+    grid-column: 1 / -1;
+  }
 }
 
 .settings-grid {

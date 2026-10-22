@@ -155,8 +155,10 @@ describe('MCP settings', () => {
     handlers.onEvent({ type: 'mcp.tools_changed', data: {} });
     expect(await screen.findByText('notes.read_note')).toBeTruthy();
     const row = screen.getByText('notes.read_note').closest('li')!;
-    expect(within(row).getByText('notes')).toBeTruthy();
-    expect(within(row).getByText(t('mcp.readOnly'))).toBeTruthy();
+    const owner = within(row).getByText('notes');
+    const access = within(row).getByText(t('mcp.readOnly'));
+    expect(owner.parentElement).toBe(access.parentElement);
+    expect(row.children).toHaveLength(3);
     mcp = { ...mcp, tools: TOOLS };
     handlers.onEvent({ type: 'mcp.tools_changed', data: {} });
     await waitFor(() => expect(screen.queryByText('notes.read_note')).toBeNull());

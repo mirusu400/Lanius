@@ -212,11 +212,13 @@ export function McpSection() {
                 {state.tools.map((tool) => (
                   <li key={tool.name}>
                     <code>{tool.name}</code>
-                    {tool.plugin && <span className="pill">{tool.plugin}</span>}
-                    <span className={tool.writes ? 'pill warn' : 'pill'}>
-                      {tool.writes ? t('mcp.writes') : t('mcp.readOnly')}
+                    <span className="mcp-tool-meta">
+                      {tool.plugin && <span className="pill">{tool.plugin}</span>}
+                      <span className={tool.writes ? 'pill warn' : 'pill'}>
+                        {tool.writes ? t('mcp.writes') : t('mcp.readOnly')}
+                      </span>
                     </span>
-                    <span className="muted">{tool.description}</span>
+                    <span className="mcp-tool-description muted">{tool.description}</span>
                   </li>
                 ))}
               </ul>
