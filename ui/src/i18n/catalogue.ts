@@ -69,7 +69,7 @@ const en = {
   'proxy.cleared': 'Captured history cleared.',
   'proxy.clearFailed': 'Could not clear captured history: {message}',
   'proxy.emptyTable':
-    'No traffic captured yet. Point your client at the proxy at 127.0.0.1:8080.',
+    'No traffic captured yet. Point your client at the proxy at {proxy}.',
 
   // --- flow table ---
   'flow.time': 'Time',
@@ -1471,7 +1471,7 @@ const ko: Catalogue = {
   'proxy.cleared': '수집 기록을 초기화했습니다.',
   'proxy.clearFailed': '수집 기록을 초기화하지 못했습니다: {message}',
   'proxy.emptyTable':
-    '아직 캡처된 트래픽이 없습니다. 클라이언트 프록시를 127.0.0.1:8080 으로 설정하세요.',
+    '아직 캡처된 트래픽이 없습니다. 클라이언트 프록시를 {proxy} 으로 설정하세요.',
 
   'flow.time': '시각',
   'flow.method': '메서드',

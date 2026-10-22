@@ -17,8 +17,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+import os
 import platform
 import shutil
+import socket
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -123,6 +125,47 @@ def profile_dir(data_dir: Path) -> Path:
     return Path(data_dir) / "browser-profile"
 
 
+# The proxy a profile's browser was started with. Chromium hands a second
+# launch on the same profile to the running process and drops its flags, so
+# this is the only record of which proxy the open windows actually use.
+_PROXY_MARKER = "lanius-proxy"
+
+
+def _running_pid(profile: Path) -> int | None:
+    """The pid of a live browser holding this profile, if one is known.
+
+    POSIX Chromium leaves ``SingletonLock`` as a symlink to
+    ``<hostname>-<pid>``. Windows keeps an opaque lock file instead, so
+    there a running browser goes undetected.
+    """
+    try:
+        target = os.readlink(profile / "SingletonLock")
+    except OSError:
+        return None
+    host, _, pid_text = target.rpartition("-")
+    if host != socket.gethostname() or not pid_text.isdigit():
+        return None
+    pid = int(pid_text)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return None
+    except PermissionError:
+        pass
+    return pid
+
+
+def running_proxy(data_dir: Path) -> str | None:
+    """The proxy the open Lanius browser uses, or None if none is open."""
+    profile = profile_dir(data_dir)
+    if _running_pid(profile) is None:
+        return None
+    try:
+        return (profile / _PROXY_MARKER).read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
 def launch(
     *,
     proxy_host: str,
@@ -145,6 +188,16 @@ def launch(
     # A loopback proxy must still be used for loopback addresses, or the
     # browser bypasses it exactly when testing a local application.
     proxy = f"http://{proxy_host}:{proxy_port}"
+
+    # A second launch only opens a window in the running browser, which
+    # keeps its old proxy. After the listener moves, that window would
+    # quietly send traffic to whatever now holds the old port.
+    current = running_proxy(data_dir)
+    if current is not None and current != proxy:
+        raise BrowserError(
+            f"the Lanius browser is still open with proxy {current}. "
+            f"Close it, then open it again to use {proxy}."
+        )
     args = [
         browser.path,
         f"--user-data-dir={profile}",
@@ -171,6 +224,11 @@ def launch(
         pid = _spawn(args)
     except OSError as exc:
         raise BrowserError(f"could not start {browser.name}: {exc}") from exc
+    if current is None:
+        try:
+            (profile / _PROXY_MARKER).write_text(proxy, encoding="utf-8")
+        except OSError as exc:
+            logger.warning("could not record the browser proxy: %s", exc)
 
     return {
         "name": browser.name,
@@ -239,5 +297,6 @@ __all__ = [
     "find_browser",
     "launch",
     "profile_dir",
+    "running_proxy",
     "state",
 ]

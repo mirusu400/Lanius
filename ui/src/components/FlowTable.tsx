@@ -24,13 +24,15 @@ interface Props {
   sortDesc?: boolean;
   onSort?: (key: HistorySortKey) => void;
   onToggleBookmark?: (flow: FlowSummary) => void;
+  /** The primary listener, named in the empty-table hint. */
+  proxyAddress?: string;
 }
 
 const SORT_KEYS: HistorySortKey[] = [
   'started_at', 'method', 'host', 'url', 'status_code', 'modified', 'response_size', 'duration_ms',
 ];
 
-export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQuery = '', sortBy, sortDesc, onSort, onToggleBookmark }: Props) {
+export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQuery = '', sortBy, sortDesc, onSort, onToggleBookmark, proxyAddress = '127.0.0.1:8080' }: Props) {
   const t = useT();
   const showSourceIp = useLocalSourceIpColumn();
   const publicIpIndex = showSourceIp ? 11 : 10;
@@ -109,7 +111,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
           {flows.length === 0 && (
             <tr>
               <td colSpan={columns.widths.length} className="empty">
-                {t('proxy.emptyTable')}
+                {t('proxy.emptyTable', { proxy: proxyAddress })}
               </td>
               <ResizableFillCell />
             </tr>

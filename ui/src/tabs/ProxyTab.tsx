@@ -671,6 +671,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                   sortDesc={historySort.desc}
                   onSort={onSortHistory}
                   onToggleBookmark={toggleBookmark}
+                  proxyAddress={status ? `${status.proxy.host}:${status.proxy.port}` : undefined}
                 />
               </Busy>
             }

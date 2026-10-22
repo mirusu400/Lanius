@@ -169,3 +169,9 @@ it('hides and restores columns from the header context menu', async () => {
   expect(screen.getByText(t('flow.host'))).toBeTruthy();
   expect(screen.getByText('example.test')).toBeTruthy();
 });
+
+it('names the listener the proxy actually uses when nothing is captured', () => {
+  render(<FlowTable flows={[]} selectedId={null} onSelect={() => undefined} proxyAddress="127.0.0.1:8083" />);
+  expect(screen.getByText(t('proxy.emptyTable', { proxy: '127.0.0.1:8083' }))).toBeTruthy();
+  expect(screen.queryByText(/8080/)).toBeNull();
+});

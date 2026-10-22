@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import os
+import socket
 import subprocess
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -210,3 +213,73 @@ def test_state_describes_the_feature_before_use(tmp_path) -> None:
 
     with mock.patch.object(browser, "find_browser", return_value=None):
         assert browser.state(tmp_path, confdir)["available"] is False
+
+
+def _hold_profile(data_dir: Path, proxy: str) -> None:
+    """Leave the profile as a running browser launched for ``proxy`` does."""
+    profile = browser.profile_dir(data_dir)
+    profile.mkdir(parents=True, exist_ok=True)
+    (profile / "SingletonLock").symlink_to(f"{socket.gethostname()}-{os.getpid()}")
+    (profile / "lanius-proxy").write_text(proxy, encoding="utf-8")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX profile lock")
+def test_open_browser_on_an_old_listener_is_refused(tmp_path) -> None:
+    """Chromium hands a second launch to the running browser and drops its
+    flags, so after the listener moves the new window would still use the
+    old port, where another proxy may be capturing it."""
+    _hold_profile(tmp_path, "http://127.0.0.1:8080")
+    found = browser.Browser("Google Chrome", "/fake/chrome")
+
+    with mock.patch.object(browser, "find_browser", return_value=found):
+        with mock.patch.object(browser, "_spawn") as popen:
+            with pytest.raises(browser.BrowserError) as excinfo:
+                browser.launch(
+                    proxy_host="127.0.0.1",
+                    proxy_port=8083,
+                    data_dir=tmp_path,
+                    confdir=tmp_path / "missing",
+                )
+
+    popen.assert_not_called()
+    assert "http://127.0.0.1:8080" in str(excinfo.value)
+    assert "http://127.0.0.1:8083" in str(excinfo.value)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX profile lock")
+def test_open_browser_on_the_same_listener_opens_a_window(tmp_path) -> None:
+    _hold_profile(tmp_path, "http://127.0.0.1:8080")
+    found = browser.Browser("Google Chrome", "/fake/chrome")
+
+    with mock.patch.object(browser, "find_browser", return_value=found):
+        with mock.patch.object(browser, "_spawn", return_value=5) as popen:
+            browser.launch(
+                proxy_host="127.0.0.1",
+                proxy_port=8080,
+                data_dir=tmp_path,
+                confdir=tmp_path / "missing",
+            )
+
+    popen.assert_called_once()
+
+
+def test_launch_records_the_proxy_and_a_stale_lock_is_ignored(tmp_path) -> None:
+    """A lock left by a crashed browser must not block the next launch."""
+    profile = browser.profile_dir(tmp_path)
+    profile.mkdir(parents=True)
+    if sys.platform != "win32":
+        (profile / "SingletonLock").symlink_to("some-other-host-1")
+    (profile / "lanius-proxy").write_text("http://127.0.0.1:8080", encoding="utf-8")
+    found = browser.Browser("Google Chrome", "/fake/chrome")
+
+    with mock.patch.object(browser, "find_browser", return_value=found):
+        with mock.patch.object(browser, "_spawn", return_value=5):
+            browser.launch(
+                proxy_host="127.0.0.1",
+                proxy_port=8083,
+                data_dir=tmp_path,
+                confdir=tmp_path / "missing",
+            )
+
+    assert (profile / "lanius-proxy").read_text(encoding="utf-8") == "http://127.0.0.1:8083"
+    assert browser.running_proxy(tmp_path) is None
