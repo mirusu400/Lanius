@@ -1,12 +1,10 @@
-# Needs Python 3.13 or newer: on 3.12 mitmproxy pins typing-extensions<=4.14,
-# which conflicts with the pydantic that mcp requires.
+# Use Python 3.13 or newer, matching the tested engine and desktop builds.
 #
-# PyPI's 12.2.3 release still pins vulnerable cryptography, h2, msgpack and
-# tornado versions. This reviewed upstream PR merge contains their dependency
-# updates, including the Tornado bound from https://github.com/mitmproxy/mitmproxy/pull/8439.
-# Keep the immutable commit until the next mitmproxy release includes them,
-# then return to a normal release constraint.
-mitmproxy @ git+https://github.com/mitmproxy/mitmproxy.git@8bc3b89334acbfd7af71aed9000900b1c67f0f63
+# mitmproxy 12.3.0 includes the dependency fixes that required a development
+# snapshot before. Pin its immutable release commit while the new release is
+# unavailable on PyPI, then replace this with mitmproxy==12.3.0.
+# https://github.com/mitmproxy/mitmproxy/releases/tag/v12.3.0
+mitmproxy @ git+https://github.com/mitmproxy/mitmproxy.git@ac4f4cf7eab63effeb4b53b6bc09b5143aa42ae4
 fastapi>=0.141
 uvicorn[standard]>=0.52
 # uvloop 0.23 forwards eager_start to task factories on Python 3.13, but

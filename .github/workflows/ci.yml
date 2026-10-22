@@ -27,9 +27,7 @@ permissions:
   contents: read
 
 env:
-  # 3.13 or newer. On 3.12 mitmproxy pins typing-extensions<=4.14, which
-  # collides with the pydantic that mcp requires, and pip spends minutes
-  # searching before giving up.
+  # Keep the tested engine runtime aligned with the desktop builds.
   PYTHON_VERSION: '3.13'
   NODE_VERSION: '22'
 
