@@ -2677,6 +2677,44 @@ pre.response-preview-text {
   color: var(--fg);
 }
 
+/* Replay and Fuzzer tab titles are drag handles. The marker belongs to the
+   whole tab so it stays visible beside the close button and on wrapped rows. */
+.reorderable-subtab {
+  position: relative;
+}
+
+.reorderable-subtab > button:first-of-type {
+  cursor: grab;
+}
+
+.reorderable-subtab > button:first-of-type:active {
+  cursor: grabbing;
+}
+
+.reorderable-subtab.dragging {
+  opacity: 0.45;
+}
+
+.reorderable-subtab.drop-before::before,
+.reorderable-subtab.drop-after::after {
+  position: absolute;
+  z-index: 1;
+  top: 15%;
+  bottom: 15%;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  content: '';
+}
+
+.reorderable-subtab.drop-before::before {
+  left: -3px;
+}
+
+.reorderable-subtab.drop-after::after {
+  right: -3px;
+}
+
 .badge {
   background: var(--accent);
   border-radius: 8px;

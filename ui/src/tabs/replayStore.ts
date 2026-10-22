@@ -15,6 +15,7 @@ import {
 } from './replayModel';
 import { asMessage, type Message } from '../i18n/message';
 import { notifyRequestTransferred } from '../requestTransfers';
+import { reorderTabs, type TabDropSide } from '../tabReorder';
 
 type Listener = (tabs: ReplayTab[]) => void;
 type SelectionListener = (id: string | null) => void;
@@ -111,6 +112,17 @@ export function renameTab(id: string, title: string): void {
   const normalized = title.trim();
   if (!normalized) return;
   updateTab(id, { title: normalized });
+}
+
+export function moveReplayTab(
+  sourceId: string,
+  targetId: string,
+  side: TabDropSide,
+): void {
+  const next = reorderTabs(tabs, sourceId, targetId, side);
+  if (next === tabs) return;
+  tabs = next;
+  emit();
 }
 
 /** Editing a sent pair starts a draft; the recorded request stays immutable. */

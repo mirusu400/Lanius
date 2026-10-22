@@ -24,6 +24,7 @@ import {
   finishReplaySend,
   getActiveTabId,
   getTabs,
+  moveReplayTab,
   renameTab,
   removeTab,
   selectTab,
@@ -54,6 +55,7 @@ import { sendTextToFuzzer } from './fuzzerStore';
 import { useShortcut } from '../useShortcut';
 import { UndoableInput } from '../components/UndoableText';
 import { EditableTabTitle } from '../components/EditableTabTitle';
+import { useTabDragReorder } from '../components/useTabDragReorder';
 
 function requestUrl(tab: Pick<ReplayTab, 'url' | 'text'>): string | null {
   try {
@@ -88,6 +90,7 @@ export function ReplayTabView() {
   );
 
   const menu = useContextMenu<string>();
+  const tabDrag = useTabDragReorder(moveReplayTab);
 
   useEffect(() => subscribe(setTabs), []);
   useEffect(() => subscribeSelection(setActiveId), []);
@@ -371,13 +374,26 @@ export function ReplayTabView() {
         {tabs.map((tab) => (
           <div
             key={tab.id}
-            className={`replay-tab-choice ${tab.id === activeId ? 'active' : ''}`}
+            className={[
+              'replay-tab-choice',
+              'reorderable-subtab',
+              tab.id === activeId ? 'active' : '',
+              tab.id === tabDrag.draggedId ? 'dragging' : '',
+              tabDrag.dropTarget?.id === tab.id
+                ? `drop-${tabDrag.dropTarget.side}`
+                : '',
+            ].filter(Boolean).join(' ')}
+            onDragOver={(event) => tabDrag.over(event, tab.id)}
+            onDrop={(event) => tabDrag.drop(event, tab.id)}
           >
             <EditableTabTitle
               active={tab.id === activeId}
               ariaLabel={t('common.renameTab', { title: tab.title })}
               buttonClassName="replay-tab-select"
               displayTitle={tab.title}
+              dragging={tab.id === tabDrag.draggedId}
+              onDragEnd={tabDrag.finish}
+              onDragStart={(event) => tabDrag.start(event, tab.id)}
               onContextMenu={(event) => menu.open(event, tab.id)}
               onRename={(title) => renameTab(tab.id, title)}
               onSelect={() => selectTab(tab.id)}

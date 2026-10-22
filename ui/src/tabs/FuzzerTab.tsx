@@ -24,7 +24,7 @@ import {
 } from './fuzzerModel';
 import {
   addFuzzerDraft, ensureFuzzerDraft, getFuzzerWorkspace, getFuzzerWorkspaceEpoch, newFuzzerDraft, openFuzzerRun,
-  patchFuzzerDraft, removeFuzzerDraft, renameFuzzerDraft, selectFuzzerDraft,
+  moveFuzzerDraft, patchFuzzerDraft, removeFuzzerDraft, renameFuzzerDraft, selectFuzzerDraft,
   subscribeFuzzerWorkspace, type FuzzerDraft,
 } from './fuzzerStore';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
@@ -48,11 +48,13 @@ import { errorMessage, rawMsg, renderMessage, useT, type Message } from '../i18n
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from '../components/ResizableColumns';
 import { useShortcut } from '../useShortcut';
 import { EditableTabTitle } from '../components/EditableTabTitle';
+import { useTabDragReorder } from '../components/useTabDragReorder';
 
 const PAYLOAD_MARKERS = /\{\{[\s\S]*?\}\}/g;
 
 export function FuzzerTab() {
   const t = useT();
+  const tabDrag = useTabDragReorder(moveFuzzerDraft);
   const [workspace, setWorkspace] = useState(getFuzzerWorkspace);
   const [history, setHistory] = useState<RunSummary[]>([]);
   const historyPending = useRef(false);
@@ -99,7 +101,20 @@ export function FuzzerTab() {
       {workspace.tabs.map((draft, index) => {
         const title = draft.title?.trim() || `${index + 1}. ${draft.url}`;
         return (
-          <div key={draft.id} className={`fuzzer-tab-choice ${draft.id === workspace.activeId ? 'active' : ''}`}>
+          <div
+            key={draft.id}
+            className={[
+              'fuzzer-tab-choice',
+              'reorderable-subtab',
+              draft.id === workspace.activeId ? 'active' : '',
+              draft.id === tabDrag.draggedId ? 'dragging' : '',
+              tabDrag.dropTarget?.id === draft.id
+                ? `drop-${tabDrag.dropTarget.side}`
+                : '',
+            ].filter(Boolean).join(' ')}
+            onDragOver={(event) => tabDrag.over(event, draft.id)}
+            onDrop={(event) => tabDrag.drop(event, draft.id)}
+          >
             <EditableTabTitle
               active={draft.id === workspace.activeId}
               ariaLabel={t('common.renameTab', { title })}
@@ -107,6 +122,9 @@ export function FuzzerTab() {
               displayTitle={title}
               editValue={draft.title ?? draft.url}
               tooltip={draft.title ? `${draft.title} — ${draft.url}` : draft.url}
+              dragging={draft.id === tabDrag.draggedId}
+              onDragEnd={tabDrag.finish}
+              onDragStart={(event) => tabDrag.start(event, draft.id)}
               onRename={(name) => renameFuzzerDraft(draft.id, name)}
               onSelect={() => selectFuzzerDraft(draft.id)}
             />

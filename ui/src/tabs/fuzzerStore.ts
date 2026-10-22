@@ -5,6 +5,7 @@ import { templateFromFlow } from './fuzzerModel';
 import { nextTabId } from './replayModel';
 import { notifyRequestTransferred } from '../requestTransfers';
 import type { HttpMode, RunMode } from '../api/types';
+import { reorderTabs, type TabDropSide } from '../tabReorder';
 
 export interface FuzzerTarget {
   url: string;
@@ -112,6 +113,16 @@ export function renameFuzzerDraft(id: string, title: string): void {
   const normalized = title.trim();
   if (!normalized) return;
   patchFuzzerDraft(id, { title: normalized });
+}
+export function moveFuzzerDraft(
+  sourceId: string,
+  targetId: string,
+  side: TabDropSide,
+): void {
+  const tabs = reorderTabs(workspace.tabs, sourceId, targetId, side);
+  if (tabs === workspace.tabs) return;
+  workspace = { ...workspace, tabs };
+  emitWorkspace();
 }
 export function selectFuzzerDraft(id: string): void {
   workspace = { ...workspace, activeId: id };

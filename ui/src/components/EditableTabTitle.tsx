@@ -1,4 +1,8 @@
-import { useState, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  useState,
+  type DragEventHandler,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 
 import './EditableTabTitle.css';
 
@@ -9,6 +13,9 @@ interface EditableTabTitleProps {
   displayTitle: string;
   editValue?: string;
   tooltip?: string;
+  dragging?: boolean;
+  onDragEnd?: DragEventHandler<HTMLButtonElement>;
+  onDragStart?: DragEventHandler<HTMLButtonElement>;
   onContextMenu?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onRename: (title: string) => void;
   onSelect: () => void;
@@ -22,6 +29,9 @@ export function EditableTabTitle({
   displayTitle,
   editValue = displayTitle,
   tooltip = displayTitle,
+  dragging = false,
+  onDragEnd,
+  onDragStart,
   onContextMenu,
   onRename,
   onSelect,
@@ -65,8 +75,12 @@ export function EditableTabTitle({
       type="button"
       className={`${buttonClassName}${active ? ' active' : ''}`}
       aria-current={active ? 'page' : undefined}
+      aria-grabbed={onDragStart ? dragging : undefined}
+      draggable={Boolean(onDragStart)}
       onClick={onSelect}
       onContextMenu={onContextMenu}
+      onDragEnd={onDragEnd}
+      onDragStart={onDragStart}
       onDoubleClick={(event) => {
         event.stopPropagation();
         setDraft(editValue);

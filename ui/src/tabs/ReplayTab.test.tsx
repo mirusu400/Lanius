@@ -565,6 +565,39 @@ describe('ReplayTab', () => {
     expect(editor().value).toContain('/hello');
   });
 
+  it('reorders request tabs by dragging without changing the active tab', async () => {
+    sendToReplay(flow);
+    sendToReplay({ ...flow, id: 'f2', path: '/second' });
+    sendToReplay({ ...flow, id: 'f3', path: '/third' });
+    render(<ReplayTabView />);
+    await waitFor(() => expect(editor().value).toContain('/third'));
+
+    const source = screen.getByRole('button', { name: 'GET /third' });
+    const target = screen.getByRole('button', { name: 'GET /hello' })
+      .closest<HTMLDivElement>('.replay-tab-choice')!;
+    const transfer = {
+      dropEffect: 'none',
+      effectAllowed: 'none',
+      setData: vi.fn(),
+      getData: vi.fn(),
+    } as unknown as DataTransfer;
+
+    fireEvent.dragStart(source, { dataTransfer: transfer });
+    await waitFor(() => expect(source.getAttribute('aria-grabbed')).toBe('true'));
+    fireEvent.dragOver(target, { dataTransfer: transfer, clientX: 10 });
+    await waitFor(() => expect(target.className).toContain('drop-after'));
+    fireEvent.drop(target, { dataTransfer: transfer, clientX: 10 });
+
+    await waitFor(() => expect(getTabs().map((tab) => tab.title)).toEqual([
+      'GET /hello',
+      'GET /third',
+      'GET /second',
+    ]));
+    expect(editor().value).toContain('/third');
+    expect(document.querySelector('.replay-tab-choice.active .tab-title')?.textContent)
+      .toBe('GET /third');
+  });
+
   it('renames a request tab by double-clicking its title', async () => {
     const user = userEvent.setup();
     sendToReplay(flow);

@@ -308,6 +308,53 @@ describe('FuzzerTab', () => {
     expect(screen.getByText('Login fuzz')).toBeTruthy();
     expect(getFuzzerWorkspace().tabs[0].title).toBe('Login fuzz');
   });
+  it('reorders request tabs by dragging without changing the active tab', async () => {
+    const one = {
+      ...newFuzzerDraft('http://one.test', 'GET /one HTTP/1.1\nHost: one.test\n\n'),
+      title: 'One',
+    };
+    const two = {
+      ...newFuzzerDraft('http://two.test', 'GET /two HTTP/1.1\nHost: two.test\n\n'),
+      title: 'Two',
+    };
+    const three = {
+      ...newFuzzerDraft('http://three.test', 'GET /three HTTP/1.1\nHost: three.test\n\n'),
+      title: 'Three',
+    };
+    setFuzzerWorkspace({ tabs: [one, two, three], activeId: two.id });
+    render(<FuzzerTab />);
+    await waitFor(() => expect(templateBox().value).toContain('/two'));
+
+    const source = screen.getByRole('button', { name: 'One' });
+    const target = screen.getByRole('button', { name: 'Three' })
+      .closest<HTMLDivElement>('.fuzzer-tab-choice')!;
+    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 100,
+    } as DOMRect);
+    const transfer = {
+      dropEffect: 'none',
+      effectAllowed: 'none',
+      setData: vi.fn(),
+      getData: vi.fn(),
+    } as unknown as DataTransfer;
+
+    fireEvent.dragStart(source, { dataTransfer: transfer });
+    await waitFor(() => expect(source.getAttribute('aria-grabbed')).toBe('true'));
+    fireEvent.dragOver(target, { dataTransfer: transfer, clientX: 90 });
+    await waitFor(() => expect(target.className).toContain('drop-after'));
+    fireEvent.drop(target, { dataTransfer: transfer, clientX: 90 });
+
+    await waitFor(() => expect(getFuzzerWorkspace().tabs.map((tab) => tab.id)).toEqual([
+      two.id,
+      three.id,
+      one.id,
+    ]));
+    expect(getFuzzerWorkspace().activeId).toBe(two.id);
+    expect(templateBox().value).toContain('/two');
+    expect(document.querySelector('.fuzzer-tab-choice.active .tab-title')?.textContent)
+      .toBe('Two');
+  });
   it('keeps an edited target when its hidden tab is shown again', async () => {
     sendToFuzzer(flow);
     function Harness() {
