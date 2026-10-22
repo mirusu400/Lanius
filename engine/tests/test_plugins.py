@@ -13,6 +13,7 @@ from app.addons.plugins import PluginError, PluginManager
 from app.api.server import create_app
 from app.config import Settings
 from app.db.store import FlowStore
+from lanius_sdk import PluginApiError
 
 STAMP_PLUGIN = textwrap.dedent(
     '''
@@ -709,8 +710,25 @@ def test_a_plugin_can_add_a_code_format(tmp_path) -> None:
     try:
         assert codegen.generate("shout", codegen.RequestSpec("GET", "https://x.test/"))
         assert any(f["kind"] == "shout" for f in codegen.available_formats())
+        manager.lockdown_enabled = lambda: True
+        with pytest.raises(PluginApiError, match="execution is suspended"):
+            codegen.generate("shout", codegen.RequestSpec("GET", "https://x.test/"))
     finally:
         manager.disable("shouter")
+
+
+def test_suspended_manager_does_not_dispatch_loaded_traffic_hooks(tmp_path) -> None:
+    (tmp_path / "stamp.py").write_text(STAMP_PLUGIN)
+    manager = PluginManager(tmp_path, addons=FakeAddons())
+    manager.discover()
+    manager.enable("stamp")
+    manager.lockdown_enabled = lambda: True
+    flow = tflow.tflow(req=tutils.treq(), resp=False)
+
+    with pytest.raises(PluginApiError, match="execution is suspended"):
+        manager.addons.items[0].request(flow)
+    assert "X-Plugin" not in flow.request.headers
+    manager.disable("stamp")
 
 
 def test_disabling_the_plugin_removes_its_format(tmp_path) -> None:

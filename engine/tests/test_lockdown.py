@@ -160,6 +160,68 @@ def test_plugins_are_suspended_and_restored(client) -> None:
     assert plugin["loaded"] is True
 
 
+@pytest.mark.parametrize(
+    ("path", "payload", "method"),
+    [
+        ("/api/plugin-actions/missing.action/invoke", {"context": {}}, "invoke_action"),
+        (
+            "/api/plugin-payload-generators/missing.generator/generate",
+            {"options": {}},
+            "generate_payloads",
+        ),
+        (
+            "/api/plugin-payload-processors/missing.processor/process",
+            {"value": "x", "context": {}},
+            "process_payload",
+        ),
+    ],
+)
+def test_plugin_contribution_apis_are_refused_before_dispatch(
+    client, path, payload, method
+) -> None:
+    lock(client)
+    registry = client.app.state.engine.plugins.registry
+    with mock.patch.object(registry, method) as dispatch:
+        response = client.post(path, json=payload)
+    assert response.status_code == 423
+    assert response.json() == {"detail": "LOCKDOWN_MODE_BLOCKED"}
+    dispatch.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("path", "method"),
+    [
+        ("/api/scanner/passive/missing-flow", "scan_passive"),
+        ("/api/scanner/active/missing-flow", "start_active"),
+    ],
+)
+def test_plugin_scanner_apis_are_refused_before_dispatch(client, path, method) -> None:
+    lock(client)
+    scanner = client.app.state.engine.scanner
+    with mock.patch.object(scanner, method) as dispatch:
+        response = client.post(path, json={})
+    assert response.status_code == 423
+    assert response.json() == {"detail": "LOCKDOWN_MODE_BLOCKED"}
+    dispatch.assert_not_called()
+
+
+def test_lockdown_keeps_builtin_codecs_and_codegen_available(client) -> None:
+    lock(client)
+    decoded = client.post(
+        "/api/decode",
+        json={"value": "aGVsbG8=", "steps": [{"codec": "base64", "direction": "decode"}]},
+    )
+    assert decoded.status_code == 200
+    assert decoded.json()["output"] == "hello"
+
+    rendered = client.post(
+        "/api/codegen",
+        json={"kind": "curl", "url": "https://example.test/"},
+    )
+    assert rendered.status_code == 200
+    assert "example.test" in rendered.json()["text"]
+
+
 def test_enabled_plugins_do_not_load_on_a_locked_start(tmp_path, monkeypatch) -> None:
     monkeypatch.delenv("LANIUS_LOCKDOWN", raising=False)
     monkeypatch.delenv("LANIUS_LOCKDOWN_GLOBAL", raising=False)

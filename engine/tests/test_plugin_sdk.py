@@ -128,6 +128,78 @@ async def test_sdk_plugin_registers_and_invokes_contributions(sdk_manager) -> No
     assert diagnostics["logs"][-1]["message"] == "SDK plugin activated"
 
 
+@pytest.mark.asyncio
+async def test_suspended_manager_refuses_every_sdk_execution_path(sdk_manager) -> None:
+    sdk_manager.enable("sdk")
+    sdk_manager.registry.register(
+        "sdk",
+        "passive_scanners",
+        "audit",
+        {"title": "Audit"},
+        lambda _snapshot: None,
+    )
+    sdk_manager.lockdown_enabled = lambda: True
+
+    with pytest.raises(PluginApiError, match="execution is suspended"):
+        await sdk_manager.registry.invoke_action(
+            "sdk.inspect", {"location": "flow", "flow_id": "f-1"}
+        )
+    with pytest.raises(PluginApiError, match="execution is suspended"):
+        await sdk_manager.registry.generate_payloads("sdk.sequence", {"count": 1})
+    with pytest.raises(PluginApiError, match="execution is suspended"):
+        await sdk_manager.registry.process_payload("sdk.prefix", "value", {})
+    with pytest.raises(PluginApiError, match="execution is suspended"):
+        codecs.transform("value", "sdk.inspect", "encode")
+    assert sdk_manager.registry.scan_handlers("passive_scanners") == []
+
+
+@pytest.mark.asyncio
+async def test_queued_sync_action_rechecks_suspension_on_the_worker(
+    sdk_manager, monkeypatch
+) -> None:
+    sdk_manager.enable("sdk")
+    called: list[bool] = []
+    sdk_manager.registry.register(
+        "sdk",
+        "actions",
+        "queued",
+        {"locations": ["global"]},
+        lambda _payload: called.append(True),
+    )
+
+    async def suspend_before_worker(function, *args):
+        sdk_manager.lockdown_enabled = lambda: True
+        return function(*args)
+
+    monkeypatch.setattr(asyncio, "to_thread", suspend_before_worker)
+    with pytest.raises(PluginApiError, match="execution is suspended"):
+        await sdk_manager.registry.invoke_action(
+            "sdk.queued", {"location": "global"}
+        )
+    assert called == []
+
+
+@pytest.mark.asyncio
+async def test_managed_task_does_not_start_after_suspension() -> None:
+    registry = ContributionRegistry(None)
+    suspended = False
+    registry.plugins_suspended = lambda: suspended
+    context = registry.context("sdk")
+    called: list[bool] = []
+
+    async def worker() -> None:
+        called.append(True)
+
+    context.tasks.create(worker(), name="queued-worker")
+    task = next(iter(registry._tasks["sdk"]))
+    suspended = True
+    await asyncio.gather(task, return_exceptions=True)
+
+    assert called == []
+    assert isinstance(task.exception(), PluginApiError)
+    await registry.dispose_owner_async("sdk")
+
+
 def test_sdk_settings_and_storage_persist_across_reload(sdk_manager) -> None:
     sdk_manager.enable("sdk")
     registry = sdk_manager.registry

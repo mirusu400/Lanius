@@ -414,10 +414,11 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
         value: str, codec: str = "base64", direction: str = "decode"
     ) -> dict[str, Any]:
         from ..addons.codecs import CodecError, transform
+        from ..plugin_registry import PluginApiError
 
         try:
             return {"output": transform(value, codec, direction)}  # type: ignore[arg-type]
-        except CodecError as exc:
+        except (CodecError, PluginApiError) as exc:
             return {"error": str(exc)}
 
     @server.tool(description="Read the project upstream HTTP mode: auto, http1.0, http1.1 or http2. Forced HTTP/2 requires HTTPS and never falls back.")

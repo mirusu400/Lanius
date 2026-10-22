@@ -729,8 +729,7 @@ class PluginManager:
             except AttributeError:  # pragma: no cover - exotic addon objects
                 logger.debug("cannot rename addon from plugin %s", plugin.name)
 
-    @staticmethod
-    def _register_formats(plugin: Plugin, objects: List[Any]) -> None:
+    def _register_formats(self, plugin: Plugin, objects: List[Any]) -> None:
         for obj in objects:
             formats = getattr(obj, "codegen_formats", None)
             if not formats:
@@ -738,7 +737,16 @@ class PluginManager:
             for kind, entry in dict(formats).items():
                 try:
                     label, generator = entry
-                    codegen.register_format(plugin.name, kind, label, generator)
+
+                    def guarded(
+                        spec: codegen.RequestSpec,
+                        __generator: Callable[[codegen.RequestSpec], str] = generator,
+                    ) -> str:
+                        self.registry.require_execution()
+                        with self.registry.execution(plugin.name):
+                            return __generator(spec)
+
+                    codegen.register_format(plugin.name, kind, label, guarded)
                 except (TypeError, ValueError) as exc:
                     logger.warning(
                         "plugin %s offers an unusable format %r: %s",
@@ -773,6 +781,7 @@ class PluginManager:
                         __hook_name: str = hook_name,
                         **kwargs: Any,
                     ) -> Any:
+                        self.registry.require_execution()
                         try:
                             with self.registry.execution(plugin.name):
                                 return await __original(*args, **kwargs)
@@ -792,6 +801,7 @@ class PluginManager:
                         __hook_name: str = hook_name,
                         **kwargs: Any,
                     ) -> Any:
+                        self.registry.require_execution()
                         try:
                             with self.registry.execution(plugin.name):
                                 return __original(*args, **kwargs)
@@ -965,6 +975,11 @@ class PluginManager:
             chain[:] = [item for item in chain if item is not addon]
             if lookup.get(name) is addon:
                 del lookup[name]
+        # A plugin's done hook is still arbitrary plugin code. Lockdown
+        # cleanup removes host-owned registrations and tasks below, but must
+        # not call back into the plugin after the suspension flag is active.
+        if self.suspended:
+            return
         await invoke(obj, mitm_hooks.DoneHook())
 
     async def _unload_async(

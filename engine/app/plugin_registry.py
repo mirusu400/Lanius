@@ -60,11 +60,27 @@ _MAX_PLUGIN_LOG_MESSAGE = 16 * 1024
 _SCANNER_SUSPEND_AFTER_ERRORS = 5
 
 
-async def _invoke_handler(handler: Any, *args: Any) -> Any:
+async def _invoke_handler(
+    handler: Any,
+    *args: Any,
+    before_invoke: Callable[[], None] | None = None,
+) -> Any:
     if inspect.iscoroutinefunction(handler):
+        if before_invoke is not None:
+            before_invoke()
         return await handler(*args)
-    result = await asyncio.to_thread(handler, *args)
+
+    def call_sync() -> Any:
+        # A contribution can wait in the executor while Lockdown is being
+        # enabled. Re-check on the worker immediately before plugin code runs.
+        if before_invoke is not None:
+            before_invoke()
+        return handler(*args)
+
+    result = await asyncio.to_thread(call_sync)
     if inspect.isawaitable(result):
+        if before_invoke is not None:
+            before_invoke()
         return await result
     return result
 
@@ -524,9 +540,17 @@ class ContributionRegistry:
         except KeyError as exc:
             raise PluginApiError(f"unknown {kind} contribution: {qualified_id}") from exc
 
+    def require_execution(self) -> None:
+        """Refuse every plugin callback while its manager is suspended."""
+
+        if self.plugins_suspended():
+            raise PluginApiError("plugin execution is suspended")
+
     def scan_handlers(
         self, kind: Literal["passive_scanners", "active_scanners"]
     ) -> List[Contribution]:
+        if self.plugins_suspended():
+            return []
         with self._diagnostics_lock:
             return [
                 item
@@ -600,6 +624,7 @@ class ContributionRegistry:
     async def invoke_action(
         self, qualified_id: str, payload: Mapping[str, Any]
     ) -> Any:
+        self.require_execution()
         item = self._get("actions", qualified_id)
         location = payload.get("location")
         locations = item.metadata["locations"]
@@ -611,7 +636,11 @@ class ContributionRegistry:
         try:
             with self.execution(item.owner):
                 result = await asyncio.wait_for(
-                    _invoke_handler(item.handler, payload),
+                    _invoke_handler(
+                        item.handler,
+                        payload,
+                        before_invoke=self.require_execution,
+                    ),
                     timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
                 )
         except TimeoutError as exc:
@@ -639,16 +668,27 @@ class ContributionRegistry:
     async def generate_payloads(
         self, qualified_id: str, options: Mapping[str, Any]
     ) -> List[str]:
+        self.require_execution()
         item = self._get("payload_generators", qualified_id)
         started = self.begin_call(item)
         try:
             with self.execution(item.owner):
                 values = await asyncio.wait_for(
-                    _invoke_handler(item.handler, options),
+                    _invoke_handler(
+                        item.handler,
+                        options,
+                        before_invoke=self.require_execution,
+                    ),
                     timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
                 )
+
+                def collect() -> List[str]:
+                    # A generator body does not run until it is iterated.
+                    self.require_execution()
+                    return _collect_payloads(values)
+
                 result = await asyncio.wait_for(
-                    asyncio.to_thread(_collect_payloads, values),
+                    asyncio.to_thread(collect),
                     timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
                 )
         except TimeoutError as exc:
@@ -668,12 +708,18 @@ class ContributionRegistry:
     async def process_payload(
         self, qualified_id: str, value: str, context: Mapping[str, Any]
     ) -> str:
+        self.require_execution()
         item = self._get("payload_processors", qualified_id)
         started = self.begin_call(item)
         try:
             with self.execution(item.owner):
                 result = await asyncio.wait_for(
-                    _invoke_handler(item.handler, value, context),
+                    _invoke_handler(
+                        item.handler,
+                        value,
+                        context,
+                        before_invoke=self.require_execution,
+                    ),
                     timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
                 )
         except TimeoutError as exc:
@@ -1079,7 +1125,22 @@ class PluginHost:
             raise PluginApiError("a codec needs an encode or decode function")
         self.registry._validate_local_id(codec_id, "codecs id")
         qualified = f"{self.owner}.{codec_id}"
-        codecs.register_codec(qualified, encode=encode, decode=decode)
+
+        def guarded(handler: Callable[[str], str] | None) -> Callable[[str], str] | None:
+            if handler is None:
+                return None
+
+            def invoke(value: str) -> str:
+                self.registry.require_execution()
+                return handler(value)
+
+            return invoke
+
+        codecs.register_codec(
+            qualified,
+            encode=guarded(encode),
+            decode=guarded(decode),
+        )
         try:
             return self.registry.register(
                 self.owner,
@@ -1197,6 +1258,7 @@ class PluginHost:
 
         async def managed() -> Any:
             nonlocal started
+            self.registry.require_execution()
             started = True
             try:
                 with self.registry.execution(self.owner):
@@ -1209,7 +1271,7 @@ class PluginHost:
 
         task = asyncio.ensure_future(managed())
         def close_unstarted(done: asyncio.Future[Any]) -> None:
-            if done.cancelled() and not started:
+            if not started:
                 close = getattr(awaitable, "close", None)
                 if close is not None:
                     close()

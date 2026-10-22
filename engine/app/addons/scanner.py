@@ -9,14 +9,14 @@ import json
 import re
 import time
 import uuid
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from mitmproxy import http
 
-from lanius_sdk import ActiveScanContext, InsertionPoint, ScanIssue
+from lanius_sdk import ActiveScanContext, InsertionPoint, PluginApiError, ScanIssue
 
 from ..db.store import FlowRecord, FlowStore
 from ..events import EventBroker
@@ -296,13 +296,27 @@ def _issues(value: Any) -> list[ScanIssue]:
     return result
 
 
-async def _invoke(handler: Any, value: Any) -> list[ScanIssue]:
+async def _invoke(
+    handler: Any,
+    value: Any,
+    *,
+    before_invoke: Callable[[], None],
+) -> list[ScanIssue]:
     if inspect.iscoroutinefunction(handler):
+        before_invoke()
         result = await handler(value)
     else:
-        result = await asyncio.to_thread(handler, value)
+        def call_sync() -> Any:
+            before_invoke()
+            return handler(value)
+
+        result = await asyncio.to_thread(call_sync)
         if inspect.isawaitable(result):
+            before_invoke()
             result = await result
+    # A synchronous generator does not execute its body until `_issues`
+    # iterates it, so guard that boundary too.
+    before_invoke()
     return _issues(result)
 
 
@@ -388,11 +402,17 @@ class ScannerAddon:
             started = self.registry.begin_call(contribution)
             try:
                 with self.registry.execution(contribution.owner):
-                    for issue in await _invoke(contribution.handler, snapshot):
+                    for issue in await _invoke(
+                        contribution.handler,
+                        snapshot,
+                        before_invoke=self.registry.require_execution,
+                    ):
                         saved.append(
                             await self._report(contribution, "passive", issue, snapshot)
                         )
             except Exception as exc:
+                if isinstance(exc, PluginApiError) and self.registry.plugins_suspended():
+                    return saved
                 self.registry.finish_call(contribution, started, exc)
                 self.registry.append_exception(
                     contribution.owner, f"passive scanner {contribution.id}", exc
@@ -580,10 +600,16 @@ class ScannerAddon:
                     started = self.registry.begin_call(check)
                     try:
                         with self.registry.execution(check.owner):
-                            for issue in await _invoke(check.handler, context):
+                            for issue in await _invoke(
+                                check.handler,
+                                context,
+                                before_invoke=self.registry.require_execution,
+                            ):
                                 await self._report(check, "active", issue, snapshot)
                                 job.issues += 1
                     except Exception as exc:
+                        if isinstance(exc, PluginApiError) and self.registry.plugins_suspended():
+                            raise asyncio.CancelledError from None
                         self.registry.finish_call(check, started, exc)
                         self.registry.append_exception(
                             check.owner, f"active scanner {check.id}", exc

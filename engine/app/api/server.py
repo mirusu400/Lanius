@@ -1775,6 +1775,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         spec = await _spec_from(payload)
         try:
             text = codegen.generate(payload.kind, spec)
+        except PluginApiError as exc:
+            # If Lockdown changed after the request began, preserve the shared
+            # 423 contract instead of returning a generic plugin error.
+            lockdown.require_outbound("plugin execution")
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"kind": payload.kind, "text": text}
@@ -2428,6 +2433,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ]
         try:
             outputs = run_chain(body.value, steps)
+        except PluginApiError as exc:
+            lockdown.require_outbound("plugin execution")
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except CodecError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {
@@ -2901,12 +2909,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def invoke_plugin_action(
         action_id: str, payload: PluginActionBody
     ) -> dict[str, Any]:
+        lockdown.require_outbound("plugin execution")
         try:
             result = await engine.plugins.registry.invoke_action(
                 action_id, payload.context
             )
             return {"result": result}
         except PluginApiError as exc:
+            lockdown.require_outbound("plugin execution")
             status = 404 if str(exc).startswith("unknown") else 400
             raise HTTPException(status_code=status, detail=str(exc)) from exc
 
@@ -2914,12 +2924,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def generate_plugin_payloads(
         generator_id: str, payload: PluginPayloadGeneratorBody
     ) -> dict[str, Any]:
+        lockdown.require_outbound("plugin execution")
         try:
             values = await engine.plugins.registry.generate_payloads(
                 generator_id, payload.options
             )
             return {"values": values, "count": len(values)}
         except PluginApiError as exc:
+            lockdown.require_outbound("plugin execution")
             status = 404 if str(exc).startswith("unknown") else 400
             raise HTTPException(status_code=status, detail=str(exc)) from exc
 
@@ -2927,12 +2939,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def process_plugin_payload(
         processor_id: str, payload: PluginPayloadProcessorBody
     ) -> dict[str, Any]:
+        lockdown.require_outbound("plugin execution")
         try:
             value = await engine.plugins.registry.process_payload(
                 processor_id, payload.value, payload.context
             )
             return {"value": value}
         except PluginApiError as exc:
+            lockdown.require_outbound("plugin execution")
             status = 404 if str(exc).startswith("unknown") else 400
             raise HTTPException(status_code=status, detail=str(exc)) from exc
 
@@ -3006,19 +3020,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/scanner/passive/{flow_id}")
     async def run_passive_scanner(flow_id: str) -> dict[str, Any]:
+        lockdown.require_outbound("plugin execution")
         preview = await asyncio.to_thread(
             store.get_preview, flow_id, body_limit=MAX_SCAN_BODY_BYTES
         )
         if preview is None or preview[0].type != "http":
             raise HTTPException(status_code=404, detail="HTTP flow not found")
         record = preview[0]
+        lockdown.require_outbound("plugin execution")
         issues = await engine.scanner.scan_passive(request_snapshot(record))
+        lockdown.require_outbound("plugin execution")
         return {"items": issues, "count": len(issues)}
 
     @app.post("/api/scanner/active/{flow_id}")
     async def start_active_scan(
         flow_id: str, payload: ActiveScanBody
     ) -> dict[str, Any]:
+        lockdown.require_outbound("plugin execution")
         try:
             job = await engine.scanner.start_active(
                 flow_id,
@@ -3028,6 +3046,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             return job.as_dict()
         except ScannerError as exc:
+            lockdown.require_outbound("plugin execution")
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/scanner/jobs/{job_id}")
