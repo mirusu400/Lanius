@@ -96,9 +96,21 @@ def test_unbalanced_marker_raises() -> None:
     with pytest.raises(FuzzerError):
         find_positions(f"GET /a?x={OPEN}1 HTTP/1.1")
     with pytest.raises(FuzzerError):
-        find_positions(f"GET /a?x=1{CLOSE} HTTP/1.1")
-    with pytest.raises(FuzzerError):
         find_positions(f"GET /a?x={OPEN}1{OPEN}2{CLOSE}{CLOSE} HTTP/1.1")
+
+
+def test_a_close_outside_a_marker_is_text() -> None:
+    """Nested JSON ends in a close marker; it must not void a marked query."""
+    template = (
+        f"POST /a?q={OPEN}x{CLOSE} HTTP/1.1\n"
+        'Cookie: prefs={"a":{"b":1}}\n\n'
+        '{"user":{"id":1}}'
+    )
+    assert [p.value for p in find_positions(template)] == ["x"]
+    assert strip_markers(template).endswith('{"user":{"id":1}}')
+    assert apply_payloads(template, ["y"]).startswith("POST /a?q=y ")
+    # A marker closing a JSON value leaves the object's own braces alone.
+    assert strip_markers(f'{{"a":{{"b":{OPEN}1{CLOSE}}}}}') == '{"a":{"b":1}}'
 
 
 def test_strip_markers_restores_base_request() -> None:

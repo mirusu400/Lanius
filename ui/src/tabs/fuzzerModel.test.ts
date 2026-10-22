@@ -37,8 +37,12 @@ describe('countPositions', () => {
 
   it('reports unbalanced markers as -1', () => {
     expect(countPositions(`GET /?a=${O}1 HTTP/1.1`)).toBe(-1);
-    expect(countPositions(`GET /?a=1${C} HTTP/1.1`)).toBe(-1);
     expect(countPositions(`GET /?a=${O}1${O}2${C}${C} HTTP/1.1`)).toBe(-1);
+  });
+
+  it('treats a close outside a marker as text', () => {
+    expect(countPositions(`POST /?q=${O}x${C} HTTP/1.1\n\n{"a":{"b":1}}`)).toBe(1);
+    expect(countPositions(`GET /?a=1${C} HTTP/1.1`)).toBe(0);
   });
 });
 
@@ -58,6 +62,12 @@ describe('clearMarkers', () => {
   it('removes every marker but keeps the values', () => {
     expect(clearMarkers(`GET /?a=${O}1${C} HTTP/1.1`)).toBe(
       'GET /?a=1 HTTP/1.1',
+    );
+  });
+
+  it('keeps nested JSON braces intact', () => {
+    expect(clearMarkers(`POST /?q=${O}x${C} HTTP/1.1\n\n{"a":{"b":1}}`)).toBe(
+      'POST /?q=x HTTP/1.1\n\n{"a":{"b":1}}',
     );
   });
 });

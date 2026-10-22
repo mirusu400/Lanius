@@ -29,23 +29,36 @@ export const RUN_MODES: {
   },
 ];
 
-/** Count balanced `{{...}}` spans; -1 means markers are invalid. */
-export function countPositions(template: string): number {
+interface MarkerSpan {
+  start: number;
+  end: number;
+  value: string;
+}
+
+/**
+ * Locate `{{...}}` spans; null means markers are invalid. A marker ends at
+ * the first close after it, and a close outside any marker is ordinary
+ * text, since nested JSON and GraphQL end in `}}` all the time.
+ */
+function findMarkers(template: string): MarkerSpan[] | null {
+  const spans: MarkerSpan[] = [];
   let cursor = 0;
-  let count = 0;
-  while (cursor < template.length) {
+  for (;;) {
     const open = template.indexOf(OPEN_MARKER, cursor);
-    const close = template.indexOf(CLOSE_MARKER, cursor);
-    if (open < 0) return close < 0 ? count : -1;
-    if (close >= 0 && close < open) return -1;
-    const end = template.indexOf(CLOSE_MARKER, open + OPEN_MARKER.length);
-    if (end < 0) return -1;
-    const nested = template.indexOf(OPEN_MARKER, open + OPEN_MARKER.length);
-    if (nested >= 0 && nested < end) return -1;
-    count += 1;
+    if (open < 0) return spans;
+    const valueStart = open + OPEN_MARKER.length;
+    const end = template.indexOf(CLOSE_MARKER, valueStart);
+    if (end < 0) return null;
+    const nested = template.indexOf(OPEN_MARKER, valueStart);
+    if (nested >= 0 && nested < end) return null;
+    spans.push({ start: open, end: end + CLOSE_MARKER.length, value: template.slice(valueStart, end) });
     cursor = end + CLOSE_MARKER.length;
   }
-  return count;
+}
+
+/** Count payload positions; -1 means markers are invalid. */
+export function countPositions(template: string): number {
+  return findMarkers(template)?.length ?? -1;
 }
 
 /** Wrap the current selection in payload markers. */
@@ -64,10 +77,21 @@ export function addMarker(
   );
 }
 
+/** The template with markers removed and their base values kept. */
 export function clearMarkers(template: string): string {
-  return template
-    .split(OPEN_MARKER).join('')
-    .split(CLOSE_MARKER).join('');
+  const spans = findMarkers(template);
+  if (!spans) {
+    // Unbalanced: drop only the opening markers, so a stray close in the
+    // body (nested JSON) survives.
+    return template.split(OPEN_MARKER).join('');
+  }
+  let out = '';
+  let cursor = 0;
+  for (const span of spans) {
+    out += template.slice(cursor, span.start) + span.value;
+    cursor = span.end;
+  }
+  return out + template.slice(cursor);
 }
 
 /** Parse a textarea wordlist into payloads (blank lines dropped). */

@@ -58,18 +58,18 @@ def find_positions(
     open_marker: str = OPEN_MARKER,
     close_marker: str = CLOSE_MARKER,
 ) -> list[Position]:
-    """Locate ``{{payload}}`` spans in a request template."""
+    """Locate ``{{payload}}`` spans in a request template.
+
+    A marker ends at the first close after it. A close outside any marker
+    is ordinary text: nested JSON, GraphQL and cookies end in ``}}`` all
+    the time, and refusing them made a marked query parameter unusable.
+    """
     positions: list[Position] = []
     index = 0
     while True:
         start = template.find(open_marker, index)
-        stray_close = template.find(close_marker, index)
         if start == -1:
-            if stray_close != -1:
-                raise FuzzerError("unbalanced payload marker")
             break
-        if stray_close != -1 and stray_close < start:
-            raise FuzzerError("unbalanced payload marker")
         value_start = start + len(open_marker)
         end = template.find(close_marker, value_start)
         if end == -1:
