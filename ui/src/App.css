@@ -4413,6 +4413,12 @@ pre.response-preview-text {
   white-space: nowrap;
 }
 
+.plugin-list-pane footer button svg {
+  display: block;
+  height: 16px;
+  width: 16px;
+}
+
 .plugin-detail-pane {
   display: flex;
   flex-direction: column;
@@ -4696,6 +4702,11 @@ pre.response-preview-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.plugin-directory-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .plugin-onboarding-actions,

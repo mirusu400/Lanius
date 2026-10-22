@@ -10,6 +10,7 @@ import {
   installPluginSample,
   listPluginSamples,
   listPlugins,
+  openDirectory,
   patchPluginSettings,
   reloadPlugin,
   resetPluginDiagnostics,
@@ -382,6 +383,15 @@ export function PluginsTab() {
     }
   };
 
+  const revealDirectory = async () => {
+    try {
+      await openDirectory(directory);
+      setError(null);
+    } catch (reason) {
+      setError(rawMsg((reason as Error).message));
+    }
+  };
+
   const refreshCatalogue = async (network = false) => {
     setCatalogueBusy('refresh');
     try {
@@ -545,7 +555,10 @@ export function PluginsTab() {
               <div className="plugin-directory-card">
                 <span>{t('plugins.directory')}</span>
                 <code>{directory}</code>
-                <button onClick={() => void copyDirectory()}>{t('plugins.copyPath')}</button>
+                <div className="plugin-directory-actions">
+                  <button onClick={() => void revealDirectory()}>{t('plugins.openDirectory')}</button>
+                  <button onClick={() => void copyDirectory()}>{t('plugins.copyPath')}</button>
+                </div>
               </div>
               <div className="plugin-onboarding-actions">
                 <button className="primary" onClick={() => packageInput.current?.click()}>{t('plugins.install')}</button>
@@ -598,7 +611,18 @@ export function PluginsTab() {
                   </article>
                 ))}
               </div>
-              <footer><code title={directory}>{directory}</code><button aria-label={t('plugins.copyPath')} onClick={() => void copyDirectory()}>⧉</button></footer>
+              <footer>
+                <code title={directory}>{directory}</code>
+                <button
+                  aria-label={t('plugins.openDirectory')}
+                  title={t('plugins.openDirectory')}
+                  onClick={() => void revealDirectory()}
+                >
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M2.5 5.5h5l1.5 2h8.5v8H2.5v-10Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </footer>
             </aside>
 
             <main className="plugin-detail-pane">

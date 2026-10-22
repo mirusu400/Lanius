@@ -1604,6 +1604,13 @@ export async function captureWindowToClipboard(): Promise<void> {
   await internals.invoke('capture_current_window');
 }
 
+/** Reveal an existing local directory in the platform file manager. */
+export async function openDirectory(path: string): Promise<void> {
+  const internals = shell();
+  if (!internals) throw new Error('Desktop shell is unavailable');
+  await internals.invoke('open_directory', { path });
+}
+
 /** True when the shell can install an update itself. */
 export function canInstallUpdates(): boolean {
   return shell() !== null;

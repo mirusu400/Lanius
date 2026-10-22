@@ -1,10 +1,27 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildFlowQuery, getStatus, listFlowPage, patchFlowAnnotation, setApiToken } from './client';
+import { buildFlowQuery, getStatus, listFlowPage, openDirectory, patchFlowAnnotation, setApiToken } from './client';
 
 afterEach(() => {
   setApiToken('');
   vi.unstubAllGlobals();
+  Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
+});
+
+describe('desktop file manager', () => {
+  it('passes the selected directory to the shell', async () => {
+    const invoke = vi.fn(async () => undefined);
+    Object.defineProperty(window, '__TAURI_INTERNALS__', {
+      configurable: true,
+      value: { invoke },
+    });
+
+    await openDirectory('/home/u/.lanius/plugins');
+
+    expect(invoke).toHaveBeenCalledWith('open_directory', {
+      path: '/home/u/.lanius/plugins',
+    });
+  });
 });
 
 describe('desktop API authentication', () => {

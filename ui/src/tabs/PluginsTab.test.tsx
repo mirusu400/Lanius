@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PluginCatalogue, PluginInfo, PluginSampleInfo } from '../api/types';
+import * as api from '../api/client';
 import { renderWithI18n as render, t } from '../test-utils';
 import { PluginsTab } from './PluginsTab';
 
@@ -177,6 +178,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
 });
 
 describe('PluginsTab', () => {
@@ -187,6 +189,19 @@ describe('PluginsTab', () => {
     expect(screen.getByText('/p/stamp.py')).toBeTruthy();
     expect(screen.getByText('request')).toBeTruthy();
     expect(screen.getAllByText(t('plugins.statusOff')).length).toBeGreaterThan(0);
+  });
+
+  it('opens the plugin directory in the desktop file manager', async () => {
+    const open = vi.spyOn(api, 'openDirectory').mockResolvedValue(undefined);
+    render(<PluginsTab />);
+
+    await screen.findByTitle('/home/u/.lanius/plugins');
+    fireEvent.click(screen.getByRole('button', {
+      name: t('plugins.openDirectory'),
+    }));
+
+    await waitFor(() => expect(open).toHaveBeenCalledWith('/home/u/.lanius/plugins'));
+    open.mockRestore();
   });
 
   it('locks the switch while enabling and then shows the running state', async () => {

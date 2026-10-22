@@ -259,6 +259,54 @@ fn open_external(url: String) -> Result<(), String> {
         .map_err(|err| format!("could not open the browser: {err}"))
 }
 
+/// Only hand an existing absolute directory to the platform file manager.
+/// In particular, this keeps argument-looking relative paths and ordinary
+/// files away from commands that are reachable from the webview.
+fn local_directory(path: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(path);
+    if !path.is_absolute() {
+        return Err("only absolute directory paths can be opened".into());
+    }
+    let metadata =
+        std::fs::metadata(&path).map_err(|err| format!("directory is unavailable: {err}"))?;
+    if !metadata.is_dir() {
+        return Err("path is not a directory".into());
+    }
+    Ok(path)
+}
+
+/// Reveal a local directory in Finder, Explorer, or the Linux file manager.
+/// The explicit click is a local desktop action; no shell parser is involved.
+#[tauri::command]
+fn open_directory(path: String) -> Result<(), String> {
+    let path = local_directory(&path)?;
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("/usr/bin/open");
+        command.arg(&path);
+        command
+    };
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = Command::new("explorer.exe");
+        command.arg(&path);
+        command
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(&path);
+        command
+    };
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| format!("could not open the file manager: {err}"))
+}
+
 /// Locate the bundled engine binary, or fall back to the dev checkout.
 /// A port from the environment, falling back to the default. An
 /// unparseable value is ignored rather than taken as 0.
@@ -1391,6 +1439,7 @@ pub fn run() {
             set_window_theme,
             open_network_extensions_settings,
             open_external,
+            open_directory,
             list_projects,
             current_project,
             create_project,
@@ -1578,6 +1627,20 @@ mod tests {
         ] {
             assert!(external_url(url).is_err(), "{url}");
         }
+    }
+
+    #[test]
+    fn only_existing_absolute_directories_can_be_opened() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let file = directory.path().join("plugin.py");
+        std::fs::write(&file, "pass").expect("temporary file");
+
+        assert_eq!(
+            local_directory(directory.path().to_str().expect("utf-8 path")),
+            Ok(directory.path().to_path_buf())
+        );
+        assert!(local_directory(file.to_str().expect("utf-8 path")).is_err());
+        assert!(local_directory("relative/plugins").is_err());
     }
 
     #[test]
