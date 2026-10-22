@@ -52,6 +52,7 @@ export default defineConfig({
     logo: '/lanius_mascot_transparent.png',
     siteTitle: 'Lanius',
     nav: [
+      { text: 'Showcase', link: '/showcase' },
       { text: 'Wiki', link: '/features' },
       { text: 'Plugins', link: '/plugins-sdk' },
       { text: 'Releases', link: `${repo}/releases` },
@@ -60,7 +61,10 @@ export default defineConfig({
       '/': [
         {
           text: 'Overview',
-          items: [{ text: 'Features', link: '/features' }],
+          items: [
+            { text: 'Showcase', link: '/showcase' },
+            { text: 'Features', link: '/features' },
+          ],
         },
         {
           text: 'Proxy',

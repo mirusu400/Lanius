@@ -16,6 +16,9 @@ hero:
       text: Download
       link: https://github.com/mirusu400/Lanius/releases/latest
     - theme: alt
+      text: See it in action
+      link: /showcase
+    - theme: alt
       text: Getting Started
       link: https://github.com/mirusu400/Lanius#getting-started
     - theme: alt
@@ -48,3 +51,30 @@ features:
       Separate global and project switches block Lanius-owned external
       requests on sensitive networks while your proxy traffic keeps working.
 ---
+
+<section class="home-showcase" aria-labelledby="home-showcase-title">
+  <div class="home-showcase__heading">
+    <p class="showcase-eyebrow">Inside the workspace</p>
+    <h2 id="home-showcase-title">Capture, understand, and test</h2>
+    <p>Follow a request from the proxied browser to the site map, then take it into Replay or Fuzzer without leaving the project.</p>
+    <a class="showcase-link" href="/showcase">Explore the complete product tour →</a>
+  </div>
+  <div class="showcase-grid showcase-grid--featured">
+    <a class="showcase-card" href="/proxy">
+      <span class="showcase-card__media"><img src="/showcase/03-proxy-history.png" alt="HTTP history with request and response details"></span>
+      <span class="showcase-card__body"><strong>See every request</strong><span>Capture browser traffic live and inspect both sides of the exchange.</span></span>
+    </a>
+    <a class="showcase-card" href="/target">
+      <span class="showcase-card__media"><img src="/showcase/04-target-site-map.png" alt="Target site map of captured hosts and paths"></span>
+      <span class="showcase-card__body"><strong>Map the attack surface</strong><span>Organise hosts, paths, methods, status codes, and scope in one tree.</span></span>
+    </a>
+    <a class="showcase-card" href="/replay">
+      <span class="showcase-card__media"><img src="/showcase/06-replay-redacted.png" alt="Replay request editor, response viewer, and Inspector"></span>
+      <span class="showcase-card__body"><strong>Change it and send again</strong><span>Edit a captured request, compare responses, and inspect encoded values.</span></span>
+    </a>
+    <a class="showcase-card" href="/fuzzer">
+      <span class="showcase-card__media"><img src="/showcase/07-fuzzer-run.png" alt="Fuzzer payload configuration and live result table"></span>
+      <span class="showcase-card__body"><strong>Scale up the test</strong><span>Run payload sets through marked positions and surface response outliers.</span></span>
+    </a>
+  </div>
+</section>

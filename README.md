@@ -8,7 +8,7 @@
 
 **A desktop web security testing proxy, built on mitmproxy.**
 
-[Download](#download) · [Getting started](#getting-started) · [Features](#features) · [Plugins](#plugins) · [AI agents](#ai-agents)
+[Download](#download) · [Showcase](#showcase) · [Getting started](#getting-started) · [Features](#features) · [Plugins](#plugins) · [AI agents](#ai-agents)
 
 </div>
 
@@ -22,6 +22,63 @@ Lanius embeds [mitmproxy](https://mitmproxy.org/) as its engine, so TLS
 interception, HTTP/2 and WebSocket handling are battle tested. Its desktop
 interface adds project-based capture, live editing, request replay, payload
 fuzzing, encoding and decoding, diffs, plugins, and native MCP tools.
+
+## Showcase
+
+From first capture to focused testing, Lanius keeps the whole workflow in one
+desktop workspace. Click any screenshot to open the matching guide, or visit
+the [full showcase](https://lanius.mir.sh/showcase) for the guided tour.
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="docs/projects.md"><img src="docs/public/showcase/01-project-picker.png" alt="Lanius project picker with temporary and named project options"></a><br>
+      <strong>Project workspaces</strong><br>
+      Keep captures, scope, settings, and saved tabs together—or start a disposable session.
+    </td>
+    <td width="50%">
+      <a href="docs/dashboard.md"><img src="docs/public/showcase/02-dashboard-doctor.png" alt="Lanius dashboard showing proxy and browser readiness checks"></a><br>
+      <strong>Built-in Doctor</strong><br>
+      Check the engine, listener, proxied browser, HTTPS certificate, and capture status at a glance.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="docs/proxy.md"><img src="docs/public/showcase/03-proxy-history.png" alt="Lanius HTTP history beside a proxied browser, with request and response details"></a><br>
+      <strong>Live HTTP history</strong><br>
+      Browse through the proxy and inspect captured requests and responses as they arrive.
+    </td>
+    <td width="50%">
+      <a href="docs/target.md"><img src="docs/public/showcase/04-target-site-map.png" alt="Lanius Target site map grouping captured hosts and paths"></a><br>
+      <strong>Attack-surface map</strong><br>
+      Turn captured hosts, paths, methods, and status codes into a navigable site map.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="docs/plugin-catalogues.md"><img src="docs/public/showcase/05-plugin-catalogue.png" alt="Lanius plugin catalogue with analysis and workflow extensions"></a><br>
+      <strong>Signed plugins</strong><br>
+      Discover and manage extensions for analysis, automation, and reporting.
+    </td>
+    <td width="50%">
+      <a href="docs/replay.md"><img src="docs/public/showcase/06-replay-redacted.png" alt="Lanius Replay workspace with request editor, response, and Inspector"></a><br>
+      <strong>Replay and inspect</strong><br>
+      Edit captured requests, resend them, follow redirects, and compare responses. Request data is redacted here.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="docs/fuzzer.md"><img src="docs/public/showcase/07-fuzzer-run.png" alt="Lanius Fuzzer running a payload set and displaying live results"></a><br>
+      <strong>Payload fuzzing</strong><br>
+      Mark insertion points, run payload sets, and spot response outliers in live results.
+    </td>
+    <td width="50%">
+      <a href="docs/projects.md"><img src="docs/public/showcase/08-project-storage.png" alt="Lanius project storage screen for reviewing targets and compacting the database"></a><br>
+      <strong>Project cleanup</strong><br>
+      See what consumes space, remove unneeded targets, and compact the project database.
+    </td>
+  </tr>
+</table>
 
 ## Download
 
