@@ -652,6 +652,8 @@ Linux and Windows.
 cd engine
 python3.13 -m venv .venv && . .venv/bin/activate
 pip install -r requirements-dev.txt
+# Temporary security override until mitmproxy allows Brotli 1.2.1.
+python -m pip install --no-deps "Brotli>=1.2.1"
 
 # Desktop app
 .venv/bin/pyinstaller --clean --noconfirm lanius-engine.spec
