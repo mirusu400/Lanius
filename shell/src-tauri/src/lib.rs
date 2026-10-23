@@ -16,6 +16,9 @@ use tauri::{Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
 mod doctor;
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 #[cfg(any(target_os = "linux", test))]
 mod linux_webkit;
 mod project_export;
@@ -438,6 +441,17 @@ fn engine_command(app: &tauri::AppHandle) -> Option<Command> {
     None
 }
 
+/// Prevent background child processes from creating a console window.
+#[cfg(windows)]
+fn hide_background_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn hide_background_window(_command: &mut Command) {}
+
 /// Where a virtualenv keeps its interpreter, per platform.
 #[cfg(windows)]
 const VENV_PYTHON: &[&str] = &["engine/.venv/Scripts/python.exe"];
@@ -589,6 +603,8 @@ fn start_engine(
         // Kept so a failed start can say why; the startup Doctor shows it too.
         .stderr(doctor::engine_log());
 
+    hide_background_window(&mut command);
+
     // Plugin files are installed once per machine. Which plugins are
     // enabled remains a setting in each project's own database.
     if std::env::var_os("LANIUS_PLUGINS_DIR").is_none() {
@@ -707,7 +723,9 @@ fn stop_engine(state: &EngineProcess) {
         // On Windows, kill the whole tree in case the engine started helpers.
         #[cfg(windows)]
         {
-            let _ = Command::new("taskkill")
+            let mut taskkill = Command::new("taskkill");
+            hide_background_window(&mut taskkill);
+            let _ = taskkill
                 .args(taskkill_args(child.id()))
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -1414,15 +1432,22 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     linux_webkit::configure_before_webview();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        .menu(shutdown::menu)
-        .on_menu_event(|app, event| {
-            if event.id().as_ref() == shutdown::QUIT_MENU_ID {
-                request_app_close(app);
-            }
-        })
+        .plugin(tauri_plugin_opener::init());
+
+    // macOS expects an application menu even for a custom web UI. Windows and
+    // Linux do not, so installing Tauri's default menu there only adds an
+    // unrelated File/Edit/View bar above Lanius's own interface.
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(shutdown::menu).on_menu_event(|app, event| {
+        if event.id().as_ref() == shutdown::QUIT_MENU_ID {
+            request_app_close(app);
+        }
+    });
+
+    builder
         .manage(EngineProcess::default())
         .manage(Arc::new(StartupProgress::default()))
         .manage(ProjectSession::default())

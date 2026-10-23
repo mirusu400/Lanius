@@ -1,7 +1,9 @@
 //! Coordinate native close requests with the webview's final workspace save.
 
+#[cfg(target_os = "macos")]
 pub const QUIT_MENU_ID: &str = "lanius-quit";
 
+#[cfg(target_os = "macos")]
 pub fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem};
 

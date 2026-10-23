@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { docPages, type DocBlock } from '../docs/pages';
 import { linkedWikiPage, wikiGroups, wikiPage } from '../docs/wiki';
 import { useI18n } from '../i18n';
+import { ExternalLink } from '../components/ExternalLink';
 import { Split } from '../components/Split';
 
 /** Keep the selected page when the workspace itself is remounted. Ordinary
@@ -87,7 +88,7 @@ export function DocsTab() {
                       selectPage(`wiki:${target}`);
                     }}>{children}</a>
                   ) : (
-                    <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+                    <ExternalLink href={href}>{children}</ExternalLink>
                   );
                 },
               }}

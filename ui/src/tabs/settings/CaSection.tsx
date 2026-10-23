@@ -7,6 +7,7 @@ import {
   getCaInfo,
   type CaInfo,
 } from '../../api/client';
+import { ExternalLink } from '../../components/ExternalLink';
 import { useT } from '../../i18n';
 
 /** Sentinel used to place a React node inside a translated sentence. */
@@ -76,14 +77,12 @@ export function CaSection({ onError }: { onError?: (message: string) => void }) 
               {splitPlaceholder(t('settings.caMitmit', { link: MARKER })).map(
                 (part, index) =>
                   part === MARKER ? (
-                    <a
+                    <ExternalLink
                       key="mitmit"
                       href={ca.install_url}
-                      target="_blank"
-                      rel="noreferrer"
                     >
                       mitm.it
-                    </a>
+                    </ExternalLink>
                   ) : (
                     <span key={index}>{part}</span>
                   ),

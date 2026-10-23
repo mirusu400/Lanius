@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 
 import { getAbout, getShellVersion, type AboutInfo } from "../../api/client";
+import { ExternalLink } from "../../components/ExternalLink";
 import { useT } from "../../i18n";
 import { notifyClipboardError, writeClipboardText } from "../../clipboard";
 
@@ -78,13 +79,11 @@ export function AboutSection() {
           <>
             <dt>{t("about.commit")}</dt>
             <dd>
-              <a
+              <ExternalLink
                 href={`${REPO}/commit/${about.commit}`}
-                target="_blank"
-                rel="noreferrer"
               >
                 {about.commit_short}
-              </a>
+              </ExternalLink>
             </dd>
           </>
         )}
@@ -117,9 +116,9 @@ export function AboutSection() {
         >
           {copied ? t("about.copied") : t("about.copy")}
         </button>
-        <a href={REPO} target="_blank" rel="noreferrer">
+        <ExternalLink href={REPO}>
           {t("about.repository")}
-        </a>
+        </ExternalLink>
       </div>
     </section>
   );

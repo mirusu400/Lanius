@@ -32,6 +32,7 @@ import type {
   PluginSettings,
   PluginUiView,
 } from '../api/types';
+import { ExternalLink } from '../components/ExternalLink';
 import { PluginFrame } from '../components/PluginFrame';
 import { PluginLogConsole } from '../components/PluginLogConsole';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -97,7 +98,7 @@ function CatalogueCard({ item, busy, onInstall, onRollback }: {
         <summary>{t('plugins.more')}</summary>
         <div className="plugin-catalogue-more-content">
           {item.details && <p>{item.details}</p>}
-          {item.homepage && <a href={item.homepage} target="_blank" rel="noopener noreferrer">{t('plugins.homepage')}</a>}
+          {item.homepage && <ExternalLink href={item.homepage}>{t('plugins.homepage')}</ExternalLink>}
           <h4>{t('plugins.releases')}</h4>
           <ul>{item.releases.map((release) => <li key={release.version}>
             <strong>v{release.version}</strong>

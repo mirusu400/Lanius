@@ -26,6 +26,7 @@ import {
   type UpdateOffer,
   type UpdateRelease,
 } from '../../api/client';
+import { ExternalLink } from '../../components/ExternalLink';
 import { flushAutosaves } from '../autosave';
 import { useSettingsToast } from '../../components/useSettingsToast';
 
@@ -159,9 +160,9 @@ export function UpdatesSection() {
                 {installLabel()}
               </button>
             )}{' '}
-            <a href={latest?.url ?? result.download_url} target="_blank" rel="noreferrer">
+            <ExternalLink href={latest?.url ?? result.download_url}>
               {t('updates.download')}
-            </a>
+            </ExternalLink>
           </div>
           {matchingOffer && <p className="muted">{t('updates.installHelp')}</p>}
           {installError && (
@@ -236,9 +237,9 @@ export function UpdatesSection() {
             ? t('updates.lastChecked', { when: new Date(checkedAt).toLocaleString() })
             : t('updates.never')}
         </span>
-        <a href={RELEASES} target="_blank" rel="noreferrer">
+        <ExternalLink href={RELEASES}>
           {t('updates.allReleases')}
-        </a>
+        </ExternalLink>
       </div>
     </section>
   );
@@ -252,9 +253,9 @@ function ReleaseCell({ release }: { release: UpdateRelease | null }) {
   return (
     <>
       {release.url ? (
-        <a href={release.url} target="_blank" rel="noreferrer">
+        <ExternalLink href={release.url}>
           {label}
-        </a>
+        </ExternalLink>
       ) : (
         label
       )}

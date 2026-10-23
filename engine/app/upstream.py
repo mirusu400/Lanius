@@ -56,12 +56,21 @@ class UpstreamBridge:
             # Make verification explicit for every TLS hop.
             args.extend(["-F", f"{hop}?secure=true" if urlsplit(hop).scheme == "https" else hop])
         try:
-            self.process = await asyncio.create_subprocess_exec(
-                *args,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            if sys.platform == "win32":  # pragma: no cover - platform specific
+                self.process = await asyncio.create_subprocess_exec(
+                    *args,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+            else:
+                self.process = await asyncio.create_subprocess_exec(
+                    *args,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
             loop = asyncio.get_running_loop()
             deadline = loop.time() + 5.0
             while loop.time() < deadline:
