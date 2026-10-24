@@ -44,8 +44,10 @@ SDK_PLUGIN = textwrap.dedent(
     def activate(context):
         context.log.info("SDK plugin activated")
         context.actions.register(
-            "inspect", "Inspect", lambda payload: {"seen": payload.get("flow_id")},
-            locations=("flow", "history"),
+            "inspect", "Inspect", lambda payload: {
+                "seen": payload.get("flow_id") or payload.get("target", {}).get("host")
+            },
+            locations=("flow", "history", "target"),
         )
         context.codecs.register(
             "inspect", "Brackets",
@@ -96,7 +98,7 @@ async def test_sdk_plugin_registers_and_invokes_contributions(sdk_manager) -> No
 
     assert plugin.loaded is True
     assert plugin.objects == []
-    assert plugin.as_dict()["sdk_api_version"] == "1.5"
+    assert plugin.as_dict()["sdk_api_version"] == "1.6"
     assert plugin.as_dict()["contributions"] == {
         "actions": 1,
         "codecs": 1,
@@ -110,6 +112,12 @@ async def test_sdk_plugin_registers_and_invokes_contributions(sdk_manager) -> No
     assert await sdk_manager.registry.invoke_action(
         "sdk.inspect", {"location": "flow", "flow_id": "f-1"}
     ) == {"seen": "f-1"}
+    assert await sdk_manager.registry.invoke_action(
+        "sdk.inspect", {
+            "location": "target",
+            "target": {"scheme": "https", "host": "example.test", "port": 443},
+        },
+    ) == {"seen": "example.test"}
     assert await sdk_manager.registry.generate_payloads(
         "sdk.sequence", {"count": 3}
     ) == ["0", "1", "2"]
@@ -123,7 +131,7 @@ async def test_sdk_plugin_registers_and_invokes_contributions(sdk_manager) -> No
     ]
     assert {item["kind"] for item in matching} == {"actions", "codecs"}
     action = next(item for item in matching if item["kind"] == "actions")
-    assert action["calls"] == 1
+    assert action["calls"] == 2
     assert action["errors"] == 0
     assert diagnostics["logs"][-1]["message"] == "SDK plugin activated"
 

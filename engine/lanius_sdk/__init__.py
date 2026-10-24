@@ -12,10 +12,10 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-API_VERSION = "1.5"
+API_VERSION = "1.6"
 
 ActionLocation = Literal[
-    "global", "history", "flow", "request", "response", "replay", "fuzzer", "plugin"
+    "global", "history", "flow", "request", "response", "replay", "fuzzer", "target", "plugin"
 ]
 SettingScope = Literal["project", "user"]
 SettingKind = Literal["string", "boolean", "integer", "number", "enum"]

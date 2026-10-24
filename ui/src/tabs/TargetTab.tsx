@@ -688,6 +688,18 @@ export function TargetTab() {
                                 flow: menu.target.clicked.flow,
                               },
                             )
+                          : menu.target.clicked.node.site &&
+                              menu.target.clicked.node.path === siteLabel(menu.target.clicked.node.site)
+                            ? pluginActions.buildMenu(
+                                ['target'],
+                                {
+                                  target: {
+                                    scheme: menu.target.clicked.node.site.scheme,
+                                    host: menu.target.clicked.node.site.host,
+                                    port: menu.target.clicked.node.site.port,
+                                  },
+                                },
+                              )
                           : undefined,
                       )
                   : []
@@ -742,6 +754,7 @@ function treeMenuItems(
       ...(site
         ? [{ label: t('menu.copyHost'), onSelect: () => copy(site.host) }]
         : []),
+      ...(pluginActions ? [pluginActions] : []),
       // A folder stands for a subtree, so this removes everything under
       // it in one request rather than a few thousand ids.
       ...(site

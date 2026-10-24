@@ -602,6 +602,7 @@ export type PluginActionLocation =
   | 'response'
   | 'replay'
   | 'fuzzer'
+  | 'target'
   | 'plugin';
 
 export interface PluginActionContribution {

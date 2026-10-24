@@ -1,4 +1,4 @@
-# Plugin SDK 1.5
+# Plugin SDK 1.6
 
 `lanius_sdk` is the stable boundary between a plugin and the engine. Engine
 modules under `app` are internal and can change without an SDK compatibility
@@ -45,7 +45,7 @@ other's IDs.
 ## Actions
 
 `context.actions.register` adds a command with one or more UI locations:
-`global`, `history`, `flow`, `request`, `response`, `replay`, `fuzzer`, or
+`global`, `history`, `flow`, `request`, `response`, `replay`, `fuzzer`, `target`, or
 `plugin`. The `plugin` location is for a sandboxed plugin view's own actions.
 Handlers receive a JSON compatible context mapping and may return a value or an
 awaitable. The contribution catalogue is available at
@@ -61,7 +61,9 @@ than 1 MiB.
 Flow locations include `flow_id` and a serializable flow summary. Request and
 response detail menus also include the loaded detail and a `message` field.
 Replay and Fuzzer include their current raw request and parsed request when
-valid. The host adds the exact `location` chosen by the UI before invocation.
+valid. A `target` action is shown on a Target site row and receives a `target`
+mapping containing `scheme`, `host`, and `port`. The host adds the exact
+`location` chosen by the UI before invocation.
 
 ## MCP tools
 
@@ -206,7 +208,7 @@ roles rather than copying application CSS or defining their own theme. See
 
 ## Compatibility
 
-`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.5`.
+`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.6`.
 Minor additions remain backward compatible. A future breaking API uses a new
 major version and package manifests declare which major versions they accept.
 

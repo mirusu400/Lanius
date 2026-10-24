@@ -17,6 +17,13 @@ let restrict = false;
 let calls: { url: string; method: string; body?: unknown }[] = [];
 let extraPaths: typeof paths = [];
 let discoveredFolders: string[] = [];
+let actionContributions: Array<{
+  id: string;
+  plugin: string;
+  title: string;
+  description: string | null;
+  locations: string[];
+}> = [];
 
 const sites = [
   {
@@ -110,6 +117,7 @@ beforeEach(() => {
   window.localStorage.removeItem('lanius.split.sitemap.graph.requests');
   extraPaths = [];
   discoveredFolders = [];
+  actionContributions = [];
   rules = [];
   restrict = false;
   calls = [];
@@ -121,6 +129,14 @@ beforeEach(() => {
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
       calls.push({ url, method, body });
 
+      if (url.endsWith('/api/plugin-contributions')) {
+        return jsonResponse({ actions: actionContributions });
+      }
+      if (url.includes('/api/plugin-actions/') && url.endsWith('/invoke')) {
+        return jsonResponse({ result: {
+          id: 'job-1', check_ids: ['lanius.dynamic-audit.dynamic-audit'], status: 'pending',
+        } });
+      }
       if (url.includes('/api/scope/from-url') && method === 'POST') {
         const created: ScopeRule = {
           id: rules.length + 1,
@@ -729,6 +745,39 @@ describe('TargetTab', () => {
       expect(body.host).toBe('api.test');
       // No path: the row is the site, not a folder inside it.
       expect(body.path_prefix).toBeUndefined();
+    });
+  });
+
+  it('invokes target plugin actions with the right-clicked site identity', async () => {
+    actionContributions = [{
+      id: 'lanius.dynamic-audit.scan-domain',
+      plugin: 'lanius.dynamic-audit',
+      title: 'Dynamic scan domain',
+      description: null,
+      locations: ['target'],
+    }];
+    const user = userEvent.setup();
+    render(<TargetTab />);
+    await waitFor(() => expect(calls.some((call) =>
+      call.url.endsWith('/api/plugin-contributions'),
+    )).toBe(true));
+    await waitFor(() => expect(rowFor('https://api.test')).toBeTruthy());
+
+    fireEvent.contextMenu(rowFor('https://api.test')!);
+    await user.hover(await screen.findByRole('menuitem', { name: t('plugins.actions') }));
+    fireEvent.click(await screen.findByRole('menuitem', {
+      name: 'Dynamic scan domain · lanius.dynamic-audit',
+    }));
+
+    await waitFor(() => {
+      const invocation = calls.find((item) =>
+        item.method === 'POST' && item.url.endsWith(
+          '/api/plugin-actions/lanius.dynamic-audit.scan-domain/invoke',
+        ));
+      expect(invocation?.body).toEqual({ context: {
+        location: 'target',
+        target: { scheme: 'https', host: 'api.test', port: 443 },
+      } });
     });
   });
 

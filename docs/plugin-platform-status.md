@@ -11,7 +11,7 @@ used to choose the implementation order.
 |---|---|
 | Runtime | Legacy mitmproxy addons and SDK plugins; deterministic ordering; complete hot-load lifecycle; transactional rollback; package module cleanup; manual reload; optional file watching; startup safe mode |
 | Discovery | Metadata and hook discovery without importing disabled loose-file plugins; package manifests expose metadata and compatibility before activation |
-| SDK | Versioned `lanius_sdk` 1.5 with owner-scoped disposable registrations |
+| SDK | Versioned `lanius_sdk` 1.6 with owner-scoped disposable registrations |
 | MCP | Typed plugin-owned HTTP MCP tools with schema validation, lifecycle cleanup, diagnostics, and suspension guards |
 | Contributions | Context actions, codecs, Fuzzer payload generators and processors, typed settings, user/project storage, managed tasks, logging, bounded read-only flow pages and exact single-exchange snapshots, passive scanner checks, and active scanner checks with request-level input probes |
 | Product surfaces | Plugin actions in Proxy history, Target, request/response details, Replay, Fuzzer, and the global Plugins toolbar |
@@ -45,7 +45,7 @@ limits, but ordinary mitmproxy hooks remain synchronous in-process callbacks.
 | Phase | Status | Notes |
 |---|---|---|
 | P0 loader hardening | Complete for lifecycle, rollback, ordering, metadata, reload, and safe mode | Raw traffic-hook timing and process containment remain future runtime work |
-| P1 stable SDK | Complete for the v1.5 contribution set | Bounded read-only History pages and plugin-owned MCP tools are available; general HTTP send, scope, and site-map facades are not exposed yet |
+| P1 stable SDK | Complete for the v1.6 contribution set | Bounded read-only History pages, plugin-owned MCP tools, and Target site actions are available; general HTTP send, scope, and site-map facades are not exposed yet |
 | P2 packages and UI | Complete for signed local packages, resources, sandboxed views, and action RPC | Custom message editors, columns, hotkeys, and richer host widgets are not available |
 | P3 scanner and issues | Complete for bounded passive/active checks and persisted findings | Out-of-band testing and external scanner adapters are not included |
 | P4 catalogue | Complete for signed-source lifecycle and recovery | There is no hosted public registry, review service, rating, or automatic update policy |
