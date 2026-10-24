@@ -134,7 +134,10 @@ export function EndpointExplorer({
       void addRequestScopeRule(formatUrl(detail), kind, target, () => void onChanged());
     })(),
     copyUrlAction: withDetail(menu.target, (detail) => {
-      copyTextToClipboard(formatUrl(detail));
+      copyTextToClipboard(
+        formatUrl(detail),
+        t('menu.copied'),
+      );
     }),
     copyAs: codegen.buildMenu({ flow_id: menu.target.id }),
     after: [{ label: t('menu.deleteFlow'), separator: true, danger: true, onSelect: () => setPendingDelete(menu.target) }],

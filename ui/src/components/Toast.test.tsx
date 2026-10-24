@@ -29,9 +29,13 @@ it('merges repeated notifications and expires them independently', () => {
   act(() => feedback.showToast({ message: 'blocked', tone: 'error' }));
   expect(screen.getAllByText('saved')).toHaveLength(1);
   act(() => vi.advanceTimersByTime(3000));
+  expect(screen.getByText('saved').classList.contains('exiting')).toBe(true);
+  act(() => vi.advanceTimersByTime(240));
   expect(screen.queryByText('saved')).toBeNull();
   expect(screen.getByRole('alert').textContent).toBe('blocked');
   act(() => vi.advanceTimersByTime(3000));
+  expect(screen.getByRole('alert').classList.contains('exiting')).toBe(true);
+  act(() => vi.advanceTimersByTime(240));
   expect(screen.queryByRole('alert')).toBeNull();
 });
 

@@ -12,7 +12,7 @@ import { listCodegenFormats, openCsrfPoc, renderCode } from '../api/client';
 import type { MenuItem } from './ContextMenu';
 import { errorMessage, type Message } from '../i18n/message';
 import { useT } from '../i18n';
-import { notifyClipboardError, writeClipboardText } from '../clipboard';
+import { notifyClipboardError, writeClipboardTextWithFeedback } from '../clipboard';
 
 export interface CodegenTarget {
   flow_id?: string;
@@ -41,7 +41,6 @@ const BUILTIN: Format[] = [
 export function useCodegenMenu(onError?: (message: Message) => void) {
   const t = useT();
   const [formats, setFormats] = useState<Format[]>(BUILTIN);
-  const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -62,22 +61,18 @@ export function useCodegenMenu(onError?: (message: Message) => void) {
     async (kind: string, target: CodegenTarget) => {
       try {
         const { text } = await renderCode({ kind, ...target });
-        await writeClipboardText(text);
-        setCopied(kind);
+        const label = formats.find((format) => format.kind === kind)?.label ?? kind;
+        await writeClipboardTextWithFeedback(
+          text,
+          t('menu.copiedAs', { kind: label }),
+        );
       } catch (error) {
         if (onError) onError(errorMessage(error));
         else notifyClipboardError(error);
       }
     },
-    [onError],
+    [formats, onError, t],
   );
-
-  // Cleared on a timer so the confirmation does not sit there forever.
-  useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(null), 2000);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
 
   const buildMenu = useCallback(
     (target: CodegenTarget | null): MenuItem => ({
@@ -115,5 +110,5 @@ export function useCodegenMenu(onError?: (message: Message) => void) {
     [copyAs, formats, onError, t],
   );
 
-  return { buildMenu, copyAs, copied, formats };
+  return { buildMenu, copyAs, formats };
 }

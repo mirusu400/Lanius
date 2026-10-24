@@ -733,7 +733,7 @@ function treeMenuItems(
   pluginActions?: MenuItem,
 ): MenuItem[] {
   const copy = (text: string) => {
-    copyTextToClipboard(text);
+    copyTextToClipboard(text, t('menu.copied'));
   };
 
   if (target.kind === 'node') {

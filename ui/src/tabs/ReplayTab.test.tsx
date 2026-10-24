@@ -641,6 +641,7 @@ describe('ReplayTab', () => {
     fireEvent.contextMenu(editor());
     await user.click(screen.getByRole('menuitem', { name: t('menu.copyUrl') }));
     expect(await navigator.clipboard.readText()).toBe('http://echo.test/hello');
+    expect(await screen.findByText(t('menu.copied'))).toBeTruthy();
   });
 
   it('adds the edited Replay path as an Exclude rule', async () => {

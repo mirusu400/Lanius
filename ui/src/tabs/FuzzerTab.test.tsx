@@ -187,6 +187,7 @@ describe('FuzzerTab', () => {
     fireEvent.contextMenu(templateBox());
     await user.click(screen.getByRole('menuitem', { name: t('menu.copyUrl') }));
     expect(await navigator.clipboard.readText()).toBe('http://app.test/login?pw=guess');
+    expect(await screen.findByText(t('menu.copied'))).toBeTruthy();
 
     fireEvent.contextMenu(templateBox());
     await user.click(screen.getByRole('menuitem', { name: t('menu.sendToReplay') }));
@@ -541,7 +542,8 @@ describe('result context menu', () => {
       screen.getByRole('menuitem', { name: t('menu.sendToReplay') }),
     ).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: t('menu.scopeIncludeRule') })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: t('menu.copyPayload') })).toBeTruthy();
+    await userEvent.click(screen.getByRole('menuitem', { name: t('menu.copyPayload') }));
+    expect(await screen.findByText(t('menu.copied'))).toBeTruthy();
   });
 
   it('adds a result path to Scope from its captured request', async () => {

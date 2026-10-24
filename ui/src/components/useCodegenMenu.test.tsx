@@ -73,6 +73,7 @@ describe('useCodegenMenu', () => {
     await waitFor(() =>
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith('curl x'),
     );
+    expect(await screen.findByText(t('menu.copiedAs', { kind: 'curl' }))).toBeTruthy();
   });
 
   it('is disabled when the request cannot be parsed', async () => {

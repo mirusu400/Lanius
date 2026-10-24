@@ -469,7 +469,10 @@ export function InterceptPanel({
           addScopeRule: (flow, kind, target) => {
             void addRequestScopeRule(flowUrl(flow), kind, target);
           },
-          copy: copyTextToClipboard,
+          copy: (text) => copyTextToClipboard(
+            text,
+            t('menu.copied'),
+          ),
         }, codegen.buildMenu({
           url: flowUrl(menuTarget.flow),
           method: menuTarget.request.method,

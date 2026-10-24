@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import { subscribeRequestTransfers } from '../requestTransfers';
-import { subscribeClipboardErrors } from '../clipboard';
+import { subscribeClipboardErrors, subscribeClipboardSuccess } from '../clipboard';
 import {
   loadToastPreferences, saveToastPreferences, TOAST_PREFERENCES_KEY,
   type ToastCategory, type ToastPreferences,
@@ -24,7 +24,10 @@ export interface ToastOptions {
 interface ToastEntry extends ToastOptions {
   id: string;
   expiresAt: number | null;
+  removeAt?: number;
 }
+
+const TOAST_EXIT_MS = 240;
 
 interface ToastContextValue {
   showToast: (options: ToastOptions) => void;
@@ -81,11 +84,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       && repeatsEngineConnectionError(options.message)) return;
     const id = options.id ?? `${options.category ?? options.tone}:${options.message}`;
     const now = Date.now();
-    const next = entries.current.filter((toast) => toast.id !== id && (toast.expiresAt === null || toast.expiresAt > now));
-    if (next.length >= 3) {
-      const expendable = next.findIndex((toast) => toast.tone !== 'error');
+    const next = entries.current.flatMap((toast) => {
+      if (toast.id === id || (toast.removeAt !== undefined && toast.removeAt <= now)) return [];
+      if (toast.removeAt === undefined && toast.expiresAt !== null && toast.expiresAt <= now) {
+        return [{ ...toast, removeAt: now + TOAST_EXIT_MS }];
+      }
+      return [toast];
+    });
+    const visibleCount = next.filter((toast) => toast.removeAt === undefined).length;
+    if (visibleCount >= 3) {
+      const expendable = next.findIndex((toast) => toast.removeAt === undefined && toast.tone !== 'error');
       if (expendable < 0 && options.tone !== 'error') return;
-      next.splice(expendable < 0 ? 0 : expendable, 1);
+      const fallback = next.findIndex((toast) => toast.removeAt === undefined);
+      next.splice(expendable < 0 ? fallback : expendable, 1);
     }
     next.push({ ...options, id, expiresAt: options.durationMs === 0 ? null
       : now + (options.durationMs ?? (options.tone === 'error' ? 6000 : 3000)) });
@@ -101,11 +112,25 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     showToast({ message: t('clipboard.failed', { message }), tone: 'error' });
   }), [showToast, t]);
 
+  useEffect(() => subscribeClipboardSuccess(({ message, id }) => {
+    showToast({ id, message, tone: 'success' });
+  }), [showToast]);
+
   useEffect(() => {
-    const deadlines = toasts.flatMap((toast) => toast.expiresAt === null ? [] : [toast.expiresAt]);
+    const deadlines = toasts.flatMap((toast) => {
+      if (toast.removeAt !== undefined) return [toast.removeAt];
+      return toast.expiresAt === null ? [] : [toast.expiresAt];
+    });
     if (!deadlines.length) return;
     const timer = window.setTimeout(() => {
-      replace(entries.current.filter((toast) => toast.expiresAt === null || toast.expiresAt > Date.now()));
+      const now = Date.now();
+      replace(entries.current.flatMap((toast) => {
+        if (toast.removeAt !== undefined) return toast.removeAt <= now ? [] : [toast];
+        if (toast.expiresAt !== null && toast.expiresAt <= now) {
+          return [{ ...toast, removeAt: now + TOAST_EXIT_MS }];
+        }
+        return [toast];
+      }));
     }, Math.max(0, Math.min(...deadlines) - Date.now()));
     return () => window.clearTimeout(timer);
   }, [toasts, replace]);
@@ -151,7 +176,8 @@ function ToastViewport({ toasts }: { toasts: ToastEntry[] }) {
   }, [popover, toasts, host]);
   return toasts.length ? createPortal(
     <div className="app-toasts" ref={ref} popover={popover ? 'manual' : undefined}>
-      {toasts.map((toast) => <div key={toast.id} className={`app-toast ${toast.tone ?? 'info'}`}
+      {toasts.map((toast) => <div key={toast.id}
+        className={`app-toast ${toast.tone ?? 'info'}${toast.removeAt === undefined ? '' : ' exiting'}`}
         role={toast.tone === 'error' ? 'alert' : 'status'} aria-atomic="true">
         {toast.message}
       </div>)}

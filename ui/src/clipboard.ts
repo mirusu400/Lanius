@@ -11,6 +11,12 @@ import {
 } from '@tauri-apps/plugin-clipboard-manager';
 
 const CLIPBOARD_ERROR = 'lanius:clipboard-error';
+const CLIPBOARD_SUCCESS = 'lanius:clipboard-success';
+
+export interface ClipboardSuccess {
+  message: string;
+  id: string;
+}
 
 function isDesktop(): boolean {
   return (
@@ -57,13 +63,43 @@ export function notifyClipboardError(error: unknown): void {
   window.dispatchEvent(new CustomEvent(CLIPBOARD_ERROR, { detail: message }));
 }
 
+/** Report an explicit copy action through the app-wide toast path. */
+export function notifyClipboardSuccess(message: string, id = 'clipboard-copied'): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent<ClipboardSuccess>(CLIPBOARD_SUCCESS, {
+    detail: { message, id },
+  }));
+}
+
+/** Write and report success while preserving rejection for local error UI. */
+export async function writeClipboardTextWithFeedback(
+  text: string,
+  message: string,
+  id = 'clipboard-copied',
+): Promise<void> {
+  await writeClipboardText(text);
+  notifyClipboardSuccess(message, id);
+}
+
 /** Fire-and-forget copy for menu actions that do not own an error surface. */
-export function copyTextToClipboard(text: string): void {
-  void writeClipboardText(text).catch(notifyClipboardError);
+export function copyTextToClipboard(text: string, successMessage?: string, id?: string): void {
+  void writeClipboardText(text)
+    .then(() => {
+      if (successMessage) notifyClipboardSuccess(successMessage, id);
+    })
+    .catch(notifyClipboardError);
 }
 
 export function subscribeClipboardErrors(listener: (message: string) => void): () => void {
   const handle = (event: Event) => listener((event as CustomEvent<string>).detail);
   window.addEventListener(CLIPBOARD_ERROR, handle);
   return () => window.removeEventListener(CLIPBOARD_ERROR, handle);
+}
+
+export function subscribeClipboardSuccess(
+  listener: (detail: ClipboardSuccess) => void,
+): () => void {
+  const handle = (event: Event) => listener((event as CustomEvent<ClipboardSuccess>).detail);
+  window.addEventListener(CLIPBOARD_SUCCESS, handle);
+  return () => window.removeEventListener(CLIPBOARD_SUCCESS, handle);
 }

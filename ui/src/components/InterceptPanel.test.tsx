@@ -107,6 +107,7 @@ describe('InterceptPanel', () => {
     fireEvent.contextMenu(editorEl());
     await user.click(screen.getByRole('menuitem', { name: t('menu.copyUrl') }));
     expect(await navigator.clipboard.readText()).toBe('http://example.com/edited?x=1');
+    expect(await screen.findByText(t('menu.copied'))).toBeTruthy();
   });
 
   it('uses the right-clicked queue item and its draft for Fuzzer', async () => {

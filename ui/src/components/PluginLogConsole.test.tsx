@@ -88,6 +88,7 @@ describe('PluginLogConsole', () => {
     await user.click(screen.getByText(t('plugins.copyLogs')));
     await waitFor(() => expect(clipboard).toHaveBeenCalledTimes(1));
     expect(clipboard.mock.calls[0][0]).toContain('request marked');
+    expect(await screen.findByText(t('plugins.logsCopied'))).toBeTruthy();
 
     const wrap = screen.getByText(t('plugins.wrapLines')).closest('label')!.querySelector('input')!;
     expect((wrap as HTMLInputElement).checked).toBe(true);

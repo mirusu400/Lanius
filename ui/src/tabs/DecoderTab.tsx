@@ -18,7 +18,7 @@ import {
   subscribe,
 } from './decoderStore';
 import { UndoableInput, UndoableTextarea } from '../components/UndoableText';
-import { copyTextToClipboard } from '../clipboard';
+import { notifyClipboardError, writeClipboardTextWithFeedback } from '../clipboard';
 
 interface StepOutput {
   codec: string;
@@ -90,6 +90,16 @@ export function DecoderTab() {
   const finalValue = outputs.length > 0 ? outputs[outputs.length - 1].value : input;
   const binary = looksBinary(finalValue);
   const view = active.view;
+  const copyResult = async () => {
+    try {
+      await writeClipboardTextWithFeedback(
+        finalValue,
+        t('decoder.copied'),
+      );
+    } catch (copyError) {
+      notifyClipboardError(copyError);
+    }
+  };
 
   return (
     <div className="decoder-tab">
@@ -225,7 +235,7 @@ export function DecoderTab() {
               <span className="muted">{t('decoder.binaryHint')}</span>
             )}
             <button
-              onClick={() => copyTextToClipboard(finalValue)}
+              onClick={() => void copyResult()}
               disabled={!finalValue}
             >
               {t('decoder.copy')}

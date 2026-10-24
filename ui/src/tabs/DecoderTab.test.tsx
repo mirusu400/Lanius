@@ -214,6 +214,17 @@ describe('decoder chain', () => {
 });
 
 describe('raw view', () => {
+  it('confirms a successful copy with a toast', async () => {
+    const user = userEvent.setup();
+    render(<DecoderTab />);
+    await user.type(input(), 'copy me');
+
+    await user.click(screen.getByRole('button', { name: t('decoder.copy') }));
+
+    expect(await navigator.clipboard.readText()).toBe('copy me');
+    expect(await screen.findByText(t('decoder.copied'))).toBeTruthy();
+  });
+
   it('shows the final value as plain text', async () => {
     chainResult = [{ codec: 'base64', direction: 'decode', value: 'hello world' }];
     render(<DecoderTab />);

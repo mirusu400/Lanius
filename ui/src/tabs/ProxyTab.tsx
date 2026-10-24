@@ -742,7 +742,10 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                     addScopeRule: (flow, kind, target) => {
                       void addRequestScopeRule(flowUrl(flow), kind, target);
                     },
-                    copy: copyTextToClipboard,
+                    copy: (text) => copyTextToClipboard(
+                      text,
+                      t('menu.copied'),
+                    ),
                     deleteFlow: (flow) => setPendingDelete(flow),
                     toggleBookmark,
                     setColor: (flow, color) => void updateAnnotation(flow, { annotation_color: color }),

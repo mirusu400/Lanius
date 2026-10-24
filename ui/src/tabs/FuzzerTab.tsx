@@ -621,7 +621,10 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
                       label: t('menu.copyPayload'),
                       separator: true,
                       onSelect: () => {
-                        copyTextToClipboard((menu.target?.payloads ?? []).join(', '));
+                        copyTextToClipboard(
+                          (menu.target?.payloads ?? []).join(', '),
+                          t('menu.copied'),
+                        );
                       },
                     },
                   ]

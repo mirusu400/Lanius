@@ -518,6 +518,7 @@ describe('FlowDetailView', () => {
     expect(screen.getByRole('menuitem', { name: t('menu.sendToFuzzer') })).toBeTruthy();
     fireEvent.click(screen.getByRole('menuitem', { name: t('menu.copyUrl') }));
     expect(await navigator.clipboard.readText()).toBe('https://api.test/x');
+    expect(await screen.findByText(t('menu.copied'))).toBeTruthy();
   });
 
   it('copies selected request or response text from the right-click menu', async () => {

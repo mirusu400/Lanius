@@ -11,7 +11,9 @@ import {
   copyTextToClipboard,
   readClipboardText,
   subscribeClipboardErrors,
+  subscribeClipboardSuccess,
   writeClipboardText,
+  writeClipboardTextWithFeedback,
 } from './clipboard';
 
 describe('clipboard', () => {
@@ -100,5 +102,24 @@ describe('clipboard', () => {
     copyTextToClipboard('blocked');
 
     await expect(message).resolves.toBe('permission denied');
+  });
+
+  it('reports success only after the clipboard write completes', async () => {
+    const write = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: write },
+      configurable: true,
+    });
+    const success = new Promise<{ message: string; id: string }>((resolve) => {
+      const unsubscribe = subscribeClipboardSuccess((detail) => {
+        unsubscribe();
+        resolve(detail);
+      });
+    });
+
+    await writeClipboardTextWithFeedback('copied', 'Copy complete', 'copy-test');
+
+    expect(write).toHaveBeenCalledWith('copied');
+    await expect(success).resolves.toEqual({ message: 'Copy complete', id: 'copy-test' });
   });
 });

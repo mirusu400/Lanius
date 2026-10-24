@@ -587,6 +587,7 @@ describe('TargetTab', () => {
     fireEvent.contextMenu(document.querySelector('.tree-row.leaf') as HTMLElement);
     await user.click(screen.getByRole('menuitem', { name: t('menu.copyUrl') }));
     expect(await navigator.clipboard.readText()).toBe('https://api.test/api/v1/login');
+    expect(await screen.findByText(t('menu.copied'))).toBeTruthy();
   });
 
   it('renders the code from the stored flow, not the tree row', async () => {

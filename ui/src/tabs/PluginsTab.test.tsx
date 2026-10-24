@@ -277,6 +277,14 @@ describe('PluginsTab', () => {
     open.mockRestore();
   });
 
+  it('confirms when the plugin directory is copied', async () => {
+    plugins = [];
+    render(<PluginsTab />);
+    fireEvent.click(await screen.findByRole('button', { name: t('plugins.copyPath') }));
+
+    expect(await screen.findByText(t('plugins.pathCopied'))).toBeTruthy();
+  });
+
   it('locks the switch while enabling and then shows the running state', async () => {
     const user = userEvent.setup();
     releaseEnable = () => undefined;

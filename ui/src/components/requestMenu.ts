@@ -49,7 +49,7 @@ export function requestMenuItems(t: Translator, options: RequestMenuOptions): Me
         if (copyUrlAction) { copyUrlAction(); return; }
         if (url) {
           if (copyUrl) copyUrl(url);
-          else copyTextToClipboard(url);
+          else copyTextToClipboard(url, t('menu.copied'));
         }
       },
     },
