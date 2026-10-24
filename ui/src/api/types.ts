@@ -852,7 +852,18 @@ export interface TlsState {
   profile: string;
   custom_ciphers: string | null;
   ciphers: string | null;
+  selected_ciphers: string[];
+  supported_ciphers: TlsCipherOption[];
+  /** OpenSSL offers these independently; set_ciphers cannot reorder them. */
+  tls13_ciphers: string[];
   available: TlsProfileOption[];
+}
+
+export interface TlsCipherOption {
+  name: string;
+  protocol: string;
+  strength_bits: number;
+  recommended: boolean;
 }
 
 /** Exact hosts whose upstream certificate is deliberately not verified. */

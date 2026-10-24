@@ -9,6 +9,9 @@ from app.tls import (
     PROFILES,
     options_for,
     patch_version_probe,
+    resolve_ciphers,
+    supported_ciphers,
+    tls13_ciphers,
     validate_ciphers,
 )
 
@@ -72,6 +75,36 @@ def test_validate_ciphers_rejects_an_unusable_list() -> None:
 
 def test_validate_ciphers_accepts_a_real_one() -> None:
     validate_ciphers("ECDHE-RSA-AES128-GCM-SHA256")
+
+
+def test_cipher_catalogue_contains_only_configurable_unique_suites() -> None:
+    catalogue = supported_ciphers()
+    names = [cipher["name"] for cipher in catalogue]
+    assert names
+    assert len(names) == len(set(names))
+    assert all(cipher["protocol"] != "TLSv1.3" for cipher in catalogue)
+    assert all(cipher["strength_bits"] > 0 for cipher in catalogue)
+    assert any(cipher["recommended"] for cipher in catalogue)
+
+
+def test_cipher_expression_is_resolved_in_offer_order() -> None:
+    assert resolve_ciphers(
+        "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384"
+    ) == (
+        "ECDHE-RSA-AES128-GCM-SHA256",
+        "ECDHE-RSA-AES256-GCM-SHA384",
+    )
+
+
+def test_default_resolution_matches_mitmproxy_not_openssl_alias() -> None:
+    resolved = resolve_ciphers(None)
+    assert resolved[0] == "ECDHE-ECDSA-AES128-GCM-SHA256"
+    assert "RSA-PSK-AES256-GCM-SHA384" not in resolved
+
+
+def test_tls13_suites_are_reported_separately() -> None:
+    assert tls13_ciphers()
+    assert all(cipher.startswith("TLS_") for cipher in tls13_ciphers())
 
 
 def test_version_probe_patch_survives_an_openssl_that_raises() -> None:

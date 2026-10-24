@@ -12,6 +12,7 @@ a determined fingerprinter can still tell the difference.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any
 
 # Order matters: it is part of what a server fingerprints.
@@ -84,6 +85,80 @@ PROFILES: dict[str, dict[str, Any]] = {
 DEFAULT_PROFILE = "default"
 
 
+def _cipher_context() -> Any:
+    """A validation-only context that never opens a connection."""
+    import ssl
+
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context
+
+
+@lru_cache(maxsize=1)
+def _mitmproxy_default_cipher_spec() -> str:
+    """The exact default list mitmproxy uses for our TLS 1.2 minimum.
+
+    mitmproxy does not expose this through its public options when
+    ``ciphers_server`` is unset, so consult the function its TLS layer uses
+    rather than substituting Python/OpenSSL's substantially broader DEFAULT.
+    """
+    from mitmproxy.addons.tlsconfig import _default_ciphers
+    from mitmproxy.net import tls as net_tls
+
+    return ":".join(_default_ciphers(net_tls.Version.TLS1_2))
+
+
+@lru_cache(maxsize=1)
+def supported_ciphers() -> tuple[dict[str, Any], ...]:
+    """Ciphers this OpenSSL build lets users put in an ordered list.
+
+    TLS 1.3 suites are intentionally omitted: ``SSLContext.set_ciphers``
+    cannot select or reorder them. They are reported separately by
+    :func:`tls13_ciphers` so the UI can explain the fixed part of the offer.
+    """
+    context = _cipher_context()
+    context.set_ciphers("ALL")
+    recommended = _cipher_context()
+    recommended.set_ciphers(_mitmproxy_default_cipher_spec())
+    recommended_names = {
+        item["name"]
+        for item in recommended.get_ciphers()
+        if item["protocol"] != "TLSv1.3"
+    }
+    return tuple(
+        {
+            "name": item["name"],
+            "protocol": item["protocol"],
+            "strength_bits": item["strength_bits"],
+            "recommended": item["name"] in recommended_names,
+        }
+        for item in context.get_ciphers()
+        if item["protocol"] != "TLSv1.3"
+    )
+
+
+@lru_cache(maxsize=1)
+def tls13_ciphers() -> tuple[str, ...]:
+    """TLS 1.3 suites OpenSSL offers independently of ``set_ciphers``."""
+    return tuple(
+        item["name"]
+        for item in _cipher_context().get_ciphers()
+        if item["protocol"] == "TLSv1.3"
+    )
+
+
+def resolve_ciphers(spec: str | None) -> tuple[str, ...]:
+    """Expand an OpenSSL expression into the configurable ordered suites."""
+    context = _cipher_context()
+    context.set_ciphers(spec or _mitmproxy_default_cipher_spec())
+    return tuple(
+        item["name"]
+        for item in context.get_ciphers()
+        if item["protocol"] != "TLSv1.3"
+    )
+
+
 def validate_ciphers(spec: str) -> None:
     """Raise ValueError if OpenSSL will not accept this cipher list.
 
@@ -92,9 +167,7 @@ def validate_ciphers(spec: str) -> None:
     """
     import ssl
 
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
+    context = _cipher_context()
     try:
         context.set_ciphers(spec)
     except ssl.SSLError as exc:

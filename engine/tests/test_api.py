@@ -939,6 +939,11 @@ def test_tls_defaults_to_mitmproxys_own_handshake(client) -> None:
     assert data["profile"] == "default"
     assert data["ciphers"] is None
     assert [p["id"] for p in data["available"]][0] == "default"
+    assert data["selected_ciphers"]
+    assert data["supported_ciphers"]
+    assert data["tls13_ciphers"]
+    supported = {cipher["name"] for cipher in data["supported_ciphers"]}
+    assert set(data["selected_ciphers"]) <= supported
 
 
 def test_selecting_a_browser_profile_changes_the_ciphers(client) -> None:
@@ -954,6 +959,7 @@ def test_custom_ciphers_override_the_profile(client) -> None:
     ).json()
     assert body["ciphers"] == "ECDHE-RSA-AES128-GCM-SHA256"
     assert body["custom_ciphers"] == "ECDHE-RSA-AES128-GCM-SHA256"
+    assert body["selected_ciphers"] == ["ECDHE-RSA-AES128-GCM-SHA256"]
 
 
 def test_clearing_custom_ciphers_restores_the_profile(client) -> None:
@@ -961,6 +967,11 @@ def test_clearing_custom_ciphers_restores_the_profile(client) -> None:
     body = client.post("/api/tls", json={"profile": "chrome", "ciphers": ""}).json()
     assert body["custom_ciphers"] is None
     assert "TLS_AES_128_GCM_SHA256" in body["ciphers"]
+
+
+def test_tls12_profile_reports_no_fixed_tls13_suites(client) -> None:
+    body = client.post("/api/tls", json={"profile": "tls12"}).json()
+    assert body["tls13_ciphers"] == []
 
 
 def test_an_unusable_cipher_list_is_refused(client) -> None:

@@ -387,12 +387,11 @@ const en: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Settings > TLS fingerprint offers Chrome, Firefox and Safari, which reorder the cipher list to match those browsers, plus Force TLS 1.2 for servers that behave differently on the older version. You can also supply your own OpenSSL cipher string.',
+            body: 'Settings > TLS fingerprint offers Chrome, Firefox and Safari, which reorder the cipher list to match those browsers, plus Force TLS 1.2 for servers that behave differently on the older version. The cipher manager only offers suites supported by the current engine and lets you search, add, remove and reorder them. Recommended suites are shown first; reveal the full list only for legacy compatibility testing.',
           },
-          { kind: 'code', body: 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384' },
           {
             kind: 'text',
-            body: 'An unusable cipher list is refused rather than stored, because it would turn every request into a 502 with no obvious cause.',
+            body: 'Use profile defaults removes the custom order. TLS 1.3 suites are shown separately because OpenSSL does not let this control select or reorder them.',
           },
         ],
       },
@@ -854,12 +853,11 @@ const ko: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Settings > TLS fingerprint에서 Chrome, Firefox, Safari를 고르면 해당 브라우저에 맞게 cipher 순서가 바뀝니다. 구버전에서 다르게 동작하는 서버를 위해 TLS 1.2 강제도 있습니다. 직접 OpenSSL cipher 문자열을 넣을 수도 있습니다.',
+            body: 'Settings > TLS fingerprint에서 Chrome, Firefox, Safari를 고르면 해당 브라우저에 맞게 cipher 순서가 바뀝니다. 구버전에서 다르게 동작하는 서버를 위해 TLS 1.2 강제도 있습니다. Cipher 관리 화면에는 현재 엔진이 지원하는 항목만 나오며 검색, 추가, 제거, 순서 변경을 할 수 있습니다. 기본으로 권장 cipher만 표시하고 레거시 호환성 테스트가 필요할 때 전체 목록을 펼칩니다.',
           },
-          { kind: 'code', body: 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384' },
           {
             kind: 'text',
-            body: '사용할 수 없는 cipher 목록은 저장되지 않고 거부됩니다. 저장되면 모든 요청이 원인 모를 502가 되기 때문입니다.',
+            body: '프로필 기본값 사용을 누르면 사용자 지정 순서가 제거됩니다. TLS 1.3 cipher는 이 제어로 선택하거나 순서를 바꿀 수 없어 별도로 안내합니다.',
           },
         ],
       },

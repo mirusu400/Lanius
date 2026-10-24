@@ -122,9 +122,11 @@ after Lockdown Mode is turned off if the feature remains enabled.
 
 Lanius terminates TLS, so the server fingerprints the proxy rather than your
 client. **Settings > TLS fingerprint** reshapes the handshake to resemble
-Chrome, Firefox or Safari, or forces TLS 1.2, and accepts a custom OpenSSL
-cipher string. This covers the cipher list and TLS version, not a full JA3 or
-JA4 match.
+Chrome, Firefox or Safari, or forces TLS 1.2. The cipher manager lists the
+suites supported by the engine and lets you add, remove, search and reorder
+them without writing an OpenSSL expression. Recommended suites are shown by
+default; expand the full list only when testing legacy compatibility. This
+covers the cipher list and TLS version, not a full JA3 or JA4 match.
 
 On Windows, macOS and Linux, HTTPS server certificates use the operating
 system's trusted roots automatically, including trusted VPN and private CAs. A

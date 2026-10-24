@@ -6670,8 +6670,171 @@ pre.response-preview-text {
 }
 
 .tls-custom {
-  max-width: 560px;
-  margin: 8px 0;
+  max-width: 960px;
+  margin: 16px 0 8px;
+}
+
+.tls-cipher-heading,
+.tls-cipher-heading > div,
+.tls-cipher-available-heading,
+.tls-cipher-actions {
+  display: flex;
+  align-items: center;
+}
+
+.tls-cipher-heading {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tls-cipher-heading > div,
+.tls-cipher-available-heading {
+  gap: 8px;
+}
+
+.tls-cipher-heading h4,
+.tls-cipher-column h5 {
+  margin: 0;
+}
+
+.tls-cipher-mode {
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tls-cipher-mode.custom {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.tls-cipher-manager {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.tls-cipher-column {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+}
+
+.tls-cipher-column:first-child {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.tls-cipher-available-heading {
+  justify-content: space-between;
+}
+
+.tls-cipher-column > input[type="search"] {
+  width: 100%;
+}
+
+.tls-cipher-show-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tls-cipher-list {
+  min-height: 180px;
+  max-height: 340px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-alt);
+}
+
+.tls-cipher-list > .muted {
+  margin: 14px;
+}
+
+.tls-cipher-list > .tls-cipher-item,
+.tls-cipher-list > [role="listitem"] {
+  border-bottom: 1px solid var(--border);
+}
+
+.tls-cipher-list > :last-child {
+  border-bottom: 0;
+}
+
+.tls-cipher-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.tls-cipher-details {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tls-cipher-details code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tls-cipher-details small {
+  color: var(--muted);
+}
+
+.tls-cipher-controls {
+  display: flex;
+  flex: none;
+  gap: 3px;
+}
+
+.tls-cipher-controls button {
+  min-width: 26px;
+  padding: 2px 5px;
+}
+
+.tls-cipher-add {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+}
+
+.tls-cipher-add:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.tls-cipher-add > span:first-child {
+  flex: none;
+  color: var(--accent);
+  font-size: 17px;
+}
+
+.tls-cipher-actions {
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.tls-cipher-actions .muted {
+  margin-right: auto;
+}
+
+.tls-cipher-fixed {
+  margin-top: 8px;
 }
 
 .tls-trust-pem {
@@ -6719,14 +6882,10 @@ pre.response-preview-text {
 
 .upstream-error > button { flex: none; }
 
-.tls-custom .row {
-  display: flex;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.tls-custom input {
-  flex: 1;
+@media (max-width: 850px) {
+  .tls-cipher-manager {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* --- context menus --- */

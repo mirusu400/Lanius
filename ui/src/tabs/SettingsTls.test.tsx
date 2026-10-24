@@ -7,12 +7,24 @@ import { TlsSection } from './settings/TlsSection';
 import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import { useI18n, type Locale } from '../i18n';
 
-const CHROME = 'TLS_AES_128_GCM_SHA256:ECDHE-RSA-AES128-GCM-SHA256:AES256-SHA';
+const TLS13 = ['TLS_AES_256_GCM_SHA384', 'TLS_CHACHA20_POLY1305_SHA256', 'TLS_AES_128_GCM_SHA256'];
+const DEFAULT_SELECTED = ['ECDHE-RSA-AES128-GCM-SHA256', 'AES256-SHA'];
+const CHROME_SELECTED = ['ECDHE-RSA-AES128-GCM-SHA256', 'AES256-SHA'];
+const CHROME = [...TLS13, ...CHROME_SELECTED].join(':');
+const SUPPORTED = [
+  { name: 'ECDHE-RSA-AES128-GCM-SHA256', protocol: 'TLSv1.2', strength_bits: 128, recommended: true },
+  { name: 'AES256-SHA', protocol: 'SSLv3', strength_bits: 256, recommended: true },
+  { name: 'DHE-RSA-AES128-GCM-SHA256', protocol: 'TLSv1.2', strength_bits: 128, recommended: true },
+  { name: 'ECDHE-ECDSA-AES256-GCM-SHA384', protocol: 'TLSv1.2', strength_bits: 256, recommended: false },
+];
 
 let tls = {
   profile: 'default',
   custom_ciphers: null as string | null,
   ciphers: null as string | null,
+  selected_ciphers: DEFAULT_SELECTED,
+  supported_ciphers: SUPPORTED,
+  tls13_ciphers: TLS13,
   available: [
     { id: 'default', label: 'mitmproxy default' },
     { id: 'chrome', label: 'Chrome' },
@@ -25,7 +37,15 @@ let postFails = false;
 beforeEach(() => {
   posted = [];
   postFails = false;
-  tls = { ...tls, profile: 'default', custom_ciphers: null, ciphers: null };
+  tls = {
+    ...tls,
+    profile: 'default',
+    custom_ciphers: null,
+    ciphers: null,
+    selected_ciphers: DEFAULT_SELECTED,
+    supported_ciphers: SUPPORTED,
+    tls13_ciphers: TLS13,
+  };
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -50,6 +70,10 @@ beforeEach(() => {
             profile: sent.profile,
             custom_ciphers: sent.ciphers || null,
             ciphers: sent.ciphers || (sent.profile === 'chrome' ? CHROME : null),
+            selected_ciphers: sent.ciphers
+              ? sent.ciphers.split(':')
+              : sent.profile === 'chrome' ? CHROME_SELECTED : DEFAULT_SELECTED,
+            tls13_ciphers: sent.profile === 'tls12' ? [] : TLS13,
           };
         }
         return ok(tls);
@@ -151,28 +175,85 @@ describe('TLS fingerprint', () => {
     await waitFor(() => expect(profileSelect()).toBeTruthy());
     await userEvent.selectOptions(profileSelect(), 'chrome');
 
-    expect(await screen.findByText(t('tls.active', { count: '3' }))).toBeTruthy();
+    expect(await screen.findByText(t('tls.active', { count: '5' }))).toBeTruthy();
   });
 
-  it('sends a custom cipher string with the profile', async () => {
+  it('adds only engine-supported ciphers and applies the ordered list', async () => {
     render(<TlsSection />);
     await waitFor(() => expect(profileSelect()).toBeTruthy());
 
-    await userEvent.type(screen.getByLabelText(t('tls.customLabel')), 'AES256-SHA');
+    await userEvent.click(screen.getByRole('button', {
+      name: t('tls.addCipher', { cipher: 'DHE-RSA-AES128-GCM-SHA256' }),
+    }));
     await userEvent.click(screen.getByRole('button', { name: t('tls.apply') }));
 
     await waitFor(() =>
-      expect(posted).toEqual([{ profile: 'default', ciphers: 'AES256-SHA' }]),
+      expect(posted).toEqual([{
+        profile: 'default',
+        ciphers: [...DEFAULT_SELECTED, 'DHE-RSA-AES128-GCM-SHA256'].join(':'),
+      }]),
     );
   });
 
+  it('lets the user reorder the exact offer before applying it', async () => {
+    render(<TlsSection />);
+    await waitFor(() => expect(profileSelect()).toBeTruthy());
+
+    await userEvent.click(screen.getByRole('button', {
+      name: t('tls.moveCipherDown', { cipher: DEFAULT_SELECTED[0] }),
+    }));
+    await userEvent.click(screen.getByRole('button', { name: t('tls.apply') }));
+
+    await waitFor(() => expect(posted).toEqual([{
+      profile: 'default',
+      ciphers: [...DEFAULT_SELECTED].reverse().join(':'),
+    }]));
+  });
+
+  it('restores the selected profile instead of making users rebuild its list', async () => {
+    tls = {
+      ...tls,
+      custom_ciphers: 'AES256-SHA',
+      ciphers: 'AES256-SHA',
+      selected_ciphers: ['AES256-SHA'],
+    };
+    render(<TlsSection />);
+
+    await userEvent.click(await screen.findByRole('button', { name: t('tls.useProfileDefaults') }));
+    await waitFor(() => expect(posted).toEqual([{ profile: 'default', ciphers: '' }]));
+  });
+
+  it('searches the supported catalogue instead of accepting free text', async () => {
+    render(<TlsSection />);
+    await waitFor(() => expect(profileSelect()).toBeTruthy());
+
+    await userEvent.type(screen.getByRole('searchbox', { name: t('tls.searchCiphers') }), 'DHE-RSA');
+    expect(screen.getByRole('button', {
+      name: t('tls.addCipher', { cipher: 'DHE-RSA-AES128-GCM-SHA256' }),
+    })).toBeTruthy();
+    expect(screen.queryByRole('button', {
+      name: t('tls.addCipher', { cipher: 'ECDHE-ECDSA-AES256-GCM-SHA384' }),
+    })).toBeNull();
+  });
+
+  it('keeps non-recommended compatibility ciphers behind an explicit choice', async () => {
+    render(<TlsSection />);
+    await waitFor(() => expect(profileSelect()).toBeTruthy());
+
+    const name = t('tls.addCipher', { cipher: 'ECDHE-ECDSA-AES256-GCM-SHA384' });
+    expect(screen.queryByRole('button', { name })).toBeNull();
+    await userEvent.click(screen.getByRole('checkbox', { name: t('tls.showAllCiphers') }));
+    expect(screen.getByRole('button', { name })).toBeTruthy();
+  });
+
   it('surfaces a cipher list the engine refuses', async () => {
-    // Storing an unusable list would make every request fail with a 502.
     postFails = true;
     render(<TlsSection />);
     await waitFor(() => expect(profileSelect()).toBeTruthy());
 
-    await userEvent.type(screen.getByLabelText(t('tls.customLabel')), 'NOPE');
+    await userEvent.click(screen.getByRole('button', {
+      name: t('tls.addCipher', { cipher: 'DHE-RSA-AES128-GCM-SHA256' }),
+    }));
     await userEvent.click(screen.getByRole('button', { name: t('tls.apply') }));
 
     expect(await screen.findByText(/no usable ciphers|422/)).toBeTruthy();

@@ -45,6 +45,9 @@ from .tls import (
     PROFILES as TLS_PROFILES,
     options_for,
     patch_version_probe,
+    resolve_ciphers,
+    supported_ciphers,
+    tls13_ciphers,
     validate_ciphers,
 )
 from .upstream import UpstreamBridge
@@ -899,6 +902,13 @@ class ProxyEngine:
             "profile": profile,
             "custom_ciphers": custom,
             "ciphers": applied["ciphers_server"],
+            "selected_ciphers": list(resolve_ciphers(applied["ciphers_server"])),
+            "supported_ciphers": [dict(cipher) for cipher in supported_ciphers()],
+            "tls13_ciphers": (
+                []
+                if applied["tls_version_server_max"] == "TLS1_2"
+                else list(tls13_ciphers())
+            ),
             "available": [
                 {"id": key, "label": value["label"]}
                 for key, value in TLS_PROFILES.items()
