@@ -7,6 +7,7 @@ import {
   loadToastPreferences, saveToastPreferences, TOAST_PREFERENCES_KEY,
   type ToastCategory, type ToastPreferences,
 } from '../toastPreferences';
+import { repeatsEngineConnectionError } from '../engineConnection';
 import './Toast.css';
 
 export type ToastTone = 'info' | 'success' | 'error';
@@ -73,6 +74,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const showToast = useCallback((options: ToastOptions) => {
     // Errors (including Lockdown refusals) remain visible regardless of choices.
     if (options.tone !== 'error' && options.category && !choices.current[options.category]) return;
+    // A transport failure already owns one persistent global banner. Keep
+    // action-specific HTTP errors, but do not repeat the same fetch failure.
+    if (options.tone === 'error'
+      && document.querySelector('.app')
+      && repeatsEngineConnectionError(options.message)) return;
     const id = options.id ?? `${options.category ?? options.tone}:${options.message}`;
     const now = Date.now();
     const next = entries.current.filter((toast) => toast.id !== id && (toast.expiresAt === null || toast.expiresAt > now));
@@ -120,6 +126,9 @@ function ToastViewport({ toasts }: { toasts: ToastEntry[] }) {
   const [host, setHost] = useState<HTMLElement>(document.body);
   useLayoutEffect(() => {
     const refresh = () => {
+      // jsdom can deliver an already-queued mutation after its document has
+      // been torn down; the desktop document remains present for app life.
+      if (typeof document === 'undefined') return;
       const dialogs = document.querySelectorAll<HTMLDialogElement>('dialog[open]');
       const focused = document.activeElement?.closest<HTMLDialogElement>('dialog[open]');
       setHost(focused ?? dialogs[dialogs.length - 1] ?? document.body);

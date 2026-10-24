@@ -45,6 +45,9 @@ import { Spinner, useDelayedBusy } from "./components/Spinner";
 import { useToast } from "./components/Toast";
 import { useFuzzerCompletionToast } from "./components/useFuzzerCompletionToast";
 import { DesktopClose } from "./components/DesktopClose";
+import { CurrentProjectButton } from "./components/CurrentProjectButton";
+import { EngineConnectionBanner } from "./components/EngineConnectionBanner";
+import { useEngineConnection } from "./engineConnection";
 import { useShortcut, useShortcuts } from "./useShortcut";
 import { autoCheck, useUpdates } from "./updates";
 import "./App.css";
@@ -122,6 +125,7 @@ export default function App() {
 
 function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: () => Promise<void> }) {
   const t = useT();
+  const engineConnection = useEngineConnection();
   // Mount a workspace tab on its first visit, then hide it with Activity.
   // React keeps its filters, drafts, selections and scroll position while
   // pausing subscriptions and polling for tabs that are out of view.
@@ -236,6 +240,10 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
     setSettingsGroup("security");
     setTab("Settings");
   };
+  const openProject = () => {
+    setSettingsGroup("project");
+    setTab("Settings");
+  };
   const visibleTabs = useMemo(
     () => tabOrder.filter((name) => name !== 'Issues' || scannerAvailable),
     [scannerAvailable, tabOrder],
@@ -294,7 +302,11 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   useEffect(startWorkspaceAutosaves, []);
 
   return (
-    <div className={switching ? "app switching" : "app"}>
+    <div className={[
+      'app',
+      switching ? 'switching' : '',
+      engineConnection.status === 'offline' ? 'engine-unavailable' : '',
+    ].filter(Boolean).join(' ')}>
       <header className="titlebar">
         <button
           type="button"
@@ -304,6 +316,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
         >
           <span className="brand-mark" aria-hidden="true" />
         </button>
+        {project && <CurrentProjectButton project={project} onOpen={openProject} />}
         <nav className="tabs">
           {visibleTabs.map((name) => (
             <button
@@ -358,6 +371,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
         )}
         {showSpinner && <Spinner />}
       </header>
+      <EngineConnectionBanner />
       <main className="content">
         <BusyProvider onChange={onBusyChange}>
           <Activity mode={tab === "Proxy" ? "visible" : "hidden"}>

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildFlowQuery, getStatus, listFlowPage, openDirectory, patchFlowAnnotation, setApiToken } from './client';
+import { EngineUnavailableError, getEngineConnection } from '../engineConnection';
 
 afterEach(() => {
   setApiToken('');
@@ -54,6 +55,31 @@ describe('desktop API authentication', () => {
     expect(new Headers(init.headers).get('Authorization')).toBe(
       'Bearer desktop-secret',
     );
+  });
+});
+
+describe('engine connection state', () => {
+  it('reports one transport outage and clears it on the next response', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockRejectedValueOnce(new Error('Failed to fetch'))
+      .mockResolvedValueOnce(new Response('{}', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })));
+
+    await expect(getStatus()).rejects.toBeInstanceOf(EngineUnavailableError);
+    expect(getEngineConnection()).toEqual({ status: 'offline', error: 'Failed to fetch', recovery: 0 });
+    await getStatus();
+    expect(getEngineConnection()).toEqual({ status: 'online', error: null, recovery: 1 });
+  });
+
+  it('does not treat an intentionally aborted request as an outage', async () => {
+    const aborted = new Error('cancelled');
+    aborted.name = 'AbortError';
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(aborted));
+    await expect(listFlowPage({}, 0, 200, undefined, undefined, 'started_at', true, new AbortController().signal))
+      .rejects.toBe(aborted);
+    expect(getEngineConnection().status).toBe('online');
   });
 });
 

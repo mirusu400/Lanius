@@ -7,6 +7,7 @@
  */
 
 import { beforeEach, vi } from 'vitest';
+import { resetEngineConnection } from './engineConnection';
 
 class InertSocket {
   static readonly CONNECTING = 0;
@@ -50,6 +51,7 @@ if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.sho
 }
 
 beforeEach(() => {
+  resetEngineConnection();
   // Only stub when a test has not provided its own WebSocket double.
   if (!('__laniusSocketMock' in globalThis)) {
     vi.stubGlobal('WebSocket', InertSocket as unknown as typeof WebSocket);

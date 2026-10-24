@@ -32,6 +32,7 @@ import { UpdatesSection } from "./settings/UpdatesSection";
 import { UpstreamSection } from "./settings/UpstreamSection";
 import { SettingsSearch } from "./settings/SettingsSearch";
 import { SETTINGS_GROUPS, SETTINGS_SECTIONS, type SettingsGroup, type SettingsSection, type SettingsSectionId } from "./settings/settingsCatalogue";
+import { useEngineConnection } from "../engineConnection";
 
 const GROUPS = SETTINGS_GROUPS;
 type Group = SettingsGroup;
@@ -94,6 +95,7 @@ function SettingsJumpFeedback({ jump, bodyRef, finish }: {
 
 export function SettingsTab({ project, onSwitchProject, switchingProject = false, switchError, openGroup, onGroupOpened, onProjectImported }: SettingsTabProps = {}) {
   const t = useT();
+  const engineConnection = useEngineConnection();
   const [group, setGroup] = useState<Group>(() =>
     GROUPS.includes(openGroup as Group) ? (openGroup as Group) : initialGroup(),
   );
@@ -179,7 +181,9 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
 
       <div className="settings-body" ref={bodyRef}>
         {GROUPS.filter((name) => visitedGroups.has(name)).map((name) =>
-          <Activity key={name} mode={group === name ? 'visible' : 'hidden'}>
+          /* A successful shared retry increments recovery, remounting visited
+             groups to replace stale transport errors with fresh engine data. */
+          <Activity key={`${name}:${engineConnection.recovery}`} mode={group === name ? 'visible' : 'hidden'}>
             <div className="settings-group">
               {SETTINGS_SECTIONS.filter((section) => section.group === name).map((section) =>
                 <div key={section.id} className={`settings-section${jump?.section.id === section.id ? ' settings-search-target' : ''}`} data-settings-section={section.id}

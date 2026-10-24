@@ -34,6 +34,10 @@ const en = {
   'common.proxy': 'Proxy',
   'common.renameTab': 'Rename {title}',
   'clipboard.failed': 'Could not access the clipboard: {message}',
+  'engine.connectionLost': 'Engine connection lost',
+  'engine.connectionHelp': 'Capture and settings may be out of date until Lanius reconnects.',
+  'engine.connectionRetry': 'Reconnect',
+  'engine.connectionChecking': 'Checking…',
 
   'shutdown.closing': 'Closing Lanius…',
   'shutdown.saving': 'Saving your open tabs.',
@@ -1472,6 +1476,10 @@ const ko: Catalogue = {
   'common.proxy': '프록시',
   'common.renameTab': '{title} 이름 변경',
   'clipboard.failed': '클립보드에 접근하지 못했습니다: {message}',
+  'engine.connectionLost': '엔진 연결이 끊겼습니다',
+  'engine.connectionHelp': '다시 연결될 때까지 캡처와 설정 상태가 최신이 아닐 수 있습니다.',
+  'engine.connectionRetry': '다시 연결',
+  'engine.connectionChecking': '확인 중…',
 
   'proxy.intercept': 'Intercept',
   'proxy.history': 'HTTP history',

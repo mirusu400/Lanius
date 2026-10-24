@@ -18,6 +18,7 @@ import type {
   WebSocketState,
 } from './types';
 import { notifyLockdownBlocked } from '../lockdownEvents';
+import { engineRequestFailed, engineResponded } from '../engineConnection';
 
 /** Engine base URL. The desktop shell can change it while the UI is open. */
 export let API_BASE =
@@ -79,7 +80,15 @@ function authenticatedInit(init?: RequestInit): RequestInit | undefined {
 }
 
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(`${API_BASE}${path}`, authenticatedInit(init));
+  try {
+    const response = await fetch(`${API_BASE}${path}`, authenticatedInit(init));
+    engineResponded();
+    return response;
+  } catch (cause) {
+    // Cancelling a search is expected and says nothing about engine health.
+    if (cause instanceof Error && cause.name === 'AbortError') throw cause;
+    throw engineRequestFailed(cause);
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

@@ -5,6 +5,7 @@ import { notifyRequestTransferred } from '../requestTransfers';
 import { defaultToastPreferences, loadToastPreferences, TOAST_PREFERENCES_KEY } from '../toastPreferences';
 import { Dialog } from './Dialog';
 import { useToast } from './Toast';
+import { engineRequestFailed } from '../engineConnection';
 
 let feedback: ReturnType<typeof useToast>;
 function Probe() {
@@ -77,6 +78,16 @@ it('filters transfer categories independently while always allowing errors', () 
   expect(screen.getByText(t('toast.requestTransferred', { tool: 'Fuzzer' }))).toBeTruthy();
   act(() => feedback.showToast({ message: 'Lockdown blocked', category: 'replay', tone: 'error' }));
   expect(screen.getByRole('alert').textContent).toBe('Lockdown blocked');
+});
+
+it('does not repeat the active engine transport failure as a toast', () => {
+  render(<div className="app"><Probe /></div>);
+  act(() => { engineRequestFailed(new Error('Failed to fetch')); });
+  act(() => feedback.showToast({ message: 'Could not load: Failed to fetch', tone: 'error' }));
+  expect(screen.queryByRole('alert')).toBeNull();
+
+  act(() => feedback.showToast({ message: 'A different action failed', tone: 'error' }));
+  expect(screen.getByRole('alert').textContent).toBe('A different action failed');
 });
 
 it('applies preference changes immediately and follows changes from another window', () => {
