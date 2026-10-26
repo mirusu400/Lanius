@@ -31,6 +31,7 @@ export function CaptureSection() {
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [picker, setPicker] = useState<ProcessInfo[] | null>(null);
+  const unavailable = state?.supported === false;
 
   useEffect(() => {
     getStatus()
@@ -62,6 +63,7 @@ export function CaptureSection() {
   }, []);
 
   const apply = async (next: typeof mode, nextRules: CaptureRule[]) => {
+    const previousMode = mode;
     setBusy(true);
     setError(null);
     setNote(null);
@@ -71,11 +73,15 @@ export function CaptureSection() {
         next === 'off' ? null : next === 'all' ? '' : rulesToSpec(nextRules);
       const result = await setLocalCapture(spec);
       setState(result);
+      setMode(next);
       saved(result.restart_required ? { detail: t('capture.restartNeeded') } : {});
       setNote(
         result.restart_required ? t('capture.restartNeeded') : t('capture.applied'),
       );
     } catch (err) {
+      // A rejected platform requirement or invalid native configuration must
+      // not leave the radio group claiming that capture is enabled.
+      setMode(previousMode);
       setError((err as Error).message);
     } finally {
       setBusy(false);
@@ -108,10 +114,10 @@ export function CaptureSection() {
               type="radio"
               name="capture-mode"
               checked={mode === option}
-              disabled={busy}
+              disabled={busy || (option !== 'off' && unavailable)}
               onChange={() => {
-                setMode(option);
-                if (option !== 'filtered') void apply(option, rules);
+                if (option === 'filtered') setMode(option);
+                else void apply(option, rules);
               }}
             />
             {t(`capture.${option}` as 'capture.off')}
@@ -245,7 +251,15 @@ export function CaptureSection() {
       {note && <p className="muted">{note}</p>}
       {error && <div className="banner error">{error}</div>}
 
-      {state && state.spec !== null && !state.approved && (
+      {state && unavailable && (
+        <div className="banner warn">
+          <strong>
+            {t('dash.captureUnavailable', { detail: state.detail ?? '' })}
+          </strong>
+        </div>
+      )}
+
+      {state && !unavailable && state.spec !== null && !state.approved && (
         <div className="banner warn">
           <strong>{t('dash.captureWaiting')}</strong>
           <span>{t('dash.captureWaitingHelp')}</span>

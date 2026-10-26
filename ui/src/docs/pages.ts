@@ -344,7 +344,7 @@ const en: DocPage[] = [
           },
           {
             kind: 'note',
-            body: 'On Windows the helper needs administrator rights instead. On Linux it needs sudo and a kernel of 6.8 or newer.',
+            body: 'On Windows the helper needs administrator rights instead. On Linux it needs sudo and a kernel of 6.8 or newer. Lanius checks these native requirements before saving the setting and shows the exact reason when capture is unavailable.',
           },
         ],
       },
@@ -810,7 +810,7 @@ const ko: DocPage[] = [
           },
           {
             kind: 'note',
-            body: 'Windows에서는 대신 관리자 권한이 필요하고, Linux에서는 sudo와 커널 6.8 이상이 필요합니다.',
+            body: 'Windows에서는 대신 관리자 권한이 필요하고, Linux에서는 sudo와 커널 6.8 이상이 필요합니다. Lanius는 설정을 저장하기 전에 이 조건을 확인하고, 시스템 캡처를 사용할 수 없으면 정확한 이유를 표시합니다.',
           },
         ],
       },

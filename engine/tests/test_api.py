@@ -36,9 +36,15 @@ def client(tmp_path):
         db_path=tmp_path / "test.sqlite",
         confdir=tmp_path / "mitm",
     )
-    app = create_app(settings)
-    with TestClient(app) as c:
-        yield c
+    # Local capture depends on host privileges on Windows/Linux. API tests
+    # exercise configuration semantics, not the CI runner's privilege level.
+    with (
+        mock.patch("app.proxy._local_redirector_unavailable_reason", return_value=None),
+        mock.patch("app.proxy.LOCAL_CAPTURE_SETTLE_SECONDS", 0),
+    ):
+        app = create_app(settings)
+        with TestClient(app) as c:
+            yield c
 
 
 def seed(client, flow_id: str, **kwargs) -> None:
@@ -872,6 +878,27 @@ def test_dashboard_carries_mode_and_capture_state(client) -> None:
 
 def test_local_capture_is_off_by_default(client) -> None:
     assert client.get("/api/status").json()["local_capture"]["spec"] is None
+
+
+def test_unavailable_local_capture_is_rejected_without_persisting(client, monkeypatch) -> None:
+    """A missing privilege must not poison the next engine startup with a
+    mode that cannot run on this machine."""
+    from app import proxy as proxy_module
+
+    monkeypatch.setattr(
+        proxy_module,
+        "local_capture_state",
+        lambda **_kwargs: {
+            "supported": False,
+            "approved": False,
+            "detail": "administrator privileges are required",
+        },
+    )
+
+    response = client.post("/api/capture/local", json={"spec": "curl"})
+    assert response.status_code == 422
+    assert "administrator privileges" in response.json()["detail"]
+    assert client.app.state.engine.local_capture_spec() is None
 
 
 def test_enabling_local_capture_persists_the_spec(client) -> None:

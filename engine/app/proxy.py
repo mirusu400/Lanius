@@ -71,6 +71,13 @@ from .tls_trust import (
 logger = logging.getLogger(__name__)
 
 BIND_TIMEOUT_SECONDS = 5.0
+# mitmproxy marks a local mode running as soon as its in-process instance exists,
+# but the OS redirector applies a new process filter asynchronously. Without a
+# short settling period, the first request launched after Settings says the
+# change is applied can escape capture. This was reproduced with the approved
+# macOS redirector: an immediate curl was missed and the delayed request was
+# captured.
+LOCAL_CAPTURE_SETTLE_SECONDS = 1.0
 
 
 # macOS ships the local-capture redirector as a system extension. It only
@@ -98,6 +105,11 @@ def reset_local_capture_cache() -> None:
     _state_cache = None
 
 
+def _local_redirector_unavailable_reason() -> str | None:
+    """Native availability probe, split out so platform tests are deterministic."""
+    return LocalRedirector.unavailable_reason()
+
+
 def local_capture_state(*, refresh: bool = False) -> dict[str, object]:
     """Whether OS-level local capture is ready on this machine.
 
@@ -121,9 +133,21 @@ def local_capture_state(*, refresh: bool = False) -> dict[str, object]:
 
 def _read_local_capture_state() -> dict[str, object]:
     if sys.platform != "darwin":
-        # Windows elevates a helper per run and Linux uses sudo, so there
-        # is no persistent approval state to read.
-        return {"supported": True, "approved": True, "detail": None}
+        # There is no persistent approval state off macOS, but the native
+        # redirector can still be unavailable because Windows is not elevated,
+        # Linux lacks privileges/a new enough kernel, or the platform is not
+        # supported at all. Report the dependency's real answer instead of
+        # claiming every non-macOS machine is ready.
+        try:
+            reason = _local_redirector_unavailable_reason()
+        except Exception as exc:  # pragma: no cover - native boundary
+            reason = f"could not check local capture availability: {exc}"
+        available = reason is None
+        return {
+            "supported": available,
+            "approved": available,
+            "detail": reason,
+        }
 
     try:
         proc = subprocess.run(
@@ -1054,8 +1078,9 @@ class ProxyEngine:
     async def set_local_capture(self, spec: str | None) -> dict[str, object]:
         """Turn OS-level capture on or off without a restart.
 
-        ``spec`` is a mitmproxy intercept spec: ``""`` or ``None`` for off,
-        ``"curl"`` for one process, ``"!Slack"`` to exclude one, and so on.
+        ``spec`` is a mitmproxy intercept spec: ``None`` for off, ``""`` for
+        every process, ``"curl"`` for one process, ``"!Slack"`` to exclude
+        one, and so on.
         Returns the resulting readiness state.
         """
         if spec is not None:
@@ -1064,6 +1089,17 @@ class ProxyEngine:
                 # Reject a bad spec here rather than letting it take the
                 # proxy down when mitmproxy reconfigures.
                 LocalRedirector.describe_spec(spec)
+
+            readiness = local_capture_state(refresh=True)
+            if not readiness["supported"]:
+                detail = readiness["detail"] or "not supported on this machine"
+                raise ValueError(f"system capture is unavailable: {detail}")
+
+        previous = {
+            str(mode["spec"])
+            for mode in self.mode_status()
+            if str(mode["spec"]).startswith("local")
+        }
 
         if spec is None:
             self.store.delete_setting(self.CAPTURE_SETTING)
@@ -1086,6 +1122,16 @@ class ProxyEngine:
             if self.master is not None
             else True
         )
+        if (
+            applied
+            and wanted
+            and previous != set(wanted)
+            and state["approved"]
+        ):
+            # LocalRedirector.set_intercept() returns before the system helper
+            # has necessarily installed the new filter. Do not tell the UI it
+            # is ready while the first request can still bypass capture.
+            await asyncio.sleep(LOCAL_CAPTURE_SETTLE_SECONDS)
         logger.info(
             "local capture set to %r (approved=%s, applied=%s)",
             spec,

@@ -1088,9 +1088,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def set_local_capture(payload: dict[str, Any]) -> dict[str, Any]:
         """Turn OS-level capture on or off.
 
-        ``spec`` is a mitmproxy intercept spec: omit it or send an empty
-        string to switch capture off, "curl" to target one process,
-        "!Slack" to exclude one.
+        ``spec`` is a mitmproxy intercept spec: omit it or send null to switch
+        capture off, an empty string to capture every process, "curl" to target
+        one process, or "!Slack" to exclude one.
         """
         spec = payload.get("spec")
         # Absent or null switches capture off; "" captures every process.

@@ -7,6 +7,10 @@ pip-audit>=2.9
 # the development/CI environment too so the audit tool does not reintroduce
 # the advisory it is meant to catch.
 msgpack>=1.2.1
+# CacheControl's file-cache extra accepts vulnerable older releases.
+filelock>=4.2.1
+# Keep the build/test toolchain itself clear of known archive extraction bugs.
+setuptools>=84.1.0
 # Not used by the engine. The Python that codegen produces imports it,
 # and one test runs that output to prove it sends the captured bytes.
 requests>=2.32

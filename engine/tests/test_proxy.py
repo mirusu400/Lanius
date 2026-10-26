@@ -625,12 +625,65 @@ def test_local_capture_needs_no_approval_off_macos(monkeypatch) -> None:
     from app import proxy as proxy_module
 
     monkeypatch.setattr(proxy_module.sys, "platform", "win32")
+    monkeypatch.setattr(
+        proxy_module, "_local_redirector_unavailable_reason", lambda: None
+    )
     proxy_module.reset_local_capture_cache()
     assert proxy_module.local_capture_state() == {
         "supported": True,
         "approved": True,
         "detail": None,
     }
+
+
+def test_local_capture_reports_native_platform_requirements(monkeypatch) -> None:
+    """Missing elevation or kernel support must not be reported as ready."""
+    from app import proxy as proxy_module
+
+    monkeypatch.setattr(proxy_module.sys, "platform", "linux")
+    monkeypatch.setattr(
+        proxy_module,
+        "_local_redirector_unavailable_reason",
+        lambda: "Linux local capture requires root and kernel 6.8 or newer",
+    )
+    proxy_module.reset_local_capture_cache()
+
+    assert proxy_module.local_capture_state() == {
+        "supported": False,
+        "approved": False,
+        "detail": "Linux local capture requires root and kernel 6.8 or newer",
+    }
+
+
+@pytest.mark.asyncio
+async def test_local_capture_waits_for_the_native_filter(tmp_path, monkeypatch) -> None:
+    """Do not return success during the window where the first request can
+    still escape the asynchronously updated OS redirector."""
+    from app import proxy as proxy_module
+
+    eng = engine(tmp_path, free_port())
+    eng.master = mock.Mock()  # type: ignore[assignment]
+    eng.mode_status = lambda: []  # type: ignore[method-assign]
+    eng._local_mode_applied = mock.AsyncMock(return_value=True)  # type: ignore[method-assign]
+    settle = mock.AsyncMock()
+    monkeypatch.setattr(proxy_module.asyncio, "sleep", settle)
+    monkeypatch.setattr(
+        proxy_module,
+        "local_capture_state",
+        lambda **_kwargs: {
+            "supported": True,
+            "approved": True,
+            "detail": None,
+        },
+    )
+
+    try:
+        result = await eng.set_local_capture("curl")
+    finally:
+        eng.store.close()
+
+    assert result["restart_required"] is False
+    settle.assert_awaited_once_with(proxy_module.LOCAL_CAPTURE_SETTLE_SECONDS)
 
 
 @pytest.mark.asyncio

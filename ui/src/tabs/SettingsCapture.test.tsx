@@ -11,6 +11,8 @@ let posted: unknown[] = [];
 let postFails = false;
 let restartRequired = false;
 let approved = false;
+let supported = true;
+let captureDetail = 'activated waiting for user';
 
 const status = () => ({
   version: '0.1.0',
@@ -26,9 +28,9 @@ const status = () => ({
   },
   paused: 0,
   local_capture: {
-    supported: true,
+    supported,
     approved,
-    detail: 'activated waiting for user',
+    detail: captureDetail,
     spec: captureSpec,
   },
 });
@@ -39,6 +41,8 @@ beforeEach(() => {
   postFails = false;
   restartRequired = false;
   approved = false;
+  supported = true;
+  captureDetail = 'activated waiting for user';
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -61,9 +65,9 @@ beforeEach(() => {
           statusText: 'OK',
           json: async () => ({
             spec: body.spec,
-            supported: true,
+            supported,
             approved: false,
-            detail: 'activated waiting for user',
+            detail: captureDetail,
             restart_required: restartRequired,
           }),
         } as Response;
@@ -101,6 +105,21 @@ describe('system capture', () => {
     render(<CaptureSection />);
     const off = (await screen.findByLabelText(t('capture.off'))) as HTMLInputElement;
     expect(off.checked).toBe(true);
+  });
+
+  it('disables enable controls and explains a native platform requirement', async () => {
+    supported = false;
+    captureDetail = 'administrator privileges are required';
+    render(<CaptureSection />);
+
+    const all = (await screen.findByLabelText(t('capture.all'))) as HTMLInputElement;
+    const filtered = screen.getByLabelText(t('capture.filtered')) as HTMLInputElement;
+    expect(all.disabled).toBe(true);
+    expect(filtered.disabled).toBe(true);
+    expect(
+      screen.getByText(t('dash.captureUnavailable', { detail: captureDetail })),
+    ).toBeTruthy();
+    expect(screen.queryByText(t('dash.captureWaitingHelp'))).toBeNull();
   });
 
   it('sends null to switch capture off, not an empty string', async () => {
@@ -295,6 +314,17 @@ describe('system capture', () => {
     await userEvent.click(screen.getByRole('button', { name: t('capture.apply') }));
 
     expect(await screen.findByText(/bad spec|422/)).toBeTruthy();
+  });
+
+  it('restores the previous mode when enabling capture is rejected', async () => {
+    postFails = true;
+    render(<CaptureSection />);
+    await userEvent.click(await screen.findByLabelText(t('capture.all')));
+
+    expect(await screen.findByText(/bad spec|422/)).toBeTruthy();
+    expect(
+      (screen.getByLabelText(t('capture.off')) as HTMLInputElement).checked,
+    ).toBe(true);
   });
 
   it('says a restart is needed when the change could not be applied live', async () => {

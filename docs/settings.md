@@ -205,7 +205,10 @@ On macOS this installs a network extension the first time, and macOS will ask
 you to approve it in **System Settings > General > Login Items & Extensions >
 Network Extensions**. Lanius shows an approval warning with a button that
 opens those settings directly. On Windows the helper needs to run with
-administrator rights.
+administrator rights. On Windows and Linux, Lanius checks the native
+redirector requirements before saving the setting. If elevation, kernel
+support, or another platform requirement is missing, Settings shows the exact
+reason instead of macOS approval instructions.
 
 The system redirector cannot be reconfigured while it is running, so changing
 the setting after capture has already started takes effect on the next launch.

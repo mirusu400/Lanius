@@ -6702,7 +6702,7 @@ pre.response-preview-text {
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.6875em;
 }
 
 .tls-cipher-mode.custom {
@@ -6741,7 +6741,7 @@ pre.response-preview-text {
   align-items: center;
   gap: 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75em;
 }
 
 .tls-cipher-list {
@@ -6820,7 +6820,7 @@ pre.response-preview-text {
 .tls-cipher-add > span:first-child {
   flex: none;
   color: var(--accent);
-  font-size: 17px;
+  font-size: 1.0625em;
 }
 
 .tls-cipher-actions {

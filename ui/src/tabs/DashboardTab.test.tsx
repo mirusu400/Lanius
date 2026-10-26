@@ -394,6 +394,26 @@ describe('warnings', () => {
       ),
     ).toBeTruthy();
   });
+
+  it('does not show macOS approval instructions for an unsupported platform', async () => {
+    payload = {
+      ...populated,
+      modes: [
+        { spec: 'local:curl', running: true, listening: false, error: null },
+      ],
+      local_capture: {
+        supported: false,
+        approved: false,
+        detail: 'administrator privileges are required',
+      },
+    };
+    render(<DashboardTab />);
+
+    expect(await screen.findByText(
+      t('dash.captureUnavailable', { detail: 'administrator privileges are required' }),
+    )).toBeTruthy();
+    expect(screen.queryByText(t('dash.captureWaitingHelp'))).toBeNull();
+  });
 });
 
 describe('title bar', () => {

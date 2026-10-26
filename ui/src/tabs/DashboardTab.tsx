@@ -172,8 +172,10 @@ export function DashboardTab({
                     })
                   : t('dash.captureWaiting')}
               </strong>
-              <span>{t('dash.captureWaitingHelp')}</span>
-              <NetworkExtensionsSettingsButton />
+              {capture.supported !== false && <>
+                <span>{t('dash.captureWaitingHelp')}</span>
+                <NetworkExtensionsSettingsButton />
+              </>}
             </div>
           )}
           {downModes.map((mode) => (

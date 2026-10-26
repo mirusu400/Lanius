@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Make TLS cipher controls follow the interface font-size setting and enforce
+  the no-fixed-font-size rule in CI.
+- Harden experimental System Capture by reporting native privilege and platform
+  requirements on Windows and Linux, keeping rejected settings out of the
+  project, distinguishing those failures from macOS extension approval, and
+  waiting for the OS process filter before reporting a live change as applied.
+- Raise Python runtime and development dependency floors for current
+  OpenTelemetry API, filelock, and setuptools security advisories.
+
 ## [0.5.0] — Deeper inspection and scalable traffic workflows
 
 See the [v0.5.0 release notes](docs/releases/v0.5.0.md) for downloads and installation notes. Changes since v0.4.0:

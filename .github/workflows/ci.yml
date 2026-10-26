@@ -107,6 +107,9 @@ jobs:
         working-directory: ui
         run: npm run lint
 
+      - name: CSS checks
+        run: node ui/scripts/check-css.mjs
+
       - name: Tests (all locales)
         working-directory: ui
         # Runs the suite in English and Korean: assertions look strings up by
