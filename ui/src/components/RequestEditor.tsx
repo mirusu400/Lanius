@@ -13,7 +13,7 @@
  * Raw to edit is a smaller surprise than a body that changes by itself.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import {
   canReformat,
@@ -27,6 +27,9 @@ import { useT } from '../i18n';
 import { HighlightedEditor, HighlightedMessage } from './SyntaxCode';
 import { messageHeaders } from './syntaxLanguage';
 import { CodeDisplayControls } from './CodeDisplayControls';
+import { MarkedText } from './MarkedText';
+import { findMatches } from './searchHighlight';
+import { MessageSearchBar, MessageSearchToggles, type MessageSearchMode } from './MessageSearch';
 
 const VIEWS: BodyView[] = ['pretty', 'raw', 'hex'];
 
@@ -42,6 +45,8 @@ export function RequestEditor({
   onSelectionChange,
   historyKey,
   highlightPattern,
+  initialView = 'pretty',
+  enableFindReplace = false,
 }: {
   /** The raw request. Always exactly what will be sent. */
   value: string;
@@ -59,11 +64,23 @@ export function RequestEditor({
   historyKey?: string;
   /** A global pattern to emphasize in the Raw and Pretty views. */
   highlightPattern?: RegExp;
+  /** Replay opens on Raw so the captured request is immediately editable. */
+  initialView?: BodyView;
+  /** Add local find and literal match/replace controls. */
+  enableFindReplace?: boolean;
 }) {
   const t = useT();
-  const [view, setView] = useState<BodyView>('pretty');
+  const [view, setView] = useState<BodyView>(initialView);
   const [showLineEndings, setShowLineEndings] = useState(false);
   const [wrap, setWrap] = useState(true);
+  const [searchMode, setSearchMode] = useState<MessageSearchMode | null>(null);
+  const [findQuery, setFindQuery] = useState('');
+  const [replacement, setReplacement] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const localEditorRef = useRef<HTMLTextAreaElement | null>(null);
+  const activeEditorRef = editorRef ?? localEditorRef;
+  const findInputRef = useRef<HTMLInputElement | null>(null);
 
   const shown = useMemo(() => {
     if (view === 'raw') return value;
@@ -76,9 +93,100 @@ export function RequestEditor({
   const truncated = view === 'hex' ? hexPreview(value).truncated : 0;
   const reformattable = canReformat(splitMessage(value).body);
   const headers = useMemo(() => messageHeaders(value), [value]);
+  const query = searchMode ? findQuery : '';
+  const matches = useMemo(() => findMatches(shown, query), [query, shown]);
+  const currentIndex = matches.length ? activeIndex % matches.length : 0;
+
+  const openSearch = useCallback((mode: MessageSearchMode) => {
+    if (mode === 'replace') setView('raw');
+    if (searchMode === mode) {
+      findInputRef.current?.focus();
+      findInputRef.current?.select();
+    } else {
+      setActiveIndex(0);
+      setSearchMode(mode);
+    }
+  }, [searchMode]);
+
+  useEffect(() => {
+    if (!searchMode) return;
+    findInputRef.current?.focus();
+    findInputRef.current?.select();
+  }, [searchMode]);
+
+  useEffect(() => {
+    if (!enableFindReplace) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const inside = target instanceof Node && !!rootRef.current?.contains(target);
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+        if (event.defaultPrevented || !inside) return;
+        event.preventDefault();
+        openSearch('find');
+      } else if (event.key === 'Escape' && searchMode && inside) {
+        event.preventDefault();
+        setSearchMode(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [enableFindReplace, openSearch, searchMode]);
+
+  useLayoutEffect(() => {
+    if (!searchMode || !query || !matches.length) return;
+    const mark = rootRef.current?.querySelector<HTMLElement>(`mark[data-find-index="${currentIndex}"]`);
+    mark?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    if (view !== 'raw') return;
+    const editor = activeEditorRef.current;
+    const match = matches[currentIndex];
+    if (!editor || !match) return;
+    const textareaOffset = (offset: number) => value.slice(0, offset).replace(/\r\n/g, '\n').length;
+    editor.setSelectionRange(textareaOffset(match.start), textareaOffset(match.end));
+    const overlay = rootRef.current?.querySelector<HTMLElement>('.highlight-editor-overlay');
+    if (overlay) {
+      editor.scrollTop = overlay.scrollTop;
+      editor.scrollLeft = overlay.scrollLeft;
+    }
+  }, [activeEditorRef, currentIndex, matches, query, searchMode, value, view]);
+
+  const move = (direction: number) => {
+    if (matches.length) setActiveIndex((currentIndex + direction + matches.length) % matches.length);
+  };
+
+  const replaceCurrent = () => {
+    const rawMatches = findMatches(value, findQuery);
+    if (!rawMatches.length) return;
+    const index = activeIndex % rawMatches.length;
+    const match = rawMatches[index];
+    const next = value.slice(0, match.start) + replacement + value.slice(match.end);
+    onChange(next);
+    const following = findMatches(next, findQuery);
+    const nextStart = match.start + replacement.length;
+    const nextIndex = following.findIndex((candidate) => candidate.start >= nextStart);
+    setActiveIndex(nextIndex >= 0 ? nextIndex : 0);
+  };
+
+  const replaceAll = () => {
+    const rawMatches = findMatches(value, findQuery);
+    if (!rawMatches.length) return;
+    let cursor = 0;
+    let next = '';
+    for (const match of rawMatches) {
+      next += value.slice(cursor, match.start) + replacement;
+      cursor = match.end;
+    }
+    onChange(next + value.slice(cursor));
+    setActiveIndex(0);
+  };
+
+  const changeView = (next: BodyView) => {
+    setView(next);
+    setActiveIndex(0);
+    if (searchMode === 'replace' && next !== 'raw') setSearchMode('find');
+  };
 
   return (
-    <div className="request-editor">
+    <div className="request-editor" ref={rootRef}>
       <div className="request-editor-bar">
         <CodeDisplayControls showLineEndings={showLineEndings} onShowLineEndings={setShowLineEndings}
           wrap={wrap} onWrap={setWrap} disabled={view === 'hex'} />
@@ -89,7 +197,7 @@ export function RequestEditor({
               role="tab"
               aria-selected={view === option}
               className={view === option ? 'active' : ''}
-              onClick={() => setView(option)}
+              onClick={() => changeView(option)}
             >
               {t(`detail.view.${option === 'pretty' ? 'parsed' : option}`)}
             </button>
@@ -128,7 +236,31 @@ export function RequestEditor({
 
         <span className="spacer" />
         {extraControls}
+        {enableFindReplace && <MessageSearchToggles
+          pane={label}
+          mode={searchMode}
+          replace
+          onFind={() => openSearch('find')}
+          onReplace={() => openSearch('replace')}
+        />}
       </div>
+
+      {searchMode && <MessageSearchBar
+        pane={label}
+        mode={searchMode}
+        query={findQuery}
+        replacement={replacement}
+        inputRef={findInputRef}
+        current={currentIndex}
+        count={matches.length}
+        onQuery={(next) => { setFindQuery(next); setActiveIndex(0); }}
+        onReplacement={setReplacement}
+        onPrevious={() => move(-1)}
+        onNext={() => move(1)}
+        onReplace={replaceCurrent}
+        onReplaceAll={replaceAll}
+        onClose={() => setSearchMode(null)}
+      />}
 
       {view === 'raw' ? (
         <HighlightedEditor
@@ -138,7 +270,7 @@ export function RequestEditor({
           className={className || 'mono'}
           containerClassName={`request-highlight-editor${highlightClassName ? ` ${highlightClassName}` : ''}`}
           label={label}
-          editorRef={editorRef}
+          editorRef={activeEditorRef}
           historyKey={historyKey}
           onContextMenu={onContextMenu}
           onSelect={onSelectionChange}
@@ -147,12 +279,14 @@ export function RequestEditor({
           showLineEndings={showLineEndings}
           wrap={wrap}
           highlightPattern={highlightPattern}
+          query={query}
+          activeIndex={searchMode && matches.length ? currentIndex : null}
         />
       ) : (
         <div className="request-editor-view" onContextMenu={onContextMenu}>
           {view === 'pretty'
-            ? <HighlightedMessage className={className || ''} text={shown} headers={headers} showLineEndings={showLineEndings} wrap={wrap} highlightPattern={highlightPattern} />
-            : <pre className={className} data-view={view}>{shown}</pre>}
+            ? <HighlightedMessage className={className || ''} text={shown} headers={headers} showLineEndings={showLineEndings} wrap={wrap} highlightPattern={highlightPattern} query={query} activeIndex={searchMode && matches.length ? currentIndex : null} />
+            : <pre className={className} data-view={view}><MarkedText text={shown} query={query} activeIndex={searchMode && matches.length ? currentIndex : null} /></pre>}
           {truncated > 0 && (
             <p className="muted">
               {t('detail.hexTruncated', { count: String(truncated) })}

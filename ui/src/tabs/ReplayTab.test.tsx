@@ -84,6 +84,15 @@ const editor = () => {
 };
 
 describe('ReplayTab', () => {
+  it('opens the request on the editable Raw view', async () => {
+    sendToReplay(flow);
+    render(<ReplayTabView />);
+    const input = await screen.findByRole('textbox', { name: t('replay.request') });
+    expect((input as HTMLTextAreaElement).value).toContain('GET /hello');
+    const raw = document.querySelector('.request-editor [role="tab"][aria-selected="true"]');
+    expect(raw?.textContent).toBe(t('detail.view.raw'));
+  });
+
   it('shows the storage omission notice with response headers in raw and preview views', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,

@@ -46,3 +46,20 @@ it('preserves display choices across views while keeping the raw response intact
   expect(wrap.getAttribute('aria-pressed')).toBe('false');
   expect(document.querySelector('.replay-response')?.textContent).toContain('"a": 1');
 });
+
+it('searches the response, navigates matches, and keeps the query across views', async () => {
+  const user = userEvent.setup();
+  render(<ResponseInspector flowId="response-1" raw={RAW} empty="no response" />);
+
+  const find = screen.getByRole('button', { name: t('detail.findIn', { pane: t('detail.response') }) });
+  expect(find.querySelector('svg')).toBeTruthy();
+  await user.click(find);
+  const input = screen.getByRole('searchbox', { name: t('detail.findIn', { pane: t('detail.response') }) });
+  await user.type(input, 'HTTP');
+  expect(document.querySelector('.response-inspector .detail-find-count')?.textContent).toBe('1/1');
+  expect(document.querySelector('.replay-response mark.find-current')?.textContent).toBe('HTTP');
+
+  await user.click(screen.getByRole('tab', { name: t('detail.view.raw') }));
+  expect((input as HTMLInputElement).value).toBe('HTTP');
+  expect(document.querySelector('.replay-response mark.find-current')?.textContent).toBe('HTTP');
+});

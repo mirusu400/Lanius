@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { getFlow } from '../api/client';
 import { useT } from '../i18n';
@@ -11,6 +11,8 @@ import { formatMessageBody, type BodyView } from './bodyFormat';
 import { CodeDisplayControls } from './CodeDisplayControls';
 import { LoadingPane } from './Spinner';
 import { RawHexView } from './RawHexView';
+import { matchCount } from './searchHighlight';
+import { MessageSearchBar, MessageSearchToggles } from './MessageSearch';
 
 type View = BodyView | 'preview';
 const VIEWS: View[] = ['pretty', 'raw', 'hex', 'preview'];
@@ -37,6 +39,13 @@ export function ResponseInspector({
   const [view, setView] = useState<View>('pretty');
   const [showLineEndings, setShowLineEndings] = useState(false);
   const [wrap, setWrap] = useState(true);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [previewMatches, setPreviewMatches] = useState(0);
+  const [hexMatches, setHexMatches] = useState(0);
+  const sectionRef = useRef<HTMLElement>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [loaded, setLoaded] = useState<{ flowId: string; raw?: string; error?: string; bodyOmitted?: boolean; bodySize?: number; bodyCapturedSize?: number } | null>(null);
 
   useEffect(() => {
@@ -67,8 +76,57 @@ export function ResponseInspector({
   const shown = view === 'pretty' && rawText !== undefined
     ? formatMessageBody(rawText, 'pretty')
     : rawText;
+  const query = findOpen ? findQuery : '';
+  const matches = !query ? 0
+    : view === 'hex' ? hexMatches
+      : view === 'preview' ? previewMatches
+        : matchCount(shown ?? '', query);
+  const currentIndex = matches ? activeIndex % matches : 0;
 
-  return <section className="response-inspector">
+  const openFind = useCallback(() => {
+    if (findOpen) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    } else {
+      setActiveIndex(0);
+      setFindOpen(true);
+    }
+  }, [findOpen]);
+
+  useEffect(() => {
+    if (!findOpen) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [findOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const inside = target instanceof Node && !!sectionRef.current?.contains(target);
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+        if (event.defaultPrevented || !inside) return;
+        event.preventDefault();
+        openFind();
+      } else if (event.key === 'Escape' && findOpen && inside) {
+        event.preventDefault();
+        setFindOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [findOpen, openFind]);
+
+  useLayoutEffect(() => {
+    if (!findOpen || !query || !matches) return;
+    const mark = sectionRef.current?.querySelector<HTMLElement>(`.response-inspector-body mark[data-find-index="${currentIndex}"]`);
+    mark?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [currentIndex, findOpen, matches, query, view]);
+
+  const move = (direction: number) => {
+    if (matches) setActiveIndex((currentIndex + direction + matches) % matches);
+  };
+
+  return <section className="response-inspector" ref={sectionRef}>
     <div className="response-inspector-bar">
       <span className="detail-half-title">{title ?? t('detail.response')}</span>
       {flowId && <CodeDisplayControls showLineEndings={showLineEndings} onShowLineEndings={setShowLineEndings}
@@ -80,16 +138,34 @@ export function ResponseInspector({
           role="tab"
           aria-selected={view === option}
           className={view === option ? 'active' : ''}
-          onClick={() => setView(option)}
+          onClick={() => {
+            setView(option);
+            setActiveIndex(0);
+            if (option === 'preview') setPreviewMatches(0);
+            if (option === 'hex') setHexMatches(0);
+          }}
         >
           {t(`detail.view.${option === 'pretty' ? 'parsed' : option}`)}
         </button>)}
       </div>}
+      {flowId && <MessageSearchToggles pane={title ?? t('detail.response')} mode={findOpen ? 'find' : null} onFind={openFind} />}
     </div>
+    {findOpen && <MessageSearchBar
+      pane={title ?? t('detail.response')}
+      mode="find"
+      query={findQuery}
+      inputRef={inputRef}
+      current={currentIndex}
+      count={matches}
+      onQuery={(next) => { setFindQuery(next); setActiveIndex(0); }}
+      onPrevious={() => move(-1)}
+      onNext={() => move(1)}
+      onClose={() => setFindOpen(false)}
+    />}
     <div className="response-inspector-body">
       {omitted && <p className="banner" role="status">{t('detail.mediaBodyOmitted', { size: formatBytes(size ?? 0) })}</p>}
       {!flowId ? <p className="muted">{empty}</p> : view === 'preview'
-        ? !omitted && <ResponsePreview flowId={flowId} />
+        ? !omitted && <ResponsePreview flowId={flowId} query={query} activeIndex={findOpen && matches ? currentIndex : null} onMatchCount={setPreviewMatches} />
         : error ? <p className="banner error">{error}</p>
           : rawText === undefined ? <LoadingPane label={t('detail.preview.loading')} />
             : view === 'hex'
@@ -100,9 +176,12 @@ export function ResponseInspector({
                   http
                   bodyBytes={capturedSize ?? size}
                   bodyOmitted={omitted}
+                  query={query}
+                  activeIndex={findOpen && matches ? currentIndex : null}
+                  onMatchCount={setHexMatches}
                   className="replay-response mono"
                 />
-              : <HighlightedMessage className="replay-response mono" text={shown ?? ''} headers={messageHeaders(rawText)} showLineEndings={showLineEndings} wrap={wrap} />}
+              : <HighlightedMessage className="replay-response mono" text={shown ?? ''} headers={messageHeaders(rawText)} showLineEndings={showLineEndings} wrap={wrap} query={query} activeIndex={findOpen && matches ? currentIndex : null} />}
     </div>
   </section>;
 }

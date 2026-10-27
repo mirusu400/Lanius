@@ -117,7 +117,7 @@ function messageHtml(text: string, headers: SyntaxHeaders, responsePath?: string
 }
 
 /** An editable raw message with inert syntax colours behind the textarea. */
-export function HighlightedEditor({ text, onChange, headers, responsePath, className, containerClassName, readOnly = false, label, historyKey, editorRef, onContextMenu, onSelect, onKeyUp, onMouseUp, showLineEndings = false, wrap = true, highlightPattern }: {
+export function HighlightedEditor({ text, onChange, headers, responsePath, className, containerClassName, readOnly = false, label, historyKey, editorRef, onContextMenu, onSelect, onKeyUp, onMouseUp, showLineEndings = false, wrap = true, highlightPattern, query = '', activeIndex = null }: {
   text: string;
   onChange: (text: string) => void;
   headers: SyntaxHeaders;
@@ -135,8 +135,10 @@ export function HighlightedEditor({ text, onChange, headers, responsePath, class
   showLineEndings?: boolean;
   wrap?: boolean;
   highlightPattern?: RegExp;
+  query?: string;
+  activeIndex?: number | null;
 }) {
-  const highlight = useMemo(() => withLineEndings(markPatternHighlightedHtml(messageHtml(text, headers, responsePath), highlightPattern), showLineEndings, true), [text, headers, responsePath, showLineEndings, highlightPattern]);
+  const highlight = useMemo(() => withLineEndings(markHighlightedHtml(markPatternHighlightedHtml(messageHtml(text, headers, responsePath), highlightPattern), query, activeIndex), showLineEndings, true), [text, headers, responsePath, showLineEndings, highlightPattern, query, activeIndex]);
   const overlay = useRef<HTMLPreElement>(null);
   return <div className={`highlight-editor code-wrap-${wrap ? 'on' : 'off'}${containerClassName ? ` ${containerClassName}` : ''}`}>
     <pre ref={overlay} className="highlight-editor-overlay mono syntax-code" aria-hidden="true"><code dangerouslySetInnerHTML={{ __html: highlight }} /></pre>

@@ -30,12 +30,18 @@ function editor(value = RAW) {
   return { onChange };
 }
 
-const box = () => screen.getByRole('textbox') as HTMLTextAreaElement;
+const box = () => screen.getByRole('textbox', { name: 'request' }) as HTMLTextAreaElement;
 const tab = (name: string) => screen.getByRole('tab', { name });
 
 function StatefulEditor({ initial = RAW }: { initial?: string }) {
   const [value, setValue] = useState(initial);
   return <RequestEditor value={value} onChange={setValue} label="request" />;
+}
+
+function ReplayEditor({ initial = RAW }: { initial?: string }) {
+  const [value, setValue] = useState(initial);
+  return <RequestEditor value={value} onChange={setValue} label="request"
+    initialView="raw" enableFindReplace />;
 }
 
 describe('what gets sent', () => {
@@ -96,6 +102,12 @@ describe('what gets sent', () => {
 });
 
 describe('views', () => {
+  it('can open directly in the editable Raw view for Replay', () => {
+    renderWithI18n(<ReplayEditor />);
+    expect(tab(t('detail.view.raw')).getAttribute('aria-selected')).toBe('true');
+    expect(box().value).toBe(RAW);
+  });
+
   it('lays the body out in the pretty view', async () => {
     editor();
     await userEvent.click(tab(t('detail.view.parsed')));
@@ -137,6 +149,36 @@ describe('views', () => {
     expect(onChange).toHaveBeenCalled();
     const last = onChange.mock.calls.at(-1)?.[0] ?? '';
     expect(last).toContain('GET / HTTP/1.1');
+  });
+});
+
+describe('find and replace', () => {
+  it('finds, navigates, and replaces literal matches in the raw request', async () => {
+    const user = userEvent.setup();
+    renderWithI18n(<ReplayEditor initial={'GET /old/old HTTP/1.1\nHost: old.test\n\nold'} />);
+
+    const replaceToggle = screen.getByRole('button', { name: t('editor.replaceIn', { pane: 'request' }) });
+    expect(replaceToggle.querySelector('svg')).toBeTruthy();
+    await user.click(replaceToggle);
+    const search = screen.getByRole('searchbox', { name: t('detail.findIn', { pane: 'request' }) });
+    await user.type(search, 'old');
+    expect(document.querySelector('.detail-find-count')?.textContent).toBe('1/4');
+    expect(document.querySelector('.request-highlight-editor mark.find-current')?.textContent).toBe('old');
+
+    await user.click(screen.getByRole('button', { name: t('detail.findNext') }));
+    expect(document.querySelector('.detail-find-count')?.textContent).toBe('2/4');
+
+    await user.type(screen.getByRole('textbox', { name: t('editor.replacement') }), 'new');
+    await user.click(screen.getByRole('button', { name: t('editor.replaceAll') }));
+    expect(box().value).toBe('GET /new/new HTTP/1.1\nHost: new.test\n\nnew');
+    expect(document.querySelector('.detail-find-count')?.textContent).toBe('0/0');
+  });
+
+  it('opens find with Ctrl+F while the request editor is active', () => {
+    renderWithI18n(<ReplayEditor />);
+    box().focus();
+    fireEvent.keyDown(box(), { key: 'f', ctrlKey: true });
+    expect(screen.getByRole('searchbox', { name: t('detail.findIn', { pane: 'request' }) })).toBeTruthy();
   });
 });
 

@@ -350,6 +350,8 @@ export function ReplayTabView() {
           value={active.text}
           onChange={(text) => editReplayTab(active.id, { text })}
           onContextMenu={editorMenu.open}
+          initialView="raw"
+          enableFindReplace
         />}
         second={<ResponseInspector
           flowId={active.response?.id ?? null}

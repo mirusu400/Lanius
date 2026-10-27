@@ -2038,12 +2038,41 @@ td.empty {
 }
 
 .detail-find-toggle,
+.message-search-toggle,
 .detail-find-bar button {
   border: 1px solid var(--border);
   border-radius: 3px;
   background: var(--bg);
   color: var(--fg);
   cursor: pointer;
+}
+
+.message-search-toggles {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.message-search-toggle {
+  align-items: center;
+  display: inline-flex;
+  height: 25px;
+  justify-content: center;
+  padding: 3px;
+  width: 27px;
+}
+
+.message-search-toggle:hover,
+.message-search-toggle[aria-pressed='true'] {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.message-search-toggle svg,
+.message-search-bar button svg {
+  height: 16px;
+  width: 16px;
 }
 
 .detail-find-toggle {
@@ -2093,8 +2122,19 @@ td.empty {
   cursor: default;
 }
 
+.message-search-bar.mode-replace input {
+  flex-basis: 160px;
+}
+
+.detail-find-bar button.message-search-action {
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
 .flow-table mark,
 .flow-detail mark,
+.request-editor mark,
+.response-inspector mark,
 .response-preview mark {
   border-radius: 2px;
   background: #ffe36e;
@@ -2102,6 +2142,8 @@ td.empty {
 }
 
 .flow-detail mark.find-current,
+.request-editor mark.find-current,
+.response-inspector mark.find-current,
 .response-preview mark.find-current {
   background: #ff944d;
   color: #17212d;
