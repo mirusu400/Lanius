@@ -1123,7 +1123,8 @@ class ProxyEngine:
             else True
         )
         if (
-            applied
+            self.master is not None
+            and applied
             and wanted
             and previous != set(wanted)
             and state["approved"]

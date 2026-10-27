@@ -806,8 +806,44 @@ async def test_upstream_forwards_http_and_is_saved(tmp_path) -> None:
         await other.wait_closed()
 
 
+@pytest.fixture
+def available_local_capture(monkeypatch) -> None:
+    """Persistence tests do not depend on the runner's native privileges."""
+    from app import proxy as proxy_module
+
+    monkeypatch.setattr(
+        proxy_module,
+        "local_capture_state",
+        lambda **_kwargs: {
+            "supported": True,
+            "approved": True,
+            "detail": None,
+        },
+    )
+
+
 @pytest.mark.asyncio
-async def test_a_filter_is_restored_after_a_restart(tmp_path) -> None:
+async def test_stopped_local_capture_does_not_wait_for_a_native_filter(
+    tmp_path, monkeypatch, available_local_capture
+) -> None:
+    """No OS filter is updated until the proxy is running."""
+    from app import proxy as proxy_module
+
+    eng = engine(tmp_path, free_port())
+    settle = mock.AsyncMock()
+    monkeypatch.setattr(proxy_module.asyncio, "sleep", settle)
+    try:
+        await eng.set_local_capture("curl")
+    finally:
+        eng.store.close()
+
+    settle.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_filter_is_restored_after_a_restart(
+    tmp_path, available_local_capture
+) -> None:
     port = free_port()
     eng = engine(tmp_path, port)
     await eng.set_local_capture("curl")
@@ -818,7 +854,9 @@ async def test_a_filter_is_restored_after_a_restart(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_capture_everything_is_restored_as_everything(tmp_path) -> None:
+async def test_capture_everything_is_restored_as_everything(
+    tmp_path, available_local_capture
+) -> None:
     """The empty spec must not come back as None, which would silently
     switch the feature off."""
     port = free_port()
@@ -831,7 +869,9 @@ async def test_capture_everything_is_restored_as_everything(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_switching_off_is_restored_as_off(tmp_path) -> None:
+async def test_switching_off_is_restored_as_off(
+    tmp_path, available_local_capture
+) -> None:
     port = free_port()
     eng = engine(tmp_path, port)
     await eng.set_local_capture("curl")
