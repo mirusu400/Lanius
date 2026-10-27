@@ -2122,11 +2122,32 @@ td.empty {
   cursor: default;
 }
 
-.message-search-bar.mode-replace input {
-  flex-basis: 160px;
+.detail-find-bar.message-search-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.message-search-row {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.message-search-query-row {
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+}
+
+.message-search-replace-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.detail-find-bar .message-search-row input {
+  min-width: 0;
+  width: 100%;
 }
 
 .detail-find-bar button.message-search-action {
+  max-width: 100%;
   padding: 0 8px;
   white-space: nowrap;
 }

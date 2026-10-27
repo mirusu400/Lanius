@@ -82,54 +82,56 @@ export function MessageSearchBar({
 }) {
   const t = useT();
   return <div className={`detail-find-bar message-search-bar mode-${mode}`}>
-    <UndoableInput
-      inputRef={inputRef}
-      type="search"
-      aria-label={t('detail.findIn', { pane })}
-      placeholder={t('detail.findPlaceholder')}
-      value={query}
-      onValueChange={onQuery}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          (event.shiftKey ? onPrevious : onNext)();
-        } else if (event.key === 'Escape') {
-          event.preventDefault();
-          onClose();
-        }
-      }}
-    />
-    {mode === 'replace' && <UndoableInput
-      type="text"
-      aria-label={t('editor.replacement')}
-      placeholder={t('editor.replacementPlaceholder')}
-      value={replacement}
-      onValueChange={onReplacement ?? (() => {})}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          onReplace?.();
-        } else if (event.key === 'Escape') {
-          event.preventDefault();
-          onClose();
-        }
-      }}
-    />}
-    <span className="detail-find-count" aria-live="polite">
-      {query ? `${count ? current + 1 : 0}/${count}` : '0/0'}
-    </span>
-    <button type="button" onClick={onPrevious} disabled={!count} aria-label={t('detail.findPrevious')} title={t('detail.findPrevious')}>
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5-5 5 5" /></svg>
-    </button>
-    <button type="button" onClick={onNext} disabled={!count} aria-label={t('detail.findNext')} title={t('detail.findNext')}>
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 8 5 5 5-5" /></svg>
-    </button>
-    {mode === 'replace' && <>
+    <div className="message-search-row message-search-query-row">
+      <UndoableInput
+        inputRef={inputRef}
+        type="search"
+        aria-label={t('detail.findIn', { pane })}
+        placeholder={t('detail.findPlaceholder')}
+        value={query}
+        onValueChange={onQuery}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            (event.shiftKey ? onPrevious : onNext)();
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            onClose();
+          }
+        }}
+      />
+      <span className="detail-find-count" aria-live="polite">
+        {query ? `${count ? current + 1 : 0}/${count}` : '0/0'}
+      </span>
+      <button type="button" onClick={onPrevious} disabled={!count} aria-label={t('detail.findPrevious')} title={t('detail.findPrevious')}>
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5-5 5 5" /></svg>
+      </button>
+      <button type="button" onClick={onNext} disabled={!count} aria-label={t('detail.findNext')} title={t('detail.findNext')}>
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 8 5 5 5-5" /></svg>
+      </button>
+      <button type="button" onClick={onClose} aria-label={t('detail.findClose')} title={t('detail.findClose')}>
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" /></svg>
+      </button>
+    </div>
+    {mode === 'replace' && <div className="message-search-row message-search-replace-row">
+      <UndoableInput
+        type="text"
+        aria-label={t('editor.replacement')}
+        placeholder={t('editor.replacementPlaceholder')}
+        value={replacement}
+        onValueChange={onReplacement ?? (() => {})}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            onReplace?.();
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            onClose();
+          }
+        }}
+      />
       <button type="button" className="message-search-action" onClick={onReplace} disabled={!count}>{t('editor.replaceCurrent')}</button>
       <button type="button" className="message-search-action" onClick={onReplaceAll} disabled={!count}>{t('editor.replaceAll')}</button>
-    </>}
-    <button type="button" onClick={onClose} aria-label={t('detail.findClose')} title={t('detail.findClose')}>
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" /></svg>
-    </button>
+    </div>}
   </div>;
 }

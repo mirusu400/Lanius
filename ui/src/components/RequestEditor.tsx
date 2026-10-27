@@ -138,12 +138,8 @@ export function RequestEditor({
     mark?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
     if (view !== 'raw') return;
     const editor = activeEditorRef.current;
-    const match = matches[currentIndex];
-    if (!editor || !match) return;
-    const textareaOffset = (offset: number) => value.slice(0, offset).replace(/\r\n/g, '\n').length;
-    editor.setSelectionRange(textareaOffset(match.start), textareaOffset(match.end));
     const overlay = rootRef.current?.querySelector<HTMLElement>('.highlight-editor-overlay');
-    if (overlay) {
+    if (editor && overlay) {
       editor.scrollTop = overlay.scrollTop;
       editor.scrollLeft = overlay.scrollLeft;
     }

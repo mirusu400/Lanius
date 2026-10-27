@@ -161,9 +161,17 @@ describe('find and replace', () => {
     expect(replaceToggle.querySelector('svg')).toBeTruthy();
     await user.click(replaceToggle);
     const search = screen.getByRole('searchbox', { name: t('detail.findIn', { pane: 'request' }) });
+    const selection = vi.spyOn(box(), 'setSelectionRange');
     await user.type(search, 'old');
+    expect(document.activeElement).toBe(search);
+    expect(selection).not.toHaveBeenCalled();
     expect(document.querySelector('.detail-find-count')?.textContent).toBe('1/4');
     expect(document.querySelector('.request-highlight-editor mark.find-current')?.textContent).toBe('old');
+
+    const rows = document.querySelectorAll('.message-search-bar .message-search-row');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].querySelector('input')).toBe(search);
+    expect(rows[1].querySelector('input')).toBe(screen.getByRole('textbox', { name: t('editor.replacement') }));
 
     await user.click(screen.getByRole('button', { name: t('detail.findNext') }));
     expect(document.querySelector('.detail-find-count')?.textContent).toBe('2/4');
