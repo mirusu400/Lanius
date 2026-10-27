@@ -1112,12 +1112,60 @@ def test_sqlite_backup_contains_raw_history_and_websockets(client, tmp_path) -> 
     assert client.get("/api/websockets/messages").json()["items"] == []
 
 
-def test_export_can_leave_out_the_capture(client) -> None:
-    """A long capture dwarfs everything else, and sharing a scope plus a
-    set of Replay requests is the common case."""
+def test_project_settings_export_leaves_out_the_capture(client) -> None:
+    """A settings file carries scope and Replay work without HTTP history."""
     assert "flows" not in client.get(
         "/api/project/export?include_flows=false"
     ).json()
+
+
+def test_project_settings_import_preserves_capture_and_applies_workspace(client) -> None:
+    seed(client, "kept-before-settings")
+    client.put(
+        "/api/workspace/replay",
+        json={"value": [{"id": "settings-replay", "text": "saved request"}]},
+    )
+    client.post(
+        "/api/scope/rules",
+        json={"kind": "include", "host": "settings.example"},
+    )
+    settings = client.get("/api/project/export?include_flows=false").json()
+
+    seed(client, "kept-after-settings")
+    client.put("/api/workspace/replay", json={"value": [{"id": "old"}]})
+    result = client.post(
+        "/api/project/import?settings_only=true", json=settings
+    )
+
+    assert result.status_code == 200, result.text
+    assert result.json()["flows"] == 0
+    assert client.app.state.store.get("kept-before-settings") is not None
+    assert client.app.state.store.get("kept-after-settings") is not None
+    assert client.get("/api/workspace/replay").json()["value"] == [
+        {"id": "settings-replay", "text": "saved request"}
+    ]
+    assert "settings.example" in {
+        rule["host"] for rule in client.get("/api/scope").json()["rules"]
+    }
+
+
+def test_project_settings_import_rejects_capture_and_database_files(client) -> None:
+    seed(client, "must-not-import")
+    project = client.get("/api/project/export").json()
+    response = client.post(
+        "/api/project/import?settings_only=true", json=project
+    )
+    assert response.status_code == 422
+    assert "captured requests" in response.json()["detail"]
+
+    backup = client.get("/api/project/backup")
+    response = client.post(
+        "/api/project/import?settings_only=true",
+        content=backup.content,
+        headers={"Content-Type": "application/x-sqlite3"},
+    )
+    assert response.status_code == 422
+    assert "JSON settings export" in response.json()["detail"]
 
 
 def test_import_restores_scope_workspace_and_flows(client) -> None:

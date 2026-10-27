@@ -1323,9 +1323,15 @@ export function saveDesktopProjectFile(
   return internals.invoke('save_project_file', { kind, includeFlows, defaultName, title });
 }
 
-export function importProject(
-  document: unknown,
-): Promise<{ ok: boolean; flows: number; scope: number; workspace: number }> {
+export interface ProjectImportResult {
+  ok: boolean;
+  flows: number;
+  scope: number;
+  workspace: number;
+  warnings?: string[];
+}
+
+export function importProject(document: unknown): Promise<ProjectImportResult> {
   return request('/api/project/import', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1337,10 +1343,19 @@ export function importProject(
  * parsed and serialized again on the UI thread. */
 export function importProjectFile(
   file: File,
-): Promise<{ ok: boolean; flows: number; scope: number; workspace: number; warnings?: string[] }> {
+): Promise<ProjectImportResult> {
   return request('/api/project/import', {
     method: 'POST',
     headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    body: file,
+  });
+}
+
+/** Apply a capture-free JSON export while keeping the current HTTP history. */
+export function importProjectSettingsFile(file: File): Promise<ProjectImportResult> {
+  return request('/api/project/import?settings_only=true', {
+    method: 'POST',
+    headers: { 'Content-Type': file.type || 'application/json' },
     body: file,
   });
 }

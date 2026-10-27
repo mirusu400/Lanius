@@ -463,11 +463,11 @@ const en: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Settings > Project opens a Save As dialog in the desktop app for JSON exports and complete database backups. Choose the folder and filename there. Pending tab edits are saved first, and a failed export does not replace an existing backup. A second JSON button leaves the capture out when you only want to pass on a scope and a set of requests.',
+            body: 'Settings > Project opens a Save As dialog in the desktop app for JSON exports and complete database backups. Choose the folder and filename there. Pending tab edits are saved first, and a failed export does not replace an existing backup. Export project settings creates a smaller JSON file with scope, settings, and saved workspaces but no captured HTTP history.',
           },
           {
             kind: 'note',
-            body: 'Import project accepts JSON exports and Lanius SQLite backups (.sqlite, .sqlite3, .db). SQLite restores binary bodies, WebSocket messages, bookmarks, issues and saved payload lists. Older backups are upgraded on a copy, leaving the selected file unchanged. Capture pauses during restoration. Importing replaces the current project and Replay/Decoder tabs after confirmation; pending writes finish first and absent tabs are cleared.',
+            body: 'Import project accepts JSON exports and Lanius SQLite backups (.sqlite, .sqlite3, .db). SQLite restores binary bodies, WebSocket messages, bookmarks, issues and saved payload lists. Import project settings accepts only capture-free JSON settings exports and keeps the current HTTP history while replacing scope, settings, saved tabs, issues, and Fuzzer runs. Pending tab writes finish before either import.',
           },
         ],
       },
@@ -929,11 +929,11 @@ const ko: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: '데스크톱 앱의 Settings > Project에서 JSON 내보내기와 전체 DB 백업을 누르면 다른 이름으로 저장 창이 열립니다. 폴더와 파일 이름을 선택하세요. 탭의 마지막 편집을 먼저 저장하며, 내보내기에 실패해도 기존 백업 파일은 대체하지 않습니다. 범위와 요청만 전달할 때 쓰는 캡처 제외 JSON 버튼도 있습니다.',
+            body: '데스크톱 앱의 Settings > Project에서 JSON 내보내기와 전체 DB 백업을 누르면 다른 이름으로 저장 창이 열립니다. 폴더와 파일 이름을 선택하세요. 탭의 마지막 편집을 먼저 저장하며, 내보내기에 실패해도 기존 백업 파일은 대체하지 않습니다. 프로젝트 설정 내보내기는 HTTP 캡처 기록을 제외하고 범위, 설정, 저장된 작업공간을 작은 JSON 파일로 만듭니다.',
           },
           {
             kind: 'note',
-            body: '프로젝트 가져오기는 JSON 내보내기와 Lanius SQLite 백업(.sqlite, .sqlite3, .db)을 지원합니다. SQLite는 바이너리 본문, WebSocket 메시지, 북마크, 이슈, 저장된 페이로드 목록까지 복원합니다. 이전 버전 백업은 사본에서 변환하므로 선택한 원본은 바뀌지 않습니다. 복원 중에는 캡처가 잠시 멈춥니다. 확인 후 현재 프로젝트와 Replay/Decoder 탭을 대체하며, 진행 중인 저장은 먼저 완료하고 가져온 프로젝트에 없는 탭은 비웁니다.',
+            body: '프로젝트 가져오기는 JSON 내보내기와 Lanius SQLite 백업(.sqlite, .sqlite3, .db)을 지원합니다. SQLite는 바이너리 본문, WebSocket 메시지, 북마크, 이슈, 저장된 페이로드 목록까지 복원합니다. 프로젝트 설정 가져오기는 캡처가 없는 JSON 설정 파일만 받으며, 현재 HTTP 기록을 유지한 채 범위, 설정, 저장된 탭, Issues, Fuzzer 실행 기록을 대체합니다. 두 가져오기 모두 진행 중인 탭 저장을 먼저 완료합니다.',
           },
         ],
       },

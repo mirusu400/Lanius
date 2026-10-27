@@ -1,10 +1,11 @@
-/** Saving and restoring the whole capture. */
+/** Saving and restoring complete projects or capture-free project settings. */
 
 import { useState } from 'react';
 import {
   exportProject,
   getLockdown,
   importProjectFile,
+  importProjectSettingsFile,
   downloadProjectBackup,
   restartProjectEngine,
   isDesktop,
@@ -38,25 +39,30 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
   const { t } = useI18n();
   const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
-  const [activeExport, setActiveExport] = useState<'database' | 'json' | 'noFlows' | null>(null);
+  const [activeExport, setActiveExport] = useState<'database' | 'json' | 'settings' | null>(null);
   const [note, setNote] = useState<Message | null>(null);
   const [error, setError] = useState<Message | null>(null);
   const [switchOpen, setSwitchOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [settingsImportFile, setSettingsImportFile] = useState<File | null>(null);
 
   const download = async (includeFlows: boolean, database = false) => {
-    setActiveExport(database ? 'database' : includeFlows ? 'json' : 'noFlows');
+    setActiveExport(database ? 'database' : includeFlows ? 'json' : 'settings');
     setBusy(true);
     setError(null);
     setNote(null);
     try {
       await flushAutosaves();
       const stamp = new Date().toISOString().slice(0, 10);
-      const filename = database ? 'lanius-project.sqlite' : `lanius-${stamp}.lanius.json`;
+      const filename = database
+        ? 'lanius-project.sqlite'
+        : includeFlows
+          ? `lanius-${stamp}.lanius.json`
+          : `lanius-settings-${stamp}.lanius.json`;
       if (isDesktop()) {
         const path = await saveDesktopProjectFile(
           database ? 'database' : 'json', includeFlows, filename,
-          t(database ? 'project.backupDatabase' : includeFlows ? 'project.export' : 'project.exportNoFlows'),
+          t(database ? 'project.backupDatabase' : includeFlows ? 'project.export' : 'project.exportSettings'),
         );
         if (path) {
           setNote(msg('project.savedFile', { path }));
@@ -84,19 +90,24 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
     }
   };
 
-  const upload = async (file: File) => {
+  const upload = async (file: File, settingsOnly = false) => {
     setBusy(true);
     setError(null);
     setNote(null);
     try {
-      const result = await replaceWorkspace(() => importProjectFile(file));
+      const result = await replaceWorkspace(() => settingsOnly
+        ? importProjectSettingsFile(file)
+        : importProjectFile(file));
       onProjectImported?.();
-      setNote(
-        msg('project.imported', {
-          flows: String(result.flows ?? 0),
-          scope: String(result.scope ?? 0),
-        }),
-      );
+      setNote(settingsOnly
+        ? msg('project.settingsImported', {
+            scope: String(result.scope ?? 0),
+            workspace: String(result.workspace ?? 0),
+          })
+        : msg('project.imported', {
+            flows: String(result.flows ?? 0),
+            scope: String(result.scope ?? 0),
+          }));
       if (result.warnings?.length) setError(rawMsg(result.warnings.join('; ')));
       let warning = result.warnings?.join('; ') ?? '';
       try {
@@ -110,10 +121,14 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
       } finally {
         notifyLockdownChanged();
       }
-      const message = t('toast.importCompleted', { flows: result.flows ?? 0, scope: result.scope ?? 0 });
+      const message = settingsOnly
+        ? t('project.settingsImported', { scope: result.scope ?? 0, workspace: result.workspace ?? 0 })
+        : t('toast.importCompleted', { flows: result.flows ?? 0, scope: result.scope ?? 0 });
       showToast({ message: warning ? `${message} ${warning}` : message, tone: warning ? 'info' : 'success', category: 'project' });
     } catch (err) {
-      setError(msg('project.importFailed', { message: (err as Error).message }));
+      setError(msg(settingsOnly ? 'project.settingsImportFailed' : 'project.importFailed', {
+        message: (err as Error).message,
+      }));
     } finally {
       setBusy(false);
     }
@@ -151,9 +166,9 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
           {activeExport === 'json' && <Spinner label={t('project.working')} />}
           {t('project.export')}
         </button>
-        <button type="button" disabled={busy} aria-busy={activeExport === 'noFlows'} aria-label={t('project.exportNoFlows')} onClick={() => void download(false)}>
-          {activeExport === 'noFlows' && <Spinner label={t('project.working')} />}
-          {t('project.exportNoFlows')}
+        <button type="button" disabled={busy} aria-busy={activeExport === 'settings'} aria-label={t('project.exportSettings')} onClick={() => void download(false)}>
+          {activeExport === 'settings' && <Spinner label={t('project.working')} />}
+          {t('project.exportSettings')}
         </button>
         <label className="import-button">
           {t('project.import')}
@@ -165,6 +180,20 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) setImportFile(file);
+              event.target.value = '';
+            }}
+          />
+        </label>
+        <label className="import-button">
+          {t('project.importSettings')}
+          <input
+            type="file"
+            accept=".json,application/json"
+            aria-label={t('project.importSettings')}
+            disabled={busy}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) setSettingsImportFile(file);
               event.target.value = '';
             }}
           />
@@ -183,6 +212,17 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
         onConfirm={() => {
           setSwitchOpen(false);
           void onSwitchProject?.();
+        }}
+      />
+      <ConfirmDialog
+        open={settingsImportFile !== null}
+        title={t('project.importSettings')}
+        message={t('project.confirmSettingsImport')}
+        confirmLabel={t('project.importSettings')}
+        onCancel={() => setSettingsImportFile(null)}
+        onConfirm={() => {
+          if (settingsImportFile) void upload(settingsImportFile, true);
+          setSettingsImportFile(null);
         }}
       />
       <ConfirmDialog

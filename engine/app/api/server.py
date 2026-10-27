@@ -872,8 +872,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True, **prepared.counts, "warnings": warnings}
 
     @app.post("/api/project/import")
-    async def import_project(request: Request) -> dict[str, Any]:
-        """Import JSON or a complete SQLite backup; stream uploads to disk."""
+    async def import_project(
+        request: Request, settings_only: bool = False
+    ) -> dict[str, Any]:
+        """Import a project, or apply a JSON settings export without its capture."""
         prepared: PreparedDatabase | None = None
         upload_path: Path | None = None
         try:
@@ -888,6 +890,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             def read_upload() -> Any:
                 with open(upload.name, "rb") as source:
                     if source.read(16) == SQLITE_HEADER:
+                        if settings_only:
+                            raise ValueError(
+                                "project settings import only accepts a JSON settings export"
+                            )
                         return prepare_database(upload.name)
                     source.seek(0)
                     try:
@@ -920,6 +926,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise ValueError("not a Lanius project")
             if payload.get("version") != 1:
                 raise ValueError(f"unsupported project version: {payload.get('version')!r}")
+            if settings_only and "flows" in payload:
+                raise ValueError(
+                    "project settings import does not accept captured requests"
+                )
             async with project_import_lock:
                 was_locked = lockdown.project_enabled
                 was_scope_egress = lockdown.scope_egress_effective

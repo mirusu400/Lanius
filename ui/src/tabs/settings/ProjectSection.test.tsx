@@ -46,6 +46,12 @@ beforeEach(async () => {
   };
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url.endsWith('/api/project/import?settings_only=true')) {
+      if (importReady) await importReady;
+      if (failImport) return response({ detail: 'invalid settings import' }, 422);
+      workspace = imported;
+      return response({ ok: true, flows: 0, scope: 2, workspace: Object.keys(imported).length, warnings: importWarnings });
+    }
     if (url.endsWith('/api/project/import')) {
       if (importReady) await importReady;
       if (failImport) return response({ detail: 'invalid import' }, 422);
@@ -83,6 +89,15 @@ async function upload(file = new File(['{"format":"lanius-project","version":1}'
   await user.upload(screen.getByLabelText(t('project.import'), { selector: 'input' }), file);
   const dialog = screen.getByRole('dialog', { name: t('project.import') });
   await user.click(within(dialog).getByRole('button', { name: t('project.import') }));
+}
+
+async function uploadSettings(file = new File(['{"format":"lanius-project","version":1}'], 'settings.json', { type: 'application/json' })) {
+  render(<ProjectSection />);
+  const user = userEvent.setup();
+  await user.upload(screen.getByLabelText(t('project.importSettings'), { selector: 'input' }), file);
+  const dialog = screen.getByRole('dialog', { name: t('project.importSettings') });
+  expect(within(dialog).getByText(t('project.confirmSettingsImport'))).toBeTruthy();
+  await user.click(within(dialog).getByRole('button', { name: t('project.importSettings') }));
 }
 
 it('restores all editors and saves future edits into the imported workspace', async () => {
@@ -125,6 +140,28 @@ it('retains the old draft and autosave when the server rejects the import', asyn
   expect((workspace.replay as ReplayTab[])[0].text).toBe('keep this draft');
 });
 
+it('imports settings through the settings-only endpoint and reloads saved tabs', async () => {
+  updateTab('old-replay', { text: 'pending before settings import' });
+  const file = new File(['{"format":"lanius-project","version":1}'], 'settings.lanius.json', { type: 'application/json' });
+  await uploadSettings(file);
+  expect(await screen.findAllByText(t('project.settingsImported', { scope: '2', workspace: '3' }))).toHaveLength(2);
+  expect(getTabs().map((tab) => tab.text)).toEqual(['imported request']);
+  expect(getDecoderTabs().map((tab) => tab.input)).toEqual(['imported payload']);
+  expect(vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/api/project/import?settings_only=true'))?.[1]).toMatchObject({
+    body: file, headers: { 'Content-Type': 'application/json' },
+  });
+});
+
+it('keeps the old workspace when a settings import is rejected', async () => {
+  failImport = true;
+  updateTab('old-replay', { text: 'keep settings draft' });
+  await uploadSettings();
+  await screen.findByText(t('project.settingsImportFailed', { message: 'invalid settings import' }));
+  await flushAutosaves();
+  expect(getTabs()[0].text).toBe('keep settings draft');
+  expect((workspace.replay as ReplayTab[])[0].text).toBe('keep settings draft');
+});
+
 it('accepts a SQLite backup and shows progress until its imported tabs have loaded', async () => {
   let finish: () => void = () => {};
   importReady = new Promise<void>((resolve) => { finish = resolve; });
@@ -151,10 +188,10 @@ it('loads the committed workspace when restoration succeeds but the proxy report
 });
 
 it.each([
-  ['project.export', 'json', true],
-  ['project.exportNoFlows', 'json', false],
-  ['project.backupDatabase', 'database', true],
-] as const)('uses a native Save As for %s and saves pending edits before export', async (label, kind, includeFlows) => {
+  ['project.export', 'json', true, /^lanius-\d{4}-\d{2}-\d{2}\.lanius\.json$/],
+  ['project.exportSettings', 'json', false, /^lanius-settings-\d{4}-\d{2}-\d{2}\.lanius\.json$/],
+  ['project.backupDatabase', 'database', true, /^lanius-project\.sqlite$/],
+] as const)('uses a native Save As for %s and saves pending edits before export', async (label, kind, includeFlows, filename) => {
   const invoke = vi.fn(async () => {
     expect((workspace.replay as ReplayTab[])[0].text).toBe('last edit before export');
     return '/chosen/location/project-file';
@@ -166,13 +203,13 @@ it.each([
   await screen.findByText(t('project.savedFile', { path: '/chosen/location/project-file' }));
   expect(invoke).toHaveBeenCalledWith('save_project_file', {
     kind, includeFlows, title: t(label),
-    defaultName: kind === 'database' ? 'lanius-project.sqlite' : expect.stringMatching(/^lanius-\d{4}-\d{2}-\d{2}\.lanius\.json$/),
+    defaultName: expect.stringMatching(filename),
   });
 });
 
 it.each([
   'project.export',
-  'project.exportNoFlows',
+  'project.exportSettings',
   'project.backupDatabase',
 ] as const)('shows the circular loader on %s while the file is being saved', async (label) => {
   let finish: (path: string) => void = () => {};
