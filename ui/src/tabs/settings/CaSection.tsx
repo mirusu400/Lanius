@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import {
   downloadCaCertificate,
   getCaInfo,
+  isDesktop,
+  saveDesktopCaCertificate,
   type CaInfo,
 } from '../../api/client';
 import { ExternalLink } from '../../components/ExternalLink';
@@ -33,6 +35,13 @@ export function CaSection({ onError }: { onError?: (message: string) => void }) 
 
   const download = async (format: string) => {
     try {
+      if (isDesktop()) {
+        await saveDesktopCaCertificate(
+          format,
+          t('settings.caDownload', { format }),
+        );
+        return;
+      }
       const blob = await downloadCaCertificate(format);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');

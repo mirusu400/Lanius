@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
+mod ca_export;
 mod doctor;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -1473,6 +1474,7 @@ pub fn run() {
             startup_progress,
             close_project,
             doctor::run_doctor,
+            ca_export::save_ca_certificate,
             project_export::save_project_file,
             close_ready,
             cancel_close,

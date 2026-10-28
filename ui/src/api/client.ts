@@ -1074,6 +1074,16 @@ export async function downloadCaCertificate(format: string): Promise<Blob> {
   return res.blob();
 }
 
+/** Native Save As for a public CA certificate in the desktop app. */
+export function saveDesktopCaCertificate(
+  format: string, title: string,
+): Promise<string | null> {
+  const internals = (window as unknown as {
+    __TAURI_INTERNALS__: { invoke(cmd: string, args: unknown): Promise<string | null> };
+  }).__TAURI_INTERNALS__;
+  return internals.invoke('save_ca_certificate', { format, title });
+}
+
 export function getDashboard(top = 8): Promise<import('./types').Dashboard> {
   return request(`/api/dashboard?top=${top}`);
 }

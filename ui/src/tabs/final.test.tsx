@@ -284,6 +284,22 @@ describe('SettingsTab', () => {
     expect(p12.disabled).toBe(true);
   });
 
+  it('uses the native Save As dialog for CA downloads in the desktop app', async () => {
+    const invoke = vi.fn(async () => 'C:\\Users\\tester\\mitmproxy-ca-cert.pem');
+    vi.stubGlobal('__TAURI_INTERNALS__', { invoke });
+    render(<CaSection />);
+
+    await userEvent.setup().click(await screen.findByRole('button', {
+      name: t('settings.caDownload', { format: 'pem' }),
+    }));
+
+    expect(invoke).toHaveBeenCalledWith('save_ca_certificate', {
+      format: 'pem',
+      title: t('settings.caDownload', { format: 'pem' }),
+    });
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/api/ca/pem'))).toHaveLength(0);
+  });
+
   it('links to mitm.it for device installation', async () => {
     render(<CaSection />);
     const link = (await screen.findByText('mitm.it')) as HTMLAnchorElement;

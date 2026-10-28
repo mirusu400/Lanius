@@ -68,8 +68,28 @@ fn save_to_path(
     kind: ExportKind,
     include_flows: bool,
 ) -> Result<(), String> {
+    save_engine_file(
+        path,
+        port,
+        token,
+        &kind.endpoint(include_flows),
+        "Project export",
+    )
+}
+
+/// Stream one response from the authenticated loopback engine into a file.
+///
+/// Callers keep the endpoint fixed to a small, validated enum so an invoked
+/// command can never turn this local-only client into an arbitrary downloader.
+pub(crate) fn save_engine_file(
+    path: &Path,
+    port: u16,
+    token: &str,
+    endpoint: &str,
+    failure_label: &str,
+) -> Result<(), String> {
     // This can connect only to the authenticated local engine. Never honor
-    // system proxies or redirects: neither may turn an export into egress.
+    // system proxies or redirects: neither may turn a local save into egress.
     // The updater enables reqwest's rustls-no-provider feature globally.
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
@@ -82,11 +102,7 @@ fn save_to_path(
         .build()
         .map_err(|error| error.to_string())?;
     let mut response = client
-        .get(format!(
-            "http://{}:{port}{}",
-            crate::API_HOST,
-            kind.endpoint(include_flows)
-        ))
+        .get(format!("http://{}:{port}{endpoint}", crate::API_HOST))
         .bearer_auth(token)
         .send()
         .map_err(|error| error.to_string())?;
@@ -97,11 +113,11 @@ fn save_to_path(
         let detail = serde_json::from_str::<serde_json::Value>(&body)
             .ok()
             .and_then(|value| value.get("detail")?.as_str().map(str::to_string));
-        return Err(detail.unwrap_or_else(|| format!("Project export failed: {status}")));
+        return Err(detail.unwrap_or_else(|| format!("{failure_label} failed: {status}")));
     }
 
-    // Stream large SQLite snapshots without passing all bytes through the UI.
-    // Commit only a complete file, so failed exports preserve an older backup.
+    // Stream without passing the bytes through the UI. Commit only a complete
+    // response, so a failed save preserves any older file at the destination.
     let parent = path
         .parent()
         .ok_or("The selected path has no parent directory")?;
