@@ -1168,6 +1168,108 @@ def test_project_settings_import_rejects_capture_and_database_files(client) -> N
     assert "JSON settings export" in response.json()["detail"]
 
 
+def test_burp_settings_import_maps_supported_settings_and_keeps_lanius_data(client) -> None:
+    seed(client, "kept-during-burp-import")
+    client.put("/api/workspace/replay", json={"value": [{"id": "keep-me"}]})
+    client.post("/api/scope/rules", json={"kind": "include", "host": "old.example"})
+
+    burp = {
+        "target": {
+            "scope": {
+                "advanced_mode": False,
+                "include": [{
+                    "enabled": True,
+                    "host": r"example\.com",
+                    "file": r"\/api\/.*",
+                    "protocol": "https",
+                }],
+                "exclude": [{
+                    "enabled": True,
+                    "host": r"static\.example\.com",
+                    "protocol": "any",
+                }],
+            }
+        },
+        "proxy": {
+            "match_replace_rules": [{
+                "comment": "Imported header",
+                "enabled": True,
+                "is_simple_match": False,
+                "rule_type": "request_header",
+                "string_match": "^X-Old:.*$",
+                "string_replace": "X-New: yes",
+            }],
+            "request_listeners": [{
+                "listen_mode": "loopback_only",
+                "listener_port": 18888,
+                "running": True,
+            }],
+            "miscellaneous": {
+                "disable_out_of_scope_logging_to_history_and_site_map": True,
+            },
+        },
+        "project_options": {
+            "http": {"http2": {"enable_http2": False}},
+            "connections": {
+                "socks_proxy": {"use_proxy": False},
+                "upstream_proxy": {"servers": [{"destination_host": "internal.example"}]},
+            },
+            # These are deliberately present to prove that the converter does
+            # not import secrets or trust decisions.
+            "ssl": {"client_certificates": [{"password": "do-not-import"}]},
+            "sessions": {"macros": [{"name": "do-not-run"}]},
+        },
+    }
+
+    response = client.post("/api/project/import?settings_only=true", json=burp)
+
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["source"] == "burp"
+    assert result["scope"] == 2
+    assert result["match_replace"] == 1
+    assert result["listeners"] == 1
+    assert result["skipped"] == 1
+    assert client.app.state.store.get("kept-during-burp-import") is not None
+    assert client.get("/api/workspace/replay").json()["value"] == [{"id": "keep-me"}]
+    scope = client.get("/api/scope").json()
+    assert scope["restrict_capture"] is True
+    assert {(rule["kind"], rule["host"], rule["path"]) for rule in scope["rules"]} == {
+        ("include", r"example\.com", r"\/api\/.*"),
+        ("exclude", r"static\.example\.com", ".*"),
+    }
+    rules = client.get("/api/match-replace").json()["rules"]
+    assert rules == [{
+        "id": "burp-1",
+        "name": "Imported header",
+        "enabled": True,
+        "phase": "request",
+        "target": "headers",
+        "match": "^X-Old:.*$",
+        "replace": "X-New: yes",
+        "regex": True,
+        "case_sensitive": True,
+    }]
+    assert client.get("/api/http-protocol").json()["mode"] == "http1.1"
+    listener = client.get("/api/listeners").json()["listeners"][0]
+    assert (listener["host"], listener["port"]) == ("127.0.0.1", 18888)
+    exported = client.get("/api/project/export?include_flows=false").json()
+    assert "do-not-import" not in json.dumps(exported)
+    assert "do-not-run" not in json.dumps(exported)
+
+
+def test_burp_empty_scope_maps_to_nothing_in_scope(client) -> None:
+    response = client.post(
+        "/api/project/import?settings_only=true",
+        json={"target": {"scope": {"include": [], "exclude": []}}},
+    )
+    assert response.status_code == 200, response.text
+    rules = client.get("/api/scope").json()["rules"]
+    assert len(rules) == 1
+    assert rules[0]["host"] == r"(?!)"
+    assert client.get("/api/scope/check?url=https://example.com/").json()["in_scope"] is False
+
+
 def test_import_restores_scope_workspace_and_flows(client) -> None:
     seed(client, "f1", host="imported.example")
     client.put("/api/workspace/replay", json={"value": [{"id": "r1"}]})

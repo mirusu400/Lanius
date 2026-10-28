@@ -8,6 +8,7 @@ import { renderWithI18n as render, t } from './test-utils';
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   delete (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   setApiBase('http://127.0.0.1:12954');
 });
@@ -69,6 +70,53 @@ it('shows what the engine is doing while a project starts', async () => {
 
   finish({ id: 'temp', name: 'Temporary project', temporary: true, dbPath: '/tmp/t.sqlite', lastOpened: 0 });
   await waitFor(() => expect(onOpen).toHaveBeenCalledOnce());
+});
+
+it('creates a saved project and applies Burp settings chosen on the landing page', async () => {
+  const project = {
+    id: 'imported', name: 'demo', temporary: false,
+    dbPath: '/projects/imported/lanius.sqlite', lastOpened: 0,
+  };
+  const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
+    if (command === 'list_projects') return [];
+    if (command === 'get_global_lockdown') return { enabled: false, forced: false };
+    if (command === 'create_project') {
+      expect(args).toEqual({ name: 'demo' });
+      return project;
+    }
+    if (command === 'startup_progress') return null;
+    throw new Error(`unexpected command: ${command}`);
+  });
+  Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: { invoke } });
+  const fetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith('/api/project/import?settings_only=true')) {
+      return { ok: true, json: async () => ({
+        ok: true, source: 'burp', flows: 0, scope: 1, workspace: 0,
+        match_replace: 1, listeners: 1, skipped: 0, warnings: [],
+      }) } as Response;
+    }
+    if (url.endsWith('/api/lockdown')) {
+      return { ok: true, json: async () => ({ effective: false, project_enabled: false }) } as Response;
+    }
+    throw new Error(`unexpected request: ${url}`);
+  });
+  vi.stubGlobal('fetch', fetch);
+  const onOpen = vi.fn();
+  render(<ProjectPicker onOpen={onOpen} />);
+  const user = userEvent.setup();
+  const file = new File([JSON.stringify({
+    target: { scope: { include: [{ enabled: true }] } },
+    proxy: { match_replace_rules: [{}], request_listeners: [{}] },
+  })], 'demo_burp_config.json', { type: 'application/json' });
+
+  await user.upload(screen.getByLabelText(t('project.importSettings'), { selector: 'input' }), file);
+  const dialog = await screen.findByRole('dialog', { name: t('project.importSettings') });
+  expect(dialog.textContent).toContain('demo');
+  await user.click(screen.getByRole('button', { name: t('project.importSettings') }));
+
+  await waitFor(() => expect(onOpen).toHaveBeenCalledWith(project));
+  expect(fetch.mock.calls.find(([url]) => String(url).endsWith('/api/project/import?settings_only=true'))?.[1]).toMatchObject({ body: file });
 });
 
 it('removes the progress overlay and shows the error when a project fails to start', async () => {

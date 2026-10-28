@@ -467,7 +467,7 @@ const en: DocPage[] = [
           },
           {
             kind: 'note',
-            body: 'Import project accepts JSON exports and Lanius SQLite backups (.sqlite, .sqlite3, .db). SQLite restores binary bodies, WebSocket messages, bookmarks, issues and saved payload lists. Import project settings accepts only capture-free JSON settings exports and keeps the current HTTP history while replacing scope, settings, saved tabs, issues, and Fuzzer runs. Pending tab writes finish before either import.',
+            body: 'Import project accepts JSON exports and Lanius SQLite backups (.sqlite, .sqlite3, .db). SQLite restores binary bodies, WebSocket messages, bookmarks, issues and saved payload lists. Import Lanius / Burp settings accepts capture-free Lanius settings or Burp settings JSON. A Burp import converts supported scope, Match & Replace, listener, HTTP and connection settings, but never credentials, certificates, TLS bypasses, extensions, macros or scheduled tasks. Drop either settings file anywhere in the window to preview and confirm it; dropping one on the startup chooser creates a named project. Pending tab writes finish before an open-project import.',
           },
         ],
       },
@@ -933,7 +933,7 @@ const ko: DocPage[] = [
           },
           {
             kind: 'note',
-            body: '프로젝트 가져오기는 JSON 내보내기와 Lanius SQLite 백업(.sqlite, .sqlite3, .db)을 지원합니다. SQLite는 바이너리 본문, WebSocket 메시지, 북마크, 이슈, 저장된 페이로드 목록까지 복원합니다. 프로젝트 설정 가져오기는 캡처가 없는 JSON 설정 파일만 받으며, 현재 HTTP 기록을 유지한 채 범위, 설정, 저장된 탭, Issues, Fuzzer 실행 기록을 대체합니다. 두 가져오기 모두 진행 중인 탭 저장을 먼저 완료합니다.',
+            body: '프로젝트 가져오기는 JSON 내보내기와 Lanius SQLite 백업(.sqlite, .sqlite3, .db)을 지원합니다. SQLite는 바이너리 본문, WebSocket 메시지, 북마크, 이슈, 저장된 페이로드 목록까지 복원합니다. Lanius / Burp 설정 가져오기는 캡처 없는 Lanius 설정 또는 Burp 설정 JSON을 받습니다. Burp에서는 지원되는 범위, Match & Replace, 리스너, HTTP 및 연결 설정만 변환하며 인증정보, 인증서, TLS 우회, 확장, 매크로, 예약 작업은 가져오지 않습니다. 설정 파일은 창 어디에나 드롭해 미리 확인할 수 있고, 시작 화면에 드롭하면 파일명으로 새 프로젝트를 만듭니다. 열린 프로젝트에 적용할 때는 진행 중인 탭 저장을 먼저 완료합니다.',
           },
         ],
       },

@@ -7163,6 +7163,30 @@ pre.response-preview-text {
   display: none;
 }
 
+.settings-file-drop-overlay {
+  position: fixed;
+  inset: 18px;
+  z-index: 1000;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 88%, var(--accent));
+  box-shadow: 0 12px 60px #0008;
+  color: var(--fg);
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}
+
+.settings-file-drop-overlay span {
+  color: var(--muted);
+  font-size: .78em;
+  font-weight: 400;
+}
+
 .compact-summary {
   display: flex;
   flex-wrap: wrap;

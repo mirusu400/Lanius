@@ -96,7 +96,13 @@ async function uploadSettings(file = new File(['{"format":"lanius-project","vers
   const user = userEvent.setup();
   await user.upload(screen.getByLabelText(t('project.importSettings'), { selector: 'input' }), file);
   const dialog = screen.getByRole('dialog', { name: t('project.importSettings') });
-  expect(within(dialog).getByText(t('project.confirmSettingsImport'))).toBeTruthy();
+  expect(within(dialog).getByText(t('project.confirmDetectedSettingsImport', {
+    file: file.name,
+    source: t('project.settingsSourceLanius'),
+    scope: 0,
+    matchReplace: 0,
+    listeners: 0,
+  }))).toBeTruthy();
   await user.click(within(dialog).getByRole('button', { name: t('project.importSettings') }));
 }
 

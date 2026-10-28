@@ -36,7 +36,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'language', group: 'appearance', title: 'settings.languageSection', keys: ['settings.language', 'settings.languageHelp'], aliases: 'language locale English Korean 언어 한국어 영어' },
   { id: 'mcp', group: 'integrations', title: 'mcp.section', prefixes: ['mcp.'], aliases: 'MCP API agent Codex Claude port 토큰 에이전트 연동 포트' },
   { id: 'lockdown', group: 'security', title: 'lockdown.title', prefixes: ['lockdown.'], aliases: 'egress offline scope security outbound 네트워크 보안 외부 연결 범위' },
-  { id: 'project', group: 'project', title: 'project.section', prefixes: ['project.'], keys: ['startup.switch'], aliases: 'project import export backup JSON SQLite save 프로젝트 가져오기 내보내기 백업 저장 경로' },
+  { id: 'project', group: 'project', title: 'project.section', prefixes: ['project.'], keys: ['startup.switch'], aliases: 'project import export backup JSON SQLite Burp settings drag drop save 프로젝트 버프 설정 드래그 드롭 가져오기 내보내기 백업 저장 경로' },
   { id: 'media-storage', group: 'project', title: 'captureStorage.section', prefixes: ['captureStorage.'], aliases: 'media storage body limit image audio video 5MB 미디어 본문 저장 용량 제한 이미지 오디오 비디오' },
   { id: 'document-cache', group: 'project', title: 'documentCache.section', prefixes: ['documentCache.'], aliases: 'HTTP History request response preview document memory cache MiB 요청 응답 미리보기 문서 메모리 캐시 비우기' },
   { id: 'compact', group: 'project', title: 'compact.title', prefixes: ['compact.'], aliases: 'compact vacuum disk storage delete database 용량 압축 정리 삭제 디스크 데이터베이스' },

@@ -5,7 +5,6 @@ import {
   exportProject,
   getLockdown,
   importProjectFile,
-  importProjectSettingsFile,
   downloadProjectBackup,
   restartProjectEngine,
   isDesktop,
@@ -18,6 +17,14 @@ import type { Project } from '../../projects';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Spinner } from '../../components/Spinner';
 import { useToast } from '../../components/Toast';
+import {
+  applySettingsImport,
+  inspectSettingsFile,
+  settingsImportConfirmation,
+  settingsImportError,
+  settingsImportSuccess,
+  type SettingsImportCandidate,
+} from '../../settingsImport';
 import {
   msg,
   rawMsg,
@@ -44,7 +51,7 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
   const [error, setError] = useState<Message | null>(null);
   const [switchOpen, setSwitchOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [settingsImportFile, setSettingsImportFile] = useState<File | null>(null);
+  const [settingsImport, setSettingsImport] = useState<SettingsImportCandidate | null>(null);
 
   const download = async (includeFlows: boolean, database = false) => {
     setActiveExport(database ? 'database' : includeFlows ? 'json' : 'settings');
@@ -95,34 +102,36 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
     setError(null);
     setNote(null);
     try {
-      const result = await replaceWorkspace(() => settingsOnly
-        ? importProjectSettingsFile(file)
-        : importProjectFile(file));
+      const imported = settingsOnly
+        ? await applySettingsImport(file)
+        : { result: await replaceWorkspace(() => importProjectFile(file)), warning: '' };
+      const result = imported.result;
       onProjectImported?.();
+      const success = settingsOnly ? settingsImportSuccess(result, t) : '';
       setNote(settingsOnly
-        ? msg('project.settingsImported', {
-            scope: String(result.scope ?? 0),
-            workspace: String(result.workspace ?? 0),
-          })
+        ? rawMsg(success)
         : msg('project.imported', {
             flows: String(result.flows ?? 0),
             scope: String(result.scope ?? 0),
           }));
       if (result.warnings?.length) setError(rawMsg(result.warnings.join('; ')));
-      let warning = result.warnings?.join('; ') ?? '';
-      try {
-        const lockdown = await getLockdown();
-        if (lockdown.effective) resetUpdates();
-        if (lockdown.project_enabled) await restartProjectEngine();
-      } catch (err) {
-        const detail = String(err instanceof Error ? err.message : err);
-        warning = [warning, detail].filter(Boolean).join('; ');
-        setError(rawMsg(warning));
-      } finally {
-        notifyLockdownChanged();
+      let warning = imported.warning;
+      if (!settingsOnly) {
+        warning = result.warnings?.join('; ') ?? '';
+        try {
+          const lockdown = await getLockdown();
+          if (lockdown.effective) resetUpdates();
+          if (lockdown.project_enabled) await restartProjectEngine();
+        } catch (err) {
+          const detail = String(err instanceof Error ? err.message : err);
+          warning = [warning, detail].filter(Boolean).join('; ');
+          setError(rawMsg(warning));
+        } finally {
+          notifyLockdownChanged();
+        }
       }
       const message = settingsOnly
-        ? t('project.settingsImported', { scope: result.scope ?? 0, workspace: result.workspace ?? 0 })
+        ? success
         : t('toast.importCompleted', { flows: result.flows ?? 0, scope: result.scope ?? 0 });
       showToast({ message: warning ? `${message} ${warning}` : message, tone: warning ? 'info' : 'success', category: 'project' });
     } catch (err) {
@@ -193,7 +202,11 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
             disabled={busy}
             onChange={(event) => {
               const file = event.target.files?.[0];
-              if (file) setSettingsImportFile(file);
+              if (file) {
+                void inspectSettingsFile(file)
+                  .then(setSettingsImport)
+                  .catch((err: unknown) => setError(rawMsg(settingsImportError(err, t))));
+              }
               event.target.value = '';
             }}
           />
@@ -215,14 +228,14 @@ export function ProjectSection({ project, onSwitchProject, switchingProject = fa
         }}
       />
       <ConfirmDialog
-        open={settingsImportFile !== null}
+        open={settingsImport !== null}
         title={t('project.importSettings')}
-        message={t('project.confirmSettingsImport')}
+        message={settingsImport ? settingsImportConfirmation(settingsImport, t) : ''}
         confirmLabel={t('project.importSettings')}
-        onCancel={() => setSettingsImportFile(null)}
+        onCancel={() => setSettingsImport(null)}
         onConfirm={() => {
-          if (settingsImportFile) void upload(settingsImportFile, true);
-          setSettingsImportFile(null);
+          if (settingsImport) void upload(settingsImport.file, true);
+          setSettingsImport(null);
         }}
       />
       <ConfirmDialog

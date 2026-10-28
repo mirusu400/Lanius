@@ -1855,6 +1855,54 @@ class FlowStore:
             rows = self._conn.execute("SELECT key, value FROM settings").fetchall()
         return {row["key"]: row["value"] for row in rows}
 
+    def import_settings_subset(
+        self,
+        *,
+        scope: List[dict[str, Any]] | None,
+        settings: dict[str, str],
+    ) -> dict[str, int]:
+        """Apply settings translated from an external tool.
+
+        Unlike a native Lanius settings export, an external file has no
+        workspace, issue, Fuzzer, or observation data to replace.  Updating
+        only the represented categories also keeps the conversion allowlist
+        from turning absent Burp fields into destructive defaults.
+        """
+
+        with self._lock:
+            with self._conn:
+                if scope is not None:
+                    self._conn.execute("DELETE FROM scope_rules")
+                    for rule in scope:
+                        self._conn.execute(
+                            "INSERT INTO scope_rules (kind, host, path, protocol,"
+                            " port, match_type, enabled) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (
+                                rule.get("kind", "include"),
+                                rule.get("host", "*"),
+                                rule.get("path", "*"),
+                                rule.get("protocol", "any"),
+                                rule.get("port"),
+                                rule.get("match_type", "glob"),
+                                int(bool(rule.get("enabled", True))),
+                            ),
+                        )
+                for key, value in settings.items():
+                    self._conn.execute(
+                        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                        (key, value),
+                    )
+            self.media_body_limit_mb = read_limit(self.get_setting(MEDIA_BODY_LIMIT_SETTING))
+
+        return {
+            "scope": len(scope) if scope is not None else 0,
+            "workspace": 0,
+            "settings": len(settings),
+            "flows": 0,
+            "issues": 0,
+            "egress_ip_observations": 0,
+        }
+
     def import_project(self, data: dict[str, Any]) -> dict[str, int]:
         """Replace the open project with an exported one.
 

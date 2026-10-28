@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { API_BASE, getGlobalLockdown, setDesktopApiPort, setGlobalLockdown, type GlobalLockdownStatus } from './api/client';
 import { useT, type TranslationKey } from './i18n';
 import {
+  closeProject,
   createProject,
   getStartupProgress,
   listProjects,
@@ -18,6 +19,18 @@ import { StartupDoctor } from './StartupDoctor';
 import { Spinner } from './components/Spinner';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { formatBytes } from './tabs/dashboardModel';
+import { useToast } from './components/Toast';
+import { SettingsFileDropOverlay } from './components/SettingsFileDrop';
+import { useSettingsFileDrop } from './components/useSettingsFileDrop';
+import {
+  applySettingsImport,
+  inspectSettingsFile,
+  settingsImportConfirmation,
+  settingsImportError,
+  settingsImportSuccess,
+  settingsProjectName,
+  type SettingsImportCandidate,
+} from './settingsImport';
 
 /** How often the picker asks the shell what the starting engine is doing. */
 const PROGRESS_POLL_MS = 300;
@@ -34,6 +47,7 @@ const STAGES: Record<string, TranslationKey> = {
 
 export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }) {
   const t = useT();
+  const { showToast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -47,6 +61,15 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
   const [opening, setOpening] = useState(false);
   const [progress, setProgress] = useState<StartupProgress | null>(null);
   const [upgrade, setUpgrade] = useState<{ project: Project; migration: PendingMigration } | null>(null);
+  const [settingsImport, setSettingsImport] = useState<SettingsImportCandidate | null>(null);
+
+  const queueSettingsImport = useCallback((file: File) => {
+    setError(null);
+    void inspectSettingsFile(file)
+      .then(setSettingsImport)
+      .catch((reason: unknown) => setError(settingsImportError(reason, t)));
+  }, [t]);
+  const settingsDropActive = useSettingsFileDrop(queueSettingsImport, busy || opening);
 
   useEffect(() => {
     if (!opening) return;
@@ -103,6 +126,39 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
     }
   };
 
+  const startFromSettings = async (candidate: SettingsImportCandidate, projectName: string) => {
+    setBusy(true);
+    setOpening(true);
+    setProgress(null);
+    setError(null);
+    let created = false;
+    try {
+      const project = await createProject(projectName);
+      created = true;
+      const { result, warning } = await applySettingsImport(candidate.file);
+      const message = settingsImportSuccess(result, t);
+      showToast({
+        message: warning ? `${message} ${warning}` : message,
+        tone: warning ? 'info' : 'success',
+        category: 'project',
+      });
+      onOpen(project);
+    } catch (reason) {
+      if (created) {
+        try {
+          await closeProject();
+          setProjects(await listProjects());
+        } catch {
+          // Preserve the import error below. The shell reports any still-open
+          // project when the user retries or restarts.
+        }
+      }
+      setError(settingsImportError(reason, t));
+      setBusy(false);
+      setOpening(false);
+    }
+  };
+
   /** Open a saved project, asking first if its database must be upgraded. */
   const open = async (project: Project) => {
     setBusy(true);
@@ -146,8 +202,13 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
     }
   };
 
+  const importedProjectName = settingsImport
+    ? settingsProjectName(settingsImport.file.name, projects.map((project) => project.name))
+    : '';
+
   return (
     <div className="project-picker">
+      <SettingsFileDropOverlay active={settingsDropActive} />
       {opening && <div className="project-picker-opening">
         <div className="project-picker-opening-card" aria-live="polite">
           <Spinner label={stageText} />
@@ -176,6 +237,21 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
           if (project) void start(() => openProject(project.id, true));
         }}
         onCancel={() => setUpgrade(null)}
+      />
+      <ConfirmDialog
+        open={settingsImport !== null}
+        title={t('project.importSettings')}
+        message={settingsImport
+          ? settingsImportConfirmation(settingsImport, t, importedProjectName)
+          : ''}
+        confirmLabel={t('project.importSettings')}
+        onConfirm={() => {
+          const candidate = settingsImport;
+          const projectName = importedProjectName;
+          setSettingsImport(null);
+          if (candidate) void startFromSettings(candidate, projectName);
+        }}
+        onCancel={() => setSettingsImport(null)}
       />
       <div className="project-picker-main">
         <div className="project-picker-brand">Lanius</div>
@@ -251,6 +327,27 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
             </button>
           </form>
         </div>
+
+        <section className="project-picker-import">
+          <div>
+            <h2>{t('startup.importSettings')}</h2>
+            <p className="muted">{t('startup.importSettingsHelp')}</p>
+          </div>
+          <label className="import-button" aria-disabled={busy}>
+            {t('project.importSettings')}
+            <input
+              type="file"
+              accept=".json,application/json"
+              aria-label={t('project.importSettings')}
+              disabled={busy}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) queueSettingsImport(file);
+                event.target.value = '';
+              }}
+            />
+          </label>
+        </section>
 
         <section className="project-picker-existing">
           <h2>{t('startup.existingTitle')}</h2>

@@ -59,6 +59,7 @@ from ..plugin_samples import bundled_sample_archive, bundled_samples
 from .. import codegen
 from .. import inspector
 from ..build_info import build_info
+from ..burp_import import BurpImportPlan, convert_burp_settings, is_burp_settings
 from ..lockdown import BLOCKED_DETAIL, PROJECT_SETTING, SCOPE_EGRESS_SETTING, LockdownBlocked, LockdownPolicy
 from ..tls_exceptions import TLS_EXCEPTIONS_SETTING, TLS_INSECURE_SETTING
 from ..tls_trust import TRUSTED_CA_SETTING
@@ -922,14 +923,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         # restarting the proxy before releasing the import lock.
                         await restore_task
                         raise
-            if not isinstance(payload, dict) or payload.get("format") != "lanius-project":
-                raise ValueError("not a Lanius project")
-            if payload.get("version") != 1:
-                raise ValueError(f"unsupported project version: {payload.get('version')!r}")
-            if settings_only and "flows" in payload:
-                raise ValueError(
-                    "project settings import does not accept captured requests"
-                )
+            burp_plan: BurpImportPlan | None = None
+            if settings_only and is_burp_settings(payload):
+                burp_plan = convert_burp_settings(payload)
+            else:
+                if is_burp_settings(payload):
+                    raise ValueError(
+                        "Burp settings must be opened with the settings importer"
+                    )
+                if not isinstance(payload, dict) or payload.get("format") != "lanius-project":
+                    raise ValueError("not a Lanius project or Burp settings file")
+                if payload.get("version") != 1:
+                    raise ValueError(f"unsupported project version: {payload.get('version')!r}")
+                if settings_only and "flows" in payload:
+                    raise ValueError(
+                        "project settings import does not accept captured requests"
+                    )
             async with project_import_lock:
                 was_locked = lockdown.project_enabled
                 was_scope_egress = lockdown.scope_egress_effective
@@ -950,15 +959,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await engine.stop()
                 imported = False
                 try:
-                    counts = await asyncio.to_thread(store.import_project, payload)
+                    if burp_plan is None:
+                        counts = await asyncio.to_thread(store.import_project, payload)
+                    else:
+                        counts = await asyncio.to_thread(
+                            store.import_settings_subset,
+                            scope=burp_plan.scope,
+                            settings=burp_plan.settings,
+                        )
                     imported = True
-                    engine.fuzzer.reload()
+                    if burp_plan is None:
+                        engine.fuzzer.reload()
                     for key, value in kept.items():
                         if value is None:
                             store.delete_setting(key)
                         else:
                             store.set_setting(key, value)
-                    warnings: list[str] = []
+                    warnings: list[str] = list(burp_plan.warnings) if burp_plan else []
                     can_resume = False
                     try:
                         await apply_imported_project(was_locked, was_scope_egress)
@@ -976,7 +993,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                 f"Project imported, but the proxy could not restart: {exc}"
                             )
                     broker.publish("project.imported", counts)
-                    return {"ok": True, **counts, "warnings": warnings}
+                    return {
+                        "ok": True,
+                        **counts,
+                        "source": "burp" if burp_plan else "lanius",
+                        "match_replace": burp_plan.match_replace if burp_plan else 0,
+                        "listeners": burp_plan.listeners if burp_plan else 0,
+                        "skipped": burp_plan.skipped if burp_plan else 0,
+                        "warnings": warnings,
+                    }
                 finally:
                     # An invalid upload leaves the old in-memory route intact.
                     # Bring it back because we stopped it before the database

@@ -47,9 +47,20 @@ import { useFuzzerCompletionToast } from "./components/useFuzzerCompletionToast"
 import { DesktopClose } from "./components/DesktopClose";
 import { CurrentProjectButton } from "./components/CurrentProjectButton";
 import { EngineConnectionBanner } from "./components/EngineConnectionBanner";
+import { ConfirmDialog } from "./components/ConfirmDialog";
+import { SettingsFileDropOverlay } from "./components/SettingsFileDrop";
+import { useSettingsFileDrop } from "./components/useSettingsFileDrop";
 import { useEngineConnection } from "./engineConnection";
 import { useShortcut, useShortcuts } from "./useShortcut";
 import { autoCheck, useUpdates } from "./updates";
+import {
+  applySettingsImport,
+  inspectSettingsFile,
+  settingsImportConfirmation,
+  settingsImportError,
+  settingsImportSuccess,
+  type SettingsImportCandidate,
+} from "./settingsImport";
 import "./App.css";
 import "./themePresets.css";
 
@@ -157,9 +168,10 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   const [draggedTab, setDraggedTab] = useState<Tab | null>(null);
   const [dropTarget, setDropTarget] = useState<{ tab: Tab; side: DropSide } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [settingsImporting, setSettingsImporting] = useState(false);
   // Held back until the wait is long enough to notice, so a tab that
   // loads in a few frames does not flash a spinner.
-  const showSpinner = useDelayedBusy(busy);
+  const showSpinner = useDelayedBusy(busy || settingsImporting);
   const onBusyChange = useCallback((value: boolean) => setBusy(value), []);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
@@ -171,6 +183,42 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   const [lockdownActive, setLockdownActive] = useState(false);
   const { showToast } = useToast();
   const notifyFuzzerFinished = useFuzzerCompletionToast();
+  const [settingsImport, setSettingsImport] = useState<SettingsImportCandidate | null>(null);
+  const queueSettingsImport = useCallback((file: File) => {
+    void inspectSettingsFile(file)
+      .then(setSettingsImport)
+      .catch((reason: unknown) => showToast({
+        message: settingsImportError(reason, t),
+        tone: 'error',
+        category: 'project',
+      }));
+  }, [showToast, t]);
+  const settingsDropActive = useSettingsFileDrop(
+    queueSettingsImport,
+    switching || settingsImporting,
+  );
+
+  const importDroppedSettings = async (candidate: SettingsImportCandidate) => {
+    setSettingsImporting(true);
+    try {
+      const { result, warning } = await applySettingsImport(candidate.file);
+      onProjectImported();
+      const message = settingsImportSuccess(result, t);
+      showToast({
+        message: warning ? `${message} ${warning}` : message,
+        tone: warning ? 'info' : 'success',
+        category: 'project',
+      });
+    } catch (reason) {
+      showToast({
+        message: settingsImportError(reason, t),
+        tone: 'error',
+        category: 'project',
+      });
+    } finally {
+      setSettingsImporting(false);
+    }
+  };
 
   const refreshScannerAvailability = useCallback(() => {
     void getScannerState()
@@ -307,6 +355,19 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
       switching ? 'switching' : '',
       engineConnection.status === 'offline' ? 'engine-unavailable' : '',
     ].filter(Boolean).join(' ')}>
+      <SettingsFileDropOverlay active={settingsDropActive} />
+      <ConfirmDialog
+        open={settingsImport !== null}
+        title={t('project.importSettings')}
+        message={settingsImport ? settingsImportConfirmation(settingsImport, t) : ''}
+        confirmLabel={t('project.importSettings')}
+        onCancel={() => setSettingsImport(null)}
+        onConfirm={() => {
+          const candidate = settingsImport;
+          setSettingsImport(null);
+          if (candidate) void importDroppedSettings(candidate);
+        }}
+      />
       <header className="titlebar">
         <button
           type="button"

@@ -1328,6 +1328,10 @@ export interface ProjectImportResult {
   flows: number;
   scope: number;
   workspace: number;
+  source?: 'lanius' | 'burp';
+  match_replace?: number;
+  listeners?: number;
+  skipped?: number;
   warnings?: string[];
 }
 

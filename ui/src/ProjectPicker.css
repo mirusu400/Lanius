@@ -88,6 +88,20 @@
 .project-picker-card input { width: 100%; margin-bottom: 12px; }
 .project-picker-card button { margin-top: auto; }
 
+.project-picker-import {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 16px;
+  padding: 18px 22px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg-alt);
+}
+.project-picker-import p { margin: 0; }
+.project-picker-import .import-button { flex: 0 0 auto; }
+
 .project-picker-existing { margin-top: 36px; }
 .project-picker-existing ul { list-style: none; padding: 0; margin: 12px 0; }
 .project-picker-existing li {
@@ -103,6 +117,7 @@
 
 @media (max-width: 640px) {
   .project-picker-grid { grid-template-columns: 1fr; }
+  .project-picker-import { align-items: flex-start; flex-direction: column; }
 }
 
 /* Shown while the engine starts; large projects can take a while. */

@@ -39,6 +39,20 @@ Importing a project also replaces the open Replay and Decoder tabs. Pending
 writes from the previous workspace finish before the import starts, and tabs
 absent from the imported project are cleared.
 
+**Import Lanius / Burp settings** accepts a capture-free Lanius settings JSON
+or a Burp settings JSON. A Burp import converts target scope, HTTP Match &
+Replace rules, active proxy listeners, HTTP protocol preferences, capture
+scope restriction, and an unauthenticated SOCKS route. Credentials, client
+certificates, TLS bypasses, extensions, macros, scheduled tasks, and
+destination-specific upstream routes are never imported. Unsupported entries
+among otherwise convertible rules and routes are counted in the result.
+
+You can also drop either settings file anywhere on the Lanius window. Lanius
+shows the detected source and counts before applying it. Dropping a file on the
+startup project chooser creates a named project from the filename; dropping it
+inside an open project keeps that project's captured HTTP history. No change is
+made until the confirmation is accepted.
+
 ## Cleaning up
 
 The same screen shows which captured targets use space. Select targets to
