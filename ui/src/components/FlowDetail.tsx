@@ -644,7 +644,10 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
     before: [{
       label: t('editor.copy'),
       disabled: !menu.target?.selection,
-      onSelect: () => copyTextToClipboard(menu.target?.selection ?? ''),
+      onSelect: () => copyTextToClipboard(
+        menu.target?.selection ?? '',
+        t('menu.copied'),
+      ),
     }],
   });
 

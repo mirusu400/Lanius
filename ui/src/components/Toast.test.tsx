@@ -6,6 +6,7 @@ import { defaultToastPreferences, loadToastPreferences, TOAST_PREFERENCES_KEY } 
 import { Dialog } from './Dialog';
 import { useToast } from './Toast';
 import { engineRequestFailed } from '../engineConnection';
+import { notifyClipboardError, notifyClipboardSuccess } from '../clipboard';
 
 let feedback: ReturnType<typeof useToast>;
 function Probe() {
@@ -23,13 +24,13 @@ afterEach(() => {
 it('merges repeated notifications and expires them independently', () => {
   vi.useFakeTimers();
   render(<Probe />);
-  act(() => feedback.showToast({ message: 'saved', category: 'settings' }));
+  act(() => feedback.showToast({ message: 'saved', category: 'settings', durationMs: 3000 }));
   act(() => vi.advanceTimersByTime(2000));
-  act(() => feedback.showToast({ message: 'saved', category: 'settings' }));
-  act(() => feedback.showToast({ message: 'blocked', tone: 'error' }));
+  act(() => feedback.showToast({ message: 'saved', category: 'settings', durationMs: 3000 }));
+  act(() => feedback.showToast({ message: 'blocked', tone: 'error', durationMs: 6000 }));
   expect(screen.getAllByText('saved')).toHaveLength(1);
   act(() => vi.advanceTimersByTime(3000));
-  expect(screen.getByText('saved').classList.contains('exiting')).toBe(true);
+  expect(screen.getByText('saved').closest('.app-toast')?.classList.contains('exiting')).toBe(true);
   act(() => vi.advanceTimersByTime(240));
   expect(screen.queryByText('saved')).toBeNull();
   expect(screen.getByRole('alert').textContent).toBe('blocked');
@@ -37,6 +38,16 @@ it('merges repeated notifications and expires them independently', () => {
   expect(screen.getByRole('alert').classList.contains('exiting')).toBe(true);
   act(() => vi.advanceTimersByTime(240));
   expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('keeps default notifications visible long enough to notice', () => {
+  vi.useFakeTimers();
+  render(<Probe />);
+  act(() => feedback.showToast({ message: 'copied', tone: 'success' }));
+  act(() => vi.advanceTimersByTime(4499));
+  expect(screen.getByRole('status').classList.contains('exiting')).toBe(false);
+  act(() => vi.advanceTimersByTime(1));
+  expect(screen.getByRole('status').classList.contains('exiting')).toBe(true);
 });
 
 it('bounds the stack without displacing errors with success notifications', () => {
@@ -82,6 +93,16 @@ it('filters transfer categories independently while always allowing errors', () 
   expect(screen.getByText(t('toast.requestTransferred', { tool: 'Fuzzer' }))).toBeTruthy();
   act(() => feedback.showToast({ message: 'Lockdown blocked', category: 'replay', tone: 'error' }));
   expect(screen.getByRole('alert').textContent).toBe('Lockdown blocked');
+});
+
+it('shows clipboard feedback through the existing toast provider', () => {
+  render(<Probe />);
+  act(() => notifyClipboardSuccess('URL copied', 'copy-url'));
+  expect(screen.getByRole('status').textContent).toBe('URL copied');
+  act(() => notifyClipboardError(new Error('permission denied')));
+  expect(screen.getByRole('alert').textContent).toBe(
+    t('clipboard.failed', { message: 'permission denied' }),
+  );
 });
 
 it('does not repeat the active engine transport failure as a toast', () => {

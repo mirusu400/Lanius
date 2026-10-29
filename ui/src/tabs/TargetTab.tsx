@@ -56,6 +56,7 @@ import { EndpointExplorer } from '../components/EndpointExplorer';
 import { Split } from '../components/Split';
 import { connectStream } from '../api/stream';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
+import { useToast } from '../components/Toast';
 
 type View = 'sitemap' | 'endpoints' | 'scope';
 
@@ -68,6 +69,7 @@ function flowIdsUnder(node: TreeNode): string[] {
 
 export function TargetTab() {
   const t = useT();
+  const { showToast } = useToast();
   const addRequestScopeRule = useAddRequestScopeRule();
   const [view, setView] = useState<View>('sitemap');
   const [sitemapView, setSitemapView] = useState<'tree' | 'graph'>('tree');
@@ -410,17 +412,22 @@ export function TargetTab() {
     setPendingDelete(null);
     if (!pending) return;
     try {
-      await pending.run();
+      const { deleted } = await pending.run();
       setSelectedFlow(null);
       setSelectedKeys(new Set());
       setAnchorKey(null);
       resetPages();
       expansion.collapseAll();
-      await refreshSites();
+      showToast({ message: t('delete.done', { count: deleted }), tone: 'success', category: 'history' });
+      try {
+        await refreshSites();
+      } catch (err) {
+        setError(rawMsg((err as Error).message));
+      }
     } catch (err) {
-      setError(rawMsg((err as Error).message));
+      showToast({ message: t('delete.failed', { message: (err as Error).message }), tone: 'error' });
     }
-  }, [deletion, refreshSites, resetPages, expansion]);
+  }, [deletion, refreshSites, resetPages, expansion, showToast, t]);
 
   useEffect(() => {
     void refreshScope();

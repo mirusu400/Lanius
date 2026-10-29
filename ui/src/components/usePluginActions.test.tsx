@@ -71,4 +71,27 @@ describe('usePluginActions', () => {
     await user.click(await screen.findByText('Inspect flow · acme'));
     expect((await screen.findByRole('status')).textContent).toContain(t('issues.scanStarted'));
   });
+
+  it('shows a toast when a context-menu plugin action fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/api/plugin-contributions')) {
+        return { ok: true, json: async () => ({ actions: [{
+          id: 'acme.inspect', plugin: 'acme', title: 'Inspect flow',
+          description: null, locations: ['history'],
+        }] }) } as Response;
+      }
+      return {
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: async () => ({ detail: 'plugin failed' }),
+      } as Response;
+    }));
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(await screen.findByText('Inspect flow · acme'));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      t('plugins.actionFailed', { name: 'Inspect flow', message: 'plugin failed' }),
+    );
+  });
 });

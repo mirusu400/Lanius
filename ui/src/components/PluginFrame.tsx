@@ -9,7 +9,10 @@ import {
 } from '../api/client';
 import type { PluginInfo, PluginUiView } from '../api/types';
 import { useT } from '../i18n';
-import { writeClipboardText } from '../clipboard';
+import {
+  notifyClipboardError,
+  writeClipboardTextWithFeedback,
+} from '../clipboard';
 import { readPluginTheme, watchPluginTheme } from './pluginTheme';
 
 interface RpcRequest {
@@ -78,7 +81,12 @@ export function PluginFrame({
         } else if (request.method === 'clipboard.write') {
           if (!permissions.has('clipboard.write')) throw new Error('permission denied: clipboard.write');
           if (typeof params.text !== 'string' || params.text.length > 65536) throw new Error('clipboard text exceeds 65536 characters');
-          await writeClipboardText(params.text);
+          try {
+            await writeClipboardTextWithFeedback(params.text, t('menu.copied'));
+          } catch (error) {
+            notifyClipboardError(error);
+            throw error;
+          }
           result = { copied: true };
         } else if (request.method === 'contributions.list') {
           const catalogue = await listPluginContributions();
@@ -121,7 +129,7 @@ export function PluginFrame({
     };
     window.addEventListener('message', receive);
     return () => window.removeEventListener('message', receive);
-  }, [plugin, view, context, onClose]);
+  }, [plugin, view, context, onClose, t]);
 
   return (
     <section className={`plugin-frame-shell${embedded ? ' plugin-frame-embedded' : ''}`}>

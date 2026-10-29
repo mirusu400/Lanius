@@ -272,7 +272,7 @@ describe('MCP settings', () => {
     };
     expect(config.mcpServers.lanius.type).toBe('http');
     expect(config.mcpServers.lanius.url).toBe('http://127.0.0.1:12954/mcp/mcp');
-    expect(await screen.findByText(t('mcp.copied'))).toBeTruthy();
+    expect((await screen.findByRole('status')).textContent).toBe(t('mcp.copied'));
   });
 
   it('shows and copies Codex and Claude Code commands for the active endpoint', async () => {
@@ -292,7 +292,7 @@ describe('MCP settings', () => {
     await user.click(mcpSection().getByRole('button', { name: t('mcp.copyCommand', { client: 'Codex' }) }));
     await user.click(mcpSection().getByRole('button', { name: t('mcp.copyCommand', { client: 'Claude Code' }) }));
     expect(copied).toEqual([codex, claude]);
-    expect(await screen.findByText(t('mcp.commandCopied'))).toBeTruthy();
+    expect((await screen.findByRole('status')).textContent).toBe(t('mcp.commandCopied'));
   });
 
   it('says so when the MCP server did not start', async () => {

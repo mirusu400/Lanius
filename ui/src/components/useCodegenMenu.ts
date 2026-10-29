@@ -10,9 +10,10 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { listCodegenFormats, openCsrfPoc, renderCode } from '../api/client';
 import type { MenuItem } from './ContextMenu';
-import { errorMessage, type Message } from '../i18n/message';
+import { errorMessage, renderMessage, type Message } from '../i18n/message';
 import { useT } from '../i18n';
 import { notifyClipboardError, writeClipboardTextWithFeedback } from '../clipboard';
+import { useToast } from './Toast';
 
 export interface CodegenTarget {
   flow_id?: string;
@@ -40,6 +41,7 @@ const BUILTIN: Format[] = [
 /** Builds the submenu and performs the copy. */
 export function useCodegenMenu(onError?: (message: Message) => void) {
   const t = useT();
+  const { showToast } = useToast();
   const [formats, setFormats] = useState<Format[]>(BUILTIN);
 
   useEffect(() => {
@@ -98,16 +100,24 @@ export function useCodegenMenu(onError?: (message: Message) => void) {
           // through the proxy by hand, which is most of the work.
           label: t('menu.openCsrfPoc'),
           separator: true,
-          onSelect: () => {
+          onSelect: async () => {
             if (!target) return;
-            openCsrfPoc(target).catch((error: unknown) =>
-              onError?.(errorMessage(error)),
-            );
+            try {
+              await openCsrfPoc(target);
+              showToast({ message: t('menu.csrfPocOpened'), tone: 'success', category: 'browser' });
+            } catch (error) {
+              showToast({
+                message: t('menu.csrfPocOpenFailed', {
+                  message: renderMessage(errorMessage(error), t) ?? String(error),
+                }),
+                tone: 'error',
+              });
+            }
           },
         },
       ],
     }),
-    [copyAs, formats, onError, t],
+    [copyAs, formats, showToast, t],
   );
 
   return { buildMenu, copyAs, formats };

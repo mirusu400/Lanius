@@ -536,6 +536,7 @@ describe('FlowDetailView', () => {
     expect((copy as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(copy);
     expect(await navigator.clipboard.readText()).toBe('ok');
+    expect(await screen.findByText(t('menu.copied'))).toBeTruthy();
   });
 
   it('does not copy a stale selection from the other message pane', async () => {

@@ -237,6 +237,7 @@ describe('ProxyTab', () => {
     const row = (await screen.findByText('/seeded')).closest('tr')!;
     await user.click(within(row).getByRole('button', { name: t('history.addBookmark') }));
     await waitFor(() => expect(row.classList.contains('annotation-yellow')).toBe(true));
+    expect(await screen.findByText(t('history.bookmarked'))).toBeTruthy();
     const call = calls.find((item) => item.url.endsWith('/annotation'));
     expect(call?.body).toEqual({ bookmarked: true });
   });
@@ -249,8 +250,26 @@ describe('ProxyTab', () => {
     await user.click(await within(row).findByRole('button', { name: t('history.removeBookmark') }));
 
     await waitFor(() => expect(row.classList.contains('annotation-yellow')).toBe(false));
+    expect(await screen.findByText(t('history.bookmarkRemoved'))).toBeTruthy();
     const annotationCalls = calls.filter((item) => item.url.endsWith('/annotation'));
     expect(annotationCalls.at(-1)?.body).toEqual({ bookmarked: false, annotation_color: null });
+  });
+
+  it('confirms a highlight chosen from the context menu', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    const row = (await screen.findByText('/seeded')).closest('tr')!;
+    fireEvent.contextMenu(row);
+    await user.hover(screen.getByRole('menuitem', { name: t('history.highlight') }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: t('history.color.blue') }));
+
+    await waitFor(() => expect(calls.some((item) =>
+      item.url.endsWith('/annotation') &&
+      (item.body as { annotation_color?: string }).annotation_color === 'blue'
+    )).toBe(true));
+    expect(await screen.findByText(t('history.highlightApplied', {
+      color: t('history.color.blue'),
+    }))).toBeTruthy();
   });
 
   it('keeps an intercept draft when switching between Proxy subtabs', async () => {
@@ -1215,6 +1234,7 @@ describe('deleting from the history', () => {
       const call = calls.find((c) => c.url.endsWith('/api/flows/delete'));
       expect((call!.body as { ids: string[] }).ids).toEqual(['seed-1']);
     });
+    expect(await screen.findByText(t('delete.done', { count: 1 }))).toBeTruthy();
   });
 
   it('takes the row out of the table', async () => {

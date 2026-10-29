@@ -55,7 +55,13 @@ export function usePluginActions(
           showToast({ message: t('issues.scanStarted'), tone: 'success', category: 'scanner' });
         }
       } catch (error) {
-        onError?.((error as Error).message);
+        const message = (error as Error).message;
+        showToast({
+          message: t('plugins.actionFailed', { name: action.title, message }),
+          tone: 'error',
+          category: 'plugins',
+        });
+        onError?.(message);
       }
     },
     [onError, onInvoked, showToast, t],

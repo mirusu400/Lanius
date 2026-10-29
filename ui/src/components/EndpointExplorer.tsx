@@ -16,6 +16,7 @@ import { useCodegenMenu } from './useCodegenMenu';
 import { requestMenuItems } from './requestMenu';
 import { useAddRequestScopeRule } from './requestScope';
 import { copyTextToClipboard } from '../clipboard';
+import { useToast } from './Toast';
 
 const PAGE_SIZE = 200;
 
@@ -35,6 +36,7 @@ export function EndpointExplorer({
   onChanged: () => Promise<void>;
 }) {
   const t = useT();
+  const { showToast } = useToast();
   const addRequestScopeRule = useAddRequestScopeRule();
   const endpointColumns = useResizableColumns('lanius.columns.endpoints', [70, 180, 300, 78, 180, 180]);
   const requestColumns = useResizableColumns('lanius.columns.endpointRequests', [90, 360, 75, 90]);
@@ -148,16 +150,21 @@ export function EndpointExplorer({
     const id = pendingDelete.id;
     setPendingDelete(null);
     try {
-      await deleteFlows({ ids: [id] });
+      const { deleted } = await deleteFlows({ ids: [id] });
       if (selectedRequestId === id) {
         setSelectedRequestId(null);
         setSelectedDetail(null);
       }
       setRequests((current) => current.filter((item) => item.id !== id));
       setRequestCount((count) => Math.max(0, count - 1));
-      await onChanged();
+      showToast({ message: t('delete.done', { count: deleted }), tone: 'success', category: 'history' });
+      try {
+        await onChanged();
+      } catch (err) {
+        setError((err as Error).message);
+      }
     } catch (err) {
-      setError((err as Error).message);
+      showToast({ message: t('delete.failed', { message: (err as Error).message }), tone: 'error' });
     }
   };
 

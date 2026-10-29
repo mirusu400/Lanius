@@ -477,18 +477,20 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   const removeFlow = useCallback(
     async (flow: FlowSummary) => {
       try {
-        await deleteFlows({ ids: [flow.id] });
+        const { deleted } = await deleteFlows({ ids: [flow.id] });
         // Dropped locally rather than reloading: a reload would jump the
         // list back to the top and lose where the user was reading.
         setFlows((prev) => prev.filter((f) => f.id !== flow.id));
         // Only when the deleted row was the selected one. A selection
         // missing from this page usually just means it is filtered out.
         if (getSelectedFlow() === flow.id) clearSelection();
-      } catch {
+        showToast({ message: t('delete.done', { count: deleted }), tone: 'success', category: 'history' });
+      } catch (err) {
         // The row stays; the next refresh will show whether it went.
+        showToast({ message: t('delete.failed', { message: (err as Error).message }), tone: 'error' });
       }
     },
-    [],
+    [showToast, t],
   );
 
   const updateAnnotation = useCallback(async (
@@ -498,10 +500,16 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
       const annotation = await patchFlowAnnotation(flow.id, changes);
       setFlows((prev) => prev.map((item) => item.id === flow.id ? { ...item, ...annotation } : item));
       if (filtersRef.current.bookmarkedOnly || filtersRef.current.annotationColor) void reload();
+      const message = changes.bookmarked !== undefined
+        ? t(changes.bookmarked ? 'history.bookmarked' : 'history.bookmarkRemoved')
+        : changes.annotation_color
+          ? t('history.highlightApplied', { color: t(`history.color.${changes.annotation_color}`) })
+          : t('history.highlightRemoved');
+      showToast({ message, tone: 'success', category: 'history' });
     } catch (err) {
-      setError(rawMsg((err as Error).message));
+      showToast({ message: t('history.annotationFailed', { message: (err as Error).message }), tone: 'error' });
     }
-  }, [reload]);
+  }, [reload, showToast, t]);
 
   const toggleBookmark = useCallback((flow: FlowSummary) => {
     // The default highlight is part of bookmarking from the UI. Clearing

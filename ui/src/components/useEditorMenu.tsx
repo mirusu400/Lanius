@@ -64,7 +64,7 @@ export function useEditorMenu(
     {
       label: t('editor.copy'),
       disabled: !hasSelection,
-      onSelect: () => copyTextToClipboard(selection.text),
+      onSelect: () => copyTextToClipboard(selection.text, t('menu.copied')),
     },
     {
       label: t('editor.cut'),

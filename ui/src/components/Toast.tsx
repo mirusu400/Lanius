@@ -99,7 +99,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       next.splice(expendable < 0 ? fallback : expendable, 1);
     }
     next.push({ ...options, id, expiresAt: options.durationMs === 0 ? null
-      : now + (options.durationMs ?? (options.tone === 'error' ? 6000 : 3000)) });
+      : now + (options.durationMs ?? (options.tone === 'error' ? 8000 : 4500)) });
     replace(next);
   }, [replace]);
 
@@ -179,7 +179,7 @@ function ToastViewport({ toasts }: { toasts: ToastEntry[] }) {
       {toasts.map((toast) => <div key={toast.id}
         className={`app-toast ${toast.tone ?? 'info'}${toast.removeAt === undefined ? '' : ' exiting'}`}
         role={toast.tone === 'error' ? 'alert' : 'status'} aria-atomic="true">
-        {toast.message}
+        <span className="app-toast-message">{toast.message}</span>
       </div>)}
     </div>, host,
   ) : null;

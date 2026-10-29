@@ -3,7 +3,7 @@ import { cleanup, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { PluginInfo, PluginUiView } from '../api/types';
-import { renderWithI18n as render } from '../test-utils';
+import { renderWithI18n as render, t } from '../test-utils';
 import { PluginFrame } from './PluginFrame';
 
 const view: PluginUiView = {
@@ -128,6 +128,32 @@ it('rejects clipboard writes without the declared permission', async () => {
     type: 'lanius.response', id: 'copy', error: 'permission denied: clipboard.write',
   }, '*'));
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it('confirms successful plugin clipboard writes with the shared toast', async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
+  });
+  render(<PluginFrame
+    plugin={{
+      ...plugin,
+      package: { ...plugin.package!, permissions: ['actions.invoke', 'clipboard.write'] },
+    }}
+    view={view}
+  />);
+  const target = (screen.getByTitle('acme.demo: Main view') as HTMLIFrameElement).contentWindow!;
+  const reply = vi.spyOn(target, 'postMessage');
+  window.dispatchEvent(new MessageEvent('message', { source: target, data: {
+    type: 'lanius.request', plugin: plugin.name, id: 'copy', method: 'clipboard.write', params: { text: 'flow-id' },
+  } }));
+
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith('flow-id'));
+  await waitFor(() => expect(reply).toHaveBeenCalledWith({
+    type: 'lanius.response', id: 'copy', result: { copied: true },
+  }, '*'));
+  expect(screen.getByRole('status').textContent).toBe(t('menu.copied'));
 });
 
 it('shares host controls and synchronizes resolved palette and typography without reloading the frame', async () => {

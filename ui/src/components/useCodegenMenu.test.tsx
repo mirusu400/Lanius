@@ -11,6 +11,7 @@ import { renderWithI18n, t } from '../test-utils';
 vi.mock('../api/client', () => ({
   listCodegenFormats: vi.fn(),
   renderCode: vi.fn(),
+  openCsrfPoc: vi.fn(),
 }));
 
 const api = await import('../api/client');
@@ -35,6 +36,7 @@ describe('useCodegenMenu', () => {
       ],
     });
     vi.mocked(api.renderCode).mockResolvedValue({ kind: 'curl', text: 'curl x' });
+    vi.mocked(api.openCsrfPoc).mockResolvedValue({ path: '/tmp/lanius-csrf.html' });
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
       configurable: true,
@@ -87,6 +89,14 @@ describe('useCodegenMenu', () => {
     renderWithI18n(<Harness target={{ flow_id: 'f1' }} />);
     await userEvent.hover(screen.getByRole('menuitem', { name: t('menu.copyAs') }));
     expect(await screen.findByRole('menuitem', { name: 'curl' })).toBeTruthy();
+  });
+
+  it('confirms when the CSRF proof of concept opens in the browser', async () => {
+    renderWithI18n(<Harness target={{ flow_id: 'f1' }} />);
+    await userEvent.hover(screen.getByRole('menuitem', { name: t('menu.copyAs') }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: t('menu.openCsrfPoc') }));
+    expect(api.openCsrfPoc).toHaveBeenCalledWith({ flow_id: 'f1' });
+    expect(await screen.findByText(t('menu.csrfPocOpened'))).toBeTruthy();
   });
 });
 

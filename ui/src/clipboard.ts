@@ -10,13 +10,15 @@ import {
   writeText as writeNativeText,
 } from '@tauri-apps/plugin-clipboard-manager';
 
-const CLIPBOARD_ERROR = 'lanius:clipboard-error';
-const CLIPBOARD_SUCCESS = 'lanius:clipboard-success';
-
 export interface ClipboardSuccess {
   message: string;
   id: string;
 }
+
+type ErrorListener = (message: string) => void;
+type SuccessListener = (detail: ClipboardSuccess) => void;
+const errorListeners = new Set<ErrorListener>();
+const successListeners = new Set<SuccessListener>();
 
 function isDesktop(): boolean {
   return (
@@ -58,17 +60,14 @@ export async function readClipboardText(): Promise<string> {
 
 /** Report a clipboard failure through the app-wide toast path. */
 export function notifyClipboardError(error: unknown): void {
-  if (typeof window === 'undefined') return;
   const message = error instanceof Error ? error.message : String(error);
-  window.dispatchEvent(new CustomEvent(CLIPBOARD_ERROR, { detail: message }));
+  for (const listener of errorListeners) listener(message);
 }
 
 /** Report an explicit copy action through the app-wide toast path. */
 export function notifyClipboardSuccess(message: string, id = 'clipboard-copied'): void {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent<ClipboardSuccess>(CLIPBOARD_SUCCESS, {
-    detail: { message, id },
-  }));
+  const detail = { message, id };
+  for (const listener of successListeners) listener(detail);
 }
 
 /** Write and report success while preserving rejection for local error UI. */
@@ -91,15 +90,13 @@ export function copyTextToClipboard(text: string, successMessage?: string, id?: 
 }
 
 export function subscribeClipboardErrors(listener: (message: string) => void): () => void {
-  const handle = (event: Event) => listener((event as CustomEvent<string>).detail);
-  window.addEventListener(CLIPBOARD_ERROR, handle);
-  return () => window.removeEventListener(CLIPBOARD_ERROR, handle);
+  errorListeners.add(listener);
+  return () => { errorListeners.delete(listener); };
 }
 
 export function subscribeClipboardSuccess(
   listener: (detail: ClipboardSuccess) => void,
 ): () => void {
-  const handle = (event: Event) => listener((event as CustomEvent<ClipboardSuccess>).detail);
-  window.addEventListener(CLIPBOARD_SUCCESS, handle);
-  return () => window.removeEventListener(CLIPBOARD_SUCCESS, handle);
+  successListeners.add(listener);
+  return () => { successListeners.delete(listener); };
 }

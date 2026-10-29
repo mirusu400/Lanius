@@ -95,6 +95,7 @@ describe('AboutSection', () => {
     renderWithI18n(<AboutSection />);
     await userEvent.click(await screen.findByRole('button', { name: t('about.copy') }));
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
+    expect((await screen.findByRole('status')).textContent).toBe(t('about.copied'));
     const text = vi.mocked(navigator.clipboard.writeText).mock.calls[0][0];
     expect(text).toContain('0.1.0');
     expect(text).toContain('nightly-20260915');

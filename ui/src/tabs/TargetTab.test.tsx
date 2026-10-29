@@ -219,6 +219,22 @@ beforeEach(() => {
       if (url.includes('/api/endpoints')) {
         return jsonResponse({ items: endpoints, count: endpoints.length });
       }
+      if (url.endsWith('/api/codegen/formats')) {
+        return jsonResponse({
+          formats: [
+            { kind: 'curl', label: 'curl', source: 'builtin' },
+            { kind: 'fetch', label: 'fetch', source: 'builtin' },
+            { kind: 'python', label: 'Python requests', source: 'builtin' },
+            { kind: 'csrf', label: 'CSRF proof of concept', source: 'builtin' },
+          ],
+        });
+      }
+      if (url.endsWith('/api/codegen')) {
+        return jsonResponse({ kind: body.kind, text: 'curl https://api.test/api/v1/login' });
+      }
+      if (url.endsWith('/api/flows/delete')) {
+        return jsonResponse({ deleted: 1 });
+      }
       if (url.includes('/api/flows/')) {
         const parts = new URL(url).pathname.split('/');
         const id = parts.at(-1) === 'replay-request' ? parts.at(-2) : parts.at(-1);
@@ -590,7 +606,7 @@ describe('TargetTab', () => {
     expect(await screen.findByText(t('menu.copied'))).toBeTruthy();
   });
 
-  it('renders the code from the stored flow, not the tree row', async () => {
+  it('copies rendered code from the stored flow and shows the existing toast', async () => {
     // The tree holds a summary with no headers and no body, so rendering
     // from it would produce a command that does not repeat the request.
     const user = userEvent.setup();
@@ -607,6 +623,8 @@ describe('TargetTab', () => {
       expect((call!.body as { flow_id: string }).flow_id).toMatch(/^p[12]$/);
       expect((call!.body as { kind: string }).kind).toBe('curl');
     });
+    expect(await navigator.clipboard.readText()).toBe('curl https://api.test/api/v1/login');
+    expect(await screen.findByText(t('menu.copiedAs', { kind: 'curl' }))).toBeTruthy();
   });
 
   it('deletes one request from the tree', async () => {
@@ -622,6 +640,7 @@ describe('TargetTab', () => {
       const call = calls.find((c) => c.url.endsWith('/api/flows/delete'));
       expect((call!.body as { ids: string[] }).ids).toHaveLength(1);
     });
+    expect(await screen.findByText(t('delete.done', { count: 1 }))).toBeTruthy();
   });
 
   it('Ctrl-selects sites and deletes them in one confirmed request', async () => {

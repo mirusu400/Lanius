@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { getAbout, getShellVersion, type AboutInfo } from "../../api/client";
 import { ExternalLink } from "../../components/ExternalLink";
 import { useT } from "../../i18n";
-import { notifyClipboardError, writeClipboardText } from "../../clipboard";
+import { notifyClipboardError, writeClipboardTextWithFeedback } from "../../clipboard";
 
 /** The repository, for linking a commit to what is in it. */
 const REPO = "https://github.com/mirusu400/Lanius";
@@ -109,7 +109,7 @@ export function AboutSection() {
         <button
           type="button"
           onClick={() => {
-            void writeClipboardText(summary)
+            void writeClipboardTextWithFeedback(summary, t("about.copied"))
               .then(() => setCopied(true))
               .catch(notifyClipboardError);
           }}

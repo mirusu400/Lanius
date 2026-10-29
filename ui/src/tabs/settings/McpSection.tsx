@@ -18,7 +18,7 @@ import {
   type Message,
 } from '../../i18n';
 import { UndoableInput } from '../../components/UndoableText';
-import { writeClipboardText } from '../../clipboard';
+import { notifyClipboardError, writeClipboardTextWithFeedback } from '../../clipboard';
 
 export function McpSection() {
   const { t } = useI18n();
@@ -131,10 +131,14 @@ export function McpSection() {
 
   const copy = async (value: string, success: Message) => {
     try {
-      await writeClipboardText(value);
-      setNote(success);
+      await writeClipboardTextWithFeedback(
+        value,
+        renderMessage(success, t) ?? t('menu.copied'),
+      );
+      setNote(null);
       setError(null);
     } catch (err) {
+      notifyClipboardError(err);
       setError(rawMsg((err as Error).message));
     }
   };
