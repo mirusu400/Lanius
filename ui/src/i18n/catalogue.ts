@@ -716,6 +716,7 @@ const en = {
   'updates.allReleases': 'All releases',
   'updates.pill': 'Update available',
   'updates.badge': 'A newer build is available',
+  'tabs.newRequest': 'A new request was sent to {tool}',
 
   'settings.group.proxy': 'Proxy',
   'settings.group.browser': 'Browser',
@@ -2196,6 +2197,7 @@ const ko: Catalogue = {
   'updates.allReleases': '전체 릴리스',
   'updates.pill': '업데이트 있음',
   'updates.badge': '새 빌드가 있습니다',
+  'tabs.newRequest': '{tool}에 새 요청이 전송되었습니다',
 
   'settings.group.proxy': '프록시',
   'settings.group.browser': '브라우저',

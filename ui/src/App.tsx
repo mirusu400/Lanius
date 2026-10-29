@@ -44,6 +44,7 @@ import { BusyProvider } from "./components/busy";
 import { Spinner, useDelayedBusy } from "./components/Spinner";
 import { useToast } from "./components/Toast";
 import { useFuzzerCompletionToast } from "./components/useFuzzerCompletionToast";
+import { useRequestTransferIndicators } from "./components/useRequestTransferIndicators";
 import { DesktopClose } from "./components/DesktopClose";
 import { CurrentProjectButton } from "./components/CurrentProjectButton";
 import { EngineConnectionBanner } from "./components/EngineConnectionBanner";
@@ -151,10 +152,13 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
   );
   const tab = pluginWorkspace.active ?? builtinTab;
   const selectPlugin = pluginWorkspace.select;
-  const setTab = useCallback((update: Tab | ((tab: Tab) => Tab)) => {
+  const { indicators: transferIndicators, clearIndicator: clearTransferIndicator } =
+    useRequestTransferIndicators(tab);
+  const setTab = useCallback((next: Tab) => {
     selectPlugin(null);
-    setBuiltinTab(update);
-  }, [selectPlugin]);
+    if (next === 'Replay' || next === 'Fuzzer') clearTransferIndicator(next);
+    setBuiltinTab(next);
+  }, [clearTransferIndicator, selectPlugin]);
   const [historyMethodRequest, setHistoryMethodRequest] = useState<{ method: string } | null>(null);
   const [historyRevision, setHistoryRevision] = useState(0);
   const onProjectImported = useCallback(() => {
@@ -413,6 +417,9 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
               {/* A new build is worth one dot, wherever you are. */}
               {name === "Settings" && updateAvailable && (
                 <span className="tab-dot" aria-label={t("updates.badge")} />
+              )}
+              {(name === 'Replay' || name === 'Fuzzer') && transferIndicators.has(name) && (
+                <span className="tab-dot" aria-label={t('tabs.newRequest', { tool: name })} />
               )}
             </button>
           ))}
