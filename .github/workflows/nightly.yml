@@ -197,9 +197,9 @@ jobs:
           # A wheel built with dynamic linking ignores the new build flag.
           python -m pip cache remove cryptography
           pip install -r requirements.txt pyinstaller
-          # mitmproxy 12.3 caps the vulnerable Brotli 1.2.0 release. Override
-          # it with the API-compatible 1.2.1 decoder fix until upstream does.
-          python -m pip install --no-deps "Brotli>=1.2.1"
+          # mitmproxy 12.3 has stale upper bounds for security-only releases.
+          # Resolve it first, then replace only the audited packages.
+          python -m pip install --no-deps -r requirements-overrides.txt
 
       - name: Freeze the engine
         working-directory: engine

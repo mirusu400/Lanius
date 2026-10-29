@@ -49,16 +49,16 @@ jobs:
           cache-dependency-path: |
             engine/requirements.txt
             engine/requirements-dev.txt
+            engine/requirements-overrides.txt
 
       - name: Install dependencies
         working-directory: engine
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
-          # mitmproxy 12.3 caps Brotli at 1.2.0, but 1.2.1 only adds the
-          # PYSEC-2026-4322 decoder fix. Override the stale upper bound until
-          # upstream raises it; --no-deps deliberately changes only Brotli.
-          python -m pip install --no-deps "Brotli>=1.2.1"
+          # mitmproxy 12.3 has stale upper bounds for security-only releases.
+          # Resolve it first, then replace only the audited packages.
+          python -m pip install --no-deps -r requirements-overrides.txt
 
       - name: Type check
         working-directory: engine

@@ -1,0 +1,7 @@
+# Install this file with --no-deps after requirements.txt. mitmproxy 12.3's
+# upper bounds lag security-only releases of these API-compatible packages.
+# Keeping the overrides separate lets pip resolve mitmproxy first while CI and
+# frozen desktop builds still ship the patched versions.
+Brotli>=1.2.1
+# Fixes CVE-2026-115927, CVE-2026-116577 and CVE-2026-116578.
+tornado>=6.6
