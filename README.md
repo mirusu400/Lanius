@@ -1,3 +1,5 @@
+# Lanius
+
 <div align="center">
 
 <img src="docs/icons/lanius_readme_banner.png" alt="Lanius" width="100%">
