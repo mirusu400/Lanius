@@ -33,10 +33,15 @@ it('lists both send actions with platform defaults and records a persistent cust
   const sendReplay = row(t('menu.sendToReplay'));
   const sendFuzzer = row(t('menu.sendToFuzzer'));
   const toggleIntercept = row(t('shortcuts.toggleIntercept'));
+  const forwardIntercept = row(t('shortcuts.forwardIntercept'));
+  const dropIntercept = row(t('shortcuts.dropIntercept'));
   const original = getShortcut('request.sendToReplay')!;
   expect(sendReplay.getByRole('button', { name: formatShortcut(getShortcut('request.sendToReplay')) })).toBeTruthy();
   expect(sendFuzzer.getByRole('button', { name: formatShortcut(getShortcut('request.sendToFuzzer')) })).toBeTruthy();
   expect(toggleIntercept.getByRole('button', { name: formatShortcut(getShortcut('intercept.toggle')) })).toBeTruthy();
+  expect(forwardIntercept.getByRole('button', { name: formatShortcut(getShortcut('intercept.forward')) })).toBeTruthy();
+  expect(dropIntercept.getByRole('button', { name: formatShortcut(null) })).toBeTruthy();
+  expect(dropIntercept.getByRole('button', { name: t('shortcuts.clear') })).toHaveProperty('disabled', true);
   fireShortcut('request.sendToReplay');
   fireShortcut('request.sendToFuzzer');
   expect(replay).toHaveBeenCalledTimes(1);

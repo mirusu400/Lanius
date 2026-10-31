@@ -8,6 +8,7 @@ import { InterceptPanel } from './InterceptPanel';
 import type { InterceptRules, PausedFlow } from '../api/types';
 import { getTabs, resetTabs } from '../tabs/replayStore';
 import { resetTarget, subscribeTarget, type FuzzerTarget } from '../tabs/fuzzerStore';
+import { resetShortcut, saveShortcut } from '../shortcuts';
 
 const rules: InterceptRules = {
   enabled: true,
@@ -56,6 +57,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetShortcut('intercept.drop');
   vi.unstubAllGlobals();
 });
 
@@ -226,7 +228,6 @@ describe('InterceptPanel', () => {
 
   it('forwards unchanged requests without edits', async () => {
     const onResolved = vi.fn();
-    const user = userEvent.setup();
     render(
       <InterceptPanel
         rules={rules}
@@ -235,7 +236,7 @@ describe('InterceptPanel', () => {
         onResolved={onResolved}
       />,
     );
-    await user.click(screen.getByRole('button', { name: t('intercept.forward') }));
+    fireShortcut('intercept.forward');
     await waitFor(() => expect(onResolved).toHaveBeenCalledWith('p1'));
     const call = calls.find((c) => c.url.includes('/forward'));
     expect(call?.init?.body).toBe('{}');
@@ -512,7 +513,9 @@ describe('InterceptPanel', () => {
 
   it('drops the paused flow', async () => {
     const onResolved = vi.fn();
-    const user = userEvent.setup();
+    saveShortcut('intercept.drop', {
+      code: 'Delete', ctrl: true, alt: false, shift: true, meta: false,
+    });
     render(
       <InterceptPanel
         rules={rules}
@@ -521,7 +524,7 @@ describe('InterceptPanel', () => {
         onResolved={onResolved}
       />,
     );
-    await user.click(screen.getByRole('button', { name: t('intercept.drop') }));
+    fireShortcut('intercept.drop');
     await waitFor(() => expect(onResolved).toHaveBeenCalledWith('p1'));
     expect(calls.some((c) => c.url.endsWith('/p1/drop'))).toBe(true);
   });

@@ -288,6 +288,10 @@ export function InterceptPanel({
     },
   }, Boolean(currentRequest));
   useShortcuts({ 'intercept.toggle': toggleIntercept }, !busy);
+  useShortcuts({
+    'intercept.forward': () => void act('forward'),
+    'intercept.drop': () => void act('drop'),
+  }, Boolean(current && !busy));
 
   return (
     <div className="intercept-panel">

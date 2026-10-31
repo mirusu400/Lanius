@@ -245,7 +245,9 @@ These work in Proxy history, Intercept and Target. In Replay, Send to Fuzzer
 carries the current edited request; in Fuzzer, Send to Replay opens the
 selected result. An open context menu uses its right-clicked request. While the
 Intercept view is open, toggle interception with **⌘+Option+I** on macOS or
-**Ctrl+Alt+I** on Linux and Windows.
+**Ctrl+Alt+I** on Linux and Windows, and forward the selected message with
+**⌘+Shift+Enter** or **Ctrl+Shift+Enter**. Drop is also available as a
+configurable action, but has no default binding to prevent accidental use.
 **Settings > Shortcuts** lists these actions alongside every screen and Replay
 action, and lets you record, disable, or reset each shortcut. These choices
 are saved on this machine.

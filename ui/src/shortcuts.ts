@@ -83,6 +83,20 @@ export const SHORTCUTS: ShortcutDefinition[] = [
     defaults: defaultFor('KeyI', { alt: true }),
   },
   {
+    id: 'intercept.forward',
+    category: 'general',
+    label: 'shortcuts.forwardIntercept',
+    description: 'shortcuts.forwardInterceptHelp',
+    defaults: defaultFor('Enter', { shift: true }),
+  },
+  {
+    id: 'intercept.drop',
+    category: 'general',
+    label: 'shortcuts.dropIntercept',
+    description: 'shortcuts.dropInterceptHelp',
+    defaults: { mac: null, windows: null, linux: null },
+  },
+  {
     id: 'app.screenshot',
     category: 'general',
     label: 'shortcuts.captureWindow',
