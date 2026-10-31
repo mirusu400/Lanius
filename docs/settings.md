@@ -243,7 +243,9 @@ for Docs. Send the selected request to Replay with **⌘+R** on macOS or
 **Ctrl+R** on Linux and Windows, or to Fuzzer with **⌘+I** / **Ctrl+I**.
 These work in Proxy history, Intercept and Target. In Replay, Send to Fuzzer
 carries the current edited request; in Fuzzer, Send to Replay opens the
-selected result. An open context menu uses its right-clicked request.
+selected result. An open context menu uses its right-clicked request. While the
+Intercept view is open, toggle interception with **⌘+Option+I** on macOS or
+**Ctrl+Alt+I** on Linux and Windows.
 **Settings > Shortcuts** lists these actions alongside every screen and Replay
 action, and lets you record, disable, or reset each shortcut. These choices
 are saved on this machine.

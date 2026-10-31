@@ -272,6 +272,13 @@ export function InterceptPanel({
     paused: shownMenuFlow ?? current,
     requestText: current.phase === 'request' ? shown : renderRequest(current),
   } : null;
+  const toggleIntercept = () => {
+    if (rules.enabled && Object.keys(drafts).length > 0 && paused.length > 0) {
+      void actAll().then((succeeded) => {
+        if (succeeded) onToggle({ enabled: false });
+      });
+    } else onToggle({ enabled: !rules.enabled });
+  };
   useShortcuts({
     'request.sendToReplay': () => {
       if (currentRequest) sendHeldToReplay(heldRequest(currentRequest).flow, currentRequest.requestText);
@@ -280,6 +287,7 @@ export function InterceptPanel({
       if (currentRequest) sendTextToFuzzer(originOf(heldRequest(currentRequest).flow), currentRequest.requestText);
     },
   }, Boolean(currentRequest));
+  useShortcuts({ 'intercept.toggle': toggleIntercept }, !busy);
 
   return (
     <div className="intercept-panel">
@@ -289,13 +297,7 @@ export function InterceptPanel({
         <button
           className={rules.enabled ? 'toggle on' : 'toggle'}
           disabled={busy}
-          onClick={() => {
-            if (rules.enabled && Object.keys(drafts).length > 0 && paused.length > 0) {
-              void actAll().then((succeeded) => {
-                if (succeeded) onToggle({ enabled: false });
-              });
-            } else onToggle({ enabled: !rules.enabled });
-          }}
+          onClick={toggleIntercept}
         >
           {rules.enabled ? t('intercept.on') : t('intercept.off')}
         </button>

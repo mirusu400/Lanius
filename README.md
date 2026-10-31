@@ -309,7 +309,8 @@ remaining screens follow the tab bar). Use **⌘+Option+D** or **Ctrl+Alt+D**
 for Docs. Send the selected request to Replay with **⌘+R** / **Ctrl+R**, or
 to Fuzzer with **⌘+I** / **Ctrl+I**. These work in Proxy history, Intercept
 and Target, with Send to Fuzzer also carrying Replay edits and Send to Replay
-opening a selected Fuzzer result. **Settings > Shortcuts** lists these actions
+opening a selected Fuzzer result. In the Intercept view, use **⌘+Option+I** /
+**Ctrl+Alt+I** to toggle interception. **Settings > Shortcuts** lists these actions
 alongside every screen and Replay action, and lets you record, disable, or
 reset each shortcut. These choices are saved on this machine.
 

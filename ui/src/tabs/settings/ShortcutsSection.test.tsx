@@ -32,9 +32,11 @@ it('lists both send actions with platform defaults and records a persistent cust
   const { unmount } = render(<Harness />);
   const sendReplay = row(t('menu.sendToReplay'));
   const sendFuzzer = row(t('menu.sendToFuzzer'));
+  const toggleIntercept = row(t('shortcuts.toggleIntercept'));
   const original = getShortcut('request.sendToReplay')!;
   expect(sendReplay.getByRole('button', { name: formatShortcut(getShortcut('request.sendToReplay')) })).toBeTruthy();
   expect(sendFuzzer.getByRole('button', { name: formatShortcut(getShortcut('request.sendToFuzzer')) })).toBeTruthy();
+  expect(toggleIntercept.getByRole('button', { name: formatShortcut(getShortcut('intercept.toggle')) })).toBeTruthy();
   fireShortcut('request.sendToReplay');
   fireShortcut('request.sendToFuzzer');
   expect(replay).toHaveBeenCalledTimes(1);

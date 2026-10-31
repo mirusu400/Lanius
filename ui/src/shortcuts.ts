@@ -76,6 +76,13 @@ export const SHORTCUTS: ShortcutDefinition[] = [
     defaults: defaultFor('KeyI'),
   },
   {
+    id: 'intercept.toggle',
+    category: 'general',
+    label: 'shortcuts.toggleIntercept',
+    description: 'shortcuts.toggleInterceptHelp',
+    defaults: defaultFor('KeyI', { alt: true }),
+  },
+  {
     id: 'app.screenshot',
     category: 'general',
     label: 'shortcuts.captureWindow',

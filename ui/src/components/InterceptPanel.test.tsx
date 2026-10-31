@@ -539,6 +539,9 @@ describe('InterceptPanel', () => {
     );
     await user.click(screen.getByRole('button', { name: t('intercept.on') }));
     expect(onToggle).toHaveBeenCalledWith({ enabled: false });
+    onToggle.mockClear();
+    fireShortcut('intercept.toggle');
+    expect(onToggle).toHaveBeenCalledWith({ enabled: false });
   });
 
   it('surfaces parse errors instead of forwarding garbage', async () => {
