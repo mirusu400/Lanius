@@ -773,6 +773,7 @@ async def test_upstream_forwards_http_and_is_saved(tmp_path) -> None:
             "enabled": True,
             "hops": [f"http://127.0.0.1:{upstream_port}"],
             "url": f"http://127.0.0.1:{upstream_port}",
+            "authentication": [None],
         }
         reader, writer = await asyncio.open_connection("127.0.0.1", port)
         writer.write(
@@ -797,13 +798,77 @@ async def test_upstream_forwards_http_and_is_saved(tmp_path) -> None:
             await proxy.set_upstream(f"http://127.0.0.1:{port}")
         assert proxy.upstream_state() == state
 
-        assert await proxy.set_upstream(None) == {"enabled": False, "hops": [], "url": None}
+        assert await proxy.set_upstream(None) == {
+            "enabled": False,
+            "hops": [],
+            "url": None,
+            "authentication": [],
+        }
         assert proxy._modes()[0] == f"regular@127.0.0.1:{port}"
     finally:
         await proxy.stop()
         proxy.store.close()
         other.close()
         await other.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_upstream_authentication_is_redacted_saved_and_reused(tmp_path) -> None:
+    port = free_port()
+    proxy = engine(tmp_path, port)
+    url = "http://proxy.example:8080"
+    try:
+        state = await proxy.set_upstream(
+            [url],
+            [{"username": "alice", "password": "secret"}],
+        )
+        assert state == {
+            "enabled": True,
+            "hops": [url],
+            "url": url,
+            "authentication": [{"username": "alice", "password_set": True}],
+        }
+        assert "secret" not in repr(state)
+        assert proxy._needs_upstream_bridge()
+
+        assert await proxy.set_upstream([url], [{"username": "alice"}]) == state
+        with pytest.raises(ValueError, match="password is required"):
+            await proxy.set_upstream([url], [{"username": "bob"}])
+
+        revived = _reopen(tmp_path, port)
+        try:
+            assert revived.upstream_state() == state
+            assert revived.upstream_credentials[0].password == "secret"
+            assert revived._needs_upstream_bridge()
+        finally:
+            revived.store.close()
+
+        second_url = "socks5://second.example:1080"
+        await proxy.set_upstream(
+            [url, second_url],
+            [
+                {"username": "alice", "password": "secret"},
+                {"username": "bob", "password": "other-secret"},
+            ],
+        )
+        reordered = await proxy.set_upstream(
+            [second_url, url],
+            [{"username": "bob"}, {"username": "alice"}],
+        )
+        assert reordered["authentication"] == [
+            {"username": "bob", "password_set": True},
+            {"username": "alice", "password_set": True},
+        ]
+        assert [credential.password for credential in proxy.upstream_credentials] == [
+            "other-secret",
+            "secret",
+        ]
+
+        cleared = await proxy.set_upstream(["http://other.example:8080"])
+        assert cleared["authentication"] == [None]
+        assert proxy.store.get_setting(proxy.UPSTREAM_AUTH_SETTING) is None
+    finally:
+        proxy.store.close()
 
 
 @pytest.fixture

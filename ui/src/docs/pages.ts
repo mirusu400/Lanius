@@ -217,7 +217,7 @@ const en: DocPage[] = [
           },
           {
             kind: 'note',
-            body: 'HTTPS proxy certificates are verified. Proxy authentication and SOCKS5 UDP relay are not supported.',
+            body: 'Each hop can use username/password authentication. Leave a saved password field blank to keep it. Credentials are omitted from shareable JSON exports but included in complete SQLite backups. HTTPS proxy certificates are verified; SOCKS5 UDP relay is not supported.',
           },
         ],
       },
@@ -687,11 +687,11 @@ const ko: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Settings > 프록시 > 상위 프록시에서 상위 프록시 사용을 고르고 http://127.0.0.1:8081 같은 HTTP 또는 HTTPS 프록시 URL을 입력하세요. 브라우저는 계속 Lanius에 연결하고, 해당 리스너가 받은 요청은 상위 프록시로 보냅니다. 경로는 프로젝트에 저장되며 적용 시 바로 바뀝니다.',
+            body: 'Settings > 프록시 > 상위 프록시에서 상위 프록시 사용을 고르고 HTTP, HTTPS 또는 SOCKS5 프록시 URL을 입력하세요. 홉을 추가하고 순서를 바꿔 Lanius에서 목적지까지의 경로를 구성할 수 있습니다. 브라우저는 계속 Lanius에 연결하며, 경로는 프로젝트에 저장되고 적용 시 바로 바뀝니다.',
           },
           {
             kind: 'note',
-            body: '현재는 인증이 없는 프록시 한 곳만 지정할 수 있습니다. SOCKS5와 여러 홉은 별도 연결 계층이 필요하며 아직 지원하지 않습니다.',
+            body: '각 홉에서 사용자 이름/비밀번호 인증을 사용할 수 있습니다. 저장된 비밀번호 입력란은 비워 두면 기존 값을 유지합니다. 인증 정보는 공유용 JSON 내보내기에서 제외되지만 전체 SQLite 백업에는 포함됩니다. HTTPS 프록시 인증서는 검증하며 SOCKS5 UDP 릴레이는 지원하지 않습니다.',
           },
         ],
       },

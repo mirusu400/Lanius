@@ -50,7 +50,7 @@ from .tls import (
     tls13_ciphers,
     validate_ciphers,
 )
-from .upstream import UpstreamBridge
+from .upstream import UpstreamBridge, UpstreamCredential
 from .http_protocol import HttpProtocolAddon, SETTING as HTTP_MODE_SETTING, project_mode, validate_mode
 from . import error_page
 from .tls_exceptions import (
@@ -271,6 +271,18 @@ def normalize_upstream_url(value: str) -> str:
     return normalized
 
 
+def _upstream_credential(username: Any, password: Any) -> UpstreamCredential:
+    if not isinstance(username, str) or not username.strip():
+        raise ValueError("upstream proxy username must not be empty")
+    if len(username) > 1024:
+        raise ValueError("upstream proxy username is too long")
+    if not isinstance(password, str):
+        raise ValueError("upstream proxy password must be a string")
+    if len(password) > 4096:
+        raise ValueError("upstream proxy password is too long")
+    return UpstreamCredential(username, password)
+
+
 def _upstream_loops_back(url: str, listen_host: str, listen_port: int) -> bool:
     parsed = urlsplit(url)
     if parsed.port != listen_port:
@@ -356,6 +368,7 @@ class ProxyEngine:
         # it is the one a user chose deliberately.
         self._apply_saved_listener()
         self.upstream_hops: list[str] = []
+        self.upstream_credentials: list[UpstreamCredential | None] = []
         self._upstream_bridge: UpstreamBridge | None = None
         self._apply_saved_upstream()
 
@@ -371,6 +384,7 @@ class ProxyEngine:
     LISTENERS_SETTING = "proxy_listeners"
     UPSTREAM_SETTING = "upstream_proxy_url"
     UPSTREAM_HOPS_SETTING = "upstream_proxy_hops"
+    UPSTREAM_AUTH_SETTING = "upstream_proxy_auth"
 
     def _apply_saved_listener(self) -> None:
         """Load the listener collection, migrating the old pair of settings."""
@@ -528,6 +542,31 @@ class ProxyEngine:
             except (ValueError, TypeError) as exc:
                 logger.warning("ignoring saved upstream proxy: %s", exc)
 
+        self.upstream_credentials = [None] * len(self.upstream_hops)
+        saved_auth = self.store.get_setting(self.UPSTREAM_AUTH_SETTING)
+        if not saved_auth:
+            return
+        try:
+            payload = json.loads(saved_auth)
+            if not isinstance(payload, dict) or payload.get("version") != 1:
+                raise ValueError("unsupported upstream authentication version")
+            entries = payload.get("entries")
+            if not isinstance(entries, list) or len(entries) != len(self.upstream_hops):
+                raise ValueError("upstream authentication does not match the route")
+            credentials: list[UpstreamCredential | None] = []
+            for hop, entry in zip(self.upstream_hops, entries, strict=True):
+                if entry is None:
+                    credentials.append(None)
+                    continue
+                if not isinstance(entry, dict) or entry.get("url") != hop:
+                    raise ValueError("upstream authentication does not match the route")
+                credentials.append(
+                    _upstream_credential(entry.get("username"), entry.get("password"))
+                )
+            self.upstream_credentials = credentials
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            logger.warning("ignoring saved upstream proxy authentication: %s", exc)
+
     def reload_route_settings(self) -> None:
         """Reload project-owned listeners and upstream route after an import.
 
@@ -536,10 +575,11 @@ class ProxyEngine:
         """
         self._apply_saved_listener()
         self.upstream_hops = []
+        self.upstream_credentials = []
         self._apply_saved_upstream()
 
     def _needs_upstream_bridge(self) -> bool:
-        return len(self.upstream_hops) > 1 or (
+        return any(self.upstream_credentials) or len(self.upstream_hops) > 1 or (
             bool(self.upstream_hops) and self.upstream_hops[0].startswith("socks5://")
         )
 
@@ -672,7 +712,7 @@ class ProxyEngine:
             return
         try:
             if self._needs_upstream_bridge():
-                bridge = UpstreamBridge(self.upstream_hops)
+                bridge = UpstreamBridge(self.upstream_hops, self.upstream_credentials)
                 try:
                     await bridge.start()
                 except (OSError, RuntimeError) as exc:
@@ -743,6 +783,12 @@ class ProxyEngine:
             "enabled": bool(self.upstream_hops),
             "hops": list(self.upstream_hops),
             "url": self.upstream_hops[0] if len(self.upstream_hops) == 1 else None,
+            "authentication": [
+                None
+                if credential is None
+                else {"username": credential.username, "password_set": True}
+                for credential in self.upstream_credentials
+            ],
         }
 
     def product_route_proxy_url(self) -> str | None:
@@ -753,7 +799,11 @@ class ProxyEngine:
             raise RuntimeError("upstream proxy route is not ready")
         return self.upstream_hops[0] if self.upstream_hops else None
 
-    async def set_upstream(self, hops: list[str] | str | None) -> dict[str, Any]:
+    async def set_upstream(
+        self,
+        hops: list[str] | str | None,
+        authentication: list[dict[str, Any] | None] | None = None,
+    ) -> dict[str, Any]:
         """Apply an ordered proxy chain to the regular listener."""
         if isinstance(hops, str):
             hops = [hops]
@@ -766,29 +816,97 @@ class ProxyEngine:
             for listener in self.listeners
         ):
             raise ValueError("upstream proxy points back to the listener")
-        if wanted == self.upstream_hops:
+
+        wanted_credentials: list[UpstreamCredential | None]
+        if authentication is None:
+            wanted_credentials = (
+                list(self.upstream_credentials)
+                if wanted == self.upstream_hops
+                else [None for _ in wanted]
+            )
+        else:
+            if len(authentication) != len(wanted):
+                raise ValueError("authentication must have one entry per upstream hop")
+            wanted_credentials = []
+            for index, entry in enumerate(authentication):
+                if entry is None:
+                    wanted_credentials.append(None)
+                    continue
+                if not isinstance(entry, dict):
+                    raise ValueError("authentication entries must be objects or null")
+                username = entry.get("username")
+                if "password" in entry:
+                    wanted_credentials.append(
+                        _upstream_credential(username, entry["password"])
+                    )
+                    continue
+                saved_credential = next(
+                    (
+                        credential
+                        for saved_url, credential in zip(
+                            self.upstream_hops,
+                            self.upstream_credentials,
+                            strict=True,
+                        )
+                        if saved_url == wanted[index]
+                        and credential is not None
+                        and credential.username == username
+                    ),
+                    None,
+                )
+                if saved_credential is None:
+                    raise ValueError(
+                        "password is required for new upstream proxy credentials"
+                    )
+                wanted_credentials.append(saved_credential)
+
+        if wanted == self.upstream_hops and wanted_credentials == self.upstream_credentials:
             return self.upstream_state()
 
-        previous = self.upstream_hops
+        previous_hops = self.upstream_hops
+        previous_credentials = self.upstream_credentials
         was_running = self.running
         if was_running:
             await self.stop()
         self.upstream_hops = wanted
+        self.upstream_credentials = wanted_credentials
         try:
             if was_running:
                 await self.start()
         except Exception:
-            self.upstream_hops = previous
+            self.upstream_hops = previous_hops
+            self.upstream_credentials = previous_credentials
             if was_running:
                 with contextlib.suppress(Exception):
                     await self.start()
             raise
 
-        self.store.delete_setting(self.UPSTREAM_SETTING)
+        delete = [self.UPSTREAM_SETTING]
+        values: dict[str, str] = {}
         if not wanted:
-            self.store.delete_setting(self.UPSTREAM_HOPS_SETTING)
+            delete.extend((self.UPSTREAM_HOPS_SETTING, self.UPSTREAM_AUTH_SETTING))
         else:
-            self.store.set_setting(self.UPSTREAM_HOPS_SETTING, json.dumps(wanted))
+            values[self.UPSTREAM_HOPS_SETTING] = json.dumps(wanted, separators=(",", ":"))
+            if any(wanted_credentials):
+                values[self.UPSTREAM_AUTH_SETTING] = json.dumps(
+                    {
+                        "version": 1,
+                        "entries": [
+                            None
+                            if credential is None
+                            else {
+                                "url": wanted[index],
+                                "username": credential.username,
+                                "password": credential.password,
+                            }
+                            for index, credential in enumerate(wanted_credentials)
+                        ],
+                    },
+                    separators=(",", ":"),
+                )
+            else:
+                delete.append(self.UPSTREAM_AUTH_SETTING)
+        self.store.batch_settings(values, delete)
         state = self.upstream_state()
         self.broker.publish("engine.upstream_changed", state)
         return state

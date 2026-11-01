@@ -823,6 +823,17 @@ export interface UpstreamState {
   enabled: boolean;
   hops: string[];
   url: string | null;
+  authentication: (UpstreamAuthentication | null)[];
+}
+
+export interface UpstreamAuthentication {
+  username: string;
+  password_set: boolean;
+}
+
+export interface UpstreamAuthenticationInput {
+  username: string;
+  password?: string;
 }
 
 export interface EgressIpObservation {

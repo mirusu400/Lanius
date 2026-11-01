@@ -59,10 +59,13 @@ SOCKS5 proxy URLs such as `http://127.0.0.1:8081` and
 to the destination. The browser still connects to Lanius. The chain is saved
 with the project and takes effect when applied.
 
-HTTPS proxy certificates are verified. Proxy authentication is not supported
-yet. SOCKS5 routing covers TCP connections; UDP relay is not part of the
-browser listener. Multi-hop and SOCKS5 routing use a bundled GOST bridge on a
-loopback port.
+Enable **Use authentication** on any hop to set its username and password.
+After saving, leave the password field blank to keep the existing password.
+Credentials are stored in the project database, omitted from shareable JSON
+exports, and included in complete SQLite backups. HTTPS proxy certificates are
+verified. SOCKS5 routing covers TCP connections; UDP relay is not part of the
+browser listener. Multi-hop, authenticated, and SOCKS5 routing use a bundled
+GOST bridge on a loopback port.
 
 ## Upstream HTTP version
 

@@ -278,12 +278,15 @@ SOCKS5 proxy URLs such as `http://127.0.0.1:8081` and
 `socks5://127.0.0.1:1080`. Add and reorder hops to choose the path from
 Lanius to the destination. The browser still connects to Lanius. The chain
 is saved with the project and takes effect when applied. HTTPS proxy
-certificates are verified. Proxy authentication is not supported yet.
-SOCKS5 routing covers TCP connections; UDP relay is not part of the browser
-listener.
+certificates are verified. Each hop can use username/password authentication;
+leave a saved password field blank to keep it. Credentials are stored in the
+project database, omitted from shareable JSON exports, and included in complete
+SQLite backups. SOCKS5 routing covers TCP connections; UDP relay is not part of
+the browser listener.
 
 Multi-hop and SOCKS5 routing use a bundled [GOST](https://github.com/go-gost/gost)
-v3.3.0 bridge on a loopback port. Run `python3 scripts/fetch_gost.py` before
+v3.3.0 bridge on a loopback port; authenticated routes use the same bridge. Run
+`python3 scripts/fetch_gost.py` before
 freezing the engine locally; release builds fetch the pinned, hash-checked
 binary automatically. GOST is licensed under MIT.
 

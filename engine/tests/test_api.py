@@ -1529,7 +1529,12 @@ def test_busy_add_does_not_change_listener_collection(client) -> None:
 
 
 def test_upstream_route_can_be_set_and_cleared(client) -> None:
-    assert client.get("/api/upstream").json() == {"enabled": False, "hops": [], "url": None}
+    assert client.get("/api/upstream").json() == {
+        "enabled": False,
+        "hops": [],
+        "url": None,
+        "authentication": [],
+    }
     configured = client.post(
         "/api/upstream", json={"url": "http://127.0.0.1:18081"}
     )
@@ -1538,12 +1543,14 @@ def test_upstream_route_can_be_set_and_cleared(client) -> None:
         "enabled": True,
         "hops": ["http://127.0.0.1:18081"],
         "url": "http://127.0.0.1:18081",
+        "authentication": [None],
     }
     assert client.get("/api/upstream").json() == configured.json()
     assert client.post("/api/upstream", json={"url": None}).json() == {
         "enabled": False,
         "hops": [],
         "url": None,
+        "authentication": [],
     }
 
 
@@ -1554,7 +1561,70 @@ def test_upstream_rejects_invalid_addresses_without_changing_route(client) -> No
     assert client.post(
         "/api/upstream", json={"url": f"http://127.0.0.1:{listener_port}"}
     ).status_code == 422
-    assert client.get("/api/upstream").json() == {"enabled": False, "hops": [], "url": None}
+    assert client.get("/api/upstream").json() == {
+        "enabled": False,
+        "hops": [],
+        "url": None,
+        "authentication": [],
+    }
+
+
+def test_upstream_authentication_is_write_only_and_not_json_exported(client) -> None:
+    async def fake_bridge_start(bridge) -> None:
+        bridge.port = free_port()
+
+    url = "http://proxy.example:8080"
+    with mock.patch("app.proxy.UpstreamBridge.start", new=fake_bridge_start):
+        response = client.post(
+            "/api/upstream",
+            json={
+                "hops": [url],
+                "authentication": [{"username": "alice", "password": "secret"}],
+            },
+        )
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": True,
+        "hops": [url],
+        "url": url,
+        "authentication": [{"username": "alice", "password_set": True}],
+    }
+    assert "secret" not in response.text
+    assert client.get("/api/upstream").json() == response.json()
+
+    exported = client.get("/api/project/export?include_flows=false").json()
+    assert "upstream_proxy_auth" not in exported["settings"]
+    assert "secret" not in json.dumps(exported)
+    exported["settings"]["upstream_proxy_auth"] = json.dumps({
+        "version": 1,
+        "entries": [{
+            "url": url,
+            "username": "mallory",
+            "password": "injected",
+        }],
+    })
+    with mock.patch("app.proxy.UpstreamBridge.start", new=fake_bridge_start):
+        imported = client.post(
+            "/api/project/import?settings_only=true",
+            json=exported,
+        )
+    assert imported.status_code == 200
+    stored_auth = client.app.state.store.get_setting("upstream_proxy_auth")
+    assert "secret" in stored_auth
+    assert "injected" not in stored_auth
+
+    assert client.post(
+        "/api/upstream",
+        json={"hops": [url], "authentication": [{"username": "alice"}]},
+    ).status_code == 200
+    assert client.post(
+        "/api/upstream",
+        json={"hops": [url], "authentication": [{"username": "bob"}]},
+    ).status_code == 422
+    assert client.post(
+        "/api/upstream",
+        json={"hops": [url], "authentication": {"username": "alice"}},
+    ).status_code == 422
 
 
 def test_the_api_survives_a_proxy_port_that_is_already_taken(tmp_path) -> None:

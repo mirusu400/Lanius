@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 import subprocess
 from unittest.mock import AsyncMock, Mock
 
@@ -50,3 +52,51 @@ async def test_windows_gost_does_not_open_a_console(monkeypatch, tmp_path) -> No
     )
     writer.close.assert_called_once_with()
     writer.wait_closed.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_authenticated_hops_use_a_temporary_config_not_process_args(
+    monkeypatch, tmp_path
+) -> None:
+    executable = tmp_path / "gost"
+    process = Mock(returncode=None)
+    captured: dict[str, object] = {}
+
+    async def spawn(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        config_path = Path(args[2])
+        captured["config_path"] = config_path
+        captured["config"] = json.loads(config_path.read_text(encoding="utf-8"))
+        return process
+
+    writer = Mock()
+    writer.wait_closed = AsyncMock()
+    monkeypatch.setattr(upstream, "gost_executable", lambda: executable)
+    monkeypatch.setattr(upstream, "_free_local_port", lambda: 43123)
+    monkeypatch.setattr(upstream.sys, "platform", "linux")
+    monkeypatch.setattr(upstream.asyncio, "create_subprocess_exec", spawn)
+    monkeypatch.setattr(
+        upstream.asyncio,
+        "open_connection",
+        AsyncMock(return_value=(Mock(), writer)),
+    )
+
+    bridge = upstream.UpstreamBridge(
+        ["https://proxy.example:8443"],
+        [upstream.UpstreamCredential("alice", "not-on-the-command-line")],
+    )
+    await bridge.start()
+
+    assert captured["args"] == (str(executable), "-C", str(captured["config_path"]))
+    assert "not-on-the-command-line" not in repr(captured["args"])
+    assert not Path(captured["config_path"]).exists()
+    node = captured["config"]["chains"][0]["hops"][0]["nodes"][0]
+    assert node["connector"] == {
+        "type": "http",
+        "auth": {"username": "alice", "password": "not-on-the-command-line"},
+    }
+    assert node["dialer"] == {
+        "type": "tls",
+        "tls": {"secure": True, "serverName": "proxy.example"},
+    }

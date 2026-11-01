@@ -758,6 +758,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=413,
                 detail="JSON export is limited to 100,000 flows; use the complete SQLite backup",
             )
+        exported_settings = await asyncio.to_thread(store.all_settings)
+        # JSON projects are designed to be shared. Keep proxy passwords local;
+        # a complete SQLite backup remains an exact, credential-bearing backup.
+        exported_settings.pop(ProxyEngine.UPSTREAM_AUTH_SETTING, None)
         data: dict[str, Any] = {
             "format": "lanius-project",
             "version": 1,
@@ -765,7 +769,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "engine_version": __version__,
             "scope": await asyncio.to_thread(store.list_scope_rules),
             "workspace": await asyncio.to_thread(store.all_workspace),
-            "settings": await asyncio.to_thread(store.all_settings),
+            "settings": exported_settings,
             "issues": await asyncio.to_thread(store.all_issues),
             "fuzzer_runs": await asyncio.to_thread(store.list_fuzzer_runs),
             "egress_ip_observations": await asyncio.to_thread(
@@ -943,14 +947,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 was_locked = lockdown.project_enabled
                 was_scope_egress = lockdown.scope_egress_effective
                 was_running = engine.running
-                # Trust decisions are never imported: a shared project must not
-                # add a CA or switch off verification for a host on its own.
+                # Trust decisions and local secrets are never imported: a shared
+                # project must not add a CA, relax TLS, or inject proxy credentials.
                 kept = {
                     key: store.get_setting(key)
                     for key in (
                         TRUSTED_CA_SETTING,
                         TLS_EXCEPTIONS_SETTING,
                         TLS_INSECURE_SETTING,
+                        ProxyEngine.UPSTREAM_AUTH_SETTING,
                     )
                 }
                 await engine.fuzzer.stop_all()
@@ -960,7 +965,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 imported = False
                 try:
                     if burp_plan is None:
-                        counts = await asyncio.to_thread(store.import_project, payload)
+                        import_payload = dict(payload)
+                        if isinstance(payload.get("settings"), dict):
+                            import_settings = dict(payload["settings"])
+                            import_settings.pop(ProxyEngine.UPSTREAM_AUTH_SETTING, None)
+                            import_payload["settings"] = import_settings
+                        counts = await asyncio.to_thread(
+                            store.import_project, import_payload
+                        )
                     else:
                         counts = await asyncio.to_thread(
                             store.import_settings_subset,
@@ -1411,9 +1423,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             or (isinstance(hops, list) and all(isinstance(hop, str) for hop in hops))
         ):
             raise HTTPException(status_code=422, detail="hops must be a list of proxy URLs")
+        authentication = payload.get("authentication")
+        if "authentication" in payload and not (
+            authentication is None
+            or (
+                isinstance(authentication, list)
+                and all(entry is None or isinstance(entry, dict) for entry in authentication)
+            )
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="authentication must be a list of objects or null values",
+            )
         egress_ip.route_changed()
         try:
-            return await engine.set_upstream(hops)
+            return await engine.set_upstream(hops, authentication)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except ProxyStartError as exc:
