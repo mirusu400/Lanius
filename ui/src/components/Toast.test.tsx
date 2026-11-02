@@ -40,14 +40,40 @@ it('merges repeated notifications and expires them independently', () => {
   expect(screen.queryByRole('alert')).toBeNull();
 });
 
-it('keeps default notifications visible long enough to notice', () => {
+it('dismisses default notifications after two and a half seconds', () => {
   vi.useFakeTimers();
   render(<Probe />);
   act(() => feedback.showToast({ message: 'copied', tone: 'success' }));
-  act(() => vi.advanceTimersByTime(4499));
+  act(() => vi.advanceTimersByTime(2499));
   expect(screen.getByRole('status').classList.contains('exiting')).toBe(false);
   act(() => vi.advanceTimersByTime(1));
   expect(screen.getByRole('status').classList.contains('exiting')).toBe(true);
+});
+
+it('keeps errors visible for four seconds by default', () => {
+  vi.useFakeTimers();
+  render(<Probe />);
+  act(() => feedback.showToast({ message: 'blocked', tone: 'error' }));
+  act(() => vi.advanceTimersByTime(3999));
+  expect(screen.getByRole('alert').classList.contains('exiting')).toBe(false);
+  act(() => vi.advanceTimersByTime(1));
+  expect(screen.getByRole('alert').classList.contains('exiting')).toBe(true);
+});
+
+it('closes one notification from its dismiss button', () => {
+  vi.useFakeTimers();
+  render(<Probe />);
+  act(() => {
+    feedback.showToast({ message: 'first' });
+    feedback.showToast({ message: 'second' });
+  });
+  const first = screen.getByText('first').closest('.app-toast')!;
+  act(() => first.querySelector<HTMLButtonElement>('.app-toast-dismiss')!.click());
+  expect(first.classList.contains('exiting')).toBe(true);
+  expect(screen.getByText('second')).toBeTruthy();
+  act(() => vi.advanceTimersByTime(240));
+  expect(screen.queryByText('first')).toBeNull();
+  expect(screen.getByText('second')).toBeTruthy();
 });
 
 it('bounds the stack without displacing errors with success notifications', () => {

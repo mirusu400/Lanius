@@ -28,6 +28,8 @@ interface ToastEntry extends ToastOptions {
 }
 
 const TOAST_EXIT_MS = 240;
+const TOAST_DEFAULT_MS = 2500;
+const TOAST_ERROR_MS = 4000;
 
 interface ToastContextValue {
   showToast: (options: ToastOptions) => void;
@@ -52,6 +54,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const dismissToast = useCallback(() => {
     replace([]);
+  }, [replace]);
+
+  const dismissToastById = useCallback((id: string) => {
+    const removeAt = Date.now() + TOAST_EXIT_MS;
+    replace(entries.current.map((toast) => (
+      toast.id === id && toast.removeAt === undefined ? { ...toast, removeAt } : toast
+    )));
   }, [replace]);
 
   const applyPreferences = useCallback((next: ToastPreferences) => {
@@ -99,7 +108,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       next.splice(expendable < 0 ? fallback : expendable, 1);
     }
     next.push({ ...options, id, expiresAt: options.durationMs === 0 ? null
-      : now + (options.durationMs ?? (options.tone === 'error' ? 8000 : 4500)) });
+      : now + (options.durationMs ?? (options.tone === 'error' ? TOAST_ERROR_MS : TOAST_DEFAULT_MS)) });
     replace(next);
   }, [replace]);
 
@@ -139,13 +148,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [showToast, dismissToast, preferences, updatePreferences]);
   return <ToastContext.Provider value={value}>
     {children}
-    <ToastViewport toasts={toasts} />
+    <ToastViewport toasts={toasts} onDismiss={dismissToastById} />
   </ToastContext.Provider>;
 }
 
 /** Render inside the active dialog so its live regions are not inert. A manual
  * popover also puts notifications above modal backdrops without taking focus. */
-function ToastViewport({ toasts }: { toasts: ToastEntry[] }) {
+function ToastViewport({ toasts, onDismiss }: { toasts: ToastEntry[]; onDismiss: (id: string) => void }) {
+  const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const [popover, setPopover] = useState(() => 'showPopover' in HTMLElement.prototype);
   const [host, setHost] = useState<HTMLElement>(document.body);
@@ -180,6 +190,8 @@ function ToastViewport({ toasts }: { toasts: ToastEntry[] }) {
         className={`app-toast ${toast.tone ?? 'info'}${toast.removeAt === undefined ? '' : ' exiting'}`}
         role={toast.tone === 'error' ? 'alert' : 'status'} aria-atomic="true">
         <span className="app-toast-message">{toast.message}</span>
+        <button type="button" className="app-toast-dismiss" aria-label={t('common.close')}
+          onClick={() => onDismiss(toast.id)} />
       </div>)}
     </div>, host,
   ) : null;

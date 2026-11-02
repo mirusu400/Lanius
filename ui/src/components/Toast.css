@@ -15,11 +15,11 @@
 .app-toast {
   --toast-color: var(--accent);
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr) 22px;
   align-items: start;
   gap: 10px;
   margin-bottom: 10px;
-  padding: 13px 16px 13px 13px;
+  padding: 13px 11px 13px 13px;
   border: 1px solid color-mix(in srgb, var(--toast-color) 55%, var(--border));
   border-left: 4px solid var(--toast-color);
   border-radius: 8px;
@@ -61,6 +61,29 @@
 .app-toast-message {
   min-width: 0;
   padding-top: 1px;
+}
+
+.app-toast-dismiss {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  pointer-events: auto;
+}
+
+.app-toast-dismiss::before { content: '×'; }
+
+.app-toast-dismiss:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--toast-color) 14%, transparent);
+  color: var(--fg);
 }
 
 .app-toast.exiting {
