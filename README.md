@@ -8,7 +8,9 @@
 [![Nightly](https://github.com/mirusu400/Lanius/actions/workflows/nightly.yml/badge.svg)](https://github.com/mirusu400/Lanius/actions/workflows/nightly.yml)
 [![Stable release](https://github.com/mirusu400/Lanius/actions/workflows/stable.yml/badge.svg)](https://github.com/mirusu400/Lanius/actions/workflows/stable.yml)
 
-**A desktop web security testing proxy, built on mitmproxy.**
+**The local-first web security workspace built for humans and AI agents.**
+
+Powered by mitmproxy. Persistent projects, native MCP, and Lockdown Mode.
 
 [Download](#download) · [Showcase](#showcase) · [Getting started](#getting-started) · [Features](#features) · [Plugins](#plugins) · [AI agents](#ai-agents)
 
@@ -81,6 +83,68 @@ the [full showcase](https://lanius.mir.sh/showcase) for the guided tour.
     </td>
   </tr>
 </table>
+
+## Why Lanius
+
+The established tools are good at different things. Lanius brings their most
+useful day-to-day ideas into one local desktop workflow, then adds first-class
+agent access and explicit controls for sensitive networks.
+
+| Compared with | The Lanius difference |
+|---|---|
+| **mitmproxy** | **Same proven engine. Far less assembly required.** |
+| **Burp Suite Community Edition** | **Persistent projects and unrestricted payload fuzzing—without upgrading to Pro.** |
+| **OWASP ZAP** | **A focused manual testing workspace, built for human–agent collaboration.** |
+| **Caido Basic** | **Native MCP. No account required. Lockdown built for sensitive networks.** |
+
+### Access
+
+| Capability | Lanius | mitmproxy / mitmweb | Burp Community | OWASP ZAP | Caido Basic |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **Free** | **✓** | ✓ | △ | ✓ | △ |
+| **Open source** | **✓** | ✓ | ✕ | ✓ | ✕ |
+
+### Everyday workflow
+
+| Capability | Lanius | mitmproxy / mitmweb | Burp Community | OWASP ZAP | Caido Basic |
+|---|:---:|:---:|:---:|:---:|:---:|
+| One-click proxy-ready browser | ✓ | ✕ | ✓ | ✓ | ✓ |
+| Request and response intercept | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Scope and site map UI | ✓ | △ | ✓ | ✓ | ✓ |
+| Request replay | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Unrestricted GUI fuzzing | ✓ | ✕ | △ | ✓ | ✓ |
+| WebSocket intercept and resend | ✓ | △ | ✓ | ✓ | ✓ |
+| GUI Match & Replace | ✓ | △ | ✓ | △ | ✓ |
+| Decoder and response diff | ✓ | △ | ✓ | △ | △ |
+| Persistent projects | ✓ | △ | △ | ✓ | ✓ |
+| Extension system | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+### Where Lanius stands apart
+
+| Capability | Lanius | mitmproxy / mitmweb | Burp Community | OWASP ZAP | Caido Basic |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Native desktop MCP | ✓ | ✕ | △ | △ | △ |
+| First-party SDK for plugin-owned MCP tools | ✓ | ✕ | ✕ | △ | ✕ |
+| Sensitive-header redaction for agent tools | ✓ | ✕ | ✕ | ✕ | ✕ |
+| Sensitive-network Lockdown Mode | ✓ | ✕ | ✕ | ✕ | ✕ |
+| GUI per-app or PID system capture | ✓ | △ | ✕ | ✕ | ✕ |
+| Full integration Doctor | ✓ | ✕ | △ | ✕ | ✕ |
+| Unlimited persistent projects at entry level | ✓ | ✕ | △ | ✓ | △ |
+| No account required | ✓ | ✓ | ✓ | ✓ | ✕ |
+| Direct Burp settings import | ✓ | ✕ | ✕ | ✕ | ✕ |
+
+Comparison scope: publicly documented desktop capabilities and entry-level
+editions as of 2026-11-02. ✓ means the capability is included as a first-party
+feature in the compared edition. △ means limited or conditional: an account,
+different edition, add-on, CLI, manual setup, or third-party component may be
+required. ✕ means unavailable in the compared product. Verify current details
+in the official documentation for
+[mitmproxy](https://docs.mitmproxy.org/stable/),
+[Burp Suite](https://portswigger.net/burp/documentation/desktop),
+[OWASP ZAP](https://www.zaproxy.org/docs/), and
+[Caido](https://docs.caido.io/). Pricing and plan limits can change; see the
+[Burp edition comparison](https://portswigger.net/burp/communitydownload) and
+[Caido pricing](https://www.caido.io/pricing/) for the current terms.
 
 ## Download
 

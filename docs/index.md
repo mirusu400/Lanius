@@ -4,10 +4,11 @@ sidebar: false
 
 hero:
   name: Lanius
-  text: A desktop web security testing proxy
+  text: The local-first web security workspace
   tagline: >
-    Built on mitmproxy. See every request, stop it mid flight, change it,
-    and send it again.
+    Built on mitmproxy for humans and AI agents. Capture in a proxy-ready
+    browser, keep every test in a persistent project, and lock down outbound
+    access when the network matters.
   image:
     src: /lanius_mascot_transparent.png
     alt: Lanius mascot
@@ -76,5 +77,250 @@ features:
       <span class="showcase-card__media"><img src="/showcase/07-fuzzer-run.png" alt="Fuzzer payload configuration and live result table"></span>
       <span class="showcase-card__body"><strong>Scale up the test</strong><span>Run payload sets through marked positions and surface response outliers.</span></span>
     </a>
+  </div>
+</section>
+
+<section id="comparison" class="home-comparison" aria-labelledby="comparison-title">
+  <div class="home-comparison__heading">
+    <p class="showcase-eyebrow">Why Lanius</p>
+    <h2 id="comparison-title">The workflow you expect. The controls the others bolt on.</h2>
+    <p>Lanius covers the everyday proxy toolkit, then adds native agent access, project-local data, and a real boundary for sensitive networks.</p>
+  </div>
+
+  <div class="rival-grid" aria-label="How Lanius compares with similar tools">
+    <article class="rival-card">
+      <span>vs mitmproxy</span>
+      <strong>Same proven engine.</strong>
+      <p>Far less assembly required.</p>
+    </article>
+    <article class="rival-card">
+      <span>vs Burp Community</span>
+      <strong>Keep the whole project.</strong>
+      <p>Persistent workspaces and unrestricted payload fuzzing—without upgrading to Pro.</p>
+    </article>
+    <article class="rival-card">
+      <span>vs OWASP ZAP</span>
+      <strong>Stay focused on the test.</strong>
+      <p>A manual testing workspace built for human–agent collaboration.</p>
+    </article>
+    <article class="rival-card">
+      <span>vs Caido Basic</span>
+      <strong>Local means local.</strong>
+      <p>Native MCP. No account required. Lockdown built for sensitive networks.</p>
+    </article>
+  </div>
+
+  <div class="comparison-legend" aria-label="Comparison legend">
+    <span><i class="comparison-mark comparison-mark--yes" aria-hidden="true">✓</i> Included</span>
+    <span><i class="comparison-mark comparison-mark--partial" aria-hidden="true">△</i> Limited or conditional</span>
+    <span><i class="comparison-mark comparison-mark--no" aria-hidden="true">✕</i> Not available</span>
+  </div>
+
+  <div class="comparison-table-wrap" tabindex="0" aria-label="Scrollable product comparison">
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th scope="col">Capability</th>
+          <th scope="col" class="is-lanius">Lanius</th>
+          <th scope="col">mitmproxy</th>
+          <th scope="col">Burp Community</th>
+          <th scope="col">OWASP ZAP</th>
+          <th scope="col">Caido Basic</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="comparison-group comparison-group--priority"><th colspan="6" scope="colgroup">Access</th></tr>
+        <tr class="comparison-priority">
+          <th scope="row">Free</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: Community edition">△</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: account and Basic plan limits">△</span></td>
+        </tr>
+        <tr class="comparison-priority">
+          <th scope="row">Open source</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not available">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not available">✕</span></td>
+        </tr>
+        <tr class="comparison-group"><th colspan="6" scope="colgroup">Everyday workflow</th></tr>
+        <tr>
+          <th scope="row">One-click proxy-ready browser</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Request / response intercept</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Scope and site map UI</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: flow filters">△</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Request replay</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Unrestricted GUI fuzzing</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: Intruder demo">△</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+        </tr>
+        <tr>
+          <th scope="row">WebSocket intercept and resend</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: scripting required">△</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+        </tr>
+        <tr>
+          <th scope="row">GUI Match &amp; Replace</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: options or add-ons">△</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: Replacer add-on">△</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Decoder and response diff</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: content views">△</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: encoding tools without integrated diff">△</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: conversion tools without integrated diff">△</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Persistent projects</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: saved flow files">△</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: Professional edition">△</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Extension system</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+        </tr>
+        <tr class="comparison-group"><th colspan="6" scope="colgroup">Where Lanius stands apart</th></tr>
+        <tr>
+          <th scope="row">Native desktop MCP</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: DAST product only">△</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: MCP Integration add-on">△</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: unofficial community bridge">△</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Plugin-owned MCP tools via first-party SDK</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: Extender scripts through add-on">△</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Sensitive-header redaction for agent tools</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Sensitive-network Lockdown Mode</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+        </tr>
+        <tr>
+          <th scope="row">GUI per-app or PID system capture</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: CLI Local Capture">△</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Full integration Doctor</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: browser health check only">△</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Unlimited persistent projects at entry level</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: Professional edition">△</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--partial" aria-label="Limited: paid plan">△</span></td>
+        </tr>
+        <tr>
+          <th scope="row">No account required</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Direct Burp settings import</th>
+          <td class="is-lanius"><span class="comparison-mark comparison-mark--yes" aria-label="Included">✓</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+          <td><span class="comparison-mark comparison-mark--no" aria-label="Not included">✕</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="comparison-note">
+    Compared using publicly documented desktop capabilities and entry-level editions on 2026-11-02.
+    ✓ means included as a first-party feature. △ means limited or conditional: an account,
+    different edition, add-on, CLI, manual setup, or third-party component may be required.
+    ✕ means unavailable.
+    Check the current official documentation for
+    <a href="https://docs.mitmproxy.org/stable/">mitmproxy</a>,
+    <a href="https://portswigger.net/burp/documentation/desktop">Burp Suite</a>,
+    <a href="https://www.zaproxy.org/docs/">OWASP ZAP</a>, and
+    <a href="https://docs.caido.io/">Caido</a>.
+  </p>
+
+  <div class="comparison-cta">
+    <div>
+      <strong>Keep the capture local. Bring your own agent.</strong>
+      <span>Start with a temporary project or keep the complete investigation in a workspace of its own.</span>
+    </div>
+    <a href="https://github.com/mirusu400/Lanius/releases/latest">Download Lanius</a>
   </div>
 </section>

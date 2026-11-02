@@ -10,11 +10,11 @@ const repo = 'https://github.com/mirusu400/Lanius'
 
 export default defineConfig({
   title: 'Lanius',
-  description: 'A desktop web security testing proxy, built on mitmproxy.',
+  description: 'The local-first web security workspace built on mitmproxy for humans and AI agents.',
   head: [
     ['link', { rel: 'icon', href: '/app_icon.png' }],
     ['meta', { property: 'og:title', content: 'Lanius' }],
-    ['meta', { property: 'og:description', content: 'A desktop web security testing proxy, built on mitmproxy.' }],
+    ['meta', { property: 'og:description', content: 'The local-first web security workspace built on mitmproxy for humans and AI agents.' }],
     ['meta', { property: 'og:image', content: 'https://lanius.mir.sh/lanius_social_preview.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
   ],
@@ -54,6 +54,7 @@ export default defineConfig({
     siteTitle: 'Lanius',
     nav: [
       { text: 'Showcase', link: '/showcase' },
+      { text: 'Compare', link: '/#comparison' },
       { text: 'Wiki', link: '/features' },
       { text: 'Plugins', link: '/plugins-sdk' },
       { text: 'Releases', link: `${repo}/releases` },
