@@ -1509,18 +1509,18 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
-            tauri::WindowEvent::CloseRequested { api, .. } => {
+            tauri::WindowEvent::CloseRequested { api, .. }
                 if !window
                     .state::<ShutdownState>()
                     .0
                     .lock()
                     .expect("shutdown lock")
-                    .approved
-                {
-                    api.prevent_close();
-                    request_app_close(window.app_handle());
-                }
+                    .approved =>
+            {
+                api.prevent_close();
+                request_app_close(window.app_handle());
             }
+            tauri::WindowEvent::CloseRequested { .. } => {}
             tauri::WindowEvent::Destroyed => {
                 end_project(
                     &window.state::<EngineProcess>(),

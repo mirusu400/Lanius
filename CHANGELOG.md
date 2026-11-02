@@ -2,14 +2,37 @@
 
 ## Unreleased
 
-- Make TLS cipher controls follow the interface font-size setting and enforce
-  the no-fixed-font-size rule in CI.
-- Harden experimental System Capture by reporting native privilege and platform
-  requirements on Windows and Linux, keeping rejected settings out of the
-  project, distinguishing those failures from macOS extension approval, and
-  waiting for the OS process filter before reporting a live change as applied.
-- Raise Python runtime and development dependency floors for current
-  OpenTelemetry API, filelock, and setuptools security advisories.
+## [0.6.0] — Visual target mapping and portable testing workflows
+
+See the [v0.6.0 release notes](docs/releases/v0.6.0.md) for downloads and installation notes. Changes since v0.5.0:
+
+- Explore captured attack surfaces with bounded interactive Target graphs across
+  multiple hosts, including zoom, draggable nodes, pausable layouts, child-path
+  navigation, and request inspection. Plugin SDK 1.6 also adds Target host
+  context actions.
+- Find and replace text directly in Replay requests, highlight valid Fuzzer
+  payload markers, and preserve stray closing braces in JSON, GraphQL, and other
+  request content.
+- Export project settings without captured traffic and import Lanius or Burp
+  settings through the file picker or drag and drop. Convert supported scope,
+  Match & Replace, listener, HTTP protocol, capture, and SOCKS settings while
+  excluding credentials and unsupported routes.
+- Add username and password authentication to individual upstream proxy hops,
+  keep credentials out of shareable JSON exports, and manage supported TLS
+  cipher suites through a searchable and reorderable interface.
+- Control Intercept toggling, forwarding, and dropping with configurable
+  shortcuts, reorder Replay and Fuzzer tabs, identify newly transferred
+  requests, and improve clipboard, toast, project, and engine-status feedback.
+- Repair one layer of double-encoded UTF-8 in read-only response displays without
+  changing captured bytes, use a native Save As dialog for CA certificates, and
+  prevent the built-in browser from silently reusing an obsolete listener.
+- Harden Lockdown Mode so plugin actions, scanners, codecs, generators, and
+  background tasks cannot execute while plugins are suspended. Improve Windows
+  and Linux System Capture validation and save only settings the platform can
+  apply.
+- Update mitmproxy and security-sensitive Python and UI dependencies, fix
+  AppImage launcher permissions, and improve native window, settings, and
+  destructive-action reliability.
 
 ## [0.5.0] — Deeper inspection and scalable traffic workflows
 

@@ -24,6 +24,9 @@ httpx>=0.28
 certifi>=2026.10.19
 cryptography>=50.0.1
 h2>=4.4.1
+# ldap3 accepts older pyasn1 releases with ASN.1 decoder denial-of-service
+# issues fixed in 0.6.5.
+pyasn1>=0.6.5
 tornado>=6.5.10
 # Response previews use python-zstandard directly. mitmproxy now uses
 # backports.zstd, which does not provide the zstandard import.
