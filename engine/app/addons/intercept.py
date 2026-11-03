@@ -168,12 +168,16 @@ class InterceptAddon:
         store: FlowStore | None = None,
         scope_predicate: Callable[[str, str, int, str], bool] | None = None,
         on_forwarded: Callable[[http.HTTPFlow], bool | None] | None = None,
+        may_release: Callable[[http.HTTPFlow], bool] | None = None,
     ) -> None:
         self.broker = broker
         self.rules = rules or InterceptRules()
         self.store = store
         self.scope_predicate = scope_predicate
         self.on_forwarded = on_forwarded
+        # Consulted for every released request, edited or not: a request can
+        # be held across a change that now forbids all egress.
+        self.may_release = may_release
         self.paused: dict[str, tuple[http.HTTPFlow, Phase]] = {}
 
     def _auto_decompress(self) -> bool:
@@ -234,6 +238,8 @@ class InterceptAddon:
             )
             if self.on_forwarded is not None:
                 allowed = self.on_forwarded(flow) is not False
+        if allowed and phase == "request" and self.may_release is not None:
+            allowed = self.may_release(flow)
         # Invalid edits must leave the request available for retry or Drop.
         self._take(flow_id)
         # Resume before kill: kill() clears ``intercepted`` without waking

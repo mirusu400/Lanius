@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
-import { getEgressIpState, setEgressIpState } from '../../api/client';
-import type { EgressIpObservation, EgressIpState } from '../../api/types';
+import { getEgressIpState, setEgressIpState, setEgressPin } from '../../api/client';
+import type { EgressIpObservation, EgressIpState, EgressPinState } from '../../api/types';
 import { Dialog } from '../../components/Dialog';
 import { UndoableInput } from '../../components/UndoableText';
 import { useT } from '../../i18n';
@@ -25,6 +25,20 @@ function observed(item: EgressIpObservation | null, never: string): string {
   return `${item.ip} · ${new Date(item.last_seen_at * 1000).toLocaleString()}`;
 }
 
+const NO_PIN: EgressPinState = {
+  enabled: false,
+  ipv4: null,
+  ipv6: null,
+  allowed: true,
+  reason: null,
+  mismatch: { ipv4: null, ipv6: null },
+  candidates: { ipv4: null, ipv6: null },
+};
+
+function pinnedIps(pin: { ipv4: string | null; ipv6: string | null }): string {
+  return [pin.ipv4, pin.ipv6].filter(Boolean).join(', ');
+}
+
 export function EgressIpSection() {
   const t = useT();
   const saved = useSettingsToast('egressIp.section');
@@ -39,6 +53,7 @@ export function EgressIpSection() {
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [history, setHistory] = useState<EgressIpObservation[]>([]);
+  const [pinConfirmOpen, setPinConfirmOpen] = useState(false);
 
   const load = (next: EgressIpState, replaceDraft: boolean) => {
     // A UI can briefly outlive an older engine during a desktop restart.
@@ -55,6 +70,8 @@ export function EgressIpSection() {
       errors: next?.errors ?? { ipv4: null, ipv6: null },
       current: next?.current ?? { ipv4: null, ipv6: null },
       history: next?.history ?? [],
+      poll_seconds: next?.poll_seconds,
+      pin: { ...NO_PIN, ...(next?.pin ?? {}) },
     };
     setState(normalized);
     if (!replaceDraft) return;
@@ -71,6 +88,14 @@ export function EgressIpSection() {
   useEffect(() => {
     void refresh(true);
   }, []);
+
+  const pin = state?.pin ?? NO_PIN;
+  // The pin status changes on its own (observer rounds, network changes).
+  useEffect(() => {
+    if (!pin.enabled) return undefined;
+    const timer = window.setInterval(() => void refresh(false), 5000);
+    return () => window.clearInterval(timer);
+  }, [pin.enabled]);
 
   const changed = state !== null && (
     enabled !== state.enabled
@@ -102,6 +127,37 @@ export function EgressIpSection() {
     }
   };
 
+  const candidates = pinnedIps(pin.candidates);
+  const pinUnavailable = state === null || busy || state.blocked_by_lockdown
+    || !state.enabled || !candidates;
+
+  const applyPin = async (enable: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await setEgressPin(enable
+        ? { enabled: true, ipv4: pin.candidates.ipv4, ipv6: pin.candidates.ipv6 }
+        : { enabled: false });
+      load(next, false);
+      saved({ detail: t(enable ? 'egressIp.pinApplied' : 'egressIp.unpinApplied') });
+      if (enable) window.setTimeout(() => void refresh(false), 1500);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+      setPinConfirmOpen(false);
+    }
+  };
+
+  const pinStatus = () => {
+    if (pin.reason === 'lockdown') return t('egressIp.pinBlockedLockdown');
+    if (pin.reason === 'mismatch') {
+      return t('egressIp.pinBlockedMismatch', { ip: pinnedIps(pin.mismatch) });
+    }
+    if (pin.reason === 'unverified') return t('egressIp.pinBlockedUnverified');
+    return t('egressIp.pinAllowed');
+  };
+
   const refreshHistory = async () => {
     setHistoryBusy(true);
     setHistoryError(null);
@@ -124,7 +180,8 @@ export function EgressIpSection() {
     <h3>{t('egressIp.section')}</h3>
     <p className="muted">{t('egressIp.help')}</p>
     <div className="settings-row">
-      <label><input type="checkbox" checked={enabled} disabled={state === null || busy}
+      <label><input type="checkbox" checked={enabled}
+        disabled={state === null || busy || (pin.enabled && enabled)}
         onChange={(event) => setEnabled(event.target.checked)} />{' '}
         {t('egressIp.enabled')}</label>
     </div>
@@ -139,6 +196,7 @@ export function EgressIpSection() {
         <option value={300}>{t('egressIp.fiveMinutes')}</option>
       </select>
     </div>
+    {pin.enabled && <p className="muted">{t('egressIp.pinPolling')}</p>}
 
     <div className="settings-row">
       <label htmlFor="egress-ip-v4">{t('egressIp.ipv4Url')}</label>
@@ -177,7 +235,50 @@ export function EgressIpSection() {
         {t('egressIp.viewHistory')}
       </button>
     </div>}
+
+    <div className="egress-ip-pin">
+      <p className="muted">{t('egressIp.pinHelp')}</p>
+      {pin.enabled ? <>
+        <p><strong>{t('egressIp.pinned')}:</strong>{' '}
+          <span className="mono">{pinnedIps(pin)}</span></p>
+        <p role="status" className={pin.allowed ? undefined : 'lockdown-active'}>{pinStatus()}</p>
+        <div className="settings-row">
+          <button type="button" disabled={busy} onClick={() => void applyPin(false)}>
+            {t('egressIp.unpin')}
+          </button>
+        </div>
+      </> : <>
+        <div className="settings-row">
+          <button type="button" disabled={pinUnavailable} onClick={() => setPinConfirmOpen(true)}>
+            {t('egressIp.pinButton')}
+          </button>
+        </div>
+        {state?.blocked_by_lockdown
+          ? <p className="muted">{t('egressIp.pinUnavailableLockdown')}</p>
+          : state && (!state.enabled || !candidates)
+            && <p className="muted">{t('egressIp.pinNeedsObservation')}</p>}
+      </>}
+    </div>
     {error && <div className="banner error" role="alert">{error}</div>}
+
+    <Dialog
+      open={pinConfirmOpen}
+      title={t('egressIp.pinConfirmTitle')}
+      onClose={() => setPinConfirmOpen(false)}
+      footer={<>
+        <span className="spacer" />
+        <button type="button" disabled={busy} onClick={() => setPinConfirmOpen(false)}>
+          {t('common.cancel')}
+        </button>
+        <button type="button" className="primary" disabled={busy || !candidates}
+          onClick={() => void applyPin(true)}>
+          {t('egressIp.pinYes')}
+        </button>
+      </>}
+    >
+      <p>{t('egressIp.pinConfirm', { ips: candidates })}</p>
+      <p className="muted">{t('egressIp.pinConfirmDetail')}</p>
+    </Dialog>
 
     <Dialog
       open={historyOpen}

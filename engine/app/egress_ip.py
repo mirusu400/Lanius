@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .db.store import FlowStore
+from .egress_pin import POLL_SECONDS as PIN_POLL_SECONDS, VALID_SECONDS, EgressPinPolicy
 from .lockdown import BLOCKED_DETAIL, LockdownBlocked, LockdownPolicy
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,10 @@ def validate_observer_url(value: str) -> str:
     if port is not None and not 1 <= port <= 65535:
         raise ValueError("observer URL port must be between 1 and 65535")
     return value
+
+
+class EgressPinConflict(RuntimeError):
+    """The pin cannot change in the current state (mapped to HTTP 409)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,10 +148,12 @@ class EgressIpMonitor:
         store: FlowStore,
         lockdown: LockdownPolicy,
         proxy_url: Callable[[], str | None],
+        pin: EgressPinPolicy | None = None,
     ) -> None:
         self.store = store
         self.lockdown = lockdown
         self.proxy_url = proxy_url
+        self.pin = pin
         self.config = _read_config(store)
         self.last_checked_at: float | None = None
         self.last_success_at: float | None = None
@@ -154,12 +161,26 @@ class EgressIpMonitor:
         self._revision = 0
         self._wake = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
+        if pin is not None:
+            pin.on_unverified = self._recheck
+
+    @property
+    def pinned(self) -> bool:
+        return self.pin is not None and self.pin.enabled
+
+    @property
+    def poll_seconds(self) -> int:
+        return PIN_POLL_SECONDS if self.pinned else self.config.interval_seconds
 
     async def start(self) -> None:
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._run(), name="lanius-egress-ip")
+        if self.pin is not None:
+            self.pin.start()
 
     async def stop(self) -> None:
+        if self.pin is not None:
+            await self.pin.stop()
         task = self._task
         self._task = None
         if task is None:
@@ -172,6 +193,8 @@ class EgressIpMonitor:
 
     async def reload(self) -> None:
         self.config = _read_config(self.store)
+        if self.pin is not None:
+            self.pin.reload()
         self._revision += 1
         self._wake.set()
 
@@ -179,13 +202,59 @@ class EgressIpMonitor:
         """Discard an in-flight result and re-evaluate the Lockdown gate."""
         self._revision += 1
         self._wake.set()
+        if self.pin is not None:
+            self.pin.evaluate()
 
     def route_changed(self) -> None:
         """Never save an answer obtained through a route being replaced."""
         self._revision += 1
         self._wake.set()
+        if self.pin is not None:
+            self.pin.invalidate()
+
+    def _recheck(self) -> None:
+        """The pin needs a fresh answer; an in-flight one may be stale."""
+        self._revision += 1
+        self._wake.set()
+
+    def pin_candidates(self) -> dict[str, str | None]:
+        """Addresses the observer confirmed in its latest round."""
+        horizon = time.time() - (self.poll_seconds + VALID_SECONDS)
+        found: dict[str, str | None] = {}
+        for family in (4, 6):
+            latest = self.store.latest_egress_ip_observation(family)
+            fresh = (
+                self.config.enabled
+                and not self.lockdown.enabled
+                and self.errors[family] is None
+                and latest is not None
+                and latest["last_seen_at"] >= horizon
+            )
+            found[f"ipv{family}"] = latest["ip"] if fresh and latest else None
+        return found
+
+    def set_pin(self, enabled: bool, ipv4: str | None, ipv6: str | None) -> None:
+        """Pin exactly the addresses the user confirmed, or remove the pin."""
+        if self.pin is None:
+            raise RuntimeError("public IP pin is unavailable")
+        if not enabled:
+            self.pin.configure(False, None, None)
+            self._recheck()
+            return
+        # Refused while Lockdown Mode is active: the observer cannot run.
+        self.lockdown.require_outbound("public IP pin")
+        if not self.config.enabled:
+            raise EgressPinConflict("enable public IP observation first")
+        candidates = self.pin_candidates()
+        if not any(candidates.values()):
+            raise EgressPinConflict("no recent public IP observation to pin")
+        if (ipv4 or None, ipv6 or None) != (candidates["ipv4"], candidates["ipv6"]):
+            raise EgressPinConflict("the observed public IP changed; review it and try again")
+        self.pin.configure(True, candidates["ipv4"], candidates["ipv6"])
 
     async def configure(self, config: EgressIpConfig) -> None:
+        if self.pinned and not config.enabled:
+            raise EgressPinConflict("remove the public IP pin before disabling observation")
         if config.interval_seconds not in ALLOWED_INTERVALS:
             raise ValueError("poll interval must be 60, 180 or 300 seconds")
         ipv4_url = validate_observer_url(config.ipv4_url)
@@ -220,6 +289,14 @@ class EgressIpMonitor:
             "errors": {"ipv4": self.errors[4], "ipv6": self.errors[6]},
             "current": current,
             "history": observations,
+            "poll_seconds": self.poll_seconds,
+            "pin": {
+                **(self.pin.status() if self.pin is not None else {
+                    "enabled": False, "ipv4": None, "ipv6": None, "allowed": True,
+                    "reason": None, "mismatch": {"ipv4": None, "ipv6": None},
+                }),
+                "candidates": self.pin_candidates(),
+            },
         }
 
     async def _wait(self, timeout: float | None = None) -> None:
@@ -246,7 +323,7 @@ class EgressIpMonitor:
             await self._poll(config, revision)
             if revision != self._revision:
                 continue
-            await self._wait(float(config.interval_seconds))
+            await self._wait(float(self.poll_seconds))
 
     async def _poll(self, config: EgressIpConfig, revision: int) -> None:
         self.last_checked_at = time.time()
@@ -262,10 +339,13 @@ class EgressIpMonitor:
             except Exception as exc:
                 self.errors[family] = str(exc)
                 logger.info("public IPv%s observation failed: %s", family, exc)
+                if self.pin is not None and revision == self._revision:
+                    self.pin.observation_failed(family)
 
     async def _observe(self, family: int, url: str, revision: int) -> None:
         # Keep the policy context around the entire network operation. Turning
         # Lockdown on cancels this task; no result survives to the DB write.
+        before = self.pin.network_snapshot() if self.pinned and self.pin else None
         async with self.lockdown.outbound("public IP observation"):
             observed = await _request_ip(url, family, self.proxy_url())
             if (
@@ -284,3 +364,5 @@ class EgressIpMonitor:
                 observer_url=url,
             )
             self.last_success_at = time.time()
+            if self.pin is not None and before is not None:
+                self.pin.observed(family, observed, before)

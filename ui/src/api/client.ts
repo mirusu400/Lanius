@@ -1222,6 +1222,18 @@ export function setEgressIpState(settings: {
   });
 }
 
+export function setEgressPin(pin: {
+  enabled: boolean;
+  ipv4?: string | null;
+  ipv6?: string | null;
+}): Promise<import('./types').EgressIpState> {
+  return request('/api/egress-ip/pin', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(pin),
+  });
+}
+
 export function setListener(
   host: string,
   port: number,

@@ -121,6 +121,30 @@ in-flight result from being written. No public-IP observation is saved while
 global or project Lockdown Mode is effective. Polling resumes automatically
 after Lockdown Mode is turned off if the feature remains enabled.
 
+### Pinning traffic to the observed public IP
+
+**Only communicate from this public IP** pins the project to the addresses the
+observer confirmed in its latest round. After confirmation, proxy, Replay,
+Fuzzer and raw TCP/UDP/DNS traffic leaves only while the pin is confirmed:
+
+- While pinned, the observer runs every 30 seconds and a confirmation is
+  trusted for 45 seconds. An expired confirmation, an observer failure, a
+  different address, or an address in a family that was not pinned blocks
+  traffic until a matching observation arrives.
+- Local interface changes (VPN up/down, Wi-Fi switch) and upstream route
+  changes invalidate the confirmation at once and trigger an immediate
+  re-check. An observation that started on a different network is ignored.
+- The guard refuses before DNS lookup or socket creation. When traffic stops
+  being allowed, live proxy connections, held Intercept requests, Replay and
+  Fuzzer runs are closed. A blocked attempt shows an error toast.
+
+The pin is stored in the project database, so exports carry it. It cannot be
+turned on while Lockdown Mode is active, and a pinned project blocks all user
+traffic while Lockdown Mode is active because the observer cannot run. The pin
+can always be removed. Public IP recording cannot be disabled while pinned.
+The decision reflects what the observer sees; a target reached through a
+different route (for example a split tunnel) may see another address.
+
 ## Looking like a browser
 
 Lanius terminates TLS, so the server fingerprints the proxy rather than your

@@ -251,6 +251,24 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
         refreshScannerAvailability();
         return;
       }
+      if (event.type === 'engine.egress_pin_blocked') {
+        const target = event.data.port === null
+          ? event.data.host
+          : `${event.data.host}:${event.data.port}`;
+        const reason = {
+          lockdown: 'egressIp.pinReasonLockdown',
+          mismatch: 'egressIp.pinReasonMismatch',
+          unverified: 'egressIp.pinReasonUnverified',
+        } as const;
+        showToast({
+          message: t('egressIp.pinBlockedToast', {
+            target,
+            reason: t(reason[event.data.reason] ?? reason.unverified),
+          }),
+          tone: 'error',
+        });
+        return;
+      }
       if (event.type !== 'engine.scope_egress_blocked') return;
       const target = event.data.port === null
         ? event.data.host

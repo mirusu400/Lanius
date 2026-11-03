@@ -73,7 +73,7 @@ from ..content_encoding import (
     auto_decompress_enabled,
     content_encoding,
 )
-from ..egress_ip import EgressIpConfig, EgressIpMonitor
+from ..egress_ip import EgressIpConfig, EgressIpMonitor, EgressPinConflict
 from ..media_storage import MEDIA_BODY_LIMIT_SETTING, MAX_MEDIA_BODY_LIMIT_MB
 from ..db.store import ANNOTATION_COLORS, FlowStore
 from ..db.database_import import SQLITE_HEADER, PreparedDatabase, prepare_database
@@ -179,6 +179,12 @@ class EgressIpPatch(BaseModel):
     interval_seconds: int = Field(strict=True)
     ipv4_url: str
     ipv6_url: str
+
+
+class EgressPinPatch(BaseModel):
+    enabled: bool
+    ipv4: str | None = None
+    ipv6: str | None = None
 
 
 class EgressIpEstimatesBody(BaseModel):
@@ -460,7 +466,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     broker = EventBroker(on_publish=_log_event)
     startup_progress.report("engine")
     engine = ProxyEngine(settings, store, broker, lockdown)
-    egress_ip = EgressIpMonitor(store, lockdown, engine.product_route_proxy_url)
+    egress_ip = EgressIpMonitor(
+        store, lockdown, engine.product_route_proxy_url, engine.egress_pin,
+    )
 
     # Built below, then started by the lifespan (its session manager needs a
     # running task group before it can serve requests).
@@ -643,6 +651,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ipv4_url=payload.ipv4_url,
                 ipv6_url=payload.ipv6_url,
             ))
+        except EgressPinConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return await asyncio.to_thread(egress_ip.state)
+
+    @app.put("/api/egress-ip/pin")
+    async def set_egress_pin(payload: EgressPinPatch) -> dict[str, object]:
+        """Only let user traffic leave while the public IP is the pinned one."""
+        try:
+            egress_ip.set_pin(payload.enabled, payload.ipv4, payload.ipv6)
+        except EgressPinConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return await asyncio.to_thread(egress_ip.state)

@@ -34,9 +34,11 @@ from .addons.scanner import ScannerAddon
 from .plugin_packages import PluginPackageManager
 from .plugin_catalogue import PluginCatalogueManager
 from .addons.scope import ScopeManager
+from .addons.egress_pin import EgressPinAddon
 from .addons.scope_egress import ScopeEgressEarlyAddon, ScopeEgressGuardAddon
 from .addons.system_trust import MacOSSystemTrustAddon
 from .config import Settings
+from .egress_pin import EgressPinPolicy
 from .lockdown import LockdownPolicy
 from .db.store import FlowStore
 from .events import EventBroker
@@ -312,6 +314,10 @@ class ProxyEngine:
         self.scope = ScopeManager(store, broker)
         self.scope_egress = ScopeEgressGuardAddon(self.scope, self.lockdown, broker)
         self.scope_egress_early = ScopeEgressEarlyAddon(self.scope_egress)
+        self.egress_pin = EgressPinPolicy(store, self.lockdown)
+        self.egress_pin.on_revoked = self._egress_pin_revoked
+        self.egress_pin_guard = EgressPinAddon(self.egress_pin, broker)
+        self._pin_closing: set[asyncio.Task[None]] = set()
         self.capture = CaptureAddon(store, broker, self.scope)
         self.match_replace = MatchReplaceAddon(store, broker)
         self.intercept = InterceptAddon(
@@ -322,6 +328,7 @@ class ProxyEngine:
             # second time. Persist it immediately so History can show the
             # final "Modified request" even before a response arrives.
             on_forwarded=self._intercept_forwarded,
+            may_release=self.egress_pin_guard.allows_http,
         )
         self.websockets = WebSocketProxyAddon(broker, store=store)
         self.replay = ReplayAddon(store)
@@ -675,6 +682,11 @@ class ProxyEngine:
         # bundled addon so a DNS flow cannot reach mitmproxy's resolver first.
         master.addons.chain.remove(self.scope_egress_early)
         master.addons.chain.insert(0, self.scope_egress_early)
+        # The public IP pin does not depend on the destination; it follows the
+        # scope guard and still precedes every bundled addon and resolver.
+        master.addons.add(self.egress_pin_guard)
+        master.addons.chain.remove(self.egress_pin_guard)
+        master.addons.chain.insert(1, self.egress_pin_guard)
         master.addons.add(self.match_replace)
         master.addons.add(self.intercept)
         master.addons.add(self.scope_egress)
@@ -1427,6 +1439,30 @@ class ProxyEngine:
         self.websockets.master = None
         self.broker.publish("engine.stopped", {})
 
+    def _egress_pin_revoked(self) -> None:
+        """The pinned public IP is no longer confirmed: close user egress."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(self.close_for_egress_pin(), name="lanius-egress-pin-close")
+        self._pin_closing.add(task)
+        task.add_done_callback(self._pin_closing.discard)
+
+    async def close_for_egress_pin(self) -> None:
+        """Drop held, standalone and live connections without a restart.
+
+        New connections are already refused by the guard; this ends the ones
+        that were opened while the pinned address was still confirmed.
+        """
+        if self.egress_pin.allowed:
+            return
+        await self.fuzzer.stop_all()
+        await self.replay.cancel_active("the public IP pin")
+        self.intercept.drop_all()
+        self.websockets.drop_all()
+        await self._close_live_connections("public IP pin is not confirmed")
+
     async def restart_for_scope_egress(self) -> None:
         """Close all user egress and rebuild mitmproxy with current policy."""
         await self.fuzzer.stop_all()
@@ -1458,6 +1494,14 @@ class ProxyEngine:
         # Stopping listening sockets does not stop mitmproxy's live client
         # handlers. Close both ends before changing protocol/trust/scope policy,
         # otherwise a browser can keep using the old negotiated connection.
+        await self._close_live_connections("proxy connection settings changed")
+
+    async def _close_live_connections(self, reason: str) -> None:
+        if self.master is None:
+            return
+        proxyserver = self.master.addons.get("proxyserver")
+        if proxyserver is None:  # pragma: no cover - always present upstream
+            return
         tasks: set[asyncio.Task[Any]] = set()
         for handler in list(getattr(proxyserver, "connections", {}).values()):
             for transport in list(handler.transports.values()):
@@ -1465,6 +1509,6 @@ class ProxyEngine:
                     transport.writer.close()
                 if transport.handler is not None and not transport.handler.done():
                     tasks.add(transport.handler)
-                    transport.handler.cancel("proxy connection settings changed")
+                    transport.handler.cancel(reason)
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)

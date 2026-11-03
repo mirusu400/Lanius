@@ -116,3 +116,49 @@ it('loads public IP history into a modal', async () => {
   expect(dialog.textContent).toContain(t('egressIp.historyCount', { count: '2' }));
   expect(requested.some((url) => url.endsWith('/api/egress-ip?history_limit=1000'))).toBe(true);
 });
+
+function stubState(state: object) {
+  vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    const body = init?.method === 'PUT' ? JSON.parse(String(init.body)) as unknown : null;
+    if (body) posted.push({ url: String(url), body });
+    const pinned = body && String(url).endsWith('/pin') && (body as { enabled: boolean }).enabled;
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => pinned
+        ? { ...state, pin: { ...(state as { pin: object }).pin, enabled: true, ipv4: '8.8.8.8', reason: 'unverified', allowed: false } }
+        : state,
+    } as Response;
+  }));
+}
+
+const observedPin = {
+  enabled: false, ipv4: null, ipv6: null, allowed: true, reason: null,
+  mismatch: { ipv4: null, ipv6: null },
+  candidates: { ipv4: '8.8.8.8', ipv6: null },
+};
+
+it('asks before pinning traffic to the observed public IP', async () => {
+  const user = userEvent.setup();
+  stubState({ ...base, enabled: true, pin: observedPin });
+  render(<EgressIpSection />);
+  await user.click(await screen.findByRole('button', { name: t('egressIp.pinButton') }));
+  expect(screen.getByText(t('egressIp.pinConfirm', { ips: '8.8.8.8' }))).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: t('egressIp.pinYes') }));
+
+  await waitFor(() => expect(posted).toEqual([{
+    url: expect.stringContaining('/api/egress-ip/pin') as unknown,
+    body: { enabled: true, ipv4: '8.8.8.8', ipv6: null },
+  }]));
+  expect(await screen.findByText(t('egressIp.pinBlockedUnverified'))).toBeTruthy();
+  expect(screen.getByRole('button', { name: t('egressIp.unpin') })).toBeTruthy();
+});
+
+it('does not offer the IP pin while Lockdown Mode is active', async () => {
+  stubState({ ...base, enabled: true, blocked_by_lockdown: true, pin: observedPin });
+  render(<EgressIpSection />);
+  const button = await screen.findByRole('button', { name: t('egressIp.pinButton') });
+  await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(true));
+  expect(screen.getByText(t('egressIp.pinUnavailableLockdown'))).toBeTruthy();
+});

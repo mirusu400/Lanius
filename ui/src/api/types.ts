@@ -296,6 +296,10 @@ export type EngineEvent =
   | { type: 'engine.started' | 'engine.stopped'; data: Record<string, unknown> }
   | { type: 'engine.local_capture_blocked'; data: LocalCaptureState }
   | {
+      type: 'engine.egress_pin_blocked';
+      data: { reason: EgressPinReason; host: string; port: number | null };
+    }
+  | {
       type: 'engine.scope_egress_blocked';
       data: {
         scheme: string;
@@ -857,6 +861,21 @@ export interface EgressIpState {
   errors: { ipv4: string | null; ipv6: string | null };
   current: { ipv4: EgressIpObservation | null; ipv6: EgressIpObservation | null };
   history: EgressIpObservation[];
+  poll_seconds?: number;
+  pin?: EgressPinState;
+}
+
+export type EgressPinReason = 'lockdown' | 'unverified' | 'mismatch';
+
+export interface EgressPinState {
+  enabled: boolean;
+  ipv4: string | null;
+  ipv6: string | null;
+  allowed: boolean;
+  reason: EgressPinReason | null;
+  mismatch: { ipv4: string | null; ipv6: string | null };
+  /** Addresses confirmed by the latest observation round, offered for pinning. */
+  candidates: { ipv4: string | null; ipv6: string | null };
 }
 
 export interface TlsState {
