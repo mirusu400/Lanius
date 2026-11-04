@@ -3213,6 +3213,8 @@ pre.response-preview-text {
 
 .resp-meta {
   color: var(--muted);
+  flex: none;
+  white-space: nowrap;
 }
 
 .replay-split {

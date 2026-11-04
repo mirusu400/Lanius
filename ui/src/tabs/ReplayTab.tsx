@@ -364,6 +364,16 @@ export function ReplayTabView() {
                   : t('replay.bodyTruncated', { count: String(count) }),
               )
             : undefined}
+          meta={active.response && (
+            <span className="resp-meta mono">
+              {active.response.upstream_http_version && <span title={t('httpProtocol.actual', { version: active.response.upstream_http_version })}>{active.response.upstream_http_version} · </span>}
+              {active.response.status_code ?? 'ERR'} ·{' '}
+              {active.response.size} B ·{' '}
+              {active.response.duration_ms === null
+                ? '-'
+                : `${Math.round(active.response.duration_ms)} ms`}
+            </span>
+          )}
           empty={t('replay.noResponse')}
         />}
       />
@@ -530,16 +540,6 @@ export function ReplayTabView() {
               />
               {t('replay.autoFollowRedirects')}
             </label>
-            {active.response && (
-              <span className="resp-meta mono">
-                {active.response.upstream_http_version && <span title={t('httpProtocol.actual', { version: active.response.upstream_http_version })}>{active.response.upstream_http_version} · </span>}
-                {active.response.status_code ?? 'ERR'} ·{' '}
-                {active.response.size} B ·{' '}
-                {active.response.duration_ms === null
-                  ? '-'
-                  : `${Math.round(active.response.duration_ms)} ms`}
-              </span>
-            )}
           </div>
           {active.error && (
             <div className="banner error">{renderMessage(active.error, t)}</div>

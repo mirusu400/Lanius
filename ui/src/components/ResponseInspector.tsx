@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 import { getFlow } from '../api/client';
 import { useT } from '../i18n';
@@ -26,6 +26,7 @@ export function ResponseInspector({
   bodyOmitted,
   bodySize,
   title,
+  meta,
   empty,
 }: {
   flowId: string | null;
@@ -33,6 +34,8 @@ export function ResponseInspector({
   bodyOmitted?: boolean;
   bodySize?: number;
   title?: string;
+  /** Shown beside the title, e.g. status, size and elapsed time. */
+  meta?: ReactNode;
   empty: string;
 }) {
   const t = useT();
@@ -129,6 +132,7 @@ export function ResponseInspector({
   return <section className="response-inspector" ref={sectionRef}>
     <div className="response-inspector-bar">
       <span className="detail-half-title">{title ?? t('detail.response')}</span>
+      {meta}
       {flowId && <CodeDisplayControls showLineEndings={showLineEndings} onShowLineEndings={setShowLineEndings}
         wrap={wrap} onWrap={setWrap} disabled={view === 'preview' || view === 'hex'} />}
       {flowId && <div className="view-switch" role="tablist">
