@@ -143,6 +143,9 @@ export function buildFlowQuery(filters: FlowFilters, limit = 200, offset = 0, an
   for (const ext of filters.excludeExtensions ?? []) {
     params.append('exclude_extensions', ext);
   }
+  for (const source of filters.excludeSources ?? []) {
+    params.append('exclude_sources', source);
+  }
   if (filters.inScopeOnly) params.set('in_scope_only', 'true');
   if (filters.bookmarkedOnly) params.set('bookmarked_only', 'true');
   if (filters.annotationColor) params.set('annotation_color', filters.annotationColor);

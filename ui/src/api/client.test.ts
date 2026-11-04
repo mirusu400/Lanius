@@ -160,6 +160,12 @@ describe('buildFlowQuery with the new filters', () => {
     expect(query).toContain('exclude_extensions=png&exclude_extensions=css');
   });
 
+  it('sends excluded tools as a list', () => {
+    expect(buildFlowQuery({ excludeSources: ['replay', 'fuzzer'] })).toContain(
+      'exclude_sources=replay&exclude_sources=fuzzer',
+    );
+  });
+
   it('sends the scope flag only when it is on', () => {
     expect(buildFlowQuery({ inScopeOnly: true })).toContain('in_scope_only=true');
     expect(buildFlowQuery({ inScopeOnly: false })).not.toContain('in_scope_only');

@@ -36,6 +36,8 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
   const t = useT();
   const showSourceIp = useLocalSourceIpColumn();
   const publicIpIndex = showSourceIp ? 11 : 10;
+  // Last, so layouts saved before this column existed keep their indices.
+  const toolIndex = publicIpIndex + 1;
   const [showPublicIp, setShowPublicIp] = useState(false);
   const hiddenChanged = useCallback((hidden: number[]) => {
     setShowPublicIp(!hidden.includes(publicIpIndex));
@@ -56,8 +58,8 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
     rows.current.get(id)?.focus();
     rows.current.get(id)?.scrollIntoView?.({ block: 'nearest' });
   };
-  const baseColumns = useResizableColumns('lanius.columns.history', [64, 48, 84, 70, 180, 260, 66, 82, 78, 84, 180]);
-  const sourceColumns = useResizableColumns('lanius.columns.history.source', [64, 48, 84, 70, 180, 260, 66, 82, 78, 84, 135, 180]);
+  const baseColumns = useResizableColumns('lanius.columns.history', [64, 48, 84, 70, 180, 260, 66, 82, 78, 84, 180, 72]);
+  const sourceColumns = useResizableColumns('lanius.columns.history.source', [64, 48, 84, 70, 180, 260, 66, 82, 78, 84, 135, 180, 72]);
   const columns = showSourceIp ? sourceColumns : baseColumns;
   const headers = [
     t('flow.time'), t('flow.method'), t('flow.host'), t('flow.url'),
@@ -104,6 +106,8 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
               resizeLabel={t('table.resizeColumn', { column: t('flow.localSourceIp') })} />}
             <ResizableHeader label={t('flow.publicIpEstimate')} index={publicIpIndex} columns={columns}
               resizeLabel={t('table.resizeColumn', { column: t('flow.publicIpEstimate') })} />
+            <ResizableHeader label={t('flow.tool')} index={toolIndex} columns={columns}
+              resizeLabel={t('table.resizeColumn', { column: t('flow.tool') })} />
             <ResizableFillHeader />
           </tr>
         </thead>
@@ -166,6 +170,9 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
               </td>}
               <td className="mono" title={t('flow.publicIpEstimateHint')}>
                 {publicIps[flow.id] || '—'}
+              </td>
+              <td className="mono" title={t('flow.toolHint')}>
+                {flow.source === 'replay' || flow.source === 'fuzzer' ? t(`flow.tool.${flow.source}`) : ''}
               </td>
               <ResizableFillCell />
             </tr>

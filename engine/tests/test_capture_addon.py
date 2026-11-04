@@ -7,7 +7,7 @@ import time
 import pytest
 from mitmproxy.test import tflow, tutils
 
-from app.addons.capture import CaptureAddon, flow_to_record
+from app.addons.capture import SOURCE_KEY, CaptureAddon, flow_to_record
 from app.db.store import FlowStore
 from app.events import EventBroker
 
@@ -189,6 +189,13 @@ def test_a_replay_is_not_proxied_traffic() -> None:
     flow = make_flow()
     flow.is_replay = "request"
     assert flow_to_record(flow).source == "replay"
+
+
+def test_a_fuzzer_request_says_so() -> None:
+    flow = make_flow()
+    flow.is_replay = "request"
+    flow.metadata[SOURCE_KEY] = "fuzzer"
+    assert flow_to_record(flow).source == "fuzzer"
 
 
 @pytest.mark.asyncio

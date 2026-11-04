@@ -1507,6 +1507,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         status_classes: list[int] | None = Query(None),
         extensions: list[str] | None = Query(None),
         exclude_extensions: list[str] | None = Query(None),
+        exclude_sources: list[str] | None = Query(None),
         in_scope_only: bool = False,
         bookmarked_only: bool = False,
         annotation_color: str | None = None,
@@ -1531,6 +1532,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_classes=status_classes,
                 extensions=extensions,
                 exclude_extensions=exclude_extensions,
+                exclude_sources=exclude_sources,
                 bookmarked_only=bookmarked_only,
                 annotation_color=annotation_color,
             )

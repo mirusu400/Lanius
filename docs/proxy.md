@@ -24,6 +24,14 @@ History has a **Modified** column. When Match & Replace, Intercept, or a plugin
 changes a request, its detail pane keeps **Original**, **Auto-modified**, and
 **Modified request** tabs so every stage can be compared.
 
+## Replay and Fuzzer requests
+
+Requests sent from Replay and Fuzzer are recorded in History as well. The
+**Tool** column names the tool that sent each one and is empty for proxied
+traffic. In **Filter...**, tick **Hide Replay requests** or **Hide Fuzzer
+requests** to leave them out. Fuzzer requests recorded before this column
+existed are listed as Replay.
+
 ## Inspector decoding
 
 Select text in a request or response and open **Inspector** to peel its

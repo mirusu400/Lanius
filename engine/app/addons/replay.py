@@ -27,6 +27,7 @@ from ..content_encoding import (
     encode_content,
 )
 from ..db.store import FlowRecord, FlowStore
+from .capture import SOURCE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,7 @@ class ReplayAddon:
 
     async def send(
         self, flow: http.HTTPFlow, timeout: float = DEFAULT_TIMEOUT,
-        http_mode: HttpMode | None = None,
+        http_mode: HttpMode | None = None, source: str = "replay",
     ) -> FlowRecord:
         if self.options is None:
             raise ReplayError("proxy engine is not running")
@@ -161,6 +162,7 @@ class ReplayAddon:
         except ValueError as exc:
             raise ReplayError(str(exc)) from exc
         flow.is_replay = "request"
+        flow.metadata[SOURCE_KEY] = source
         handler = ReplayHandler(flow, self.options)
         task = asyncio.current_task()
         if task is not None:
@@ -193,7 +195,7 @@ class ReplayAddon:
                 self._active.discard(task)
                 self._policy_cancelled.pop(task, None)
 
-        record = _to_record(flow, started)
+        record = _to_record(flow, started, source)
         await asyncio.to_thread(self.store.upsert, record)
         return record
 
@@ -208,11 +210,11 @@ class ReplayAddon:
             await asyncio.gather(*tasks, return_exceptions=True)
 
 
-def _to_record(flow: http.HTTPFlow, started: float) -> FlowRecord:
+def _to_record(flow: http.HTTPFlow, started: float, source: str) -> FlowRecord:
     from .capture import flow_to_record
 
     record = flow_to_record(flow)
-    record.source = "replay"
+    record.source = source
     if record.started_at is None:
         record.started_at = started
     if record.duration_ms is None and record.completed_at:

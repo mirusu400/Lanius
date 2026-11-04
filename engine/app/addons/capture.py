@@ -24,6 +24,9 @@ from ..events import EventBroker
 from ..http_protocol import MODE_KEY, WIRE_KEY
 from ..request_history import AUTO_MODIFIED, ORIGINAL, request_changed, snapshot
 
+# Which tool sent a replayed flow ("replay" or "fuzzer"), set before sending.
+SOURCE_KEY = "lanius.source"
+
 logger = logging.getLogger(__name__)
 
 # A raw TCP record holds the whole stream so far, so writing it on every
@@ -344,7 +347,10 @@ def flow_to_record(flow: http.HTTPFlow) -> FlowRecord:
         # addons as well, so both halves write the same row: whichever
         # landed last decided what the row said it was, and on a loaded
         # machine that was the wrong one. Both now say the same thing.
-        source="replay" if flow.is_replay == "request" else "proxy",
+        source=(
+            flow.metadata.get(SOURCE_KEY, "replay")
+            if flow.is_replay == "request" else "proxy"
+        ),
         comment=flow.comment or None,
     )
     original_data = flow.metadata.get(ORIGINAL)

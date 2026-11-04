@@ -75,6 +75,12 @@ describe('matchesFilters', () => {
     expect(matchesFilters(marked, { bookmarkedOnly: true, annotationColor: 'red' })).toBe(false);
     expect(matchesFilters(flow({ annotation_color: 'blue' }), { bookmarkedOnly: true })).toBe(false);
   });
+  it('hides flows sent by an excluded tool', () => {
+    const filters = { excludeSources: ['fuzzer' as const] };
+    expect(matchesFilters(flow({ source: 'fuzzer' }), filters)).toBe(false);
+    expect(matchesFilters(flow({ source: 'replay' }), filters)).toBe(true);
+    expect(matchesFilters(flow(), filters)).toBe(true);
+  });
   it('accepts everything with empty filters', () => {
     expect(matchesFilters(flow(), {})).toBe(true);
   });

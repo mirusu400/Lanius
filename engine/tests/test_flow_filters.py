@@ -115,6 +115,24 @@ class TestExcludingExtensions:
         assert "13" in ids(client.get("/api/flows?exclude_extensions=png"))
 
 
+class TestExcludingSources:
+    """Replay and Fuzzer write into the same history as the proxy."""
+
+    def test_drops_one_tool(self, client) -> None:
+        add(client, id="r1", source="replay")
+        add(client, id="z1", source="fuzzer")
+        got = ids(client.get("/api/flows?exclude_sources=fuzzer"))
+        assert "z1" not in got
+        assert {"r1", "1"} <= got
+
+    def test_drops_both_tools_and_keeps_proxied_traffic(self, client) -> None:
+        add(client, id="r1", source="replay")
+        add(client, id="z1", source="fuzzer")
+        got = ids(client.get("/api/flows?exclude_sources=replay&exclude_sources=fuzzer"))
+        assert got & {"r1", "z1"} == set()
+        assert "1" in got
+
+
 class TestMethods:
     def test_keeps_one_method(self, client) -> None:
         assert ids(client.get("/api/flows?methods=POST")) == {"4", "6"}

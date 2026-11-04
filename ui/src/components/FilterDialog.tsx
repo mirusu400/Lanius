@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from 'react';
 
-import type { FlowFilters, HistoryColor } from '../api/types';
+import type { FlowFilters, FlowTool, HistoryColor } from '../api/types';
 import { Dialog } from './Dialog';
 import { useT } from '../i18n';
 import { UndoableInput } from './UndoableText';
@@ -22,6 +22,10 @@ const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
 /** By class, because 2xx is the useful unit rather than 200 against 201. */
 const STATUS_CLASSES = [2, 3, 4, 5];
+const TOOLS: [FlowTool, string][] = [
+  ['replay', 'filter.hideReplay'],
+  ['fuzzer', 'filter.hideFuzzer'],
+];
 const HISTORY_COLORS: HistoryColor[] = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'];
 
 /** What a capture is mostly made of, and what people mute first. */
@@ -38,7 +42,7 @@ const COMMON_EXTENSIONS = [
   'woff2',
 ];
 
-function toggle(list: string[], value: string): string[] {
+function toggle<T extends string>(list: T[], value: T): T[] {
   return list.includes(value)
     ? list.filter((v) => v !== value)
     : [...list, value];
@@ -103,6 +107,7 @@ export function FilterDialog({
     set({ extensions: [...boxes, ...parseExtensions(text)] });
   };
   const exclude = draft.excludeExtensions ?? [];
+  const excludeSources = draft.excludeSources ?? [];
 
   const set = (patch: Partial<FlowFilters>) =>
     setDraft((current) => ({ ...current, ...patch }));
@@ -160,6 +165,16 @@ export function FilterDialog({
               {HISTORY_COLORS.map((color) => <option key={color} value={color}>{t(`history.color.${color}`)}</option>)}
             </select>
           </label>
+        </section>
+        <section>
+          <h5>{t('filter.tools')}</h5>
+          {TOOLS.map(([tool, label]) => (
+            <label className="filter-toggle" key={tool}>
+              <input type="checkbox" checked={excludeSources.includes(tool)}
+                onChange={() => set({ excludeSources: toggle(excludeSources, tool) })} />
+              {t(label)}
+            </label>
+          ))}
         </section>
         <section>
           <h5>{t('filter.methods')}</h5>
@@ -284,6 +299,7 @@ export function countActive(filters: FlowFilters): number {
     (filters.excludeExtensions?.length ? 1 : 0) +
     (filters.host ? 1 : 0) +
     (filters.inScopeOnly ? 1 : 0)
+    + (filters.excludeSources?.length ? 1 : 0)
     + (filters.bookmarkedOnly ? 1 : 0)
     + (filters.annotationColor ? 1 : 0)
   );

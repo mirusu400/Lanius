@@ -308,7 +308,7 @@ def test_concurrent_run_recovers_stale_request_numbers(client, target, restrict_
     flow_ids = [result["flow_id"] for result in done["results"]]
     assert len(set(flow_ids)) == len(payloads)
     records = [store.get(flow_id) for flow_id in flow_ids]
-    assert all(record is not None and record.source == "replay" for record in records)
+    assert all(record is not None and record.source == "fuzzer" for record in records)
     assert sorted(record.request_number for record in records) == list(range(3165, 3197))
     assert store.get("collision").request_number == 2801
     assert store.get("latest").request_number == 3164
@@ -578,5 +578,5 @@ def test_run_results_are_recorded_as_flows(client, target) -> None:
     done = wait_for(client, started["id"])
     flow_id = done["results"][0]["flow_id"]
     stored = client.get(f"/api/flows/{flow_id}").json()
-    assert stored["source"] == "replay"
+    assert stored["source"] == "fuzzer"
     assert "traceable" in (stored["query"] or "")

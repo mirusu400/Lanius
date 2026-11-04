@@ -482,7 +482,9 @@ class FuzzerAddon:
                     **payload,
                     encode_content_body=self.replay.auto_decompress,
                 )
-                record = await self.replay.send(flow, http_mode=run.http_mode)
+                record = await self.replay.send(
+                    flow, http_mode=run.http_mode, source="fuzzer",
+                )
                 result.status_code = record.status_code
                 result.length = record.response_size
                 result.duration_ms = record.duration_ms

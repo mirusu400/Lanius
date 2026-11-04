@@ -1200,6 +1200,7 @@ class FlowStore:
         status_classes: Sequence[int] | None = None,
         extensions: Sequence[str] | None = None,
         exclude_extensions: Sequence[str] | None = None,
+        exclude_sources: Sequence[str] | None = None,
         bookmarked_only: bool = False, annotation_color: str | None = None,
     ) -> tuple[str, List[Any]]:
         clauses: list[str] = []
@@ -1239,6 +1240,11 @@ class FlowStore:
             for ext in exclude_extensions:
                 clauses.append("(path IS NULL OR lower(path) NOT LIKE ? ESCAPE '\\')")
                 params.append(f"%.{_like_literal(ext.lower().lstrip('.'))}")
+        if exclude_sources:
+            # Rows stored before the source column existed read as proxy.
+            placeholders = ", ".join("?" for _ in exclude_sources)
+            clauses.append(f"COALESCE(source, 'proxy') NOT IN ({placeholders})")
+            params.extend(exclude_sources)
         if search:
             clauses.append("rowid IN (SELECT rowid FROM flow_search WHERE text GLOB ?)")
             params.append(f"*{_glob_literal(search.casefold())}*")
@@ -1300,6 +1306,7 @@ class FlowStore:
         status_classes: Sequence[int] | None = None,
         extensions: Sequence[str] | None = None,
         exclude_extensions: Sequence[str] | None = None,
+        exclude_sources: Sequence[str] | None = None,
         bookmarked_only: bool = False, annotation_color: str | None = None,
     ) -> dict[str, Any]:
         """A bounded page over small history rows, without touching body pages.
@@ -1335,6 +1342,7 @@ class FlowStore:
             search=None if ordered_text_scan else search,
             methods=methods, status_classes=status_classes,
             extensions=extensions, exclude_extensions=exclude_extensions,
+            exclude_sources=exclude_sources,
             bookmarked_only=bookmarked_only, annotation_color=annotation_color,
         )
         scope_sql = "lanius_history_scope(scheme, host, port, path) = 1"
@@ -1383,6 +1391,7 @@ class FlowStore:
                     methods=methods, status_classes=status_classes,
                     extensions=extensions,
                     exclude_extensions=exclude_extensions,
+                    exclude_sources=exclude_sources,
                     bookmarked_only=bookmarked_only, annotation_color=annotation_color,
                 )
                 base_where = (

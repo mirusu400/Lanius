@@ -148,7 +148,10 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
         ),
     )
 
-    @server.tool(description="List captured flows, newest first.")
+    @server.tool(description=(
+        "List captured flows, newest first. exclude_sources hides flows "
+        "sent by 'replay' or 'fuzzer'."
+    ))
     async def list_flows(
         limit: int = 50,
         offset: int = 0,
@@ -160,6 +163,7 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
         search: str | None = None,
         bookmarked_only: bool = False,
         annotation_color: str | None = None,
+        exclude_sources: list[str] | None = None,
     ) -> dict[str, Any]:
         try:
             page = await asyncio.to_thread(
@@ -172,6 +176,7 @@ def build_server(store: FlowStore, engine: Any = None, name: str = "lanius") -> 
                 method=method,
                 status_code=status_code,
                 search=search,
+                exclude_sources=exclude_sources,
                 bookmarked_only=bookmarked_only,
                 annotation_color=annotation_color,
             )

@@ -10,6 +10,7 @@ interface FilterableFlow {
   status_code?: number | null;
   bookmarked?: boolean;
   annotation_color?: FlowSummary['annotation_color'];
+  source?: string;
 }
 
 export const MAX_FLOWS = 5000;
@@ -36,6 +37,7 @@ export function matchesFilters(
   if (filters.host && !(flow.host ?? '').toLowerCase().includes(filters.host.toLowerCase())) return false;
   if (filters.bookmarkedOnly && !flow.bookmarked) return false;
   if (filters.annotationColor && flow.annotation_color !== filters.annotationColor) return false;
+  if (filters.excludeSources?.some((source) => source === flow.source)) return false;
   if (filters.method && flow.method !== filters.method.toUpperCase()) {
     return false;
   }

@@ -327,6 +327,9 @@ export type EngineEvent =
       data: { run_id: string; result: RunResult };
     };
 
+/** Tools that send their own requests into the history. */
+export type FlowTool = 'replay' | 'fuzzer';
+
 export interface FlowFilters {
   host?: string;
   method?: string;
@@ -338,6 +341,8 @@ export interface FlowFilters {
   statusClasses?: number[];
   extensions?: string[];
   excludeExtensions?: string[];
+  /** Flows sent by these tools are left out. */
+  excludeSources?: FlowTool[];
   inScopeOnly?: boolean;
   bookmarkedOnly?: boolean;
   annotationColor?: HistoryColor;
