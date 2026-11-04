@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 
 import type { FlowFilters, FlowTool, HistoryColor } from '../api/types';
 import { Dialog } from './Dialog';
-import { useT } from '../i18n';
+import { useT, type TranslationKey } from '../i18n';
 import { UndoableInput } from './UndoableText';
 
 /** The methods worth a checkbox. Anything else is still reachable
@@ -22,7 +22,7 @@ const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
 /** By class, because 2xx is the useful unit rather than 200 against 201. */
 const STATUS_CLASSES = [2, 3, 4, 5];
-const TOOLS: [FlowTool, string][] = [
+const TOOLS: [FlowTool, TranslationKey][] = [
   ['replay', 'filter.hideReplay'],
   ['fuzzer', 'filter.hideFuzzer'],
 ];
