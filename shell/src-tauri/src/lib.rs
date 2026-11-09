@@ -311,6 +311,30 @@ fn open_directory(path: String) -> Result<(), String> {
         .map_err(|err| format!("could not open the file manager: {err}"))
 }
 
+/// Ask the user for a directory through the native folder picker.
+/// Returns None when the dialog is cancelled.
+#[tauri::command]
+async fn pick_directory(
+    window: tauri::WebviewWindow,
+    title: String,
+    start: Option<String>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut dialog = window.dialog().file().set_parent(&window).set_title(title);
+        if let Some(start) = start.filter(|start| PathBuf::from(start).is_dir()) {
+            dialog = dialog.set_directory(start);
+        }
+        let Some(selected) = dialog.blocking_pick_folder() else {
+            return Ok(None);
+        };
+        let path = selected.into_path().map_err(|error| error.to_string())?;
+        Ok(Some(path.to_string_lossy().into_owned()))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 /// Locate the bundled engine binary, or fall back to the dev checkout.
 /// A port from the environment, falling back to the default. An
 /// unparseable value is ignored rather than taken as 0.
@@ -1466,6 +1490,7 @@ pub fn run() {
             open_network_extensions_settings,
             open_external,
             open_directory,
+            pick_directory,
             list_projects,
             current_project,
             create_project,

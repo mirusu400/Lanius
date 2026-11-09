@@ -1237,9 +1237,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except (OSError, ProxyStartError) as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
+    BROWSER_PROFILE_SETTING = "browser_profile_dir"
+
+    def browser_profile() -> str | None:
+        """The profile directory chosen for this project, if any."""
+        return store.get_setting(BROWSER_PROFILE_SETTING) or None
+
     @app.get("/api/browser")
     async def browser_state() -> dict[str, Any]:
-        return browser.state(settings.data_dir, settings.confdir)
+        return browser.state(settings.data_dir, settings.confdir, browser_profile())
+
+    @app.put("/api/browser/profile")
+    async def set_browser_profile(payload: dict[str, Any]) -> dict[str, Any]:
+        """Choose where the browser keeps its data; null restores the default.
+
+        Several directories let one keep separate logins and cookies, for
+        instance one per test account, and switch between them.
+        """
+        path = payload.get("path")
+        if path is not None and not isinstance(path, str):
+            raise HTTPException(status_code=422, detail="path must be a string or null")
+        if path and path.strip():
+            try:
+                profile = browser.check_profile_dir(path, settings.data_dir)
+            except browser.BrowserError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            store.set_setting(BROWSER_PROFILE_SETTING, str(profile))
+        else:
+            store.set_setting(BROWSER_PROFILE_SETTING, "")
+        return browser.state(settings.data_dir, settings.confdir, browser_profile())
 
     @app.post("/api/browser")
     async def open_browser(payload: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -1259,6 +1285,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 data_dir=settings.data_dir,
                 confdir=settings.confdir,
                 url=url,
+                custom_profile=browser_profile(),
             )
         except browser.BrowserError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1292,6 +1319,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 data_dir=settings.data_dir,
                 confdir=settings.confdir,
                 url=target.as_uri(),
+                custom_profile=browser_profile(),
             )
         except browser.BrowserError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1301,7 +1329,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def clear_browser_profile() -> dict[str, Any]:
         """Throw away the browser profile: cookies, logins and history."""
         try:
-            removed = await asyncio.to_thread(browser.clear_profile, settings.data_dir)
+            removed = await asyncio.to_thread(
+                browser.clear_profile, settings.data_dir, browser_profile()
+            )
         except browser.BrowserError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return {"cleared": removed}

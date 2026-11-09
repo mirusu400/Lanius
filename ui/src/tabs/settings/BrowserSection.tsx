@@ -6,7 +6,10 @@ import { useToast } from '../../components/Toast';
 import {
   clearBrowserProfile,
   getBrowserState,
+  isDesktop,
   openBrowser,
+  pickDirectory,
+  setBrowserProfileDir,
 } from '../../api/client';
 import type { BrowserState } from '../../api/types';
 import {
@@ -26,10 +29,16 @@ export function BrowserSection() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [note, setNote] = useState<Message | null>(null);
   const [error, setError] = useState<Message | null>(null);
+  const [dir, setDir] = useState('');
+
+  const loaded = (next: BrowserState) => {
+    setState(next);
+    setDir(next.custom_profile ? next.profile : '');
+  };
 
   useEffect(() => {
     getBrowserState()
-      .then(setState)
+      .then(loaded)
       .catch((err) => setError(msg('browser.loadFailed', { message: (err as Error).message })))
       .finally(() => setLoading(false));
   }, []);
@@ -38,7 +47,7 @@ export function BrowserSection() {
     setLoading(true);
     setError(null);
     try {
-      setState(await getBrowserState());
+      loaded(await getBrowserState());
     } catch (err) {
       setError(msg('browser.loadFailed', { message: (err as Error).message }));
     } finally {
@@ -78,6 +87,32 @@ export function BrowserSection() {
     }
   };
 
+  const changeDir = async (path: string | null) => {
+    setBusy(true);
+    setNote(null);
+    setError(null);
+    try {
+      const next = await setBrowserProfileDir(path);
+      loaded(next);
+      setNote(msg('browser.dirChanged', { path: next.profile }));
+    } catch (err) {
+      setError(msg('browser.dirFailed', { message: (err as Error).message }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const browse = async () => {
+    try {
+      const picked = await pickDirectory(t('browser.pickTitle'), state?.profile);
+      if (picked) await changeDir(picked);
+    } catch (err) {
+      setError(msg('browser.dirFailed', { message: (err as Error).message }));
+    }
+  };
+
+  const savedDir = state?.custom_profile ? state.profile : '';
+
   return (
     <>
       <section>
@@ -102,6 +137,41 @@ export function BrowserSection() {
             <dt>{t('browser.profile')}</dt>
             <dd>{state.profile}</dd>
           </dl>
+          <div className="settings-row">
+            <label htmlFor="browser-data-dir">{t('browser.dataDir')}</label>
+            <input
+              id="browser-data-dir"
+              type="text"
+              className="mono"
+              value={dir}
+              placeholder={state.default_profile}
+              disabled={busy}
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(event) => setDir(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && dir.trim() !== savedDir) void changeDir(dir.trim() || null);
+              }}
+            />
+            {isDesktop() && (
+              <button type="button" disabled={busy} onClick={() => void browse()}>
+                {t('browser.browse')}
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={busy || dir.trim() === savedDir}
+              onClick={() => void changeDir(dir.trim() || null)}
+            >
+              {t('browser.applyDir')}
+            </button>
+            {state.custom_profile && (
+              <button type="button" disabled={busy} onClick={() => void changeDir(null)}>
+                {t('browser.defaultDir')}
+              </button>
+            )}
+          </div>
+          <p className="muted">{t('browser.dataDirHelp')}</p>
           <div className="settings-row">
             <button type="button" disabled={busy} onClick={() => void open()}>
               {busy ? t('browser.opening') : t('browser.open')}

@@ -28,7 +28,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'capture', group: 'proxy', title: 'capture.section', prefixes: ['capture.'], aliases: 'system capture app process redirector 시스템 캡처 앱 프로세스' },
   { id: 'tls', group: 'proxy', title: 'tls.section', prefixes: ['tls.'], aliases: 'TLS fingerprint cipher Chrome Firefox Safari 지문 암호' },
   { id: 'shortcuts', group: 'shortcuts', title: 'shortcuts.section', prefixes: ['shortcuts.'], aliases: 'keyboard hotkey 키보드 단축키' },
-  { id: 'browser', group: 'browser', title: 'browser.section', prefixes: ['browser.'], aliases: 'Chromium cookies profile cache 브라우저 쿠키 프로필 캐시' },
+  { id: 'browser', group: 'browser', title: 'browser.section', prefixes: ['browser.'], aliases: 'Chromium cookies profile cache data directory folder 브라우저 쿠키 프로필 캐시 데이터 디렉터리 폴더 경로' },
   { id: 'ca', group: 'browser', title: 'settings.caSection', keys: ['settings.caHelp', 'settings.caDownload', 'settings.caMitmit'], aliases: 'certificate trust HTTPS mitm.it PEM CER P12 인증서 신뢰 설치 다운로드' },
   { id: 'browser-help', group: 'browser', title: 'settings.browserSection', keys: ['settings.browserHelp'], aliases: 'manual browser proxy setup 브라우저 수동 프록시 설정' },
   { id: 'appearance', group: 'appearance', title: 'appearance.section', prefixes: ['appearance.'], aliases: 'font theme dark light size source IP 폰트 글꼴 테마 화면 크기 다크 라이트' },

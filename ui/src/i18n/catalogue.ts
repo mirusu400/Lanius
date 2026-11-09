@@ -1025,6 +1025,15 @@ const en = {
   'browser.confirmClear':
     'This deletes the cookies, logins and history of the Lanius browser. Continue?',
   'browser.loadFailed': 'Could not load browser settings: {message}',
+  'browser.dataDir': 'Data directory',
+  'browser.dataDirHelp':
+    'Where the browser keeps cookies, logins and history. Point it at different folders to keep separate sets of browsing data and switch between them. Leave empty to use this project\'s own profile.',
+  'browser.browse': 'Browse...',
+  'browser.pickTitle': 'Choose a browser data directory',
+  'browser.applyDir': 'Use this directory',
+  'browser.defaultDir': 'Use default',
+  'browser.dirChanged': 'The browser will now use {path}.',
+  'browser.dirFailed': 'Could not change the data directory: {message}',
   'mcp.section': 'AI agents (MCP)',
   'mcp.help':
     'Lanius exposes captured traffic to AI coding agents over the Model Context Protocol. An agent can read what you captured, manage scope, and replay requests.',
@@ -2545,6 +2554,15 @@ const ko: Catalogue = {
   'browser.confirmClear':
     'Lanius 브라우저의 쿠키, 로그인, 기록을 삭제합니다. 계속할까요?',
   'browser.loadFailed': '브라우저 설정을 불러오지 못했습니다: {message}',
+  'browser.dataDir': '데이터 디렉터리',
+  'browser.dataDirHelp':
+    '브라우저가 쿠키, 로그인, 기록을 저장하는 위치입니다. 폴더를 여러 개 두고 바꿔 지정하면 브라우징 데이터를 따로 유지하며 번갈아 쓸 수 있습니다. 비워 두면 이 프로젝트의 기본 프로필을 씁니다.',
+  'browser.browse': '찾아보기...',
+  'browser.pickTitle': '브라우저 데이터 디렉터리 선택',
+  'browser.applyDir': '이 디렉터리 사용',
+  'browser.defaultDir': '기본값 사용',
+  'browser.dirChanged': '이제 브라우저가 {path} 를 사용합니다.',
+  'browser.dirFailed': '데이터 디렉터리를 바꾸지 못했습니다: {message}',
   'mcp.section': 'AI 에이전트 (MCP)',
   'mcp.help':
     'Lanius는 Model Context Protocol로 캡처한 트래픽을 AI 코딩 에이전트에 제공합니다. 에이전트는 캡처 내용을 읽고, 스코프를 관리하고, 요청을 다시 보낼 수 있습니다.',

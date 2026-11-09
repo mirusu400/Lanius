@@ -1791,6 +1791,37 @@ def test_the_browser_profile_can_be_thrown_away(client) -> None:
     assert client.delete("/api/browser/profile").json()["cleared"] is False
 
 
+def test_the_browser_profile_directory_can_be_chosen(client, tmp_path) -> None:
+    from app import browser as browser_module
+
+    chosen = tmp_path / "account-b"
+    body = client.put("/api/browser/profile", json={"path": str(chosen)}).json()
+    assert body["profile"] == str(chosen)
+    assert body["custom_profile"] is True
+
+    with mock.patch.object(browser_module, "find_browser") as find:
+        find.return_value = browser_module.Browser("Google Chrome", "/fake/chrome")
+        with mock.patch.object(browser_module, "_spawn", return_value=1) as spawn:
+            assert client.post("/api/browser", json={}).status_code == 200
+    assert f"--user-data-dir={chosen}" in spawn.call_args[0][0]
+
+    # Lanius has used it now, so its data can be cleared.
+    assert client.delete("/api/browser/profile").json()["cleared"] is True
+    assert not chosen.exists()
+
+    body = client.put("/api/browser/profile", json={"path": None}).json()
+    assert body["custom_profile"] is False
+    assert body["profile"] == body["default_profile"]
+
+
+def test_an_unsuitable_browser_profile_directory_is_refused(client, tmp_path) -> None:
+    (tmp_path / "notes.txt").write_text("keep")
+    response = client.put("/api/browser/profile", json={"path": str(tmp_path)})
+    assert response.status_code == 422
+    assert client.put("/api/browser/profile", json={"path": 3}).status_code == 422
+    assert client.get("/api/browser").json()["custom_profile"] is False
+
+
 # --- code generation ------------------------------------------------------
 
 

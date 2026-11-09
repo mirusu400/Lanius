@@ -116,12 +116,16 @@ def ca_spki_hash(confdir: Path) -> str | None:
     return base64.b64encode(hashlib.sha256(der).digest()).decode()
 
 
-def profile_dir(data_dir: Path) -> Path:
-    """Where the throwaway browser profile lives.
+def profile_dir(data_dir: Path, custom: Path | str | None = None) -> Path:
+    """Where the browser profile lives.
 
     Kept rather than recreated per launch, so logins and cookies survive
-    between sessions the way they would in a real browser.
+    between sessions the way they would in a real browser. A user may
+    choose their own directory instead, to keep several sets of browsing
+    data and switch between them.
     """
+    if custom:
+        return Path(custom).expanduser()
     return Path(data_dir) / "browser-profile"
 
 
@@ -129,6 +133,51 @@ def profile_dir(data_dir: Path) -> Path:
 # launch on the same profile to the running process and drops its flags, so
 # this is the only record of which proxy the open windows actually use.
 _PROXY_MARKER = "lanius-proxy"
+
+# Left in every profile Lanius has launched. Clearing a directory the user
+# chose deletes it, so it must be one Lanius has really used as a profile.
+_OWNER_MARKER = "lanius-profile"
+
+
+def check_profile_dir(path: Path | str, data_dir: Path) -> Path:
+    """Validate a directory the user wants as the browser profile.
+
+    The directory is handed to Chromium and may later be deleted by
+    "clear browsing data", so an existing folder full of unrelated files
+    is refused rather than adopted.
+    """
+    raw = str(path).strip()
+    if not raw:
+        raise BrowserError("the profile directory is empty")
+    profile = Path(raw).expanduser()
+    if not profile.is_absolute():
+        raise BrowserError("the profile directory must be an absolute path")
+    resolved = profile.resolve()
+    if (
+        resolved == Path.home().resolve()
+        or resolved == Path(resolved.anchor)
+        or Path(data_dir).resolve().is_relative_to(resolved)
+    ):
+        raise BrowserError(f"{profile} cannot be used as a browser profile")
+    if profile.exists():
+        if not profile.is_dir():
+            raise BrowserError(f"{profile} is not a directory")
+        if not _looks_like_profile(profile):
+            raise BrowserError(
+                f"{profile} already contains other files. Choose an empty "
+                "folder or an existing browser profile."
+            )
+    return profile
+
+
+def _looks_like_profile(profile: Path) -> bool:
+    """Empty, or already a Chromium profile."""
+    try:
+        if not any(profile.iterdir()):
+            return True
+    except OSError:
+        return False
+    return (profile / _OWNER_MARKER).exists() or (profile / "Local State").exists()
 
 
 def _running_pid(profile: Path) -> int | None:
@@ -155,9 +204,9 @@ def _running_pid(profile: Path) -> int | None:
     return pid
 
 
-def running_proxy(data_dir: Path) -> str | None:
+def running_proxy(data_dir: Path, custom: Path | str | None = None) -> str | None:
     """The proxy the open Lanius browser uses, or None if none is open."""
-    profile = profile_dir(data_dir)
+    profile = profile_dir(data_dir, custom)
     if _running_pid(profile) is None:
         return None
     try:
@@ -173,6 +222,7 @@ def launch(
     data_dir: Path,
     confdir: Path,
     url: str | None = None,
+    custom_profile: Path | str | None = None,
 ) -> dict[str, object]:
     """Open the browser against this proxy. Returns what was started."""
     browser = find_browser()
@@ -182,7 +232,11 @@ def launch(
             "Edge or Brave, or point your own browser at the proxy."
         )
 
-    profile = profile_dir(data_dir)
+    if custom_profile:
+        # Checked again here: the folder may have changed since it was chosen.
+        profile = check_profile_dir(custom_profile, data_dir)
+    else:
+        profile = profile_dir(data_dir)
     profile.mkdir(parents=True, exist_ok=True)
 
     # A loopback proxy must still be used for loopback addresses, or the
@@ -192,7 +246,7 @@ def launch(
     # A second launch only opens a window in the running browser, which
     # keeps its old proxy. After the listener moves, that window would
     # quietly send traffic to whatever now holds the old port.
-    current = running_proxy(data_dir)
+    current = running_proxy(data_dir, profile)
     if current is not None and current != proxy:
         raise BrowserError(
             f"the Lanius browser is still open with proxy {current}. "
@@ -227,6 +281,7 @@ def launch(
     if current is None:
         try:
             (profile / _PROXY_MARKER).write_text(proxy, encoding="utf-8")
+            (profile / _OWNER_MARKER).touch()
         except OSError as exc:
             logger.warning("could not record the browser proxy: %s", exc)
 
@@ -266,24 +321,37 @@ def _spawn(args: list[str]) -> int:
     return process.pid
 
 
-def state(data_dir: Path, confdir: Path) -> dict[str, object]:
+def state(
+    data_dir: Path, confdir: Path, custom: Path | str | None = None
+) -> dict[str, object]:
     """What the UI needs to describe the feature before it is used."""
     browser = find_browser()
     return {
         "available": browser is not None,
         "name": browser.name if browser else None,
-        "profile": str(profile_dir(data_dir)),
+        "profile": str(profile_dir(data_dir, custom)),
+        "default_profile": str(profile_dir(data_dir)),
+        "custom_profile": bool(custom),
         "ca_trusted": ca_spki_hash(confdir) is not None,
     }
 
 
-def clear_profile(data_dir: Path) -> bool:
+def clear_profile(data_dir: Path, custom: Path | str | None = None) -> bool:
     """Throw away the browser profile: cookies, logins, history."""
-    profile = profile_dir(data_dir)
+    profile = profile_dir(data_dir, custom)
     if not profile.exists():
         return False
+    if _running_pid(profile) is not None:
+        raise BrowserError("close the Lanius browser before clearing its data")
+    if custom:
+        # A chosen directory is only removed once Lanius has launched a
+        # browser in it, so a mistyped path cannot delete someone's files.
+        if not (profile / _OWNER_MARKER).exists():
+            raise BrowserError(
+                f"{profile} was not created by Lanius, so it is left alone"
+            )
     # Only ever the directory we created, never a path from a caller.
-    if profile.name != "browser-profile":  # pragma: no cover - defensive
+    elif profile.name != "browser-profile":  # pragma: no cover - defensive
         raise BrowserError("refusing to remove an unexpected profile path")
     shutil.rmtree(profile)
     return True
@@ -293,6 +361,7 @@ __all__ = [
     "Browser",
     "BrowserError",
     "ca_spki_hash",
+    "check_profile_dir",
     "clear_profile",
     "find_browser",
     "launch",

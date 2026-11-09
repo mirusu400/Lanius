@@ -283,3 +283,57 @@ def test_launch_records_the_proxy_and_a_stale_lock_is_ignored(tmp_path) -> None:
 
     assert (profile / "lanius-proxy").read_text(encoding="utf-8") == "http://127.0.0.1:8083"
     assert browser.running_proxy(tmp_path) is None
+
+
+def test_launch_uses_a_chosen_profile_directory(tmp_path) -> None:
+    """Separate directories keep separate logins, so the user can switch."""
+    chosen = tmp_path / "account-a"
+    found = browser.Browser("Google Chrome", "/fake/chrome")
+    with mock.patch.object(browser, "find_browser", return_value=found):
+        with mock.patch.object(browser, "_spawn", return_value=5) as popen:
+            result = browser.launch(
+                proxy_host="127.0.0.1",
+                proxy_port=8080,
+                data_dir=tmp_path / "project",
+                confdir=tmp_path / "missing",
+                custom_profile=str(chosen),
+            )
+
+    assert f"--user-data-dir={chosen}" in popen.call_args[0][0]
+    assert result["profile"] == str(chosen)
+    assert (chosen / "lanius-profile").exists()
+
+
+def test_a_folder_of_unrelated_files_is_not_adopted(tmp_path) -> None:
+    """Clearing a profile deletes it, so it must not be someone's documents."""
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    (documents / "thesis.docx").write_text("work")
+
+    with pytest.raises(browser.BrowserError):
+        browser.check_profile_dir(documents, tmp_path / "project")
+    with pytest.raises(browser.BrowserError):
+        browser.check_profile_dir("relative/dir", tmp_path / "project")
+    # Nor anything that contains the project itself.
+    with pytest.raises(browser.BrowserError):
+        browser.check_profile_dir(tmp_path, tmp_path / "project")
+
+    existing = tmp_path / "chrome"
+    existing.mkdir()
+    (existing / "Local State").write_text("{}")
+    assert browser.check_profile_dir(existing, tmp_path / "project") == existing
+    assert browser.check_profile_dir(tmp_path / "new", tmp_path / "project") == tmp_path / "new"
+
+
+def test_a_chosen_directory_is_cleared_only_once_lanius_used_it(tmp_path) -> None:
+    chosen = tmp_path / "chrome"
+    chosen.mkdir()
+    (chosen / "Local State").write_text("{}")
+
+    with pytest.raises(browser.BrowserError):
+        browser.clear_profile(tmp_path, chosen)
+    assert chosen.exists()
+
+    (chosen / "lanius-profile").touch()
+    assert browser.clear_profile(tmp_path, chosen) is True
+    assert not chosen.exists()

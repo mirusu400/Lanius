@@ -15,11 +15,15 @@ let browserState: {
   available: boolean;
   name: string | null;
   profile: string;
+  default_profile: string;
+  custom_profile: boolean;
   ca_trusted: boolean;
 } = {
   available: true,
   name: 'Google Chrome',
   profile: '/home/u/.lanius/browser-profile',
+  default_profile: '/home/u/.lanius/browser-profile',
+  custom_profile: false,
   ca_trusted: true,
 };
 let launches = 0;
@@ -41,6 +45,8 @@ beforeEach(() => {
     available: true,
     name: 'Google Chrome',
     profile: '/home/u/.lanius/browser-profile',
+    default_profile: '/home/u/.lanius/browser-profile',
+    custom_profile: false,
     ca_trusted: true,
   };
   launches = 0;
@@ -51,6 +57,16 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes('/api/browser/profile') && init?.method === 'PUT') {
+        const { path } = JSON.parse(String(init.body)) as { path: string | null };
+        if (path === '/etc') return jsonResponse({ detail: '/etc already contains other files' }, 422);
+        browserState = {
+          ...browserState,
+          profile: path ?? browserState.default_profile,
+          custom_profile: path !== null,
+        };
+        return jsonResponse(browserState);
+      }
       if (url.includes('/api/browser/profile')) {
         cleared += 1;
         return jsonResponse({ cleared: true });
@@ -222,5 +238,36 @@ describe('browser settings', () => {
     const dialog = await screen.findByRole('dialog', { name: t('browser.clearProfile') });
     await user.click(within(dialog).getByRole('button', { name: t('common.cancel') }));
     expect(cleared).toBe(0);
+  });
+
+  it('switches the browser data directory and back to the default', async () => {
+    const user = userEvent.setup();
+    render(<BrowserSection />);
+    const input = await screen.findByLabelText(t('browser.dataDir'));
+
+    await user.type(input, '/data/account-a');
+    await user.click(section().getByRole('button', { name: t('browser.applyDir') }));
+    expect(
+      await screen.findByText(t('browser.dirChanged', { path: '/data/account-a' })),
+    ).toBeTruthy();
+    expect(section().getAllByText('/data/account-a').length).toBeGreaterThan(0);
+
+    await user.click(section().getByRole('button', { name: t('browser.defaultDir') }));
+    await waitFor(() => expect((input as HTMLInputElement).value).toBe(''));
+    expect(browserState.custom_profile).toBe(false);
+  });
+
+  it('reports a directory the engine refuses', async () => {
+    const user = userEvent.setup();
+    render(<BrowserSection />);
+    const input = await screen.findByLabelText(t('browser.dataDir'));
+
+    await user.type(input, '/etc{Enter}');
+    expect(
+      await screen.findByText(
+        t('browser.dirFailed', { message: '/etc already contains other files' }),
+      ),
+    ).toBeTruthy();
+    expect(browserState.custom_profile).toBe(false);
   });
 });

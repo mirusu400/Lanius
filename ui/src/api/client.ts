@@ -1121,6 +1121,17 @@ export function clearBrowserProfile(): Promise<{ cleared: boolean }> {
   return request('/api/browser/profile', { method: 'DELETE' });
 }
 
+/** Choose the browser's data directory; null goes back to the default. */
+export function setBrowserProfileDir(
+  path: string | null,
+): Promise<import('./types').BrowserState> {
+  return request('/api/browser/profile', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+}
+
 export function getMcpState(): Promise<import('./types').McpState> {
   return request('/api/mcp');
 }
@@ -1665,6 +1676,13 @@ export async function openDirectory(path: string): Promise<void> {
   const internals = shell();
   if (!internals) throw new Error('Desktop shell is unavailable');
   await internals.invoke('open_directory', { path });
+}
+
+/** Ask for a directory with the native folder picker; null when cancelled. */
+export async function pickDirectory(title: string, start?: string): Promise<string | null> {
+  const internals = shell();
+  if (!internals) throw new Error('Desktop shell is unavailable');
+  return (await internals.invoke('pick_directory', { title, start: start ?? null })) as string | null;
 }
 
 /** True when the shell can install an update itself. */

@@ -770,6 +770,10 @@ export interface BrowserState {
   available: boolean;
   name: string | null;
   profile: string;
+  /** The project's own profile, used when no directory is chosen. */
+  default_profile: string;
+  /** True when the user chose the data directory. */
+  custom_profile: boolean;
   /** True when HTTPS will work without installing the CA by hand. */
   ca_trusted: boolean;
 }
