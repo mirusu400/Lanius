@@ -8,6 +8,7 @@
 import { useRef, useState, type RefObject } from 'react';
 
 import { ContextMenu, useContextMenu, type MenuItem } from './ContextMenu';
+import { encodeMenuItems, replaceRange } from './encodeMenu';
 import { useT } from '../i18n';
 import {
   copyTextToClipboard,
@@ -40,6 +41,7 @@ export function useEditorMenu(
   // Captured on open: clicking a menu item moves focus, which would
   // otherwise collapse the selection before the action runs.
   const [selection, setSelection] = useState({ start: 0, end: 0, text: '' });
+  const [readOnly, setReadOnly] = useState(false);
 
   const open = (event: React.MouseEvent) => {
     const editor = ref.current;
@@ -49,6 +51,7 @@ export function useEditorMenu(
         end: editor.selectionEnd,
         text: editor.value.slice(editor.selectionStart, editor.selectionEnd),
       });
+      setReadOnly(editor.readOnly);
     }
     menu.open(event, null);
   };
@@ -103,6 +106,15 @@ export function useEditorMenu(
         editor.select();
       }),
     },
+    ...encodeMenuItems(t, selection.text, (value) => withEditor((editor) => {
+      const next = replaceRange(editor.value, selection.start, selection.end, value);
+      setNativeValue(editor, next.text);
+      // Leave the result selected, so it can be encoded again or undone.
+      requestAnimationFrame(() => {
+        editor.focus();
+        editor.setSelectionRange(next.start, next.end);
+      });
+    })(), hasSelection && !readOnly).map((item, index) => index === 0 ? { ...item, separator: true } : item),
     ...extras
       .filter((extra) => !extra.needsSelection || hasSelection)
       .map((extra) => ({

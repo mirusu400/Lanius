@@ -226,6 +226,40 @@ describe('InterceptPanel', () => {
     expect(editor.value).toContain('Host: example.com');
   });
 
+  it('encodes the selected text of the edited request in place', async () => {
+    render(
+      <InterceptPanel
+        rules={rules}
+        paused={[{ ...pausedFlow, path: '/search?q=a b' }]}
+        onToggle={() => {}}
+        onResolved={() => {}}
+      />,
+    );
+    const editor = editorEl();
+    const start = editor.value.indexOf('a b');
+    editor.setSelectionRange(start, start + 3);
+    fireEvent.contextMenu(editor);
+    await userEvent.hover(screen.getByRole('menuitem', { name: new RegExp(t('encode.menu')) }));
+    await userEvent.click(screen.getByRole('menuitem', { name: t('encode.urlKey') }));
+    expect(editorEl().value).toContain('GET /search?q=a%20b HTTP/1.1');
+  });
+
+  it('offers no encoding on a read-only version', async () => {
+    render(
+      <InterceptPanel
+        rules={rules}
+        paused={[pausedFlow]}
+        onToggle={() => {}}
+        onResolved={() => {}}
+      />,
+    );
+    await userEvent.click(screen.getByRole('tab', { name: t('intercept.view.original') }));
+    const editor = editorEl();
+    editor.setSelectionRange(0, 3);
+    fireEvent.contextMenu(editor);
+    expect(screen.queryByRole('menuitem', { name: new RegExp(t('encode.menu')) })).toBeNull();
+  });
+
   it('forwards unchanged requests without edits', async () => {
     const onResolved = vi.fn();
     render(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { dropFlow, forwardAll, forwardFlow } from '../api/client';
 import type { FlowFilters, FlowSummary, InterceptRules, PausedFlow } from '../api/types';
@@ -13,6 +13,7 @@ import { OpenBrowserButton } from './OpenBrowserButton';
 import { MatchReplaceButton } from './MatchReplaceDialog';
 import { HighlightedEditor } from './SyntaxCode';
 import { ContextMenu, useContextMenu } from './ContextMenu';
+import { encodeMenuItems, replaceRange } from './encodeMenu';
 import { useCodegenMenu } from './useCodegenMenu';
 import { usePluginActions } from './usePluginActions';
 import { FilterDialog, countActive } from './FilterDialog';
@@ -120,6 +121,11 @@ export function InterceptPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Message | null>(null);
   const menu = useContextMenu<HeldMenuTarget>();
+  const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  // Captured on open: clicking a menu item moves focus, which would
+  // otherwise collapse the selection before it is encoded. Null when the
+  // menu was opened somewhere other than an editable message.
+  const [editSelection, setEditSelection] = useState<{ start: number; end: number; text: string } | null>(null);
   const codegen = useCodegenMenu(setError);
   const pluginActions = usePluginActions((message) => setError(rawMsg(message)));
   const automatic = useMemo(
@@ -257,6 +263,16 @@ export function InterceptPanel({
       : renderRequest(flow);
   const openCurrentMenu = (event: React.MouseEvent) => {
     if (!current) return;
+    const editor = editorRef.current;
+    setEditSelection(
+      editor && !editor.readOnly && event.target === editor
+        ? {
+            start: editor.selectionStart,
+            end: editor.selectionEnd,
+            text: editor.value.slice(editor.selectionStart, editor.selectionEnd),
+          }
+        : null,
+    );
     menu.open(event, {
       paused: shownMenuFlow ?? current,
       requestText: current.phase === 'request' ? shown : renderRequest(current),
@@ -264,6 +280,19 @@ export function InterceptPanel({
   };
   const menuTarget = menu.target ? heldRequest(menu.target) : null;
   const menuText = menu.target?.requestText ?? '';
+  const replaceEditSelection = (value: string) => {
+    if (!editSelection) return;
+    const next = replaceRange(shown, editSelection.start, editSelection.end, value);
+    changeDraft(next.text);
+    // Leave the result selected, so it can be encoded again.
+    requestAnimationFrame(() => {
+      editorRef.current?.focus();
+      editorRef.current?.setSelectionRange(next.start, next.end);
+    });
+  };
+  const encodeItems = editSelection
+    ? encodeMenuItems(t, editSelection.text, replaceEditSelection, editSelection.end > editSelection.start)
+    : [];
 
   const sendHeldToReplay = (flow: FlowSummary, text: string) => {
     sendTextToReplay(originOf(flow), text, `${flow.method} ${flow.path ?? '/'}`);
@@ -445,6 +474,7 @@ export function InterceptPanel({
                       text={shown}
                       historyKey={`${currentKey}:${stage}`}
                       onChange={changeDraft}
+                      editorRef={editorRef}
                       readOnly={stage !== 'modified'}
                       label={t('intercept.editor')}
                       headers={shownHeaders}
@@ -465,7 +495,7 @@ export function InterceptPanel({
       )}
       <ContextMenu
         position={menu.position}
-        items={menu.target && menuTarget ? flowMenuItems(menuTarget.flow, t, {
+        items={menu.target && menuTarget ? [...encodeItems, ...flowMenuItems(menuTarget.flow, t, {
           sendToReplay: (flow) => {
             sendHeldToReplay(flow, menuText);
           },
@@ -487,7 +517,7 @@ export function InterceptPanel({
         }), pluginActions.buildMenu(
           ['flow', menu.target.paused.phase],
           { flow_id: menu.target.paused.id, flow: menuTarget.flow },
-        )) : []}
+        )).map((item, index) => index === 0 && encodeItems.length ? { ...item, separator: true } : item)] : []}
         onClose={menu.close}
       />
     </div>
