@@ -490,8 +490,8 @@ class PluginManager:
                     ):
                         if existing.loaded:
                             await self._unload_async(existing)
-                        else:
-                            existing.meta = item.meta
+                        existing.package_root = item.package_root
+                        existing.meta = item.meta
                         if existing.enabled and not self.suspended:
                             try:
                                 await self._load_async(existing)
@@ -1024,12 +1024,27 @@ class PluginManager:
         self._publish()
         return plugin
 
+    @staticmethod
+    def _rediscover(plugin: Plugin, found: dict[str, DiscoveredPlugin]) -> None:
+        """Adopt the on-disk manifest of an unloaded plugin before loading it."""
+
+        item = found.get(plugin.name)
+        if item is None:
+            return
+        plugin.path = item.path
+        plugin.fingerprint = item.fingerprint
+        plugin.package_root = item.package_root
+        plugin.meta = item.meta
+
     def reload(self, name: str) -> Plugin:
         if self.runtime_started:
             raise PluginError("live plugin changes must be awaited")
         plugin = self.get(name)
         was_enabled = plugin.enabled
         self._unload_sync(plugin)
+        # Views and other manifest data are only read by a scan, so a reload
+        # that skipped it would keep showing the manifest from the last load.
+        self._rediscover(plugin, self.scan())
         if was_enabled:
             self._load(plugin)
             plugin.enabled = True
@@ -1056,10 +1071,12 @@ class PluginManager:
             return plugin
 
     async def reload_async(self, name: str) -> Plugin:
+        found = await asyncio.to_thread(self.scan)
         async with self._lock:
             plugin = self.get(name)
             was_enabled = plugin.enabled
             await self._unload_async(plugin)
+            self._rediscover(plugin, found)
             try:
                 if was_enabled:
                     await self._load_async(plugin)

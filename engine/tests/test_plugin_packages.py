@@ -394,3 +394,47 @@ def test_invalid_view_placement_is_a_package_error(tmp_path, placement):
     (tmp_path / 'plugin.json').write_text(json.dumps(manifest))
     with pytest.raises(PluginPackageError, match='placement'):
         load_manifest(tmp_path)
+
+
+def _add_tab_view(path: Path) -> None:
+    manifest = json.loads((path / "plugin.json").read_text())
+    manifest["ui"]["views"].append(
+        {"id": "extra", "title": "Extra", "entrypoint": "ui/index.html", "placement": "tab"}
+    )
+    (path / "plugin.json").write_text(json.dumps(manifest))
+
+
+def test_reload_picks_up_manifest_view_changes(tmp_path) -> None:
+    package = tmp_path / "plugins" / "demo"
+    write_source_package(package)
+    manager = PluginManager(tmp_path / "plugins")
+    manager.discover()
+    manager.enable("acme.demo")
+
+    _add_tab_view(package)
+    plugin = manager.reload("acme.demo")
+    assert plugin.loaded is True
+    assert [view["id"] for view in plugin.as_dict()["ui"]["views"]] == ["main", "extra"]
+
+
+@pytest.mark.asyncio
+async def test_live_reload_and_auto_reload_pick_up_manifest_view_changes(tmp_path) -> None:
+    package = tmp_path / "plugins" / "demo"
+    write_source_package(package)
+    manager = PluginManager(tmp_path / "plugins")
+    manager.discover()
+    manager.mark_runtime_started()
+    await manager.enable_async("acme.demo")
+
+    _add_tab_view(package)
+    plugin = await manager.reload_async("acme.demo")
+    assert [view["id"] for view in plugin.as_dict()["ui"]["views"]] == ["main", "extra"]
+
+    await manager.set_auto_reload("acme.demo", True)
+    manifest = json.loads((package / "plugin.json").read_text())
+    manifest["ui"]["views"][1]["title"] = "Renamed"
+    (package / "plugin.json").write_text(json.dumps(manifest))
+    await manager.refresh()
+    plugin = manager.get("acme.demo")
+    assert plugin.loaded is True
+    assert plugin.as_dict()["ui"]["views"][1]["title"] == "Renamed"
