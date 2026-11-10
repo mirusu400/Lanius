@@ -56,6 +56,10 @@ const en: DocPage[] = [
             body: 'Sizes are adjustable independently. A preview below the controls shows the editor font at the chosen size, so you can see the effect without opening a request.',
           },
           {
+            kind: 'text',
+            body: 'Each font field lists the fonts installed on this machine, each drawn in its own typeface. Type to filter the list. The editor font list puts fixed-width fonts first. A name that is not in the list can still be typed and used. Clear the field to go back to the default.',
+          },
+          {
             kind: 'note',
             body: 'Only fonts installed on this machine can be used. If a choice is not installed, Lanius says so rather than silently falling back and leaving you wondering why nothing changed.',
           },

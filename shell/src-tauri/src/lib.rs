@@ -17,6 +17,7 @@ use tauri_plugin_updater::UpdaterExt;
 
 mod ca_export;
 mod doctor;
+mod fonts;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -1487,6 +1488,7 @@ pub fn run() {
             restart_project_engine,
             set_api_port,
             set_window_theme,
+            fonts::list_system_fonts,
             open_network_extensions_settings,
             open_external,
             open_directory,

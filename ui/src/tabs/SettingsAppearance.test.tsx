@@ -9,9 +9,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppearanceSection } from './settings/AppearanceSection';
 import { renderWithI18n as render, t } from '../test-utils';
+import { resetSystemFonts } from '../components/systemFonts';
 import {
   DEFAULTS,
+  DEFAULT_MONO_STACK,
+  DEFAULT_UI_STACK,
   MONO_SIZE_RANGE,
+  fontStack,
   apply,
   load,
   normalise,
@@ -116,6 +120,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetSystemFonts();
   vi.unstubAllGlobals();
 });
 
@@ -168,11 +173,60 @@ describe('appearance settings', () => {
   it('changes the editor font family', async () => {
     const user = userEvent.setup();
     render(<AppearanceSection />);
-    await user.selectOptions(
-      section().getByLabelText(t('appearance.monoFont')),
-      'menlo',
-    );
-    expect(root().style.getPropertyValue('--font-mono')).toContain('Menlo');
+    await user.click(section().getByLabelText(t('appearance.monoFont')));
+    await user.click(await screen.findByRole('option', { name: 'Menlo' }));
+    expect(root().style.getPropertyValue('--font-mono')).toContain('"Menlo"');
+  });
+
+  it('lists installed fonts from the shell, fixed-width ones first for the editor', async () => {
+    const invoke = vi.fn(async (command: string) => command === 'list_system_fonts'
+      ? [
+          { family: 'Apple SD Gothic Neo', monospaced: false },
+          { family: 'D2Coding', monospaced: true },
+          { family: 'Pretendard', monospaced: false },
+        ]
+      : null);
+    vi.stubGlobal('__TAURI_INTERNALS__', { invoke });
+    const user = userEvent.setup();
+    render(<AppearanceSection />);
+
+    await user.click(section().getByLabelText(t('appearance.monoFont')));
+    const options = await within(await screen.findByRole('listbox')).findAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      t('appearance.fontDefault'), 'D2Coding', 'Apple SD Gothic Neo', 'Pretendard',
+    ]);
+    await user.keyboard('{Escape}');
+
+    const uiFont = section().getByLabelText(t('appearance.uiFont'));
+    await user.click(uiFont);
+    await user.type(uiFont, 'pret');
+    expect(within(screen.getByRole('listbox')).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['Pretendard']);
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(root().style.getPropertyValue('--font-ui')).toMatch(/^"Pretendard", /);
+    // Listed once and shared by both pickers.
+    expect(invoke.mock.calls.filter(([command]) => command === 'list_system_fonts')).toHaveLength(1);
+  });
+
+  it('uses a typed font name that is not in the list', async () => {
+    const user = userEvent.setup();
+    render(<AppearanceSection />);
+    const uiFont = section().getByLabelText(t('appearance.uiFont'));
+    await user.click(uiFont);
+    await user.type(uiFont, 'My Corporate Sans{Enter}');
+    expect(root().style.getPropertyValue('--font-ui')).toMatch(/^"My Corporate Sans", /);
+    expect(load().uiFamily).toBe('My Corporate Sans');
+  });
+
+  it('goes back to the default font when the field is cleared', async () => {
+    localStorage.setItem('lanius.appearance', JSON.stringify({ uiFamily: 'Inter' }));
+    const user = userEvent.setup();
+    render(<AppearanceSection />);
+    const uiFont = section().getByLabelText(t('appearance.uiFont'));
+    await user.clear(uiFont);
+    await user.keyboard('{Enter}');
+    expect(load().uiFamily).toBe('');
+    expect(root().style.getPropertyValue('--font-ui')).toBe(DEFAULT_UI_STACK);
   });
 
   it('remembers the choice for next launch', async () => {
@@ -220,8 +274,18 @@ describe('stored appearance', () => {
     expect(normalise({ monoSize: -4 }).monoSize).toBe(MONO_SIZE_RANGE.min);
     expect(normalise({ monoSize: Number.NaN }).monoSize).toBe(DEFAULTS.monoSize);
     expect(normalise({ theme: 'neon' }).theme).toBe(DEFAULTS.theme);
-    // An unknown font falls back rather than writing nonsense into CSS.
-    expect(normalise({ monoFamily: 'comic-sans-9000' }).monoFamily).toBe('');
+    // Anything that could escape the quoted family is dropped.
+    expect(normalise({ monoFamily: 'Evil"; } body { color: red' }).monoFamily)
+      .toBe('Evil body color: red');
+    expect(normalise({ monoFamily: 42 }).monoFamily).toBe('');
+  });
+
+  it('reads choices saved from the old fixed font list', () => {
+    expect(normalise({ monoFamily: 'jetbrains', uiFamily: 'helvetica' })).toMatchObject({
+      monoFamily: 'JetBrains Mono',
+      uiFamily: 'Helvetica Neue',
+    });
+    expect(fontStack('ui-monospace', DEFAULT_MONO_STACK)).toBe(`ui-monospace, ${DEFAULT_MONO_STACK}`);
   });
 
   it('survives unreadable storage', () => {

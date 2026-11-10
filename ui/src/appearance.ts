@@ -21,7 +21,7 @@ export interface Appearance {
   uiSize: number;
   /** Monospace size, used by the editors and the history table. */
   monoSize: number;
-  /** Empty means the built-in stack. */
+  /** A font family name. Empty means the built-in stack. */
   monoFamily: string;
   uiFamily: string;
 }
@@ -44,27 +44,77 @@ export const MONO_SIZE_RANGE = { min: 9, max: 22 } as const;
 export const UI_SIZE_PRESETS = [10, 11, 12, 13, 14, 15, 16, 18, 20] as const;
 export const MONO_SIZE_PRESETS = [9, 10, 11, 12, 13, 14, 16, 18, 20, 22] as const;
 
-/** Monospace stacks worth offering, with the default first. */
-export const MONO_FAMILIES = [
-  { id: '', stack: "'SF Mono', 'JetBrains Mono', Menlo, monospace" },
-  { id: 'menlo', stack: 'Menlo, monospace' },
-  { id: 'monaco', stack: 'Monaco, monospace' },
-  { id: 'consolas', stack: 'Consolas, monospace' },
-  { id: 'jetbrains', stack: "'JetBrains Mono', monospace" },
-  { id: 'fira', stack: "'Fira Code', monospace" },
-  { id: 'source', stack: "'Source Code Pro', monospace" },
-  { id: 'ibm', stack: "'IBM Plex Mono', monospace" },
-  { id: 'system', stack: 'ui-monospace, monospace' },
+/** What each font falls back to, and what an empty choice means. */
+export const DEFAULT_MONO_STACK = "'SF Mono', 'JetBrains Mono', Menlo, monospace";
+export const DEFAULT_UI_STACK = "-apple-system, 'Segoe UI', sans-serif";
+
+/** Offered when the installed fonts cannot be listed, as in a browser
+ *  without the Local Font Access API. */
+export const SUGGESTED_MONO_FAMILIES = [
+  'Menlo', 'Monaco', 'Consolas', 'JetBrains Mono', 'Fira Code',
+  'Source Code Pro', 'IBM Plex Mono', 'ui-monospace',
+] as const;
+export const SUGGESTED_UI_FAMILIES = [
+  'system-ui', 'Inter', 'Helvetica Neue', 'Segoe UI', 'Roboto',
 ] as const;
 
-export const UI_FAMILIES = [
-  { id: '', stack: "-apple-system, 'Segoe UI', sans-serif" },
-  { id: 'system', stack: 'system-ui, sans-serif' },
-  { id: 'inter', stack: "Inter, -apple-system, sans-serif" },
-  { id: 'helvetica', stack: "'Helvetica Neue', Helvetica, sans-serif" },
-  { id: 'segoe', stack: "'Segoe UI', sans-serif" },
-  { id: 'roboto', stack: 'Roboto, sans-serif' },
-] as const;
+/** Choices saved before any installed font could be picked were ids
+ *  from a fixed list. Read them as the families they stood for. */
+const LEGACY_MONO_IDS: Record<string, string> = {
+  menlo: 'Menlo',
+  monaco: 'Monaco',
+  consolas: 'Consolas',
+  jetbrains: 'JetBrains Mono',
+  fira: 'Fira Code',
+  source: 'Source Code Pro',
+  ibm: 'IBM Plex Mono',
+  system: 'ui-monospace',
+};
+const LEGACY_UI_IDS: Record<string, string> = {
+  system: 'system-ui',
+  inter: 'Inter',
+  helvetica: 'Helvetica Neue',
+  segoe: 'Segoe UI',
+  roboto: 'Roboto',
+};
+
+/** CSS generic families, which only work unquoted. */
+const GENERIC_FAMILIES = new Set([
+  'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui',
+  'ui-serif', 'ui-sans-serif', 'ui-monospace', 'ui-rounded', 'math', 'emoji',
+]);
+
+const MAX_FAMILY_LENGTH = 120;
+
+/** A family name that is safe to write into a CSS custom property.
+ *
+ * The value is quoted when used, so quotes, backslashes and anything
+ * that could end the declaration are dropped rather than escaped. No
+ * real font needs them, and these values also arrive from imports.
+ */
+export function cleanFamily(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value
+    // oxlint-disable-next-line no-control-regex -- Control characters are what is being removed.
+    .replace(/[\u0000-\u001f\u007f"'\\;{}<>,]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_FAMILY_LENGTH)
+    .trim();
+}
+
+function normaliseFamily(value: unknown, legacy: Record<string, string>): string {
+  if (typeof value === 'string' && Object.hasOwn(legacy, value)) return legacy[value];
+  return cleanFamily(value);
+}
+
+/** The CSS stack for a chosen family, falling back to the default. */
+export function fontStack(family: string, fallback: string): string {
+  const clean = cleanFamily(family);
+  if (!clean) return fallback;
+  const name = GENERIC_FAMILIES.has(clean.toLowerCase()) ? clean : `"${clean}"`;
+  return `${name}, ${fallback}`;
+}
 
 const STORAGE_KEY = 'lanius.appearance';
 
@@ -78,8 +128,6 @@ export function normalise(value: unknown): Appearance {
   const raw = (value ?? {}) as Partial<Appearance>;
   const theme: ThemeChoice =
     THEME_CHOICES.find((choice) => choice === raw.theme) ?? DEFAULTS.theme;
-  const known = (list: readonly { id: string }[], id: unknown) =>
-    typeof id === 'string' && list.some((entry) => entry.id === id) ? id : '';
   return {
     theme,
     uiSize: clamp(
@@ -94,8 +142,8 @@ export function normalise(value: unknown): Appearance {
       MONO_SIZE_RANGE.max,
       DEFAULTS.monoSize,
     ),
-    monoFamily: known(MONO_FAMILIES, raw.monoFamily),
-    uiFamily: known(UI_FAMILIES, raw.uiFamily),
+    monoFamily: normaliseFamily(raw.monoFamily, LEGACY_MONO_IDS),
+    uiFamily: normaliseFamily(raw.uiFamily, LEGACY_UI_IDS),
   };
 }
 
@@ -139,8 +187,8 @@ export function apply(appearance: Appearance): void {
   root.dataset.theme = resolveTheme(appearance.theme);
   root.style.setProperty('--font-size-ui', `${appearance.uiSize}px`);
   root.style.setProperty('--font-size-mono', `${appearance.monoSize}px`);
-  root.style.setProperty('--font-mono', stackOf(MONO_FAMILIES, appearance.monoFamily));
-  root.style.setProperty('--font-ui', stackOf(UI_FAMILIES, appearance.uiFamily));
+  root.style.setProperty('--font-mono', fontStack(appearance.monoFamily, DEFAULT_MONO_STACK));
+  root.style.setProperty('--font-ui', fontStack(appearance.uiFamily, DEFAULT_UI_STACK));
   applyWindowTheme(appearance.theme);
 }
 
@@ -202,17 +250,4 @@ export function fontAvailable(family: string): boolean {
   // A monospace font can legitimately match; check against a second base.
   const serif = measure('serif');
   return measure(`${family}, serif`) !== serif;
-}
-
-/** The first named family in a stack, which is the one worth checking. */
-export function primaryFamily(stack: string): string {
-  const first = stack.split(',')[0]?.trim() ?? '';
-  return first.replace(/^['"]|['"]$/g, '');
-}
-
-export function stackOf(
-  list: readonly { id: string; stack: string }[],
-  id: string,
-): string {
-  return (list.find((entry) => entry.id === id) ?? list[0]).stack;
 }

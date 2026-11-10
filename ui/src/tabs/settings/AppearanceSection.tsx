@@ -3,19 +3,19 @@
 import { useEffect, useState } from 'react';
 import {
   DEFAULTS as APPEARANCE_DEFAULTS,
-  MONO_FAMILIES,
+  DEFAULT_MONO_STACK,
+  DEFAULT_UI_STACK,
   MONO_SIZE_PRESETS,
   MONO_SIZE_RANGE,
-  UI_FAMILIES,
+  SUGGESTED_MONO_FAMILIES,
+  SUGGESTED_UI_FAMILIES,
   UI_SIZE_PRESETS,
   UI_SIZE_RANGE,
   apply as applyAppearance,
   fontAvailable,
   load as loadAppearance,
   normalise as normaliseAppearance,
-  primaryFamily,
   save as saveAppearance,
-  stackOf,
   watchSystem,
   type Appearance,
   type ThemeChoice,
@@ -24,6 +24,7 @@ import {
   useI18n,
 } from '../../i18n';
 import { SizeField } from '../../components/SizeField';
+import { FontPicker } from '../../components/FontPicker';
 import { setShowLocalSourceIpColumn, useLocalSourceIpColumn } from '../../historySourceColumn';
 import { useSettingsToast } from '../../components/useSettingsToast';
 
@@ -49,15 +50,10 @@ export function AppearanceSection() {
     return watchSystem(() => applyAppearance(settings));
   }, [settings]);
 
-  const monoStack = stackOf(MONO_FAMILIES, settings.monoFamily);
-  const uiStack = stackOf(UI_FAMILIES, settings.uiFamily);
   // A missing font falls back silently, which looks like the setting
   // being ignored; say so instead.
-  const monoMissing = !fontAvailable(primaryFamily(monoStack));
-  const uiMissing = !fontAvailable(primaryFamily(uiStack));
-
-  const fontLabel = (id: string, stack: string) =>
-    id === '' ? t('appearance.fontDefault') : primaryFamily(stack);
+  const monoMissing = !fontAvailable(quotedFamily(settings.monoFamily));
+  const uiMissing = !fontAvailable(quotedFamily(settings.uiFamily));
 
   return (
     <section>
@@ -102,17 +98,13 @@ export function AppearanceSection() {
 
       <div className="settings-row">
         <label htmlFor="ui-font">{t('appearance.uiFont')}</label>
-        <select
+        <FontPicker
           id="ui-font"
           value={settings.uiFamily}
-          onChange={(event) => update({ uiFamily: event.target.value })}
-        >
-          {UI_FAMILIES.map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {fontLabel(entry.id, entry.stack)}
-            </option>
-          ))}
-        </select>
+          fallback={DEFAULT_UI_STACK}
+          suggestions={SUGGESTED_UI_FAMILIES}
+          onChange={(uiFamily) => update({ uiFamily })}
+        />
         {uiMissing && <span className="muted">{t('appearance.missingFont')}</span>}
       </div>
 
@@ -130,17 +122,14 @@ export function AppearanceSection() {
 
       <div className="settings-row">
         <label htmlFor="mono-font">{t('appearance.monoFont')}</label>
-        <select
+        <FontPicker
           id="mono-font"
           value={settings.monoFamily}
-          onChange={(event) => update({ monoFamily: event.target.value })}
-        >
-          {MONO_FAMILIES.map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {fontLabel(entry.id, entry.stack)}
-            </option>
-          ))}
-        </select>
+          fallback={DEFAULT_MONO_STACK}
+          suggestions={SUGGESTED_MONO_FAMILIES}
+          preferMonospaced
+          onChange={(monoFamily) => update({ monoFamily })}
+        />
         {monoMissing && (
           <span className="muted">{t('appearance.missingFont')}</span>
         )}
@@ -171,4 +160,12 @@ export function AppearanceSection() {
       </div>
     </section>
   );
+}
+
+/** A family as the font check expects it. Empty means the default
+ *  stack, which always resolves to something. Generic names such as
+ *  ui-monospace are not installed fonts and cannot be measured. */
+function quotedFamily(family: string): string {
+  if (!family || /^(ui-|system-ui$)/.test(family)) return '';
+  return `"${family}"`;
 }
