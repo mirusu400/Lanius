@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## [0.7.0] — Pinned egress and bulk history workflows
+
+See the [v0.7.0 release notes](docs/releases/v0.7.0.md) for downloads and installation notes. Changes since v0.6.0:
+
+- Pin proxy, Replay, Fuzzer, and raw TCP/UDP/DNS traffic to the observed public
+  IP. The guard refuses before DNS or socket creation, fails closed on expiry,
+  observer failure, address mismatch, or interface and route changes, and
+  closes live connections when the pin is no longer confirmed.
+- Select several HTTP History rows with Ctrl/Cmd and Shift, then send them to
+  Replay, bookmark, highlight, copy URLs, or delete them together.
+- Label Replay and Fuzzer requests in a History **Tool** column and hide them
+  from the filter, split extension presets into inspected formats and static
+  assets, and search History by full request URL.
+- Encode and decode selected text from the Replay, Fuzzer, and Intercept editor
+  menus.
+- Advance the plugin SDK to 1.7 with plugin message view tabs beside Pretty,
+  Raw, and Hex, and re-read plugin manifests on reload.
+- Pick interface and editor fonts from the fonts installed on this machine, and
+  keep the Lanius browser profile in a chosen data folder.
+- Show Replay response time in the response header, let toasts be dismissed
+  directly, and build macOS Apple Silicon releases on the macos-15 runner.
+
 ## [0.6.0] — Visual target mapping and portable testing workflows
 
 See the [v0.6.0 release notes](docs/releases/v0.6.0.md) for downloads and installation notes. Changes since v0.5.0:

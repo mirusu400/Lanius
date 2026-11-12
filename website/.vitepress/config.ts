@@ -27,6 +27,7 @@ export default defineConfig({
     'releases/v0.4.0.md': 'releases/v0-4-0.md',
     'releases/v0.5.0.md': 'releases/v0-5-0.md',
     'releases/v0.6.0.md': 'releases/v0-6-0.md',
+    'releases/v0.7.0.md': 'releases/v0-7-0.md',
   },
   cleanUrls: true,
   sitemap: {
@@ -112,6 +113,7 @@ export default defineConfig({
           text: 'Notes',
           items: [
             { text: 'Theme Palette Sources', link: '/theme-sources' },
+            { text: 'Release 0.7.0', link: '/releases/v0-7-0' },
             { text: 'Release 0.6.0', link: '/releases/v0-6-0' },
             { text: 'Release 0.5.0', link: '/releases/v0-5-0' },
             { text: 'Release 0.4.0', link: '/releases/v0-4-0' },

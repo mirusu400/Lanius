@@ -53,6 +53,7 @@ export const wikiGroups: WikiGroup[] = [
     title: 'Notes',
     pages: [
       page('theme-sources', 'Theme palette sources'),
+      page('releases/v0.7.0', 'Release 0.7.0'),
       page('releases/v0.6.0', 'Release 0.6.0'),
       page('releases/v0.5.0', 'Release 0.5.0'),
       page('releases/v0.4.0', 'Release 0.4.0'),
