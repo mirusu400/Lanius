@@ -174,6 +174,16 @@ def test_plugins_are_suspended_and_restored(client) -> None:
             {"value": "x", "context": {}},
             "process_payload",
         ),
+        (
+            "/api/plugin-message-views/missing.view/render",
+            {"message": {}},
+            "render_message_view",
+        ),
+        (
+            "/api/plugin-message-views/missing.view/apply",
+            {"text": "x", "message": {}},
+            "apply_message_view",
+        ),
     ],
 )
 def test_plugin_contribution_apis_are_refused_before_dispatch(

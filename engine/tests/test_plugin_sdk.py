@@ -13,7 +13,7 @@ from app.addons.plugins import PluginError, PluginManager
 from app.api.server import create_app
 from app.config import Settings
 from app.db.store import FlowRecord, FlowStore
-from app.plugin_registry import ContributionRegistry
+from app.plugin_registry import ContributionRegistry, message_view_input
 from fastapi.testclient import TestClient
 from lanius_sdk import PluginApiError
 
@@ -62,6 +62,15 @@ SDK_PLUGIN = textwrap.dedent(
             "prefix", "Prefix",
             lambda value, options: options.get("prefix", "") + value,
         )
+        context.message_views.register(
+            "reversed", "Reversed",
+            lambda message: message["body"][::-1] if message["body"] else None,
+            apply=lambda text, message: message["raw"][: len(message["raw"]) - len(message["body"])] + text[::-1],
+        )
+        context.message_views.register(
+            "status", "Status", lambda message: message["start_line"],
+            sides=("response",),
+        )
         context.settings.define(
             SettingDefinition("enabled", "Enabled", kind="boolean", default=True),
             SettingDefinition(
@@ -98,10 +107,11 @@ async def test_sdk_plugin_registers_and_invokes_contributions(sdk_manager) -> No
 
     assert plugin.loaded is True
     assert plugin.objects == []
-    assert plugin.as_dict()["sdk_api_version"] == "1.6"
+    assert plugin.as_dict()["sdk_api_version"] == "1.7"
     assert plugin.as_dict()["contributions"] == {
         "actions": 1,
         "codecs": 1,
+        "message_views": 2,
         "payload_generators": 1,
         "payload_processors": 1,
         "settings": 2,
@@ -158,6 +168,10 @@ async def test_suspended_manager_refuses_every_sdk_execution_path(sdk_manager) -
         await sdk_manager.registry.process_payload("sdk.prefix", "value", {})
     with pytest.raises(PluginApiError, match="execution is suspended"):
         codecs.transform("value", "sdk.inspect", "encode")
+    with pytest.raises(PluginApiError, match="execution is suspended"):
+        await sdk_manager.registry.render_message_view("sdk.reversed", {
+            "side": "request", "location": "history", "raw": "GET / HTTP/1.1\r\n\r\nabc",
+        })
     assert sdk_manager.registry.scan_handlers("passive_scanners") == []
 
 
@@ -206,6 +220,71 @@ async def test_managed_task_does_not_start_after_suspension() -> None:
     assert called == []
     assert isinstance(task.exception(), PluginApiError)
     await registry.dispose_owner_async("sdk")
+
+
+@pytest.mark.asyncio
+async def test_message_views_render_and_apply_edits(sdk_manager) -> None:
+    sdk_manager.enable("sdk")
+    registry = sdk_manager.registry
+    raw = "POST /e2e HTTP/1.1\r\nHost: example.test\r\nX-Key: a:b\r\n\r\ncba"
+    message = {"side": "request", "location": "replay", "raw": raw, "flow_id": "f-1"}
+
+    assert await registry.render_message_view("sdk.reversed", message) == "abc"
+    assert await registry.apply_message_view("sdk.reversed", "xyz", message) == (
+        "POST /e2e HTTP/1.1\r\nHost: example.test\r\nX-Key: a:b\r\n\r\nzyx"
+    )
+    # A view that does not apply to a message says so with None.
+    assert await registry.render_message_view(
+        "sdk.reversed", {**message, "raw": "GET / HTTP/1.1\n\n"}
+    ) is None
+
+    views = {item["id"]: item for item in registry.list("message_views")["message_views"]}
+    assert views["sdk.reversed"]["editable"] is True
+    assert views["sdk.reversed"]["sides"] == ["request", "response"]
+    assert views["sdk.status"] == {
+        "id": "sdk.status", "plugin": "sdk", "title": "Status",
+        "description": None, "sides": ["response"], "editable": False,
+    }
+
+    with pytest.raises(PluginApiError, match="does not handle requests"):
+        await registry.render_message_view("sdk.status", message)
+    with pytest.raises(PluginApiError, match="read-only"):
+        await registry.apply_message_view(
+            "sdk.status", "x", {**message, "side": "response"}
+        )
+    with pytest.raises(PluginApiError, match="location"):
+        await registry.render_message_view("sdk.reversed", {**message, "location": "x"})
+
+
+def test_message_view_input_splits_headers_and_body() -> None:
+    parsed = message_view_input({
+        "side": "response", "location": "history",
+        "raw": "HTTP/1.1 200 OK\nContent-Type: text/plain\n\nline\r\n\r\nmore",
+        "body_truncated": True,
+    })
+    assert parsed["start_line"] == "HTTP/1.1 200 OK"
+    assert parsed["headers"] == [["Content-Type", "text/plain"]]
+    assert parsed["body"] == "line\r\n\r\nmore"
+    assert parsed["body_truncated"] is True
+    assert parsed["editable"] is False
+
+
+@pytest.mark.asyncio
+async def test_message_view_registration_is_validated(tmp_path) -> None:
+    registry = ContributionRegistry(None)
+    context = registry.context("views")
+    with pytest.raises(PluginApiError, match="sides"):
+        context.message_views.register("bad", "Bad", lambda m: "", sides=("body",))
+    with pytest.raises(PluginApiError, match="sides"):
+        context.message_views.register("bad", "Bad", lambda m: "", sides="request")
+    with pytest.raises(PluginApiError, match="title and render"):
+        context.message_views.register("bad", " ", lambda m: "")
+    context.message_views.register("bytes", "Bytes", lambda m: b"nope")
+    with pytest.raises(PluginApiError, match="must return a string"):
+        await registry.render_message_view("views.bytes", {
+            "side": "request", "location": "history", "raw": "GET / HTTP/1.1\r\n\r\n",
+        })
+    assert registry.diagnostics("views")["contributions"][0]["errors"] == 1
 
 
 def test_sdk_settings_and_storage_persist_across_reload(sdk_manager) -> None:
@@ -350,6 +429,28 @@ def test_sdk_contributions_are_available_through_the_api(tmp_path) -> None:
         assert diagnostics.json()["logs"][-1]["message"] == "SDK plugin activated"
         reset = client.post("/api/plugins/sdk/diagnostics/reset")
         assert reset.json()["logs"][-1]["message"] == "SDK plugin activated"
+
+        catalogue = client.get("/api/plugin-contributions").json()
+        assert {view["id"] for view in catalogue["message_views"]} == {
+            "sdk.reversed", "sdk.status",
+        }
+        message = {"side": "request", "location": "replay", "raw": "GET / HTTP/1.1\r\n\r\ncba"}
+        rendered = client.post(
+            "/api/plugin-message-views/sdk.reversed/render", json={"message": message}
+        )
+        assert rendered.json() == {"text": "abc"}
+        applied = client.post(
+            "/api/plugin-message-views/sdk.reversed/apply",
+            json={"text": "xy", "message": message},
+        )
+        assert applied.json() == {"raw": "GET / HTTP/1.1\r\n\r\nyx"}
+        assert client.post(
+            "/api/plugin-message-views/sdk.missing/render", json={"message": message}
+        ).status_code == 404
+        assert client.post(
+            "/api/plugin-message-views/sdk.status/apply",
+            json={"text": "x", "message": {**message, "side": "response"}},
+        ).status_code == 400
 
         generated = client.post(
             "/api/plugin-payload-generators/sdk.sequence/generate",

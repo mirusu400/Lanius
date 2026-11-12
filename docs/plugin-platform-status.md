@@ -11,7 +11,7 @@ used to choose the implementation order.
 |---|---|
 | Runtime | Legacy mitmproxy addons and SDK plugins; deterministic ordering; complete hot-load lifecycle; transactional rollback; package module cleanup; manual reload; optional file watching; startup safe mode |
 | Discovery | Metadata and hook discovery without importing disabled loose-file plugins; package manifests expose metadata and compatibility before activation |
-| SDK | Versioned `lanius_sdk` 1.6 with owner-scoped disposable registrations |
+| SDK | Versioned `lanius_sdk` 1.7 with owner-scoped disposable registrations |
 | MCP | Typed plugin-owned HTTP MCP tools with schema validation, lifecycle cleanup, diagnostics, and suspension guards |
 | Contributions | Context actions, codecs, Fuzzer payload generators and processors, typed settings, user/project storage, managed tasks, logging, bounded read-only flow pages and exact single-exchange snapshots, passive scanner checks, and active scanner checks with request-level input probes |
 | Product surfaces | Plugin actions in Proxy history, Target, request/response details, Replay, Fuzzer, and the global Plugins toolbar |

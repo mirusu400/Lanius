@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { getFlow } from '../api/client';
 import { useT } from '../i18n';
@@ -13,9 +13,17 @@ import { LoadingPane } from './Spinner';
 import { RawHexView } from './RawHexView';
 import { matchCount } from './searchHighlight';
 import { MessageSearchBar, MessageSearchToggles } from './MessageSearch';
+import { PluginMessageView, PluginViewTabs } from './PluginMessageView';
+import {
+  findPluginView,
+  isPluginViewKey,
+  usePluginMessageViews,
+  viewsForSide,
+  type PluginViewKey,
+} from './pluginMessageViews';
 
-type View = BodyView | 'preview';
-const VIEWS: View[] = ['pretty', 'raw', 'hex', 'preview'];
+type View = BodyView | 'preview' | PluginViewKey;
+const VIEWS: (BodyView | 'preview')[] = ['pretty', 'raw', 'hex', 'preview'];
 
 /** The same recorded response can be inspected from Replay or Fuzzer.
  * Replay already has raw text; Fuzzer retrieves it from its result flow.
@@ -28,6 +36,8 @@ export function ResponseInspector({
   title,
   meta,
   empty,
+  pluginLocation,
+  pluginMessage,
 }: {
   flowId: string | null;
   raw?: string;
@@ -37,9 +47,21 @@ export function ResponseInspector({
   /** Shown beside the title, e.g. status, size and elapsed time. */
   meta?: ReactNode;
   empty: string;
+  /** Offer plugin message views, telling them where they are shown. */
+  pluginLocation?: 'replay' | 'fuzzer';
+  /** The complete message for plugins when `raw` is cut for display. */
+  pluginMessage?: { raw: string; bodyTruncated: boolean };
 }) {
   const t = useT();
-  const [view, setView] = useState<View>('pretty');
+  const allPluginViews = usePluginMessageViews(Boolean(pluginLocation));
+  const pluginViews = useMemo(
+    () => (pluginLocation ? viewsForSide(allPluginViews, 'response') : []),
+    [allPluginViews, pluginLocation],
+  );
+  const [selectedView, setView] = useState<View>('pretty');
+  const pluginView = findPluginView(pluginViews, selectedView);
+  const view: View = isPluginViewKey(selectedView) && !pluginView ? 'pretty' : selectedView;
+  const [pluginText, setPluginText] = useState('');
   const [showLineEndings, setShowLineEndings] = useState(false);
   const [wrap, setWrap] = useState(true);
   const [findOpen, setFindOpen] = useState(false);
@@ -49,7 +71,7 @@ export function ResponseInspector({
   const [hexMatches, setHexMatches] = useState(0);
   const sectionRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [loaded, setLoaded] = useState<{ flowId: string; raw?: string; error?: string; bodyOmitted?: boolean; bodySize?: number; bodyCapturedSize?: number } | null>(null);
+  const [loaded, setLoaded] = useState<{ flowId: string; raw?: string; error?: string; bodyOmitted?: boolean; bodySize?: number; bodyCapturedSize?: number; bodyTruncated?: boolean } | null>(null);
 
   useEffect(() => {
     if (!flowId || raw !== undefined) return;
@@ -63,6 +85,7 @@ export function ResponseInspector({
           bodyOmitted: detail.response_body_omitted,
           bodySize: detail.response_size,
           bodyCapturedSize: detail.response_body_captured_size,
+          bodyTruncated: detail.response_body_truncated,
         });
       })
       .catch((cause: unknown) => {
@@ -76,6 +99,7 @@ export function ResponseInspector({
   const omitted = bodyOmitted ?? (loaded?.flowId === flowId ? loaded.bodyOmitted : false);
   const size = bodySize ?? (loaded?.flowId === flowId ? loaded.bodySize : 0);
   const capturedSize = loaded?.flowId === flowId ? loaded.bodyCapturedSize : undefined;
+  const loadedTruncated = loaded?.flowId === flowId ? Boolean(loaded.bodyTruncated) : false;
   const shown = view === 'pretty' && rawText !== undefined
     ? formatMessageBody(rawText, 'pretty')
     : rawText;
@@ -83,7 +107,7 @@ export function ResponseInspector({
   const matches = !query ? 0
     : view === 'hex' ? hexMatches
       : view === 'preview' ? previewMatches
-        : matchCount(shown ?? '', query);
+        : matchCount(pluginView ? pluginText : shown ?? '', query);
   const currentIndex = matches ? activeIndex % matches : 0;
 
   const openFind = useCallback(() => {
@@ -151,6 +175,7 @@ export function ResponseInspector({
         >
           {t(`detail.view.${option === 'pretty' ? 'parsed' : option}`)}
         </button>)}
+        <PluginViewTabs views={pluginViews} active={view} onSelect={(key) => { setView(key); setActiveIndex(0); }} />
       </div>}
       {flowId && <MessageSearchToggles pane={title ?? t('detail.response')} mode={findOpen ? 'find' : null} onFind={openFind} />}
     </div>
@@ -172,6 +197,23 @@ export function ResponseInspector({
         ? !omitted && <ResponsePreview flowId={flowId} query={query} activeIndex={findOpen && matches ? currentIndex : null} onMatchCount={setPreviewMatches} />
         : error ? <p className="banner error">{error}</p>
           : rawText === undefined ? <LoadingPane label={t('detail.preview.loading')} />
+            : pluginView
+              ? <PluginMessageView
+                  key={pluginView.id}
+                  view={pluginView}
+                  message={{
+                    side: 'response',
+                    location: pluginLocation ?? 'replay',
+                    raw: pluginMessage?.raw ?? rawText,
+                    flow_id: flowId,
+                    body_truncated: pluginMessage?.bodyTruncated ?? loadedTruncated,
+                  }}
+                  query={query}
+                  activeIndex={findOpen && matches ? currentIndex : null}
+                  onText={setPluginText}
+                  className="replay-response mono"
+                  wrap={wrap}
+                />
             : view === 'hex'
               ? <RawHexView
                   flowId={raw === undefined ? flowId : undefined}

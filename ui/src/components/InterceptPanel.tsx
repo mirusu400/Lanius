@@ -16,6 +16,8 @@ import { ContextMenu, useContextMenu } from './ContextMenu';
 import { encodeMenuItems, replaceRange } from './encodeMenu';
 import { useCodegenMenu } from './useCodegenMenu';
 import { usePluginActions } from './usePluginActions';
+import { PluginMessageView, PluginViewTabs } from './PluginMessageView';
+import { findPluginView, usePluginMessageViews, viewsForSide, type PluginViewKey } from './pluginMessageViews';
 import { FilterDialog, countActive } from './FilterDialog';
 import { FixedSidebarSplit } from './FixedSidebarSplit';
 import { matchesFilters } from '../tabs/proxyModel';
@@ -128,6 +130,8 @@ export function InterceptPanel({
   const [editSelection, setEditSelection] = useState<{ start: number; end: number; text: string } | null>(null);
   const codegen = useCodegenMenu(setError);
   const pluginActions = usePluginActions((message) => setError(rawMsg(message)));
+  const pluginMessageViews = usePluginMessageViews();
+  const [pluginKey, setPluginKey] = useState<PluginViewKey | null>(null);
   const automatic = useMemo(
     () => (current ? renderPaused(current) : ''),
     [current],
@@ -138,6 +142,8 @@ export function InterceptPanel({
   const shown = current && stage !== 'modified'
     ? renderPausedVariant(current, stage)
     : modified;
+  const pluginViews = current ? viewsForSide(pluginMessageViews, current.phase) : [];
+  const pluginView = pluginKey ? findPluginView(pluginViews, pluginKey) : undefined;
   const shownMenuFlow = current?.phase === 'request' && stage !== 'modified'
     && current.request_variants?.[stage]
     ? {
@@ -455,20 +461,31 @@ export function InterceptPanel({
                   <div className="intercept-versions" role="tablist" aria-label={t('intercept.versions')}>
                     {(['original', 'auto_modified', 'modified'] as const).map((option) => (
                       <button key={option} type="button" role="tab"
-                        aria-selected={stage === option}
-                        className={stage === option ? 'active' : undefined}
-                        onClick={() => setStage(option)}>
+                        aria-selected={stage === option && !pluginView}
+                        className={stage === option && !pluginView ? 'active' : undefined}
+                        onClick={() => { setStage(option); setPluginKey(null); }}>
                         {t(`intercept.view.${option}`)}
                         {option === 'modified' && dirty && (
                           <span className="intercept-dirty" aria-label={t('intercept.unsaved')}> •</span>
                         )}
                       </button>
                     ))}
+                    {pluginViews.length > 0 && <span className="view-switch" role="group">
+                      <PluginViewTabs views={pluginViews} active={pluginView ? pluginKey ?? '' : ''} onSelect={setPluginKey} />
+                    </span>}
                     <span className="spacer" />
                     {stage !== 'modified' && <span className="muted">{t('intercept.readOnly')}</span>}
                     {dirty && <span className="muted">{t('intercept.forwardUsesModified')}</span>}
                   </div>
-                  <div className="intercept-editor-shell" onContextMenu={openCurrentMenu}>
+                  {pluginView ? <div className="intercept-editor-shell">
+                    <PluginMessageView
+                      key={`${pluginView.id}:${currentKey}:${stage}`}
+                      view={pluginView}
+                      message={{ side: current.phase, location: 'intercept', raw: shown, flow_id: current.id }}
+                      onChange={stage === 'modified' ? changeDraft : undefined}
+                      className="intercept-editor mono"
+                    />
+                  </div> : <div className="intercept-editor-shell" onContextMenu={openCurrentMenu}>
                     <HighlightedEditor
                       className="intercept-editor mono"
                       text={shown}
@@ -480,7 +497,7 @@ export function InterceptPanel({
                       headers={shownHeaders}
                       responsePath={current.path}
                     />
-                  </div>
+                  </div>}
                 </>
               ) : (
                 <div className="intercept-idle muted">{t('intercept.noFilterMatches')}</div>

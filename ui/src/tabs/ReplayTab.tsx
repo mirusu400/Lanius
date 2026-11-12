@@ -10,6 +10,7 @@ import {
   nextTabId,
   redirectRequest,
   renderResponseText,
+  responseMessageText,
   saveAutoFollowRedirects,
   toSendPayload,
   trimResponse,
@@ -349,12 +350,17 @@ export function ReplayTabView() {
           label={t('replay.request')}
           value={active.text}
           onChange={(text) => editReplayTab(active.id, { text })}
+          pluginLocation="replay"
           onContextMenu={editorMenu.open}
           initialView="raw"
           enableFindReplace
         />}
         second={<ResponseInspector
           flowId={active.response?.id ?? null}
+          pluginLocation="replay"
+          pluginMessage={active.response && !(active.response.error && active.response.status_code === null)
+            ? { raw: responseMessageText(active.response), bodyTruncated: Boolean(active.response.body_truncated) }
+            : undefined}
           bodyOmitted={active.response?.body_omitted}
           bodySize={active.response?.size}
           raw={active.response

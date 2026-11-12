@@ -360,6 +360,15 @@ export function trimResponse(response: ReplayResponse): ReplayResponse {
   };
 }
 
+/** The response as one message, body untruncated, for plugin views. */
+export function responseMessageText(response: ReplayResponse): string {
+  const status = `${response.response_http_version ?? 'HTTP'} ${response.status_code ?? ''} ${
+    response.reason ?? ''
+  }`.trimEnd();
+  const headers = response.headers.map(([k, v]) => `${k}: ${v}`).join('\n');
+  return `${status}\n${headers}\n\n${response.body ?? ''}`;
+}
+
 export function renderResponseText(
   response: ReplayResponse,
   note: (hidden: number | null) => string = (n) =>

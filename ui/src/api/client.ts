@@ -916,6 +916,33 @@ export function invokePluginAction(
   });
 }
 
+export function renderPluginMessageView(
+  viewId: string,
+  message: import('./types').PluginMessageInput,
+  signal?: AbortSignal,
+): Promise<{ text: string | null }> {
+  return request(`/api/plugin-message-views/${encodeURIComponent(viewId)}/render`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ message }),
+    signal,
+  });
+}
+
+export function applyPluginMessageView(
+  viewId: string,
+  text: string,
+  message: import('./types').PluginMessageInput,
+  signal?: AbortSignal,
+): Promise<{ raw: string }> {
+  return request(`/api/plugin-message-views/${encodeURIComponent(viewId)}/apply`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ text, message }),
+    signal,
+  });
+}
+
 export function installPluginPackage(
   file: File,
 ): Promise<{ plugin: import('./types').PluginInfo; trust: string }> {

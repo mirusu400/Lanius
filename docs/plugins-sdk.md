@@ -1,4 +1,4 @@
-# Plugin SDK 1.6
+# Plugin SDK 1.7
 
 `lanius_sdk` is the stable boundary between a plugin and the engine. Engine
 modules under `app` are internal and can change without an SDK compatibility
@@ -86,6 +86,56 @@ complete example, client refresh behavior, and cancellation limitations.
 codec is exposed under its qualified ID and participates in the same decoder
 chain as built in codecs. An ID collision rejects activation instead of
 overwriting an existing transform.
+
+## Message views (SDK 1.7)
+
+`context.message_views.register` adds a tab beside Pretty, Raw and Hex in
+HTTP history, the Replay and Fuzzer editors and responses, and Intercept.
+`render(message)` returns the tab's text, or `None` when the view does not
+apply to that message. The tab then says so instead of showing an error.
+
+With an `apply(text, message)` function the tab is editable wherever Raw is
+editable: the Replay and Fuzzer request editors and the Modified version in
+Intercept. Edited text is passed to `apply`, and the complete raw message it
+returns replaces Raw. What is sent is still exactly the Raw text, so a failed
+`apply` leaves Raw unchanged and shows the error in the tab.
+
+```python
+import base64
+
+from lanius_sdk import PluginContext
+
+def activate(context: PluginContext) -> None:
+    def decrypt(message):
+        if not message["body"]:
+            return None
+        return my_decrypt(base64.b64decode(message["body"])).decode()
+
+    def encrypt(text, message):
+        head = message["raw"][: len(message["raw"]) - len(message["body"])]
+        return head + base64.b64encode(my_encrypt(text.encode())).decode()
+
+    context.message_views.register(
+        "e2e", "E2E", decrypt, apply=encrypt, sides=("request", "response"),
+    )
+```
+
+`message` contains:
+
+| Key | Meaning |
+| --- | --- |
+| `side` | `"request"` or `"response"` |
+| `location` | `"history"`, `"replay"`, `"fuzzer"` or `"intercept"` |
+| `flow_id` | The captured or result flow, when there is one |
+| `raw` | The whole message as text: start line, headers, blank line, body |
+| `start_line`, `headers`, `body` | `raw` split up; `headers` is a list of `[name, value]` |
+| `body_truncated` | The body is a display preview. Use `context.flows.get(flow_id)` for exact bytes |
+| `editable` | Whether the tab is being shown with `apply` enabled |
+
+Both callbacks may be sync or async and share the 30 second contribution
+timeout and plugin diagnostics. `sides` limits which half of an exchange
+offers the tab. While plugins are suspended, for example in Lockdown Mode,
+the tabs disappear and the endpoints refuse with `LOCKDOWN_MODE_BLOCKED`.
 
 ## Fuzzer payload extensions
 
@@ -208,7 +258,7 @@ roles rather than copying application CSS or defining their own theme. See
 
 ## Compatibility
 
-`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.6`.
+`lanius_sdk.API_VERSION` and `context.api_version` currently report `1.7`.
 Minor additions remain backward compatible. A future breaking API uses a new
 major version and package manifests declare which major versions they accept.
 

@@ -1265,6 +1265,51 @@ pre.body,
   word-break: normal;
 }
 
+/* --- plugin message views --- */
+.plugin-message-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.plugin-message-view-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.plugin-message-view-text {
+  flex: 1;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.plugin-message-view-editor {
+  flex: 1;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 10px;
+  border: 0;
+  resize: none;
+  background: transparent;
+  color: var(--fg);
+  line-height: 1.4;
+  tab-size: 2;
+  overflow-wrap: anywhere;
+}
+
+.plugin-message-view-empty {
+  padding: 6px 8px;
+}
+
 /* --- fuzzer payloads --- */
 .payload-maker-dialog {
   width: min(1100px, 94vw);

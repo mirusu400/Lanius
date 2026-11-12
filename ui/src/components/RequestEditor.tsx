@@ -11,6 +11,10 @@
  * honest way to do that: whitespace inside a JSON string is meaningful,
  * so the result would sometimes differ from what was typed. Switching to
  * Raw to edit is a smaller surprise than a body that changes by itself.
+ *
+ * Plugin views are the exception: a plugin that can reverse its own
+ * rendering (re-encrypting a decrypted body, say) is asked to, and its
+ * result becomes the raw text.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -30,8 +34,18 @@ import { CodeDisplayControls } from './CodeDisplayControls';
 import { MarkedText } from './MarkedText';
 import { findMatches } from './searchHighlight';
 import { MessageSearchBar, MessageSearchToggles, type MessageSearchMode } from './MessageSearch';
+import type { PluginMessageLocation } from '../api/types';
+import { PluginMessageView, PluginViewTabs } from './PluginMessageView';
+import {
+  findPluginView,
+  isPluginViewKey,
+  usePluginMessageViews,
+  viewsForSide,
+  type PluginViewKey,
+} from './pluginMessageViews';
 
 const VIEWS: BodyView[] = ['pretty', 'raw', 'hex'];
+type EditorView = BodyView | PluginViewKey;
 
 export function RequestEditor({
   value,
@@ -47,6 +61,7 @@ export function RequestEditor({
   highlightPattern,
   initialView = 'pretty',
   enableFindReplace = false,
+  pluginLocation,
 }: {
   /** The raw request. Always exactly what will be sent. */
   value: string;
@@ -68,9 +83,20 @@ export function RequestEditor({
   initialView?: BodyView;
   /** Add local find and literal match/replace controls. */
   enableFindReplace?: boolean;
+  /** Offer plugin message views, telling them where they are shown. */
+  pluginLocation?: PluginMessageLocation;
 }) {
   const t = useT();
-  const [view, setView] = useState<BodyView>(initialView);
+  const allPluginViews = usePluginMessageViews(Boolean(pluginLocation));
+  const pluginViews = useMemo(
+    () => (pluginLocation ? viewsForSide(allPluginViews, 'request') : []),
+    [allPluginViews, pluginLocation],
+  );
+  const [selectedView, setView] = useState<EditorView>(initialView);
+  const pluginView = findPluginView(pluginViews, selectedView);
+  // A view whose plugin was unloaded falls back to the editable text.
+  const view: EditorView = isPluginViewKey(selectedView) && !pluginView ? 'raw' : selectedView;
+  const [pluginText, setPluginText] = useState('');
   const [showLineEndings, setShowLineEndings] = useState(false);
   const [wrap, setWrap] = useState(true);
   const [searchMode, setSearchMode] = useState<MessageSearchMode | null>(null);
@@ -85,10 +111,11 @@ export function RequestEditor({
   const shown = useMemo(() => {
     if (view === 'raw') return value;
     if (view === 'pretty') return formatMessageBody(value, 'pretty');
+    if (isPluginViewKey(view)) return pluginText;
     // Hex covers the whole message, headers included: when it is being
     // read at all, it is usually to find a byte the eye cannot see.
     return hexPreview(value).text;
-  }, [value, view]);
+  }, [pluginText, value, view]);
 
   const truncated = view === 'hex' ? hexPreview(value).truncated : 0;
   const reformattable = canReformat(splitMessage(value).body);
@@ -175,7 +202,7 @@ export function RequestEditor({
     setActiveIndex(0);
   };
 
-  const changeView = (next: BodyView) => {
+  const changeView = (next: EditorView) => {
     setView(next);
     setActiveIndex(0);
     if (searchMode === 'replace' && next !== 'raw') setSearchMode('find');
@@ -198,9 +225,10 @@ export function RequestEditor({
               {t(`detail.view.${option === 'pretty' ? 'parsed' : option}`)}
             </button>
           ))}
+          <PluginViewTabs views={pluginViews} active={view} onSelect={changeView} />
         </div>
 
-        {view !== 'raw' && (
+        {view !== 'raw' && !pluginView && (
           // Said plainly rather than left to be discovered by typing
           // into a box that ignores you.
           <span className="muted">{t('editor.viewOnly')}</span>
@@ -258,7 +286,20 @@ export function RequestEditor({
         onClose={() => setSearchMode(null)}
       />}
 
-      {view === 'raw' ? (
+      {pluginView ? (
+        <PluginMessageView
+          // Each document gets its own view, so a late apply cannot land in another.
+          key={`${pluginView.id}:${historyKey ?? ''}`}
+          view={pluginView}
+          message={{ side: 'request', location: pluginLocation ?? 'replay', raw: value }}
+          onChange={onChange}
+          query={query}
+          activeIndex={searchMode && matches.length ? currentIndex : null}
+          onText={setPluginText}
+          className={className || 'mono'}
+          wrap={wrap}
+        />
+      ) : view === 'raw' ? (
         <HighlightedEditor
           text={value}
           headers={headers}

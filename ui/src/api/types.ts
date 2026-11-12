@@ -530,6 +530,7 @@ export interface PluginUiView {
 export interface PluginContributionCounts {
   actions?: number;
   codecs?: number;
+  message_views?: number;
   payload_generators?: number;
   payload_processors?: number;
   settings?: number;
@@ -622,8 +623,33 @@ export interface PluginActionContribution {
   locations: PluginActionLocation[];
 }
 
+export type PluginMessageSide = 'request' | 'response';
+export type PluginMessageLocation = 'history' | 'replay' | 'fuzzer' | 'intercept';
+
+/** A plugin tab shown beside Pretty, Raw and Hex. */
+export interface PluginMessageViewContribution {
+  id: string;
+  plugin: string;
+  title: string;
+  description: string | null;
+  sides: PluginMessageSide[];
+  /** The plugin can turn edited tab text back into the raw message. */
+  editable: boolean;
+}
+
+/** What a message view is asked to render. */
+export interface PluginMessageInput {
+  side: PluginMessageSide;
+  location: PluginMessageLocation;
+  raw: string;
+  flow_id?: string | null;
+  body_truncated?: boolean;
+  editable?: boolean;
+}
+
 export interface PluginContributionCatalogue {
   actions: PluginActionContribution[];
+  message_views?: PluginMessageViewContribution[];
   codecs: Array<{
     id: string;
     plugin: string;

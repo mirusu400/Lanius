@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-API_VERSION = "1.6"
+API_VERSION = "1.7"
 
 ActionLocation = Literal[
     "global", "history", "flow", "request", "response", "replay", "fuzzer", "target", "plugin"
@@ -22,6 +22,7 @@ SettingKind = Literal["string", "boolean", "integer", "number", "enum"]
 IssueSeverity = Literal["info", "low", "medium", "high", "critical"]
 IssueConfidence = Literal["tentative", "firm", "certain"]
 InsertionPointKind = Literal["query", "header", "path", "form", "json", "body", "request"]
+MessageSide = Literal["request", "response"]
 
 
 class PluginApiError(ValueError):
@@ -146,6 +147,17 @@ class _Host(Protocol):
         decode: Callable[[str], str] | None,
     ) -> Disposable: ...
 
+    def register_message_view(
+        self,
+        view_id: str,
+        title: str,
+        render: Callable[[Mapping[str, Any]], str | None | Awaitable[str | None]],
+        *,
+        apply: Callable[[str, Mapping[str, Any]], str | Awaitable[str]] | None,
+        sides: Sequence[MessageSide],
+        description: str | None,
+    ) -> Disposable: ...
+
     def register_payload_generator(
         self,
         generator_id: str,
@@ -250,6 +262,38 @@ class Codecs:
     ) -> Disposable:
         return self._host.register_codec(
             codec_id, title, encode=encode, decode=decode
+        )
+
+
+class MessageViews:
+    """Extra tabs beside Pretty, Raw and Hex in message viewers and editors."""
+
+    def __init__(self, host: _Host) -> None:
+        self._host = host
+
+    def register(
+        self,
+        view_id: str,
+        title: str,
+        render: Callable[[Mapping[str, Any]], str | None | Awaitable[str | None]],
+        *,
+        apply: Callable[[str, Mapping[str, Any]], str | Awaitable[str]] | None = None,
+        sides: Sequence[MessageSide] = ("request", "response"),
+        description: str | None = None,
+    ) -> Disposable:
+        """Add a tab that shows ``render(message)`` for one HTTP message.
+
+        ``message`` holds ``side``, ``location``, ``flow_id``, ``raw``,
+        ``start_line``, ``headers``, ``body``, ``body_truncated`` and
+        ``editable``. Return ``None`` when the view does not apply.
+
+        With ``apply``, the tab is editable wherever the raw message is (the
+        Replay and Fuzzer request editors). ``apply(text, message)`` turns
+        the edited tab text back into the complete raw message to send.
+        """
+        return self._host.register_message_view(
+            view_id, title, render, apply=apply, sides=sides,
+            description=description,
         )
 
 
@@ -447,6 +491,7 @@ class PluginContext:
         self.api_version = API_VERSION
         self.actions = Actions(host)
         self.codecs = Codecs(host)
+        self.message_views = MessageViews(host)
         self.payloads = Payloads(host)
         self.settings = PluginSettings(host)
         self.storage = PluginStorage(host)
@@ -470,6 +515,8 @@ __all__ = [
     "PluginApiError",
     "PluginContext",
     "McpTools",
+    "MessageSide",
+    "MessageViews",
     "PluginResources",
     "ScanIssue",
     "SettingDefinition",

@@ -497,6 +497,7 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
               onChange={setTemplate}
               onContextMenu={editorMenu.open}
               onSelectionChange={rememberSelection}
+              pluginLocation="fuzzer"
             />
             {editorMenu.element}
           </div>}
@@ -591,6 +592,7 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
             </div>}
             second={<ResponseInspector
               flowId={selectedResult?.flow_id ?? null}
+              pluginLocation="fuzzer"
               title={selectedResult ? `${t('detail.response')} #${selectedResult.index}` : undefined}
               empty={selectedResult?.error ?? t('fuzzer.selectResult')}
             />}

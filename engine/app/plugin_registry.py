@@ -24,6 +24,7 @@ from lanius_sdk import (
     ActiveScanContext,
     ActionLocation,
     Disposable,
+    MessageSide,
     PluginApiError,
     PluginContext,
     ScanIssue,
@@ -37,6 +38,7 @@ from .plugin_output import capture_plugin_output
 ContributionKind = Literal[
     "actions",
     "codecs",
+    "message_views",
     "payload_generators",
     "payload_processors",
     "settings",
@@ -54,6 +56,9 @@ _MAX_STORAGE_BYTES = 1024 * 1024
 _MAX_GENERATED_PAYLOADS = 100_000
 _MAX_RESOURCE_BYTES = 10 * 1024 * 1024
 _MAX_ACTION_RESULT_BYTES = 1024 * 1024
+_MAX_MESSAGE_VIEW_BYTES = 16 * 1024 * 1024
+_MESSAGE_SIDES = ("request", "response")
+_MESSAGE_LOCATIONS = ("history", "replay", "fuzzer", "intercept")
 _CONTRIBUTION_TIMEOUT_SECONDS = 30.0
 _MAX_PLUGIN_LOGS = 500
 _MAX_PLUGIN_LOG_MESSAGE = 16 * 1024
@@ -94,6 +99,51 @@ def _collect_payloads(values: Iterable[Any]) -> List[str]:
             )
         result.append(str(value))
     return result
+
+
+def message_view_input(context: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize the message a view renders, splitting the raw HTTP text."""
+
+    side = context.get("side")
+    if side not in _MESSAGE_SIDES:
+        raise PluginApiError("message side must be 'request' or 'response'")
+    location = context.get("location")
+    if location not in _MESSAGE_LOCATIONS:
+        raise PluginApiError("unsupported message view location")
+    raw = context.get("raw")
+    if not isinstance(raw, str):
+        raise PluginApiError("message raw text must be a string")
+    if len(raw.encode("utf-8", "surrogatepass")) > _MAX_MESSAGE_VIEW_BYTES:
+        raise PluginApiError("message exceeds 16 MiB")
+    flow_id = context.get("flow_id")
+    if flow_id is not None and not isinstance(flow_id, str):
+        raise PluginApiError("flow_id must be a string")
+    # Editors normalize to CRLF, captured text may use bare LF: take
+    # whichever blank line comes first.
+    ends = [(index, len(mark)) for mark in ("\r\n\r\n", "\n\n")
+            if (index := raw.find(mark)) >= 0]
+    if ends:
+        index, width = min(ends)
+        head, body = raw[:index], raw[index + width:]
+    else:
+        head, body = raw, ""
+    lines = head.splitlines()
+    headers: list[list[str]] = []
+    for line in lines[1:]:
+        name, separator, value = line.partition(":")
+        if separator:
+            headers.append([name.strip(), value.strip()])
+    return {
+        "side": side,
+        "location": location,
+        "flow_id": flow_id,
+        "raw": raw,
+        "start_line": lines[0] if lines else "",
+        "headers": headers,
+        "body": body,
+        "body_truncated": bool(context.get("body_truncated", False)),
+        "editable": bool(context.get("editable", False)),
+    }
 
 
 @dataclass(slots=True)
@@ -223,6 +273,7 @@ class ContributionRegistry:
         self._items: dict[ContributionKind, dict[str, Contribution]] = {
             "actions": {},
             "codecs": {},
+            "message_views": {},
             "payload_generators": {},
             "payload_processors": {},
             "settings": {},
@@ -740,6 +791,75 @@ class ContributionRegistry:
         self.finish_call(item, started)
         return result
 
+    async def _invoke_message_view(
+        self, item: Contribution, label: str, *args: Any
+    ) -> Any:
+        started = self.begin_call(item)
+        try:
+            with self.execution(item.owner):
+                result = await asyncio.wait_for(
+                    _invoke_handler(*args, before_invoke=self.require_execution),
+                    timeout=_CONTRIBUTION_TIMEOUT_SECONDS,
+                )
+            if result is not None and not isinstance(result, str):
+                raise PluginApiError(f"{label} must return a string")
+            if result is not None and len(
+                result.encode("utf-8", "surrogatepass")
+            ) > _MAX_MESSAGE_VIEW_BYTES:
+                raise PluginApiError(f"{label} result exceeds 16 MiB")
+        except TimeoutError as exc:
+            error = PluginApiError(f"{label} timed out")
+            self.finish_call(item, started, error)
+            self.append_exception(item.owner, label, error)
+            raise error from exc
+        except Exception as exc:
+            self.finish_call(item, started, exc)
+            self.append_exception(item.owner, label, exc)
+            raise
+        self.finish_call(item, started)
+        return result
+
+    def _message_view(
+        self, qualified_id: str, message: Mapping[str, Any]
+    ) -> Contribution:
+        self.require_execution()
+        item = self._get("message_views", qualified_id)
+        if message["side"] not in item.metadata["sides"]:
+            raise PluginApiError(
+                f"message view {qualified_id} does not handle {message['side']}s"
+            )
+        return item
+
+    async def render_message_view(
+        self, qualified_id: str, context: Mapping[str, Any]
+    ) -> str | None:
+        """Return the view's text, or None when it does not apply."""
+
+        message = message_view_input(context)
+        item = self._message_view(qualified_id, message)
+        return await self._invoke_message_view(
+            item, f"message view {qualified_id}", item.handler["render"], message,
+        )
+
+    async def apply_message_view(
+        self, qualified_id: str, text: str, context: Mapping[str, Any]
+    ) -> str:
+        """Turn edited view text back into the complete raw message."""
+
+        if not isinstance(text, str):
+            raise PluginApiError("edited view text must be a string")
+        message = message_view_input({**context, "editable": True})
+        item = self._message_view(qualified_id, message)
+        apply = item.handler["apply"]
+        if apply is None:
+            raise PluginApiError(f"message view {qualified_id} is read-only")
+        result = await self._invoke_message_view(
+            item, f"message view {qualified_id} apply", apply, text, message,
+        )
+        if result is None:
+            raise PluginApiError("message view apply must return a string")
+        return result
+
     def settings(self, owner: str) -> dict[str, Any]:
         fields = [
             item
@@ -1160,6 +1280,39 @@ class PluginHost:
         except Exception:
             codecs.unregister_codec(qualified)
             raise
+
+    def register_message_view(
+        self,
+        view_id: str,
+        title: str,
+        render: Callable[[Mapping[str, Any]], str | None | Awaitable[str | None]],
+        *,
+        apply: Callable[[str, Mapping[str, Any]], str | Awaitable[str]] | None,
+        sides: Sequence[MessageSide],
+        description: str | None,
+    ) -> Disposable:
+        if not isinstance(title, str) or not title.strip() or not callable(render):
+            raise PluginApiError("a message view needs a title and render function")
+        if apply is not None and not callable(apply):
+            raise PluginApiError("message view apply must be callable")
+        if (
+            isinstance(sides, str)
+            or not sides
+            or any(side not in _MESSAGE_SIDES for side in sides)
+        ):
+            raise PluginApiError("message view sides must be 'request' and/or 'response'")
+        return self.registry.register(
+            self.owner,
+            "message_views",
+            view_id,
+            {
+                "title": title,
+                "description": description,
+                "sides": list(dict.fromkeys(sides)),
+                "editable": apply is not None,
+            },
+            {"render": render, "apply": apply},
+        )
 
     def register_payload_generator(
         self,

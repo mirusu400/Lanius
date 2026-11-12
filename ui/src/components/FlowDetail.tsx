@@ -34,6 +34,16 @@ import { LoadingPane } from './Spinner';
 import { selectedText } from './textDocument';
 import { selectAllText } from './selectAllText';
 import { RawHexView } from './RawHexView';
+import { PluginMessageView, PluginViewTabs } from './PluginMessageView';
+import {
+  findPluginView,
+  isPluginViewKey,
+  pluginViewKey,
+  usePluginMessageViews,
+  viewsForSide,
+  type PluginViewKey,
+} from './pluginMessageViews';
+import type { PluginMessageViewContribution } from '../api/types';
 
 interface Props {
   flow: FlowSummary | null;
@@ -51,7 +61,8 @@ interface Props {
  * over the wire, and hex is the only one that answers questions about
  * encoding or invisible bytes.
  */
-type View = 'parsed' | 'raw' | 'hex' | 'preview';
+type BuiltInView = 'parsed' | 'raw' | 'hex' | 'preview';
+type View = BuiltInView | PluginViewKey;
 type RequestStage = 'original' | 'auto_modified' | 'modified';
 
 const CHARSET_OPTIONS = [
@@ -142,6 +153,8 @@ function Half({
   searchQuery,
   rawBodyFlowId,
   rawBodySide,
+  pluginViews = [],
+  side,
 }: {
   title: string;
   note?: string | null;
@@ -186,6 +199,9 @@ function Half({
   searchQuery: string;
   rawBodyFlowId?: string;
   rawBodySide?: 'request' | 'response';
+  /** Plugin views for this side; their keys are already in `views`. */
+  pluginViews?: PluginMessageViewContribution[];
+  side: 'request' | 'response';
 }) {
   const [findOpen, setFindOpen] = useState(false);
   const [showLineEndings, setShowLineEndings] = useState(false);
@@ -194,9 +210,11 @@ function Half({
   const [activeIndex, setActiveIndex] = useState(0);
   const [previewMatches, setPreviewMatches] = useState(0);
   const [hexMatches, setHexMatches] = useState(0);
+  const [pluginText, setPluginText] = useState('');
   const sectionRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const query = findOpen ? findQuery : searchQuery;
+  const pluginView = findPluginView(pluginViews, view);
   const formatted = useMemo(() => view === 'parsed' ? formatBody(body, bodyView) : '', [body, bodyView, view]);
   const formattedBody = formatted || t('common.empty');
   const reformattable = useMemo(() => view === 'parsed' && canReformat(body), [body, view]);
@@ -206,7 +224,8 @@ function Half({
   const matches = !query ? 0 : view === 'parsed' ? headerMatches + matchCount(formattedBody, query)
     : view === 'raw' ? matchCount(raw || t('common.empty'), query)
       : view === 'hex' ? hexMatches
-        : previewMatches;
+        : pluginView ? matchCount(pluginText, query)
+          : previewMatches;
   const currentIndex = matches ? activeIndex % matches : 0;
   const selectedIndex = findOpen && query && matches ? currentIndex : null;
 
@@ -313,7 +332,7 @@ function Half({
         <CodeDisplayControls showLineEndings={showLineEndings} onShowLineEndings={setShowLineEndings}
           wrap={wrap} onWrap={setWrap} disabled={view === 'preview' || view === 'hex'} />
         <div className="view-switch" role="tablist">
-          {views.map((option) => (
+          {views.filter((option): option is BuiltInView => !isPluginViewKey(option)).map((option) => (
             <button
               key={option}
               role="tab"
@@ -328,6 +347,7 @@ function Half({
               {t(`detail.view.${option}`)}
             </button>
           ))}
+          <PluginViewTabs views={pluginViews} active={view} onSelect={onView} />
         </div>
         <button type="button" className="detail-find-toggle" onClick={openFind} aria-label={t('detail.findIn', { pane: title })} title={t('detail.findShortcut')} aria-expanded={findOpen}>⌕</button>
       </div>
@@ -419,6 +439,22 @@ function Half({
             onMatchCount={setHexMatches}
           />
         )}
+        {pluginView && <PluginMessageView
+          key={pluginView.id}
+          view={pluginView}
+          message={{
+            side,
+            location: 'history',
+            raw,
+            flow_id: rawBodyFlowId ?? null,
+            body_truncated: Boolean(bodyTruncated),
+          }}
+          query={query}
+          activeIndex={selectedIndex}
+          onText={setPluginText}
+          className="raw-view mono"
+          wrap={wrap}
+        />}
         {view === 'preview' && previewFlowId && !bodyOmitted && <ResponsePreview flowId={previewFlowId} charset={charsetOverride || null} repairMojibake={mojibakeRepaired} query={query} activeIndex={selectedIndex} onMatchCount={setPreviewMatches} />}
         </>}
       </div>
@@ -462,6 +498,7 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
   }>();
   const codegen = useCodegenMenu();
   const pluginActions = usePluginActions(setActionError);
+  const pluginMessageViews = usePluginMessageViews();
   const activeHalf = useRef<'request' | 'response'>('response');
   const activateRequest = useCallback(() => { activeHalf.current = 'request'; }, []);
   const activateResponse = useCallback(() => { activeHalf.current = 'response'; }, []);
@@ -590,8 +627,10 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
 
   const isTcp = flow.type === 'tcp';
   // A TCP stream is bytes, not a message with headers.
-  const requestViews: View[] = isTcp ? ['raw', 'hex'] : ['parsed', 'raw', 'hex'];
-  const responseViews: View[] = isTcp ? ['raw', 'hex'] : ['parsed', 'raw', 'hex', 'preview'];
+  const requestPluginViews = isTcp ? [] : viewsForSide(pluginMessageViews, 'request');
+  const responsePluginViews = isTcp ? [] : viewsForSide(pluginMessageViews, 'response');
+  const requestViews: View[] = isTcp ? ['raw', 'hex'] : ['parsed', 'raw', 'hex', ...requestPluginViews.map(pluginViewKey)];
+  const responseViews: View[] = isTcp ? ['raw', 'hex'] : ['parsed', 'raw', 'hex', 'preview', ...responsePluginViews.map(pluginViewKey)];
   const pick = (view: View, views: View[]) => (views.includes(view) ? view : views[0]);
   const setCharsetOverride = (
     side: 'request' | 'response',
@@ -688,6 +727,8 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       view={pick(requestView, requestViews)}
       onView={setRequestView}
       views={requestViews}
+      pluginViews={requestPluginViews}
+      side="request"
       bodyView={requestBodyView}
       onBodyView={setRequestBodyView}
       body={selectedVariant?.body ?? detail?.request_body ?? ''}
@@ -738,6 +779,8 @@ export function FlowDetailView({ flow, searchQuery = '', onSentToReplay, splitSt
       view={pick(responseView, responseViews)}
       onView={setResponseView}
       views={responseViews}
+      pluginViews={responsePluginViews}
+      side="response"
       previewFlowId={flow.id}
       bodyView={responseBodyView}
       onBodyView={setResponseBodyView}

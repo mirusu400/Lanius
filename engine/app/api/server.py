@@ -379,6 +379,15 @@ class PluginPayloadProcessorBody(BaseModel):
     context: dict[str, Any] = {}
 
 
+class PluginMessageViewRenderBody(BaseModel):
+    message: dict[str, Any]
+
+
+class PluginMessageViewApplyBody(BaseModel):
+    text: str
+    message: dict[str, Any]
+
+
 class PluginDevelopmentInstall(BaseModel):
     path: str
 
@@ -3057,6 +3066,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 processor_id, payload.value, payload.context
             )
             return {"value": value}
+        except PluginApiError as exc:
+            lockdown.require_outbound("plugin execution")
+            status = 404 if str(exc).startswith("unknown") else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @app.post("/api/plugin-message-views/{view_id}/render")
+    async def render_plugin_message_view(
+        view_id: str, payload: PluginMessageViewRenderBody
+    ) -> dict[str, Any]:
+        lockdown.require_outbound("plugin execution")
+        try:
+            text = await engine.plugins.registry.render_message_view(
+                view_id, payload.message
+            )
+            return {"text": text}
+        except PluginApiError as exc:
+            lockdown.require_outbound("plugin execution")
+            status = 404 if str(exc).startswith("unknown") else 400
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @app.post("/api/plugin-message-views/{view_id}/apply")
+    async def apply_plugin_message_view(
+        view_id: str, payload: PluginMessageViewApplyBody
+    ) -> dict[str, Any]:
+        lockdown.require_outbound("plugin execution")
+        try:
+            raw = await engine.plugins.registry.apply_message_view(
+                view_id, payload.text, payload.message
+            )
+            return {"raw": raw}
         except PluginApiError as exc:
             lockdown.require_outbound("plugin execution")
             status = 404 if str(exc).startswith("unknown") else 400
