@@ -51,6 +51,20 @@ def _snapshot_text(raw: str | None) -> str:
         return raw
 
 
+def _request_urls(scheme: object, host: object, port: object,
+                  path: object, query: object) -> list[str]:
+    if not host:
+        return []
+    host_path = f"{host}{path or ''}"
+    suffix = f"?{query}" if query else ""
+    urls = [host_path + suffix]
+    if scheme:
+        default_port = (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
+        port_text = f":{port}" if port is not None and not default_port else ""
+        urls.append(f"{scheme}://{host}{port_text}{path or ''}{suffix}")
+    return urls
+
+
 def search_text(*values: object) -> str:
     (method, host, path, query, request_headers, request_body,
      response_headers, response_body, comment, reason, error,
@@ -59,6 +73,7 @@ def search_text(*values: object) -> str:
     req_headers = _headers(request_headers if isinstance(request_headers, str) else None)
     resp_headers = _headers(response_headers if isinstance(response_headers, str) else None)
     return "\n".join([
+        *_request_urls(scheme, host, port, path, query),
         *(str(value) if value is not None else "" for value in (
             method, host, path, query, comment, reason, error, scheme, port,
             http_version, status_code, response_mime, source, client_addr,
@@ -84,6 +99,11 @@ _FIELDS = (
     "status_code, response_mime, source, client_addr, server_addr"
 )
 _NEW = ", ".join(f"NEW.{field.strip()}" for field in _FIELDS.split(","))
+
+REINDEX_MIGRATION = (
+    "DELETE FROM flow_search",
+    f"INSERT INTO flow_search(rowid, text) SELECT rowid, lanius_flow_search_text({_FIELDS}) FROM flows",
+)
 
 MIGRATION: tuple[str, ...] = (
     "CREATE VIRTUAL TABLE flow_search USING fts5(text, tokenize='trigram')",

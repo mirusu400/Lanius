@@ -82,21 +82,27 @@ describe('FilterDialog', () => {
 
   it('shows only chosen extensions', async () => {
     const { onApply } = open();
+    const showOnly = within(group(t('filter.showOnly')));
+    for (const ext of ['php', 'aspx', 'json', 'asp', 'html', 'htm', 'js', 'jsp', 'xml']) {
+      expect(showOnly.getByLabelText(ext)).toBeTruthy();
+    }
+    expect(showOnly.queryByLabelText('png')).toBeNull();
+    expect(showOnly.queryByLabelText('jpg')).toBeNull();
     await userEvent.click(
-      within(group(t('filter.showOnly'))).getByLabelText('js'),
+      showOnly.getByLabelText('jsp'),
     );
     await userEvent.click(apply());
-    expect(onApply.mock.calls[0][0].extensions).toEqual(['js']);
+    expect(onApply.mock.calls[0][0].extensions).toEqual(['jsp']);
   });
 
   it('takes extensions that are not on the list', async () => {
     const { onApply } = open();
     await userEvent.type(
       screen.getByLabelText(t('filter.showOnlyOther')),
-      'php, aspx',
+      'jspx, do',
     );
     await userEvent.click(apply());
-    expect(onApply.mock.calls[0][0].extensions).toEqual(['php', 'aspx']);
+    expect(onApply.mock.calls[0][0].extensions).toEqual(['jspx', 'do']);
   });
 
   it('ignores a leading dot on a typed extension', async () => {
@@ -109,9 +115,9 @@ describe('FilterDialog', () => {
   it('hides chosen extensions', async () => {
     // The usual first move: a capture is mostly images.
     const { onApply } = open();
-    await userEvent.click(within(group(t('filter.hide'))).getByLabelText('png'));
+    await userEvent.click(within(group(t('filter.hide'))).getByLabelText('webp'));
     await userEvent.click(apply());
-    expect(onApply.mock.calls[0][0].excludeExtensions).toEqual(['png']);
+    expect(onApply.mock.calls[0][0].excludeExtensions).toEqual(['webp']);
   });
 
   it('hides every static type in one click', async () => {
@@ -122,6 +128,7 @@ describe('FilterDialog', () => {
     await userEvent.click(apply());
     const hidden = onApply.mock.calls[0][0].excludeExtensions ?? [];
     expect(hidden).toContain('png');
+    expect(hidden).toContain('webp');
     expect(hidden).toContain('woff2');
   });
 

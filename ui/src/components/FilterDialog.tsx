@@ -28,12 +28,16 @@ const TOOLS: [FlowTool, TranslationKey][] = [
 ];
 const HISTORY_COLORS: HistoryColor[] = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'];
 
-/** What a capture is mostly made of, and what people mute first. */
-const COMMON_EXTENSIONS = [
+/** Request formats commonly inspected in history. */
+const INCLUDE_EXTENSIONS = ['php', 'aspx', 'json', 'asp', 'html', 'htm', 'js', 'jsp', 'xml'];
+
+/** Static assets commonly muted in history. */
+const EXCLUDE_EXTENSIONS = [
   'png',
   'jpg',
   'jpeg',
   'gif',
+  'webp',
   'svg',
   'ico',
   'css',
@@ -58,13 +62,13 @@ function parseExtensions(text: string): string[] {
 
 /** The ones that have a checkbox. */
 function commonOf(extensions: string[] | undefined): string[] {
-  return (extensions ?? []).filter((e) => COMMON_EXTENSIONS.includes(e));
+  return (extensions ?? []).filter((e) => INCLUDE_EXTENSIONS.includes(e));
 }
 
 /** The ones with no checkbox, for the free-text box. */
 function otherOf(extensions: string[] | undefined): string {
   return (extensions ?? [])
-    .filter((e) => !COMMON_EXTENSIONS.includes(e))
+    .filter((e) => !INCLUDE_EXTENSIONS.includes(e))
     .join(', ');
 }
 
@@ -239,7 +243,7 @@ export function FilterDialog({
         <section>
           <h5>{t('filter.showOnly')}</h5>
           <div className="filter-checks">
-            {COMMON_EXTENSIONS.map((ext) => (
+            {INCLUDE_EXTENSIONS.map((ext) => (
               <label key={ext}>
                 <input
                   type="checkbox"
@@ -264,7 +268,7 @@ export function FilterDialog({
         <section>
           <h5>{t('filter.hide')}</h5>
           <div className="filter-checks">
-            {COMMON_EXTENSIONS.map((ext) => (
+            {EXCLUDE_EXTENSIONS.map((ext) => (
               <label key={ext}>
                 <input
                   type="checkbox"
@@ -280,7 +284,7 @@ export function FilterDialog({
           <button
             type="button"
             className="link-button"
-            onClick={() => set({ excludeExtensions: [...COMMON_EXTENSIONS] })}
+            onClick={() => set({ excludeExtensions: [...EXCLUDE_EXTENSIONS] })}
           >
             {t('filter.hideAllStatic')}
           </button>

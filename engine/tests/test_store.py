@@ -499,6 +499,51 @@ def test_search_index_tracks_updates_deletes_and_literal_metacharacters() -> Non
     store.close()
 
 
+def test_history_search_matches_host_and_path_as_one_url() -> None:
+    store = FlowStore()
+    try:
+        store.upsert(make_record(
+            "naver", scheme="http", host="naver.com", port=80,
+            path="/test123", query="a=1",
+        ))
+        store.upsert(make_record(
+            "custom-port", host="api.test", port=8443,
+            path="/users", query=None,
+        ))
+        for term in ("naver.com/test123", "http://naver.com/test123",
+                     "naver.com/test123?a=1"):
+            assert [item["id"] for item in store.page_summaries(search=term)["items"]] == ["naver"]
+        assert [item["id"] for item in store.page_summaries(
+            search="https://api.test:8443/users"
+        )["items"]] == ["custom-port"]
+        assert store.page_summaries(search="other.com/test123")["items"] == []
+    finally:
+        store.close()
+
+
+def test_url_search_reindexes_existing_history(tmp_path) -> None:
+    path = tmp_path / "old-search.sqlite"
+    store = FlowStore(path)
+    store.upsert(make_record("old", host="naver.com", path="/test123"))
+    store.close()
+
+    # Simulate the old index, where host and path were separate lines.
+    conn = sqlite3.connect(path)
+    conn.execute("DELETE FROM flow_search")
+    conn.execute("INSERT INTO flow_search(rowid, text) VALUES (1, 'naver.com\n/test123')")
+    conn.execute("PRAGMA user_version = 18")
+    conn.commit()
+    conn.close()
+
+    upgraded = FlowStore(path)
+    try:
+        assert [item["id"] for item in upgraded.page_summaries(
+            search="naver.com/test123"
+        )["items"]] == ["old"]
+    finally:
+        upgraded.close()
+
+
 def test_oversized_body_is_stored_without_unbounded_search_indexing() -> None:
     import gzip
 

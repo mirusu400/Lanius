@@ -9,14 +9,18 @@ from typing import Any
 from .. import startup_progress
 from .metrics import MIGRATION as METRICS_MIGRATION
 from .endpoint_index import MIGRATION as ENDPOINT_MIGRATION, register_functions
-from .search_index import MIGRATION as SEARCH_MIGRATION, register_functions as register_search_functions
+from .search_index import (
+    MIGRATION as SEARCH_MIGRATION,
+    REINDEX_MIGRATION,
+    register_functions as register_search_functions,
+)
 from .history_index import (
     MEDIA_MIGRATION,
     MIGRATION as HISTORY_MIGRATION,
     REQUEST_NUMBER_MIGRATION,
 )
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -269,6 +273,8 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         "ALTER TABLE flows ADD COLUMN response_http_version TEXT",
         "ALTER TABLE fuzzer_runs ADD COLUMN http_mode TEXT",
     ),
+    # Rebuild existing rows for captures saved before combined URLs were indexed.
+    19: REINDEX_MIGRATION,
 }
 
 
