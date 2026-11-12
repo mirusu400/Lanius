@@ -272,6 +272,43 @@ describe('ProxyTab', () => {
     }))).toBeTruthy();
   });
 
+  it('selects several rows and deletes or bookmarks them together from the context menu', async () => {
+    const user = userEvent.setup();
+    flowPageResponse = Promise.resolve(jsonResponse({
+      items: ['one', 'two', 'three'].map((name, index) => ({
+        ...seeded, id: `multi-${index}`, request_number: index + 1, path: `/${name}`,
+      })),
+      count: 3,
+      has_more: false,
+    }));
+    render(<ProxyTab />);
+    const row = async (path: string) => (await screen.findByText(path)).closest('tr')!;
+
+    await user.click(await row('/one'));
+    fireEvent.click(await row('/three'), { shiftKey: true });
+    await waitFor(() => expect(document.querySelectorAll('tr[aria-selected="true"]')).toHaveLength(3));
+    fireEvent.click(await row('/two'), { metaKey: true });
+    await waitFor(async () => expect((await row('/two')).getAttribute('aria-selected')).toBe('false'));
+
+    fireEvent.contextMenu(await row('/three'));
+    expect(screen.getByRole('menuitem', { name: t('history.selectedCount', { count: '2' }) })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: t('history.bookmarkSelected', { count: '2' }) }));
+    await waitFor(() => expect(calls.filter((call) => call.url.endsWith('/annotation'))).toHaveLength(2));
+    expect(calls.filter((call) => call.url.endsWith('/annotation')).map((call) => call.url))
+      .toEqual([expect.stringContaining('/multi-0/'), expect.stringContaining('/multi-2/')]);
+    expect(await screen.findByText(t('history.bulkBookmarked', { count: '2' }))).toBeTruthy();
+
+    fireEvent.contextMenu(await row('/one'));
+    fireEvent.click(screen.getByRole('menuitem', { name: t('history.deleteSelected', { count: '2' }) }));
+    expect(screen.getByText(t('delete.confirmFlows', { count: '2' }))).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: t('common.delete') }));
+    await waitFor(() => expect(screen.queryByText('/one')).toBeNull());
+    expect(screen.queryByText('/three')).toBeNull();
+    expect(screen.getByText('/two')).toBeTruthy();
+    expect(calls.find((call) => call.url.endsWith('/api/flows/delete'))?.body)
+      .toMatchObject({ ids: ['multi-0', 'multi-2'] });
+  });
+
   it('keeps an intercept draft when switching between Proxy subtabs', async () => {
     const user = userEvent.setup();
     render(<ProxyTab />);

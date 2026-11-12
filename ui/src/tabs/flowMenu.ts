@@ -83,3 +83,65 @@ export function flowMenuItems(
       : [],
   });
 }
+
+export interface FlowsMenuActions {
+  sendToReplay: (flows: FlowSummary[]) => void;
+  copy: (text: string) => void;
+  setBookmarked: (flows: FlowSummary[], bookmarked: boolean) => void;
+  setColor: (flows: FlowSummary[], color: HistoryColor | null) => void;
+  deleteFlows: (flows: FlowSummary[]) => void;
+}
+
+/** Menu contents for several selected flows.
+ *
+ * Only actions that mean the same thing for each row. Fuzzer takes one
+ * template and Copy as builds one request, so those stay single-row.
+ */
+export function flowsMenuItems(
+  flows: FlowSummary[],
+  t: Translator,
+  actions: FlowsMenuActions,
+): MenuItem[] {
+  const count = String(flows.length);
+  const unmarked = flows.filter((flow) => !flow.bookmarked);
+  const marked = flows.filter((flow) => flow.bookmarked);
+  return [
+    { label: t('history.selectedCount', { count }), disabled: true },
+    {
+      label: t('history.sendSelectedToReplay', { count }),
+      separator: true,
+      onSelect: () => actions.sendToReplay(flows),
+    },
+    ...(unmarked.length ? [{
+      label: t('history.bookmarkSelected', { count: String(unmarked.length) }),
+      separator: true,
+      onSelect: () => actions.setBookmarked(unmarked, true),
+    }] : []),
+    ...(marked.length ? [{
+      label: t('history.unbookmarkSelected', { count: String(marked.length) }),
+      separator: !unmarked.length,
+      onSelect: () => actions.setBookmarked(marked, false),
+    }] : []),
+    {
+      label: t('history.highlight'),
+      items: [
+        { label: t('history.noColor'), onSelect: () => actions.setColor(flows, null) },
+        ...(['red', 'orange', 'yellow', 'green', 'blue', 'purple'] as HistoryColor[]).map((color) => ({
+          label: t(`history.color.${color}`),
+          onSelect: () => actions.setColor(flows, color),
+        })),
+      ],
+    },
+    {
+      label: t('history.copySelectedUrls', { count }),
+      separator: true,
+      onSelect: () => actions.copy(flows.map(flowUrl).join('\n')),
+    },
+    {
+      label: t('history.deleteSelected', { count }),
+      separator: true,
+      danger: true,
+      onSelect: () => actions.deleteFlows(flows),
+    },
+  ];
+}

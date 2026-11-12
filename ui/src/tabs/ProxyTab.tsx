@@ -24,7 +24,15 @@ import type {
 import { FlowTable } from '../components/FlowTable';
 import { ContextMenu, useContextMenu } from '../components/ContextMenu';
 import { usePluginActions } from '../components/usePluginActions';
-import { flowMenuItems, flowUrl } from './flowMenu';
+import { flowMenuItems, flowsMenuItems, flowUrl } from './flowMenu';
+import {
+  EMPTY_SELECTION,
+  selectAll,
+  selectFlow,
+  selectedIds as selectedFlowIds,
+  type FlowSelection,
+  type SelectMode,
+} from './flowSelection';
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Split } from '../components/Split';
@@ -92,6 +100,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   // Proxy's effects are paused in the hidden workspace tab.
   const [selected, setSelected] = useState<string | null>(getSelectedFlow);
   useEffect(() => subscribeSelection(setSelected), []);
+  // Rows selected together with the primary one, for actions on several.
+  const [flowSelection, setFlowSelection] = useState<FlowSelection>(EMPTY_SELECTION);
   const [filters, setFilters] = useState<FlowFilters>({});
   const [interceptFilters, setInterceptFilters] = useState<FlowFilters>({});
   const appliedMethodRequest = useRef<typeof methodFilterRequest>(null);
@@ -472,18 +482,21 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
     setQueue((prev) => (id === '*' ? [] : prev.filter((p) => p.id !== id)));
   }, []);
 
-  const [pendingDelete, setPendingDelete] = useState<FlowSummary | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<FlowSummary[] | null>(null);
 
-  const removeFlow = useCallback(
-    async (flow: FlowSummary) => {
+  const removeFlows = useCallback(
+    async (targets: FlowSummary[]) => {
+      const ids = new Set(targets.map((flow) => flow.id));
       try {
-        const { deleted } = await deleteFlows({ ids: [flow.id] });
+        const { deleted } = await deleteFlows({ ids: [...ids] });
         // Dropped locally rather than reloading: a reload would jump the
         // list back to the top and lose where the user was reading.
-        setFlows((prev) => prev.filter((f) => f.id !== flow.id));
+        setFlows((prev) => prev.filter((f) => !ids.has(f.id)));
+        setFlowSelection((current) => ({ ...current, ids: current.ids.filter((id) => !ids.has(id)) }));
         // Only when the deleted row was the selected one. A selection
         // missing from this page usually just means it is filtered out.
-        if (getSelectedFlow() === flow.id) clearSelection();
+        const primary = getSelectedFlow();
+        if (primary && ids.has(primary)) clearSelection();
         showToast({ message: t('delete.done', { count: deleted }), tone: 'success', category: 'history' });
       } catch (err) {
         // The row stays; the next refresh will show whether it went.
@@ -508,6 +521,36 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
       showToast({ message, tone: 'success', category: 'history' });
     } catch (err) {
       showToast({ message: t('history.annotationFailed', { message: (err as Error).message }), tone: 'error' });
+    }
+  }, [reload, showToast, t]);
+
+  /** One change to several flows, reported once. */
+  const updateAnnotations = useCallback(async (
+    targets: FlowSummary[], changes: { bookmarked?: boolean; annotation_color?: HistoryColor | null },
+  ) => {
+    const results = await Promise.allSettled(targets.map(async (flow) => ({
+      id: flow.id,
+      annotation: await patchFlowAnnotation(flow.id, changes),
+    })));
+    const updated = new Map<string, Partial<FlowSummary>>();
+    let failure: unknown = null;
+    for (const result of results) {
+      if (result.status === 'fulfilled') updated.set(result.value.id, result.value.annotation);
+      else failure ??= result.reason;
+    }
+    setFlows((prev) => prev.map((item) => updated.has(item.id) ? { ...item, ...updated.get(item.id), id: item.id } : item));
+    if (filtersRef.current.bookmarkedOnly || filtersRef.current.annotationColor) void reload();
+    if (updated.size) {
+      const count = String(updated.size);
+      const message = changes.bookmarked !== undefined
+        ? t(changes.bookmarked ? 'history.bulkBookmarked' : 'history.bulkBookmarkRemoved', { count })
+        : changes.annotation_color
+          ? t('history.bulkHighlightApplied', { count, color: t(`history.color.${changes.annotation_color}`) })
+          : t('history.bulkHighlightRemoved', { count });
+      showToast({ message, tone: 'success', category: 'history' });
+    }
+    if (failure) {
+      showToast({ message: t('history.annotationFailed', { message: (failure as Error).message }), tone: 'error' });
     }
   }, [reload, showToast, t]);
 
@@ -549,7 +592,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
     }
   }, [invalidateHistoryRequest, showToast, t]);
 
-  const menu = useContextMenu<FlowSummary>();
+  const menu = useContextMenu<{ flow: FlowSummary; flows: FlowSummary[] }>();
   const pluginActions = usePluginActions(
     (message) => setError(rawMsg(message)),
     () => void reload(),
@@ -575,6 +618,35 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
     () => flows.find((f) => f.id === selected) ?? null,
     [flows, selected],
   );
+  const flowOrder = useMemo(() => flows.map((flow) => flow.id), [flows]);
+  const selectedSet = useMemo(
+    () => new Set(selectedFlowIds(flowSelection, selected, flowOrder)),
+    [flowSelection, selected, flowOrder],
+  );
+  const selectHistoryFlow = (id: string, mode: SelectMode = 'replace') => {
+    const next = selectFlow(flowSelection, selected, flowOrder, id, mode);
+    setFlowSelection(next.selection);
+    setSelectedFlow(next.primary);
+  };
+  const selectAllHistory = () => {
+    const next = selectAll(flowOrder, selected);
+    setFlowSelection(next.selection);
+    setSelectedFlow(next.primary);
+  };
+  const openHistoryMenu = (event: React.MouseEvent, flow: FlowSummary) => {
+    // A right-click on one of several selected rows acts on all of them.
+    const several = selectedSet.has(flow.id) && selectedSet.size > 1
+      ? flows.filter((item) => selectedSet.has(item.id))
+      : [flow];
+    menu.open(event, { flow, flows: several });
+  };
+  const sendFlowsToReplay = async (targets: FlowSummary[]) => {
+    // One at a time, so the Replay tabs open in table order.
+    for (const flow of targets) {
+      await withDetail(flow, (detail) => sendToReplay(flow, detail));
+    }
+    showToast({ message: t('history.sentSelectedToReplay', { count: String(targets.length) }), tone: 'success', category: 'history' });
+  };
 
   const applyHistoryFilters = (next: FlowFilters) => {
     if (next === filtersRef.current && historyPageRef.current === 0) return;
@@ -673,8 +745,10 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                   flows={flows}
                   searchQuery={filters.search || ''}
                   selectedId={selected}
-                  onSelect={setSelectedFlow}
-                  onContextMenu={menu.open}
+                  selectedIds={selectedSet}
+                  onSelect={selectHistoryFlow}
+                  onSelectAll={selectAllHistory}
+                  onContextMenu={openHistoryMenu}
                   sortBy={historySort.key}
                   sortDesc={historySort.desc}
                   onSort={onSortHistory}
@@ -719,20 +793,33 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
           <ConfirmDialog
             open={pendingDelete !== null}
             title={t('menu.deleteFlow')}
-            message={t('delete.confirmFlow')}
+            message={pendingDelete && pendingDelete.length > 1
+              ? t('delete.confirmFlows', { count: String(pendingDelete.length) })
+              : t('delete.confirmFlow')}
             confirmLabel={t('common.delete')}
             onCancel={() => setPendingDelete(null)}
             onConfirm={() => {
-              const flow = pendingDelete;
+              const targets = pendingDelete;
               setPendingDelete(null);
-              if (flow) void removeFlow(flow);
+              if (targets?.length) void removeFlows(targets);
             }}
           />
           <ContextMenu
             position={menu.position}
             items={
-              menu.target
-                ? flowMenuItems(menu.target, t, {
+              menu.target && menu.target.flows.length > 1
+                ? flowsMenuItems(menu.target.flows, t, {
+                    sendToReplay: (targets) => void sendFlowsToReplay(targets),
+                    copy: (text) => copyTextToClipboard(text, t('menu.copied')),
+                    setBookmarked: (targets, bookmarked) => void updateAnnotations(targets, bookmarked
+                      ? { bookmarked: true }
+                      // As with one row: removing the bookmark removes its highlight.
+                      : { bookmarked: false, annotation_color: null }),
+                    setColor: (targets, color) => void updateAnnotations(targets, { annotation_color: color }),
+                    deleteFlows: (targets) => setPendingDelete(targets),
+                  })
+              : menu.target
+                ? flowMenuItems(menu.target.flow, t, {
                     // The table row is a summary with no headers or
                     // body, so the full flow is fetched first. Without
                     // this the request arrived in Replay as a bare
@@ -754,16 +841,16 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                       text,
                       t('menu.copied'),
                     ),
-                    deleteFlow: (flow) => setPendingDelete(flow),
+                    deleteFlow: (flow) => setPendingDelete([flow]),
                     toggleBookmark,
                     setColor: (flow, color) => void updateAnnotation(flow, { annotation_color: color }),
                   },
                   // A stored flow is rendered from its id, so the engine
                   // uses the headers and body it actually captured.
-                  codegen.buildMenu({ flow_id: menu.target.id }),
+                  codegen.buildMenu({ flow_id: menu.target.flow.id }),
                   pluginActions.buildMenu(
                     ['history', 'flow'],
-                    { flow_id: menu.target.id, flow: menu.target },
+                    { flow_id: menu.target.flow.id, flow: menu.target.flow },
                   ))
                 : []
             }

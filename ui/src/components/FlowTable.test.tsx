@@ -175,3 +175,37 @@ it('names the listener the proxy actually uses when nothing is captured', () => 
   expect(screen.getByText(t('proxy.emptyTable', { proxy: '127.0.0.1:8083' }))).toBeTruthy();
   expect(screen.queryByText(/8080/)).toBeNull();
 });
+
+it('selects several rows with Ctrl/⌘ and Shift, and keeps them for the context menu', async () => {
+  const flows = ['a', 'b', 'c'].map((id, index) => ({ ...flow, id, request_number: index + 1, host: `${id}.test` }));
+  const onSelect = vi.fn();
+  const onSelectAll = vi.fn();
+  const onContextMenu = vi.fn();
+  render(<FlowTable flows={flows} selectedId="a" selectedIds={new Set(['a', 'c'])}
+    onSelect={onSelect} onSelectAll={onSelectAll} onContextMenu={onContextMenu} />);
+  const row = (host: string) => screen.getByText(host).closest('tr')!;
+
+  expect(row('a.test').getAttribute('aria-selected')).toBe('true');
+  expect(row('b.test').getAttribute('aria-selected')).toBe('false');
+  expect(row('c.test').classList.contains('selected')).toBe(true);
+
+  fireEvent.click(row('b.test'), { metaKey: true });
+  expect(onSelect).toHaveBeenLastCalledWith('b', 'toggle');
+  fireEvent.click(row('b.test'), { shiftKey: true });
+  expect(onSelect).toHaveBeenLastCalledWith('b', 'range');
+  fireEvent.click(row('b.test'));
+  expect(onSelect).toHaveBeenLastCalledWith('b', 'replace');
+
+  // Right-click on a selected row keeps the selection; on another, replaces it.
+  onSelect.mockClear();
+  fireEvent.contextMenu(row('c.test'));
+  expect(onSelect).not.toHaveBeenCalled();
+  expect(onContextMenu).toHaveBeenCalledTimes(1);
+  fireEvent.contextMenu(row('b.test'));
+  expect(onSelect).toHaveBeenCalledWith('b');
+
+  fireEvent.keyDown(row('a.test'), { key: 'ArrowDown', shiftKey: true });
+  expect(onSelect).toHaveBeenLastCalledWith('b', 'range');
+  fireEvent.keyDown(row('a.test'), { key: 'a', ctrlKey: true });
+  expect(onSelectAll).toHaveBeenCalledTimes(1);
+});

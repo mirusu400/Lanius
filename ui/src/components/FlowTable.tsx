@@ -12,11 +12,17 @@ import {
 import { MarkedText } from './MarkedText';
 import { useLocalSourceIpColumn } from '../historySourceColumn';
 import { useEgressIpEstimates } from '../useEgressIpEstimates';
+import { selectModeOf, type SelectMode } from '../tabs/flowSelection';
 
 interface Props {
   flows: FlowSummary[];
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  /** Rows selected together with `selectedId`, for actions on several. */
+  selectedIds?: ReadonlySet<string>;
+  /** `mode` follows the modifier keys: Ctrl/⌘ toggles, Shift extends. */
+  onSelect: (id: string, mode?: SelectMode) => void;
+  /** Ctrl/⌘+A in the table. */
+  onSelectAll?: () => void;
   /** Right-click on a row, for the Proxy tab to build a menu from. */
   onContextMenu?: (event: React.MouseEvent, flow: FlowSummary) => void;
   searchQuery?: string;
@@ -32,7 +38,7 @@ const SORT_KEYS: HistorySortKey[] = [
   'started_at', 'method', 'host', 'url', 'status_code', 'modified', 'response_size', 'duration_ms',
 ];
 
-export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQuery = '', sortBy, sortDesc, onSort, onToggleBookmark, proxyAddress = '127.0.0.1:8080' }: Props) {
+export function FlowTable({ flows, selectedId, selectedIds, onSelect, onSelectAll, onContextMenu, searchQuery = '', sortBy, sortDesc, onSort, onToggleBookmark, proxyAddress = '127.0.0.1:8080' }: Props) {
   const t = useT();
   const showSourceIp = useLocalSourceIpColumn();
   const publicIpIndex = showSourceIp ? 11 : 10;
@@ -44,9 +50,15 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
   }, [publicIpIndex]);
   const publicIps = useEgressIpEstimates(flows, showPublicIp);
   const rows = useRef(new Map<string, HTMLTableRowElement>());
+  const isSelected = (id: string) => id === selectedId || Boolean(selectedIds?.has(id));
   const selectAdjacent = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     if (event.target !== event.currentTarget && !(event.target instanceof HTMLTableRowElement)) return;
+    if (onSelectAll && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+      event.preventDefault();
+      onSelectAll();
+      return;
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     if (!flows.length) return;
     event.preventDefault();
     const index = flows.findIndex((flow) => flow.id === selectedId);
@@ -54,7 +66,7 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
       ? (event.key === 'ArrowDown' ? 0 : flows.length - 1)
       : Math.max(0, Math.min(flows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)));
     const id = flows[next].id;
-    onSelect(id);
+    onSelect(id, event.shiftKey ? 'range' : 'replace');
     rows.current.get(id)?.focus();
     rows.current.get(id)?.scrollIntoView?.({ block: 'nearest' });
   };
@@ -125,15 +137,19 @@ export function FlowTable({ flows, selectedId, onSelect, onContextMenu, searchQu
               key={flow.id}
               ref={(element) => { if (element) rows.current.set(flow.id, element); else rows.current.delete(flow.id); }}
               tabIndex={flow.id === selectedId ? 0 : -1}
+              aria-selected={isSelected(flow.id)}
               className={[
-                flow.id === selectedId ? 'selected' : '',
+                isSelected(flow.id) ? 'selected' : '',
                 flow.annotation_color ? `annotation-${flow.annotation_color}` : '',
               ].filter(Boolean).join(' ') || undefined}
-              onClick={(event) => { onSelect(flow.id); event.currentTarget.focus(); }}
+              // Shift+click would otherwise also select the text in between.
+              onMouseDown={(event) => { if (event.shiftKey) event.preventDefault(); }}
+              onClick={(event) => { onSelect(flow.id, selectModeOf(event)); event.currentTarget.focus(); }}
               onContextMenu={(event) => {
                 // Right-clicking a row should act on that row, not on
-                // whatever happened to be selected.
-                onSelect(flow.id);
+                // whatever happened to be selected, unless it is one of
+                // several selected rows: then it acts on all of them.
+                if (!isSelected(flow.id)) onSelect(flow.id);
                 onContextMenu?.(event, flow);
               }}
             >

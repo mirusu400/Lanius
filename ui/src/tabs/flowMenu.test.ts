@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { flowMenuItems, flowUrl } from './flowMenu';
+import { flowMenuItems, flowsMenuItems, flowUrl } from './flowMenu';
 import { t } from '../test-utils';
 import type { FlowSummary } from '../api/types';
 
@@ -84,5 +84,45 @@ describe('flowMenuItems', () => {
     colors?.find((item) => item.label === t('history.color.blue'))?.onSelect?.();
     expect(toggleBookmark).toHaveBeenCalledWith(flow);
     expect(setColor).toHaveBeenCalledWith(flow, 'blue');
+  });
+});
+
+const multiFlow = { ...flow, host: 'example.test', query: null } as FlowSummary;
+
+describe('menu for several selected flows', () => {
+  const several = [
+    { ...multiFlow, id: 'x', path: '/x', bookmarked: true },
+    { ...multiFlow, id: 'y', path: '/y', bookmarked: false },
+  ];
+
+  it('acts on every selected flow and leaves single-request tools out', () => {
+    const actions = {
+      sendToReplay: vi.fn(), copy: vi.fn(), setBookmarked: vi.fn(), setColor: vi.fn(), deleteFlows: vi.fn(),
+    };
+    const items = flowsMenuItems(several, t, actions);
+    const labels = items.map((item) => item.label);
+    expect(labels).toEqual([
+      t('history.selectedCount', { count: '2' }),
+      t('history.sendSelectedToReplay', { count: '2' }),
+      t('history.bookmarkSelected', { count: '1' }),
+      t('history.unbookmarkSelected', { count: '1' }),
+      t('history.highlight'),
+      t('history.copySelectedUrls', { count: '2' }),
+      t('history.deleteSelected', { count: '2' }),
+    ]);
+    expect(items[0].disabled).toBe(true);
+    expect(labels).not.toContain(t('menu.sendToFuzzer'));
+
+    items[1].onSelect?.();
+    expect(actions.sendToReplay).toHaveBeenCalledWith(several);
+    items[2].onSelect?.();
+    expect(actions.setBookmarked).toHaveBeenCalledWith([several[1]], true);
+    items[4].items?.[1].onSelect?.();
+    expect(actions.setColor).toHaveBeenCalledWith(several, 'red');
+    items[5].onSelect?.();
+    expect(actions.copy).toHaveBeenCalledWith('https://example.test/x\nhttps://example.test/y');
+    expect(items[6].danger).toBe(true);
+    items[6].onSelect?.();
+    expect(actions.deleteFlows).toHaveBeenCalledWith(several);
   });
 });
