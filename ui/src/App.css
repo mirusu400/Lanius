@@ -1279,7 +1279,7 @@ pre.body,
   flex-wrap: wrap;
   gap: 10px;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: 0.85em;
 }
 
 .plugin-message-view-text {
