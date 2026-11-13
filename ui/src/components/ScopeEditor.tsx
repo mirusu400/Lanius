@@ -32,6 +32,8 @@ export function ScopeEditor({
   const [editingRule, setEditingRule] = useState<ScopeRule | null>(null);
   const [editingKind, setEditingKind] = useState<number | null>(null);
   const [savingKind, setSavingKind] = useState<number | null>(null);
+  const [savingCapture, setSavingCapture] = useState(false);
+  const [deletingRuleId, setDeletingRuleId] = useState<number | null>(null);
   const menu = useContextMenu<ScopeRule>();
   const summary = summarizeScope(scope.rules);
 
@@ -70,6 +72,32 @@ export function ScopeEditor({
     }
   };
 
+  const changeRestrictCapture = async (value: boolean) => {
+    if (savingCapture) return;
+    setSavingCapture(true);
+    setError(null);
+    try {
+      await onRestrictCapture(value);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSavingCapture(false);
+    }
+  };
+
+  const deleteRule = async (id: number) => {
+    if (deletingRuleId !== null) return;
+    setDeletingRuleId(id);
+    setError(null);
+    try {
+      await onDelete(id);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setDeletingRuleId(null);
+    }
+  };
+
   return (
     <div className="scope-editor">
       <div className="scope-controls">
@@ -99,10 +127,12 @@ export function ScopeEditor({
           <input
             type="checkbox"
             checked={scope.restrict_capture}
-            onChange={(e) => void onRestrictCapture(e.target.checked)}
+            disabled={savingCapture}
+            onChange={(e) => void changeRestrictCapture(e.target.checked)}
           />
           {t('scope.restrictCapture')}
         </label>
+        {savingCapture && <span className="muted" role="status">{t('scope.savingCapture')}</span>}
       </div>
       <p className="muted scope-pattern-hint">{t(regex ? 'scope.regexHint' : 'scope.hostPatternHint')}</p>
       {error && <div className="banner error" role="alert">{renderMessage(error, t)}</div>}
@@ -181,11 +211,11 @@ export function ScopeEditor({
               <td>
                 <button
                   className="danger"
-                  disabled={savingKind === rule.id}
+                  disabled={deletingRuleId !== null || savingKind === rule.id}
                   aria-label={t('scope.delete', { rule: describeRule(rule) })}
-                  onClick={() => rule.id !== null && void onDelete(rule.id)}
+                  onClick={() => rule.id !== null && void deleteRule(rule.id)}
                 >
-                  {t('common.delete')}
+                  {deletingRuleId === rule.id ? t('scope.deletingRule') : t('common.delete')}
                 </button>
               </td>
               <ResizableFillCell />

@@ -100,7 +100,9 @@ export function FilterBar({
         aria-pressed={Boolean(filters.bookmarkedOnly)}
         onClick={() => onChange({ ...filters, bookmarkedOnly: !filters.bookmarkedOnly })}
       >★ {t('history.bookmarkedOnly')}</button>
-      <button onClick={onTogglePause}>{paused ? t('common.resume') : t('common.pause')}</button>
+      <button type="button" aria-pressed={paused} onClick={onTogglePause}>
+        {paused ? t('proxy.resumeUpdates') : t('proxy.pauseUpdates')}
+      </button>
       <button onClick={onReload}>{t('common.refresh')}</button>
       <button className="danger" onClick={onClear} disabled={clearBusy} aria-busy={clearBusy}>
         {clearBusy ? t('proxy.clearing') : t('common.clear')}
@@ -132,7 +134,7 @@ export function FilterBar({
       </label>
       <span className={`conn conn-${connection}`}>
         {connection === 'open'
-          ? t('proxy.live')
+          ? t(paused ? 'proxy.connected' : 'proxy.live')
           : t('proxy.connState', { state: connection })}
       </span>
       {status?.proxy && (

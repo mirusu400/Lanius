@@ -22,6 +22,46 @@ function setup(onUpdate = vi.fn<(id: number, changes: Partial<ScopeRule>) => Pro
 afterEach(cleanup);
 
 describe('ScopeEditor editing', () => {
+  it('reports capture-setting failures and unlocks the toggle', async () => {
+    let rejectSave!: (reason: Error) => void;
+    const onRestrictCapture = vi.fn().mockReturnValue(new Promise<void>((_resolve, reject) => {
+      rejectSave = reject;
+    }));
+    render(<ScopeEditor scope={{ rules: [rule], restrict_capture: true }}
+      onAddUrl={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()}
+      onRestrictCapture={onRestrictCapture} />);
+    const user = userEvent.setup();
+    const toggle = screen.getByRole('checkbox', { name: t('scope.restrictCapture') }) as HTMLInputElement;
+    await user.click(toggle);
+    expect(toggle.disabled).toBe(true);
+    expect(screen.getByRole('status')).toHaveProperty('textContent', t('scope.savingCapture'));
+    rejectSave(new Error('capture setting failed'));
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'capture setting failed');
+    await waitFor(() => expect(toggle.disabled).toBe(false));
+    expect(toggle.checked).toBe(true);
+    expect(onRestrictCapture).toHaveBeenCalledWith(false);
+  });
+
+  it('reports rule deletion failures and keeps the rule available', async () => {
+    let rejectDelete!: (reason: Error) => void;
+    const onDelete = vi.fn().mockReturnValue(new Promise<void>((_resolve, reject) => {
+      rejectDelete = reject;
+    }));
+    render(<ScopeEditor scope={{ rules: [rule], restrict_capture: true }}
+      onAddUrl={vi.fn()} onUpdate={vi.fn()} onDelete={onDelete}
+      onRestrictCapture={vi.fn()} />);
+    const user = userEvent.setup();
+    const button = screen.getByRole('button', { name: t('scope.delete', { rule: describeRule(rule) }) });
+    await user.click(button);
+    expect(button).toHaveProperty('disabled', true);
+    expect(button).toHaveProperty('textContent', t('scope.deletingRule'));
+    rejectDelete(new Error('delete failed'));
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'delete failed');
+    await waitFor(() => expect(button).toHaveProperty('disabled', false));
+    expect(screen.getByText(describeRule(rule))).toBeTruthy();
+    expect(onDelete).toHaveBeenCalledWith(rule.id);
+  });
+
   it('opens the right-clicked rule and discards changes on cancel', async () => {
     const { user, onUpdate } = setup();
     fireEvent.contextMenu(screen.getByText(describeRule(rule)), { clientX: 30, clientY: 40 });

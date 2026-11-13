@@ -904,6 +904,13 @@ pre.body,
   color: var(--danger);
 }
 
+.proxy-pause-notice {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--warn);
+}
+
 .banner.error {
   background: var(--danger-bg);
   border-bottom: 1px solid var(--danger-border);

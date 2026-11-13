@@ -164,6 +164,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   };
 
   const reload = useCallback(async ({ showProgress = false, background = false } = {}) => {
+    if (background && pausedRef.current) return;
     // A scheduled search already includes incoming traffic. A background
     // response must not settle progress before that search has even started.
     if (searchReloadTimer.current !== null) {
@@ -199,7 +200,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
         historySortRef.current.key, historySortRef.current.desc,
         controller.signal,
       );
-      if (generation !== requestGeneration.current) return;
+      if (generation !== requestGeneration.current || (background && pausedRef.current)) return;
       historyAnchor.current = page.anchor;
       setFlows(page.items);
       setHasMoreHistory(page.has_more);
@@ -667,6 +668,29 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
     });
   };
 
+  const toggleLiveUpdates = () => {
+    if (pausedRef.current) {
+      pausedRef.current = false;
+      setPaused(false);
+      // Requests captured while the list was frozen may be the last ones in
+      // the project, so do not wait for another stream event to show them.
+      if (historyPageRef.current === 0) {
+        historyAnchor.current = undefined;
+        historyCursors.current = {};
+        setNextHistoryCursor(null);
+      }
+      void reload();
+      return;
+    }
+    pausedRef.current = true;
+    setPaused(true);
+    if (scopeReloadTimer.current !== null) {
+      window.clearTimeout(scopeReloadTimer.current);
+      scopeReloadTimer.current = null;
+    }
+    backgroundReloadPending.current = false;
+  };
+
   return (
     <div className="proxy-tab">
       <div className="subtabs">
@@ -712,7 +736,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
             filters={filters}
             onChange={applyHistoryFilters}
             paused={paused}
-            onTogglePause={() => setPaused((p) => !p)}
+            onTogglePause={toggleLiveUpdates}
             onClear={() => setConfirmClear(true)}
             clearBusy={clearing}
             onReload={() => void reload({ showProgress: true })}
@@ -725,6 +749,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
             historyLayout={historyLayout}
             onToggleHistoryLayout={toggleHistoryLayout}
           />
+          {paused && <div className="proxy-pause-notice" role="status">{t('proxy.updatesPaused')}</div>}
           <FilterDialog
             open={filterOpen}
             filters={filters}

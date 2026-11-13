@@ -1015,11 +1015,19 @@ describe('ProxyTab', () => {
     const user = userEvent.setup();
     render(<ProxyTab />);
     await screen.findByText('seeded.test');
-    await user.click(screen.getByRole('button', { name: t('common.pause') }));
+    await user.click(screen.getByRole('button', { name: t('proxy.pauseUpdates') }));
 
     MockSocket.instances[0].emit('flow.request', live);
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText('live.test')).toBeNull();
+    expect(screen.getByRole('status')).toHaveProperty('textContent', t('proxy.updatesPaused'));
+
+    // No further stream event arrives after resuming. The saved history still
+    // needs to catch up immediately with what the engine captured meanwhile.
+    importedHistory = true;
+    await user.click(screen.getByRole('button', { name: t('proxy.resumeUpdates') }));
+    expect(await screen.findByText('/imported')).toBeTruthy();
+    expect(screen.getByText(t('proxy.live'))).toBeTruthy();
   });
 
   it('reports errors in the language currently selected', async () => {
