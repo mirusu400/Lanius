@@ -256,7 +256,9 @@ def test_browser_choices_include_beta_and_chromium_on_windows_and_linux(tmp_path
     windows = [("chrome-beta", "Google Chrome Beta", str(beta)),
                ("chromium", "Chromium", str(chromium))]
     with mock.patch.object(browser.platform, "system", return_value="Windows"), \
-         mock.patch.object(browser, "_WINDOWS_CANDIDATES", windows):
+         mock.patch.object(browser, "_WINDOWS_CANDIDATES", windows), \
+         mock.patch.dict(browser.os.environ, {"LOCALAPPDATA": ""}):
+        # A real Windows host would add per-user install paths here.
         choices = browser.browser_choices()
     assert [(item.id, item.path) for item in choices] == [
         ("chrome-beta", str(beta)), ("chromium", str(chromium)),

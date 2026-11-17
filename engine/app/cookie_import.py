@@ -30,7 +30,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.padding import PKCS7
 from websockets.exceptions import WebSocketException
-from websockets.sync.client import connect
+from websockets.sync.client import ClientConnection, connect
 
 from . import browser
 
@@ -290,6 +290,8 @@ def _linux_key(browser_id: str) -> bytes:
 
 def _windows_dpapi(ciphertext: bytes) -> bytes:
     """Decrypt a current-user DPAPI blob without printing either buffer."""
+    if sys.platform != "win32":
+        raise CookieImportError("Windows DPAPI is only available on Windows")
     from ctypes import wintypes
 
     class DataBlob(ctypes.Structure):
@@ -520,7 +522,7 @@ def _cdp_cookie(item: _Cookie) -> dict[str, object]:
     return cookie
 
 
-def _cdp_call(ws: object, request_id: int, method: str, params: dict[str, object] | None = None) -> dict:
+def _cdp_call(ws: ClientConnection, request_id: int, method: str, params: dict[str, object] | None = None) -> dict:
     ws.send(json.dumps({"id": request_id, "method": method, "params": params or {}}))
     while True:
         response = json.loads(ws.recv(timeout=15))
@@ -682,12 +684,16 @@ def import_exported_cookies(
             continue
         name, value, host, path = (item.get("name"), item.get("value"),
                                    item.get("domain"), item.get("path"))
-        if not all(isinstance(field, str) for field in (name, value, host, path)) or (
-            not host or not path.startswith("/") or len(name) + len(value) > 16_384
+        if (
+            not isinstance(name, str) or not isinstance(value, str)
+            or not isinstance(host, str) or not isinstance(path, str)
+            or not host or not path.startswith("/") or len(name) + len(value) > 16_384
         ):
             counts["unsupported"] += 1
             continue
-        same_site = same_site_values.get(item.get("sameSite"))
+        same_site_name = item.get("sameSite")
+        same_site = (same_site_values.get(same_site_name)
+                     if isinstance(same_site_name, str) else None)
         if same_site is None:
             counts["unsupported"] += 1
             continue
