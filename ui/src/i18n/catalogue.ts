@@ -738,6 +738,8 @@ const en = {
     'The app restarts to install, and capture stops while it does.',
   'updates.installFailed':
     'Could not install it: {message}. The download link still works.',
+  'updates.lockdownStatusUnavailable':
+    'Could not confirm Lockdown Mode because the engine did not respond. Try again.',
   'updates.current': 'This is the newest published build.',
   'updates.different':
     'This build is not the published one. It was either built here or has not been released.',
@@ -2310,6 +2312,8 @@ const ko: Catalogue = {
     '설치하려면 앱이 다시 시작하고, 그동안 캡처가 멈춥니다.',
   'updates.installFailed':
     '설치하지 못했습니다: {message}. 내려받기 링크는 그대로 쓸 수 있습니다.',
+  'updates.lockdownStatusUnavailable':
+    '엔진이 응답하지 않아 Lockdown Mode 상태를 확인하지 못했습니다. 다시 시도하세요.',
   'updates.current': '가장 새로운 빌드를 쓰고 있습니다.',
   'updates.different':
     '배포된 빌드가 아닙니다. 직접 빌드했거나 아직 릴리스되지 않은 커밋입니다.',

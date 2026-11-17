@@ -8,6 +8,7 @@ import { UpdatesSection } from './settings/UpdatesSection';
 import type { UpdateCheck } from '../api/client';
 import { renderWithI18n, t } from '../test-utils';
 import { resetUpdates, runCheck } from '../updates';
+import { LOCKDOWN_BLOCKED } from '../lockdownEvents';
 
 const nightly = {
   channel: 'nightly' as const,
@@ -255,6 +256,46 @@ describe('installing from inside the app', () => {
     );
   });
 
+  it('reports an unavailable policy check without claiming Lockdown Mode is on', async () => {
+    const blocked = vi.fn();
+    window.addEventListener(LOCKDOWN_BLOCKED, blocked);
+    mockShell({
+      update_check: () => {
+        throw new Error('LOCKDOWN_STATUS_UNAVAILABLE: engine did not answer');
+      },
+    });
+    mockCheck();
+    renderWithI18n(<UpdatesSection />);
+    await userEvent.click(screen.getByRole('button', { name: t('updates.check') }));
+    expect(await screen.findByText(t('updates.lockdownStatusUnavailable'))).toBeTruthy();
+    expect(blocked).not.toHaveBeenCalled();
+    expect(screen.getByText(t('updates.download'))).toBeTruthy();
+    window.removeEventListener(LOCKDOWN_BLOCKED, blocked);
+  });
+
+  it('retries the desktop offer when Check now is pressed again', async () => {
+    let calls = 0;
+    mockShell({
+      update_check: () => {
+        calls += 1;
+        if (calls === 1) throw new Error('LOCKDOWN_STATUS_UNAVAILABLE');
+        return {
+          version: '0.1.0-nightly.20260928T1009',
+          current_version: '0.1.0-nightly.20260920T0800',
+          date: null,
+          notes: null,
+        };
+      },
+    });
+    mockCheck();
+    renderWithI18n(<UpdatesSection />);
+    await userEvent.click(screen.getByRole('button', { name: t('updates.check') }));
+    await screen.findByText(t('updates.lockdownStatusUnavailable'));
+    await userEvent.click(screen.getByRole('button', { name: t('updates.check') }));
+    expect(await screen.findByRole('button', { name: t('updates.install') })).toBeTruthy();
+    expect(calls).toBe(2);
+  });
+
   it('keeps the download link when the shell cannot install', async () => {
     // A build made without a signing key carries no updater, and saying
     // so beats a button that silently does nothing.
@@ -275,6 +316,25 @@ describe('installing from inside the app', () => {
       ),
     ).toBeTruthy();
     expect(screen.getByText(t('updates.download'))).toBeTruthy();
+  });
+
+  it('describes an unconfirmed policy during installation without a false Lockdown toast', async () => {
+    const blocked = vi.fn();
+    window.addEventListener(LOCKDOWN_BLOCKED, blocked);
+    mockShell({
+      update_install: () => {
+        throw new Error('LOCKDOWN_STATUS_UNAVAILABLE');
+      },
+    });
+    mockCheck();
+    renderWithI18n(<UpdatesSection />);
+    await userEvent.click(screen.getByRole('button', { name: t('updates.check') }));
+    await userEvent.click(await screen.findByRole('button', { name: t('updates.install') }));
+    expect(await screen.findByText(t('updates.installFailed', {
+      message: t('updates.lockdownStatusUnavailable'),
+    }))).toBeTruthy();
+    expect(blocked).not.toHaveBeenCalled();
+    window.removeEventListener(LOCKDOWN_BLOCKED, blocked);
   });
 });
 

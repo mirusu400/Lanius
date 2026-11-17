@@ -23,6 +23,7 @@ import {
   desktopUpdateInstall,
   desktopUpdateProgress,
   type UpdateChannel,
+  type UpdateCheck,
   type UpdateOffer,
   type UpdateRelease,
 } from '../../api/client';
@@ -68,7 +69,8 @@ export function UpdatesSection() {
   // link to a download, while only a signed build with an updater in it
   // can be installed from here. A button that cannot work is worse than
   // no button, so it appears only once the shell has confirmed it.
-  const [offer, setOffer] = useState<{ channel: UpdateChannel; update: UpdateOffer } | null>(null);
+  const [offer, setOffer] = useState<{ checked: UpdateCheck; update: UpdateOffer } | null>(null);
+  const [offerStatusUnavailableFor, setOfferStatusUnavailableFor] = useState<UpdateCheck | null>(null);
 
   // The startup check may land while this screen is open, and the
   // timestamp lives in storage rather than in the result.
@@ -78,25 +80,30 @@ export function UpdatesSection() {
 
   const available = result?.update_available && result.reason === 'behind';
   useEffect(() => {
-    if (!desktop || !available || !result) {
-      setOffer(null);
-      return;
-    }
+    if (!desktop || !available || !result) return;
     let live = true;
     const selectedChannel = result.channel;
     void desktopUpdateCheck(selectedChannel)
       .then((found) => {
-        if (live) setOffer(found ? { channel: selectedChannel, update: found } : null);
+        if (live) {
+          setOffer(found ? { checked: result, update: found } : null);
+          setOfferStatusUnavailableFor(null);
+        }
       })
       // A build with no signing key has no updater, which is a working
       // build: it just cannot install its own replacement.
-      .catch(() => {
-        if (live) setOffer(null);
+      .catch((err: unknown) => {
+        if (live) {
+          setOffer(null);
+          setOfferStatusUnavailableFor(
+            String(err).includes('LOCKDOWN_STATUS_UNAVAILABLE') ? result : null,
+          );
+        }
       });
     return () => {
       live = false;
     };
-  }, [desktop, available, result?.channel]);
+  }, [desktop, available, result]);
 
   const chooseChannel = (next: UpdateChannel | 'auto') => {
     setChannel(next);
@@ -132,7 +139,9 @@ export function UpdatesSection() {
       // everywhere else the app restarts itself onto the new build.
       await desktopUpdateInstall(result.channel);
     } catch (err) {
-      setInstallError(String(err instanceof Error ? err.message : err));
+      setInstallError(String(err).includes('LOCKDOWN_STATUS_UNAVAILABLE')
+        ? t('updates.lockdownStatusUnavailable')
+        : String(err instanceof Error ? err.message : err));
       setInstalling(false);
     } finally {
       window.clearInterval(timer);
@@ -147,7 +156,8 @@ export function UpdatesSection() {
   };
 
   const latest = result?.latest ?? null;
-  const matchingOffer = offer && offer.channel === result?.channel ? offer.update : null;
+  const matchingOffer = offer?.checked === result ? offer.update : null;
+  const offerStatusUnavailable = offerStatusUnavailableFor === result;
   const verdict = () => {
     if (!result) return null;
     if (available) {
@@ -165,6 +175,9 @@ export function UpdatesSection() {
             </ExternalLink>
           </div>
           {matchingOffer && <p className="muted">{t('updates.installHelp')}</p>}
+          {offerStatusUnavailable && (
+            <div className="banner error">{t('updates.lockdownStatusUnavailable')}</div>
+          )}
           {installError && (
             // Usually a build with no signing key, or a package that
             // cannot replace itself. The download link still works.

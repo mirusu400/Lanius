@@ -3,8 +3,8 @@
 //! Owns the window and the Python engine lifecycle: the engine runs as a
 //! sidecar process (codex.md §4) and is shut down when the app exits.
 
-use std::io::{BufRead, Read, Write};
-use std::net::TcpStream;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -801,11 +801,10 @@ fn engine_running() -> bool {
 }
 
 const LOCKDOWN_BLOCKED: &str = "LOCKDOWN_MODE_BLOCKED";
-/// Still a refusal, and still matched by the UI's prefix check, but it says
-/// the engine never answered rather than blaming a setting the user did not
-/// make. A restarting engine is the common cause.
+/// An unavailable engine must stop product traffic, but it has not reported
+/// Lockdown Mode as enabled. Keep this distinct from a confirmed refusal.
 const UNCONFIRMED: &str =
-    "LOCKDOWN_MODE_BLOCKED: the engine did not confirm whether this project is locked";
+    "LOCKDOWN_STATUS_UNAVAILABLE: could not verify the project's Lockdown Mode; try again";
 
 #[tauri::command]
 fn get_global_lockdown() -> Result<GlobalLockdown, String> {
@@ -902,6 +901,10 @@ fn require_product_egress() -> Result<(), String> {
 fn project_egress_allowed() -> Result<Result<(), String>, ()> {
     let address = format!("{API_HOST}:{}", api_port());
     let socket = address.parse().map_err(|_| ())?;
+    project_egress_allowed_at(socket, api_token())
+}
+
+fn project_egress_allowed_at(socket: SocketAddr, token: &str) -> Result<Result<(), String>, ()> {
     let mut stream =
         TcpStream::connect_timeout(&socket, Duration::from_millis(500)).map_err(|_| ())?;
     stream
@@ -909,20 +912,35 @@ fn project_egress_allowed() -> Result<Result<(), String>, ()> {
         .map_err(|_| ())?;
     let request = format!(
         "GET /api/lockdown HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {}\r\nConnection: close\r\n\r\n",
-        api_token()
+        token
     );
     stream.write_all(request.as_bytes()).map_err(|_| ())?;
-    let mut response = Vec::new();
-    stream
-        .take(4096)
-        .read_to_end(&mut response)
-        .map_err(|_| ())?;
-    let response = String::from_utf8(response).map_err(|_| ())?;
-    let (headers, body) = response.split_once("\r\n\r\n").ok_or(())?;
-    if !headers.starts_with("HTTP/1.1 200 ") {
+    // The answer has a Content-Length. Waiting for the server to close the
+    // socket can time out after the full answer has already arrived.
+    let mut response = BufReader::new(stream.take(4096));
+    let mut line = String::new();
+    if response.read_line(&mut line).map_err(|_| ())? == 0 || !line.starts_with("HTTP/1.1 200 ") {
         return Err(());
     }
-    let status: serde_json::Value = serde_json::from_str(body).map_err(|_| ())?;
+    let mut length = None;
+    loop {
+        line.clear();
+        if response.read_line(&mut line).map_err(|_| ())? == 0 {
+            return Err(());
+        }
+        if line == "\r\n" {
+            break;
+        }
+        if let Some((name, value)) = line.split_once(':') {
+            if name.eq_ignore_ascii_case("content-length") {
+                length = Some(value.trim().parse::<usize>().map_err(|_| ())?);
+            }
+        }
+    }
+    let length = length.filter(|length| *length <= 4096).ok_or(())?;
+    let mut body = vec![0; length];
+    response.read_exact(&mut body).map_err(|_| ())?;
+    let status: serde_json::Value = serde_json::from_slice(&body).map_err(|_| ())?;
     match status.get("effective").and_then(serde_json::Value::as_bool) {
         Some(false) => Ok(Ok(())),
         Some(true) => Ok(Err(LOCKDOWN_BLOCKED.to_string())),
@@ -935,7 +953,18 @@ fn project_egress_allowed() -> Result<Result<(), String>, ()> {
 async fn check_product_egress() -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(require_product_egress)
         .await
-        .map_err(|_| LOCKDOWN_BLOCKED.to_string())?
+        .map_err(|_| UNCONFIRMED.to_string())?
+}
+
+/// A brief engine stall should not make the first updater click fail. During
+/// a download, each failed status check still stops the network immediately.
+async fn check_initial_product_egress() -> Result<(), String> {
+    let first = check_product_egress().await;
+    if matches!(&first, Err(error) if error == UNCONFIRMED) {
+        check_product_egress().await
+    } else {
+        first
+    }
 }
 
 /// Keep checking while the native updater owns a network connection. Dropping
@@ -944,7 +973,7 @@ async fn monitored_product_egress<T, F>(operation: F) -> Result<T, String>
 where
     F: std::future::Future<Output = Result<T, String>>,
 {
-    check_product_egress().await?;
+    check_initial_product_egress().await?;
     tokio::pin!(operation);
     loop {
         tokio::select! {
@@ -1711,6 +1740,34 @@ mod tests {
             listener.local_addr().expect("addr").port()
         }; // listener dropped, port released
         assert!(!port_open(port));
+    }
+
+    #[test]
+    fn lockdown_status_uses_complete_body_without_waiting_for_socket_close() {
+        for effective in [false, true] {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+            let socket = listener.local_addr().expect("addr");
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let body = format!("{{\"effective\":{effective}}}");
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nConnection: keep-alive\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(reply.as_bytes()).expect("reply");
+                std::thread::sleep(Duration::from_millis(700));
+            });
+            let result = project_egress_allowed_at(socket, "test-token");
+            assert_eq!(
+                result,
+                Ok(if effective {
+                    Err(LOCKDOWN_BLOCKED.into())
+                } else {
+                    Ok(())
+                })
+            );
+            server.join().expect("server");
+        }
     }
 
     #[test]
