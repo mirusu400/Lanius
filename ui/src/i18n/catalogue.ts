@@ -1059,12 +1059,14 @@ const en = {
   'browser.notInstalled': 'Not installed',
   'browser.opening': 'Opening...',
   'browser.opened': 'Opened {name} through the proxy.',
+  'browser.firefoxCaToast': 'Firefox needs the Lanius CA for HTTPS. Click here for setup instructions in Docs.',
+  'browser.firefoxCaState': 'Lanius cannot check Firefox CA trust. If HTTPS warns, open Firefox and follow the setup instructions in Docs.',
   'browser.failed': 'Could not open a browser: {message}',
   'browser.unavailable':
-    'No Chromium browser found. Install Chrome, Chromium, Edge or Brave, or point your own browser at the proxy.',
+    'No supported browser found. Install Chrome, Chromium, Edge, Brave or Firefox, or point your own browser at the proxy.',
   'browser.section': 'Browser',
   'browser.help':
-    'Opens a browser already pointed at the proxy and already trusting the CA, in its own profile. Your usual browser and its history are untouched.',
+    'Opens a browser with its own profile and proxy settings. Firefox needs a separate CA setup for HTTPS.',
   'browser.noCa':
     'The CA certificate is not ready, so HTTPS pages will warn until it is.',
   'browser.profile': 'Profile',
@@ -2636,12 +2638,14 @@ const ko: Catalogue = {
   'browser.notInstalled': '설치되지 않음',
   'browser.opening': '여는 중...',
   'browser.opened': '{name} 을(를) 프록시로 열었습니다.',
+  'browser.firefoxCaToast': 'Firefox에서 HTTPS를 보려면 Lanius CA 인증서를 신뢰하도록 설정해야 합니다. 누르면 문서의 설정 방법으로 이동합니다.',
+  'browser.firefoxCaState': 'Lanius는 Firefox 프로필의 CA 신뢰 여부를 확인하지 못합니다. HTTPS 경고가 뜨면 Firefox를 열고 문서의 설정 방법을 따라 주세요.',
   'browser.failed': '브라우저를 열지 못했습니다: {message}',
   'browser.unavailable':
-    'Chromium 계열 브라우저를 찾지 못했습니다. Chrome, Chromium, Edge, Brave 중 하나를 설치하거나 쓰던 브라우저를 프록시로 지정하세요.',
+    '지원하는 브라우저를 찾지 못했습니다. Chrome, Chromium, Edge, Brave, Firefox 중 하나를 설치하거나 쓰던 브라우저를 프록시로 지정하세요.',
   'browser.section': '브라우저',
   'browser.help':
-    '프록시가 이미 설정되고 CA를 신뢰하는 브라우저를 별도 프로필로 엽니다. 평소 쓰는 브라우저와 기록은 건드리지 않습니다.',
+    '별도 프로필과 프록시 설정으로 브라우저를 엽니다. Firefox에서 HTTPS를 보려면 CA를 따로 설정해야 합니다.',
   'browser.noCa':
     'CA 인증서가 아직 준비되지 않아, 준비될 때까지 HTTPS 페이지에 경고가 표시됩니다.',
   'browser.profile': '프로필',

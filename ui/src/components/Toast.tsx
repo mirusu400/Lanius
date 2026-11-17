@@ -14,6 +14,8 @@ export type ToastTone = 'info' | 'success' | 'error';
 
 export interface ToastOptions {
   message: string;
+  /** Make the message itself an action, for guides and other destinations. */
+  onClick?: () => void;
   tone?: ToastTone;
   durationMs?: number;
   category?: ToastCategory;
@@ -189,7 +191,9 @@ function ToastViewport({ toasts, onDismiss }: { toasts: ToastEntry[]; onDismiss:
       {toasts.map((toast) => <div key={toast.id}
         className={`app-toast ${toast.tone ?? 'info'}${toast.removeAt === undefined ? '' : ' exiting'}`}
         role={toast.tone === 'error' ? 'alert' : 'status'} aria-atomic="true">
-        <span className="app-toast-message">{toast.message}</span>
+        {toast.onClick ? <button type="button" className="app-toast-message app-toast-action"
+          onClick={() => { toast.onClick?.(); onDismiss(toast.id); }}>{toast.message}</button>
+          : <span className="app-toast-message">{toast.message}</span>}
         <button type="button" className="app-toast-dismiss" aria-label={t('common.close')}
           onClick={() => onDismiss(toast.id)} />
       </div>)}

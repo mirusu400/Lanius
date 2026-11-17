@@ -1,21 +1,20 @@
-"""Launch a Chromium browser already pointed at the proxy.
+"""Launch a browser already pointed at the proxy.
 
 Testing a site normally starts with two chores: change the system or
 browser proxy settings, and install the CA certificate. Both touch the
 machine, and the proxy setting is easy to leave switched on afterwards.
-This opens a browser configured for this proxy alone, in a throwaway
+This opens a browser configured for this proxy alone, in a dedicated
 profile, so the user's own browser and its history are untouched.
 
-The CA is handled with ``--ignore-certificate-errors-spki-list``, which
-excuses exactly our certificate rather than disabling verification: a
-real certificate error on some other site still stops the page, which
-matters when the point of the tool is to notice such things.
+Chromium uses ``--ignore-certificate-errors-spki-list`` for the Lanius CA.
+Firefox needs the CA imported into its separate profile by the user.
 """
 
 from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import logging
 import os
 import platform
@@ -23,6 +22,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,9 +31,8 @@ from cryptography.hazmat.primitives import serialization
 
 logger = logging.getLogger(__name__)
 
-# Chromium builds we know how to drive, most preferred first. Firefox is
-# absent deliberately: it keeps its own certificate store, so the SPKI
-# trick does not apply and it would need the CA installed properly.
+# Supported browsers, most preferred first. Firefox uses profile preferences
+# instead of Chromium's command-line proxy and CA flags.
 _MACOS_CANDIDATES = [
     (
         "chrome", "Google Chrome",
@@ -49,6 +48,7 @@ _MACOS_CANDIDATES = [
         "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     ),
     ("brave", "Brave", "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"),
+    ("firefox", "Firefox", "/Applications/Firefox.app/Contents/MacOS/firefox"),
 ]
 
 _WINDOWS_CANDIDATES = [
@@ -69,6 +69,8 @@ _WINDOWS_CANDIDATES = [
         "edge", "Microsoft Edge",
         r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
     ),
+    ("firefox", "Firefox", r"C:\Program Files\Mozilla Firefox\firefox.exe"),
+    ("firefox", "Firefox", r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe"),
 ]
 
 _LINUX_COMMANDS = [
@@ -78,6 +80,7 @@ _LINUX_COMMANDS = [
     ("chromium", "Chromium", "chromium-browser"),
     ("edge", "Microsoft Edge", "microsoft-edge"),
     ("brave", "Brave", "brave-browser"),
+    ("firefox", "Firefox", "firefox"),
 ]
 
 
@@ -89,6 +92,7 @@ class BrowserError(RuntimeError):
 class Browser:
     name: str
     path: str
+    id: str = "chrome"
 
 
 @dataclass(slots=True)
@@ -121,10 +125,10 @@ def browser_choices() -> list[BrowserChoice]:
 
 
 def find_browser() -> Browser | None:
-    """The best Chromium-based browser on this machine, if any."""
+    """The first supported browser on this machine, if any."""
     for choice in browser_choices():
         if choice.path:
-            return Browser(choice.name, choice.path)
+            return Browser(choice.name, choice.path, choice.id)
     return None
 
 
@@ -133,7 +137,7 @@ def browser_by_id(browser_id: str) -> Browser:
     for choice in browser_choices():
         if choice.id == browser_id:
             if choice.path:
-                return Browser(choice.name, choice.path)
+                return Browser(choice.name, choice.path, choice.id)
             raise BrowserError(f"{choice.name} is not installed")
     raise BrowserError(f"unknown browser: {browser_id}")
 
@@ -178,7 +182,7 @@ def profile_dir(data_dir: Path, custom: Path | str | None = None) -> Path:
 def browser_profile_dir(
     data_dir: Path, custom: Path | str | None, browser_id: str | None
 ) -> Path:
-    """Keep each browser's profile separate so Chromium cannot steal its launch."""
+    """Keep each browser's profile separate so launches cannot be mixed."""
     base = profile_dir(data_dir, custom)
     # The original profile path belongs to the old default launch. Keep it
     # for Chrome so existing macOS/Windows users retain their browser data.
@@ -229,7 +233,7 @@ def check_profile_dir(path: Path | str, data_dir: Path) -> Path:
 
 
 def _looks_like_profile(profile: Path) -> bool:
-    """Empty, or already a Chromium profile."""
+    """Empty, or already a browser profile."""
     try:
         if not any(profile.iterdir()):
             return True
@@ -262,10 +266,63 @@ def _running_pid(profile: Path) -> int | None:
     return pid
 
 
+def _firefox_running(profile: Path) -> bool:
+    """Ask the OS whether Firefox holds its profile lock, not whether a file exists."""
+    lock = profile / ("parent.lock" if sys.platform == "win32" else ".parentlock")
+    try:
+        if sys.platform == "win32":  # pragma: no cover - platform specific
+            # Firefox opens parent.lock without sharing while the profile is used.
+            with lock.open("rb"):
+                return False
+        import fcntl
+
+        with lock.open("rb") as handle:
+            try:
+                fcntl.lockf(handle, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+            return False
+    except FileNotFoundError:
+        return False
+    except OSError:
+        # A lock that cannot be inspected must not lead to deleting the profile.
+        return True
+
+
+def _write_firefox_proxy_prefs(profile: Path, host: str, port: int) -> None:
+    """Set the proxy before Firefox starts; user.js is read at profile startup."""
+    prefs = {
+        "network.proxy.type": 1,
+        "network.proxy.http": host,
+        "network.proxy.http_port": port,
+        "network.proxy.ssl": host,
+        "network.proxy.ssl_port": port,
+        "network.proxy.no_proxies_on": "",
+        "network.proxy.allow_hijacking_localhost": True,
+        "browser.shell.checkDefaultBrowser": False,
+    }
+    content = "// Lanius-managed Firefox proxy settings.\n" + "".join(
+        f"user_pref({json.dumps(key)}, {json.dumps(value)});\n"
+        for key, value in prefs.items()
+    )
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=profile,
+            prefix=".lanius-user-", delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(content)
+        temporary.replace(profile / "user.js")
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 def running_proxy(data_dir: Path, custom: Path | str | None = None) -> str | None:
     """The proxy the open Lanius browser uses, or None if none is open."""
     profile = profile_dir(data_dir, custom)
-    if _running_pid(profile) is None:
+    if _running_pid(profile) is None and not _firefox_running(profile):
         return None
     try:
         return (profile / _PROXY_MARKER).read_text(encoding="utf-8").strip() or None
@@ -287,17 +344,20 @@ def launch(
     browser = find_browser() if browser_id is None else browser_by_id(browser_id)
     if browser is None:
         raise BrowserError(
-            "no Chromium-based browser found. Install Chrome, Chromium, "
-            "Edge or Brave, or point your own browser at the proxy."
+            "no supported browser found. Install Chrome, Chromium, Edge, "
+            "Brave or Firefox, or point your own browser at the proxy."
         )
+    selected_id = browser_id or browser.id
+    # Preserve the original default profile for older Chromium-only installs.
+    profile_id = selected_id if selected_id == "firefox" else browser_id
 
     if custom_profile:
         # Checked again here: the folder may have changed since it was chosen.
         check_profile_dir(custom_profile, data_dir)
-        profile = browser_profile_dir(data_dir, custom_profile, browser_id)
+        profile = browser_profile_dir(data_dir, custom_profile, profile_id)
     else:
-        profile = browser_profile_dir(data_dir, None, browser_id)
-    if browser_id not in (None, "chrome") and profile.exists():
+        profile = browser_profile_dir(data_dir, None, profile_id)
+    if profile_id not in (None, "chrome") and profile.exists():
         # A derived sibling may already be an unrelated user directory.
         # Only a folder Lanius previously created may be reused.
         if not profile.is_dir() or (
@@ -319,27 +379,34 @@ def launch(
             f"the Lanius browser is still open with proxy {current}. "
             f"Close it, then open it again to use {proxy}."
         )
-    args = [
-        browser.path,
-        f"--user-data-dir={profile}",
-        f"--proxy-server={proxy}",
-        "--proxy-bypass-list=<-loopback>",
-        "--no-first-run",
-        "--no-default-browser-check",
-    ]
-
-    spki = ca_spki_hash(confdir)
-    if spki:
-        # Only our certificate is excused; a genuine error elsewhere still
-        # stops the page.
-        args.append(f"--ignore-certificate-errors-spki-list={spki}")
+    if selected_id == "firefox":
+        if _firefox_running(profile):
+            raise BrowserError(
+                "the Lanius Firefox profile is already open. Use its existing "
+                "window, or close it before reopening."
+            )
+        try:
+            _write_firefox_proxy_prefs(profile, proxy_host, proxy_port)
+        except OSError as exc:
+            raise BrowserError(f"could not configure Firefox proxy: {exc}") from exc
+        # no-remote keeps normal Firefox URL handoff out of this instance.
+        args = [browser.path, "--no-remote", "--profile", str(profile), url or "about:blank"]
+        spki = None
     else:
-        logger.warning(
-            "CA certificate unavailable, so HTTPS pages will warn until it "
-            "is installed"
-        )
-
-    args.append(url or "about:blank")
+        args = [
+            browser.path,
+            f"--user-data-dir={profile}",
+            f"--proxy-server={proxy}",
+            "--proxy-bypass-list=<-loopback>",
+            "--no-first-run",
+            "--no-default-browser-check",
+        ]
+        spki = ca_spki_hash(confdir)
+        if spki:
+            args.append(f"--ignore-certificate-errors-spki-list={spki}")
+        else:
+            logger.warning("CA certificate unavailable, so HTTPS pages will warn")
+        args.append(url or "about:blank")
 
     try:
         pid = _spawn(args)
@@ -354,6 +421,7 @@ def launch(
 
     return {
         "name": browser.name,
+        "id": selected_id,
         "path": browser.path,
         "pid": pid,
         "profile": str(profile),
@@ -403,7 +471,8 @@ def state(
         "profile": str(profile_dir(data_dir, custom)),
         "default_profile": str(profile_dir(data_dir)),
         "custom_profile": bool(custom),
-        "ca_trusted": ca_spki_hash(confdir) is not None,
+        "ca_trusted": browser is not None and browser.id != "firefox"
+        and ca_spki_hash(confdir) is not None,
     }
 
 
@@ -430,7 +499,7 @@ def clear_profile(data_dir: Path, custom: Path | str | None = None) -> bool:
             continue
         if profile != base and not (profile / _OWNER_MARKER).exists():
             continue
-        if _running_pid(profile) is not None:
+        if _running_pid(profile) is not None or _firefox_running(profile):
             raise BrowserError("close the Lanius browser before clearing its data")
         if profile == base:
             if not custom and profile.name != "browser-profile":

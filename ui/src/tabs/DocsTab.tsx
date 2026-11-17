@@ -1,33 +1,36 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { docPages, type DocBlock } from '../docs/pages';
+import { currentDocsPage, OPEN_DOCS_PAGE, rememberDocsPage } from '../docs/navigation';
 import { linkedWikiPage, wikiGroups, wikiPage } from '../docs/wiki';
 import { useI18n } from '../i18n';
 import { ExternalLink } from '../components/ExternalLink';
 import { Split } from '../components/Split';
 
-/** Keep the selected page when the workspace itself is remounted. Ordinary
- *  tab switches retain this component, including its scroll position. */
-let lastPageId = '';
-
 /** Test helper: the remembered page deliberately outlives the component. */
 export function resetDocsPage(): void {
-  lastPageId = '';
+  rememberDocsPage('wiki:features');
 }
 
 export function DocsTab() {
   const { t, locale } = useI18n();
   const pages = useMemo(() => docPages(locale), [locale]);
-  const [activeId, setActiveId] = useState(() => lastPageId || 'wiki:features');
+  const [activeId, setActiveId] = useState(currentDocsPage);
   const bodyRef = useRef<HTMLElement>(null);
 
   const selectPage = (id: string) => {
-    lastPageId = id;
+    rememberDocsPage(id);
     setActiveId(id);
     if (bodyRef.current) bodyRef.current.scrollTop = 0;
   };
+
+  useEffect(() => {
+    const requested = () => selectPage(currentDocsPage());
+    window.addEventListener(OPEN_DOCS_PAGE, requested);
+    return () => window.removeEventListener(OPEN_DOCS_PAGE, requested);
+  }, []);
 
   // The locale can change while this tab is open, and ids are stable
   // across locales, so the selection survives.

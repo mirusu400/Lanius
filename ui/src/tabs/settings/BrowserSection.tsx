@@ -119,7 +119,8 @@ export function BrowserSection() {
       ) : (
         <>
           {!state.ca_trusted && (
-            <div className="banner warn">{t('browser.noCa')}</div>
+            <div className="banner warn">{state.name === 'Firefox'
+              ? t('browser.firefoxCaState') : t('browser.noCa')}</div>
           )}
           <dl className="settings-grid mono">
             <dt>{t('browser.profile')}</dt>

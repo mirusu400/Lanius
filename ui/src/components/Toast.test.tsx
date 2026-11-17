@@ -76,6 +76,15 @@ it('closes one notification from its dismiss button', () => {
   expect(screen.getByText('second')).toBeTruthy();
 });
 
+it('runs a toast message action and dismisses that toast', () => {
+  const openGuide = vi.fn();
+  render(<Probe />);
+  act(() => feedback.showToast({ message: 'Firefox CA guide', onClick: openGuide }));
+  act(() => screen.getByRole('button', { name: 'Firefox CA guide' }).click());
+  expect(openGuide).toHaveBeenCalledOnce();
+  expect(screen.getByText('Firefox CA guide').closest('.app-toast')?.classList.contains('exiting')).toBe(true);
+});
+
 it('bounds the stack without displacing errors with success notifications', () => {
   render(<Probe />);
   act(() => {

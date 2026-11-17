@@ -27,6 +27,7 @@ import { PluginsTab } from "./tabs/PluginsTab";
 import { LoggerTab } from "./tabs/LoggerTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { DocsTab } from "./tabs/DocsTab";
+import { OPEN_DOCS_PAGE } from "./docs/navigation";
 import { useT } from "./i18n";
 import { flushAutosaves } from "./tabs/autosave";
 import { startWorkspaceAutosaves } from "./tabs/workspace";
@@ -159,6 +160,11 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
     if (next === 'Replay' || next === 'Fuzzer') clearTransferIndicator(next);
     setBuiltinTab(next);
   }, [clearTransferIndicator, selectPlugin]);
+  useEffect(() => {
+    const openDocs = () => setTab('Docs');
+    window.addEventListener(OPEN_DOCS_PAGE, openDocs);
+    return () => window.removeEventListener(OPEN_DOCS_PAGE, openDocs);
+  }, [setTab]);
   const [historyMethodRequest, setHistoryMethodRequest] = useState<{ method: string } | null>(null);
   const [historyRevision, setHistoryRevision] = useState(0);
   const onProjectImported = useCallback(() => {

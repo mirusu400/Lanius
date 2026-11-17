@@ -807,6 +807,7 @@ export interface BrowserState {
 }
 
 export interface LaunchedBrowser {
+  id?: string;
   name: string;
   path: string;
   pid: number;

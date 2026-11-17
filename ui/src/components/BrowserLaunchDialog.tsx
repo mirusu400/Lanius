@@ -5,7 +5,9 @@ import { useEffect, useState } from 'react';
 import { getBrowserState, openBrowser } from '../api/client';
 import type { BrowserState, LaunchedBrowser } from '../api/types';
 import { useT } from '../i18n';
+import { openDocsPage } from '../docs/navigation';
 import { Dialog } from './Dialog';
+import { useToast } from './Toast';
 
 export function BrowserLaunchDialog({ open, onClose, onLaunched }: {
   open: boolean;
@@ -13,6 +15,7 @@ export function BrowserLaunchDialog({ open, onClose, onLaunched }: {
   onLaunched: (browser: LaunchedBrowser) => void;
 }) {
   const t = useT();
+  const { showToast } = useToast();
   const [state, setState] = useState<BrowserState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +50,15 @@ export function BrowserLaunchDialog({ open, onClose, onLaunched }: {
       onLaunched(launched);
       setState(null);
       onClose();
+      if (browserId === 'firefox' || launched.id === 'firefox') {
+        showToast({
+          id: 'firefox-ca-guide',
+          message: t('browser.firefoxCaToast'),
+          tone: 'info',
+          durationMs: 0,
+          onClick: () => openDocsPage('guide:firefox-ca'),
+        });
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {

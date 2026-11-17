@@ -4,7 +4,7 @@ The launch itself is checked by inspecting the arguments rather than by
 opening a window, because the flags are the whole feature: the wrong
 proxy flag silently sends traffic around Lanius, and the wrong
 certificate flag disables verification everywhere instead of excusing
-one certificate.
+one certificate. Firefox uses profile preferences and a manual CA import.
 """
 
 from __future__ import annotations
@@ -246,6 +246,90 @@ def test_browser_choices_include_separate_chrome_beta_on_macos(tmp_path) -> None
     assert args[0] == str(beta)
     assert f"--user-data-dir={tmp_path / 'browser-profile-chrome-beta'}" in args
     assert browser.profile_dir(tmp_path) != Path(result["profile"])
+
+
+def test_firefox_uses_its_own_profile_proxy_prefs_and_manual_ca(tmp_path) -> None:
+    executable = tmp_path / "firefox"
+    executable.touch()
+    candidates = [("firefox", "Firefox", str(executable))]
+    with mock.patch.object(browser.platform, "system", return_value="Darwin"):
+        with mock.patch.object(browser, "_MACOS_CANDIDATES", candidates):
+            with mock.patch.object(browser, "_spawn", return_value=36) as spawn:
+                result = browser.launch(
+                    proxy_host="127.0.0.1", proxy_port=9345, data_dir=tmp_path,
+                    confdir=tmp_path / "ca", browser_id="firefox",
+                )
+
+    profile = tmp_path / "browser-profile-firefox"
+    assert result["id"] == "firefox"
+    assert result["profile"] == str(profile)
+    assert result["ca_trusted"] is False
+    assert spawn.call_args[0][0] == [
+        str(executable), "--no-remote", "--profile", str(profile), "about:blank",
+    ]
+    prefs = (profile / "user.js").read_text()
+    for preference in (
+        'user_pref("network.proxy.type", 1);',
+        'user_pref("network.proxy.http", "127.0.0.1");',
+        'user_pref("network.proxy.http_port", 9345);',
+        'user_pref("network.proxy.ssl", "127.0.0.1");',
+        'user_pref("network.proxy.ssl_port", 9345);',
+        'user_pref("network.proxy.no_proxies_on", "");',
+        'user_pref("network.proxy.allow_hijacking_localhost", true);',
+    ):
+        assert preference in prefs
+    assert (profile / "lanius-profile").exists()
+
+
+def test_firefox_only_state_does_not_claim_automatic_ca_trust(tmp_path) -> None:
+    executable = tmp_path / "firefox"
+    executable.touch()
+    _write_ca(tmp_path / "ca")
+    with mock.patch.object(browser.platform, "system", return_value="Darwin"):
+        with mock.patch.object(browser, "_MACOS_CANDIDATES", [("firefox", "Firefox", str(executable))]):
+            state = browser.state(tmp_path, tmp_path / "ca")
+    assert state["available"] is True
+    assert state["name"] == "Firefox"
+    assert state["ca_trusted"] is False
+
+
+def test_firefox_is_default_when_no_chromium_browser_is_installed(tmp_path) -> None:
+    executable = tmp_path / "firefox"
+    executable.touch()
+    with mock.patch.object(browser.platform, "system", return_value="Darwin"):
+        with mock.patch.object(browser, "_MACOS_CANDIDATES", [("firefox", "Firefox", str(executable))]):
+            with mock.patch.object(browser, "_spawn", return_value=37) as spawn:
+                result = browser.launch(
+                    proxy_host="127.0.0.1", proxy_port=9345,
+                    data_dir=tmp_path, confdir=tmp_path / "ca",
+                )
+    assert result["id"] == "firefox"
+    assert result["profile"] == str(tmp_path / "browser-profile-firefox")
+    assert "--no-remote" in spawn.call_args[0][0]
+
+
+def test_firefox_profile_is_not_reconfigured_or_removed_while_open(tmp_path) -> None:
+    executable = tmp_path / "firefox"
+    executable.touch()
+    profile = tmp_path / "browser-profile-firefox"
+    profile.mkdir()
+    (profile / "lanius-profile").touch()
+    (profile / "user.js").write_text("original settings")
+    candidates = [("firefox", "Firefox", str(executable))]
+    with mock.patch.object(browser.platform, "system", return_value="Darwin"):
+        with mock.patch.object(browser, "_MACOS_CANDIDATES", candidates):
+            with mock.patch.object(browser, "_firefox_running", side_effect=lambda path: path == profile):
+                with mock.patch.object(browser, "_spawn") as spawn:
+                    with pytest.raises(browser.BrowserError, match="already open"):
+                        browser.launch(
+                            proxy_host="127.0.0.1", proxy_port=9345,
+                            data_dir=tmp_path, confdir=tmp_path / "ca",
+                            browser_id="firefox",
+                        )
+                    with pytest.raises(browser.BrowserError, match="close the Lanius browser"):
+                        browser.clear_profile(tmp_path)
+    spawn.assert_not_called()
+    assert (profile / "user.js").read_text() == "original settings"
 
 
 def test_browser_selection_rejects_uninstalled_and_unknown_ids(tmp_path) -> None:

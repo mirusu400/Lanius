@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import App from '../App';
 import { DocsTab, resetDocsPage } from './DocsTab';
 import { docPages } from '../docs/pages';
+import { openDocsPage } from '../docs/navigation';
 import { wikiGroups } from '../docs/wiki';
 import { renderWithI18n as render, t, tk, TEST_LOCALE } from '../test-utils';
 import { LOCALES } from '../i18n';
@@ -91,9 +92,7 @@ describe('DocsTab', () => {
     expect(body).toContain(claim);
   });
 
-  it('explains the browser, including what it does not cover', async () => {
-    // It has to say Firefox is out and why, or a Firefox user is left
-    // wondering what they did wrong.
+  it('explains how the Lanius Firefox profile handles CA trust', async () => {
     render(<DocsTab />);
     await openPage('Browser', '브라우저');
     const body = document.querySelector('.docs-body')!.textContent ?? '';
@@ -101,6 +100,14 @@ describe('DocsTab', () => {
     expect(body).toContain('localhost');
     const store = TEST_LOCALE === 'ko' ? '인증서 저장소' : 'certificate store';
     expect(body).toContain(store);
+  });
+
+  it('gives Firefox CA import steps in its own guide', async () => {
+    render(<DocsTab />);
+    await openPage('Firefox CA certificate', 'Firefox CA 인증서');
+    const body = document.querySelector('.docs-body')!.textContent ?? '';
+    expect(body).toContain('http://mitm.it');
+    expect(body).toContain(TEST_LOCALE === 'ko' ? '인증 기관 탭' : 'Authorities tab');
   });
 
   it('documents what an agent can actually do, including acting', async () => {
@@ -198,6 +205,12 @@ describe('documentation content', () => {
 });
 
 describe('tab wiring', () => {
+  it('opens the Firefox CA guide when requested from another tab', async () => {
+    render(<App />);
+    openDocsPage('guide:firefox-ca');
+    expect(await screen.findByRole('heading', { level: 2, name: TEST_LOCALE === 'ko' ? 'Firefox CA 인증서' : 'Firefox CA certificate' })).toBeTruthy();
+    expect(document.querySelector('.docs-body')?.textContent).toContain('http://mitm.it');
+  });
   it('is reachable from the title bar', async () => {
     render(<App />);
     await userEvent.click(screen.getByRole('button', { name: t('docs.title') }));

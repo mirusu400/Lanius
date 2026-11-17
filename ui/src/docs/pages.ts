@@ -90,7 +90,7 @@ const en: DocPage[] = [
           },
           {
             kind: 'text',
-            body: 'Open browser, next to the history and in Settings, lets you choose an installed Chromium browser configured for this proxy alone. Your usual browser, its history and its logins are untouched.',
+            body: 'Open browser, next to the history and in Settings, lets you choose an installed browser configured for this proxy alone. Your usual browser, its history and its logins are untouched.',
           },
         ],
       },
@@ -103,11 +103,11 @@ const en: DocPage[] = [
           },
           {
             kind: 'text',
-            body: 'Requests to localhost go through the proxy too. Chromium normally bypasses the proxy for loopback addresses, which is exactly where an application under test usually lives.',
+            body: 'Requests to localhost go through the proxy too. Browsers normally bypass the proxy for loopback addresses, which is exactly where an application under test usually lives.',
           },
           {
             kind: 'note',
-            body: 'The CA is trusted by its public key hash, so only the Lanius certificate is accepted. A genuine certificate error on another site still stops the page, which matters when noticing such things is the point.',
+            body: 'Chromium browsers trust the Lanius CA by its public key hash. Firefox uses its own certificate store and needs a one-time import into the Lanius Firefox profile. See the Firefox CA certificate guide in Docs.',
           },
         ],
       },
@@ -116,7 +116,7 @@ const en: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Chrome, Chromium, Edge or Brave. Firefox is not used because it keeps its own certificate store, which would need the CA installed properly rather than trusted for one browser session.',
+            body: 'Chrome, Chromium, Edge, Brave or Firefox. Lanius opens Firefox with a separate profile and sets its HTTP and HTTPS proxy automatically.',
           },
           {
             kind: 'text',
@@ -130,6 +130,35 @@ const en: DocPage[] = [
           {
             kind: 'text',
             body: 'Clear browsing data in Settings deletes the profile: cookies, logins and history of the Lanius browser only.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'firefox-ca',
+    title: 'Firefox CA certificate',
+    summary: 'Trust the Lanius CA in the separate Firefox profile for HTTPS.',
+    sections: [
+      {
+        heading: 'Import the certificate',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Open Firefox from Lanius first. In that Firefox window, visit http://mitm.it and download the Firefox CA certificate. This page must be reached through the Lanius proxy.',
+          },
+          {
+            kind: 'text',
+            body: 'In the same Firefox window, open Settings > Privacy & Security > Certificates > View Certificates. On the Authorities tab, choose Import, select the downloaded certificate, then check "Trust this CA to identify websites" and confirm.',
+          },
+        ],
+      },
+      {
+        heading: 'When to repeat it',
+        blocks: [
+          {
+            kind: 'note',
+            body: 'Import into the Firefox window opened by Lanius, not your usual Firefox profile. If you clear Lanius browsing data or replace the project CA, import the current certificate again. Never turn off certificate verification to get past an HTTPS warning.',
           },
         ],
       },
@@ -565,7 +594,7 @@ const ko: DocPage[] = [
           },
           {
             kind: 'text',
-            body: '기록 옆과 설정에 있는 브라우저 열기에서 사용할 Chromium 계열 브라우저를 고르면 이 프록시로 설정해 띄웁니다. 평소 쓰는 브라우저와 기록, 로그인은 그대로 둡니다.',
+            body: '기록 옆과 설정에 있는 브라우저 열기에서 사용할 브라우저를 고르면 이 프록시로 설정해 띄웁니다. 평소 쓰는 브라우저와 기록, 로그인은 그대로 둡니다.',
           },
         ],
       },
@@ -578,11 +607,11 @@ const ko: DocPage[] = [
           },
           {
             kind: 'text',
-            body: 'localhost 요청도 프록시를 지나갑니다. Chromium은 보통 루프백 주소에 프록시를 쓰지 않는데, 테스트 대상 애플리케이션이 있는 곳이 대개 거기입니다.',
+            body: 'localhost 요청도 프록시를 지나갑니다. 브라우저는 보통 루프백 주소에 프록시를 쓰지 않는데, 테스트 대상 애플리케이션이 있는 곳이 대개 거기입니다.',
           },
           {
             kind: 'note',
-            body: 'CA는 공개키 해시로 신뢰하므로 Lanius 인증서만 통과합니다. 다른 사이트의 진짜 인증서 오류는 그대로 페이지를 막습니다. 그런 것을 알아차리는 게 이 도구의 목적이기 때문입니다.',
+            body: 'Chromium 계열 브라우저는 Lanius CA의 공개키 해시를 신뢰합니다. Firefox는 자체 인증서 저장소를 쓰므로 Lanius 전용 Firefox 프로필에 CA를 한 번 가져와야 합니다. 문서의 Firefox CA 인증서 안내를 참고하세요.',
           },
         ],
       },
@@ -591,7 +620,7 @@ const ko: DocPage[] = [
         blocks: [
           {
             kind: 'text',
-            body: 'Chrome, Chromium, Edge, Brave 중 하나가 필요합니다. Firefox는 자체 인증서 저장소를 쓰기 때문에 사용하지 않습니다. 한 번의 실행에만 신뢰시키는 방식이 통하지 않고 CA를 정식으로 설치해야 합니다.',
+            body: 'Chrome, Chromium, Edge, Brave, Firefox 중 하나가 필요합니다. Lanius는 Firefox를 별도 프로필로 열고 HTTP와 HTTPS 프록시를 자동으로 설정합니다.',
           },
           {
             kind: 'text',
@@ -605,6 +634,35 @@ const ko: DocPage[] = [
           {
             kind: 'text',
             body: '설정의 브라우징 데이터 지우기는 프로필을 삭제합니다. Lanius 브라우저의 쿠키, 로그인, 기록만 지워집니다.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'firefox-ca',
+    title: 'Firefox CA 인증서',
+    summary: 'Lanius 전용 Firefox 프로필에서 HTTPS용 CA를 신뢰합니다.',
+    sections: [
+      {
+        heading: '인증서 가져오기',
+        blocks: [
+          {
+            kind: 'text',
+            body: '먼저 Lanius에서 Firefox를 여세요. 열린 Firefox에서 http://mitm.it 에 접속해 Firefox용 CA 인증서를 다운로드하세요. 이 페이지는 Lanius 프록시를 통해 접속해야 합니다.',
+          },
+          {
+            kind: 'text',
+            body: '같은 Firefox 창에서 설정 > 개인 정보 및 보안 > 인증서 > 인증서 보기로 이동하세요. 인증 기관 탭에서 가져오기를 누르고 다운로드한 인증서를 선택한 다음, 웹 사이트를 식별하는 데 이 인증 기관을 신뢰하는 옵션을 체크하고 확인하세요.',
+          },
+        ],
+      },
+      {
+        heading: '다시 설정해야 하는 경우',
+        blocks: [
+          {
+            kind: 'note',
+            body: '평소 쓰는 Firefox가 아닌 Lanius가 연 Firefox 프로필에 가져와야 합니다. Lanius 브라우징 데이터를 지우거나 프로젝트 CA를 바꿨다면 현재 인증서를 다시 가져오세요. HTTPS 경고를 피하려고 인증서 검증을 끄지는 마세요.',
           },
         ],
       },

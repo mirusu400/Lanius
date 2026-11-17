@@ -1,14 +1,10 @@
-/** Opening a browser that is already set up for the proxy.
- *
- * The point is that a user does not have to configure anything, so the
- * tests check what the button offers and what it does when there is no
- * browser to open, rather than that a request was sent.
- */
+/** Browser selection, proxy launch, and Firefox's manual CA guidance. */
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BrowserSection } from './settings/BrowserSection';
+import { currentDocsPage, OPEN_DOCS_PAGE } from '../docs/navigation';
 import { renderWithI18n as render, t } from '../test-utils';
 
 let browserState: {
@@ -90,12 +86,14 @@ beforeEach(() => {
           selectedBrowserId = (JSON.parse(String(init.body)) as { browser_id?: string }).browser_id ?? null;
           launches += 1;
           return jsonResponse({
-            name: selectedBrowserId === 'chrome-beta' ? 'Google Chrome Beta' : 'Google Chrome',
+            id: selectedBrowserId,
+            name: selectedBrowserId === 'firefox' ? 'Firefox'
+              : selectedBrowserId === 'chrome-beta' ? 'Google Chrome Beta' : 'Google Chrome',
             path: '/fake/chrome',
             pid: 1234,
             profile: browserState.profile,
             proxy: 'http://127.0.0.1:8080',
-            ca_trusted: true,
+            ca_trusted: selectedBrowserId !== 'firefox',
           });
         }
         return jsonResponse(browserState);
@@ -210,6 +208,29 @@ describe('browser settings', () => {
     expect(await screen.findByText(t('browser.opened', { name: 'Google Chrome Beta' }))).toBeTruthy();
   });
 
+  it('shows a clickable CA guide toast after opening Firefox', async () => {
+    browserState = {
+      ...browserState,
+      browsers: [...browserState.browsers, { id: 'firefox', name: 'Firefox', available: true }],
+    };
+    const openedDocs = vi.fn();
+    window.addEventListener(OPEN_DOCS_PAGE, openedDocs);
+    const user = userEvent.setup();
+    try {
+      render(<BrowserSection />);
+      await user.click(await section().findByRole('button', { name: t('browser.open') }));
+      const dialog = await screen.findByRole('dialog', { name: t('browser.choose') });
+      await user.click(within(dialog).getByRole('button', { name: t('browser.openNamed', { name: 'Firefox' }) }));
+      expect(selectedBrowserId).toBe('firefox');
+      const guide = await screen.findByRole('button', { name: t('browser.firefoxCaToast') });
+      await user.click(guide);
+      expect(openedDocs).toHaveBeenCalledOnce();
+      expect(currentDocsPage()).toBe('guide:firefox-ca');
+    } finally {
+      window.removeEventListener(OPEN_DOCS_PAGE, openedDocs);
+    }
+  });
+
   it('shows the separate profile, so the usual browser is clearly untouched', async () => {
     render(<BrowserSection />);
     await waitFor(() => expect(screen.getByText(t('browser.section'))).toBeTruthy());
@@ -236,6 +257,18 @@ describe('browser settings', () => {
     browserState = { ...browserState, ca_trusted: false };
     render(<BrowserSection />);
     expect(await screen.findByText(t('browser.noCa'))).toBeTruthy();
+  });
+
+  it('describes Firefox CA trust as a profile setting that is not checked here', async () => {
+    browserState = {
+      ...browserState,
+      name: 'Firefox',
+      ca_trusted: false,
+      browsers: [{ id: 'firefox', name: 'Firefox', available: true }],
+    };
+    render(<BrowserSection />);
+    expect(await screen.findByText(t('browser.firefoxCaState'))).toBeTruthy();
+    expect(screen.queryByText(t('browser.noCa'))).toBeNull();
   });
 
   it('reports a launch that failed', async () => {
