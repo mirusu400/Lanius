@@ -795,6 +795,8 @@ export interface TlsProfileOption {
 export interface BrowserState {
   available: boolean;
   name: string | null;
+  /** Known browsers, including installed and unavailable choices. */
+  browsers?: { id: string; name: string; available: boolean }[];
   profile: string;
   /** The project's own profile, used when no directory is chosen. */
   default_profile: string;

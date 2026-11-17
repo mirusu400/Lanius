@@ -14,6 +14,7 @@ import { renderWithI18n as render, t } from '../test-utils';
 let browserState: {
   available: boolean;
   name: string | null;
+  browsers: { id: string; name: string; available: boolean }[];
   profile: string;
   default_profile: string;
   custom_profile: boolean;
@@ -21,12 +22,18 @@ let browserState: {
 } = {
   available: true,
   name: 'Google Chrome',
+  browsers: [
+    { id: 'chrome', name: 'Google Chrome', available: true },
+    { id: 'chrome-beta', name: 'Google Chrome Beta', available: false },
+    { id: 'chromium', name: 'Chromium', available: false },
+  ],
   profile: '/home/u/.lanius/browser-profile',
   default_profile: '/home/u/.lanius/browser-profile',
   custom_profile: false,
   ca_trusted: true,
 };
 let launches = 0;
+let selectedBrowserId: string | null = null;
 let launchError: string | null = null;
 let cleared = 0;
 
@@ -44,12 +51,18 @@ beforeEach(() => {
   browserState = {
     available: true,
     name: 'Google Chrome',
+    browsers: [
+      { id: 'chrome', name: 'Google Chrome', available: true },
+      { id: 'chrome-beta', name: 'Google Chrome Beta', available: false },
+      { id: 'chromium', name: 'Chromium', available: false },
+    ],
     profile: '/home/u/.lanius/browser-profile',
     default_profile: '/home/u/.lanius/browser-profile',
     custom_profile: false,
     ca_trusted: true,
   };
   launches = 0;
+  selectedBrowserId = null;
   launchError = null;
   cleared = 0;
 
@@ -74,9 +87,10 @@ beforeEach(() => {
       if (url.includes('/api/browser')) {
         if (init?.method === 'POST') {
           if (launchError) return jsonResponse({ detail: launchError }, 409);
+          selectedBrowserId = (JSON.parse(String(init.body)) as { browser_id?: string }).browser_id ?? null;
           launches += 1;
           return jsonResponse({
-            name: 'Google Chrome',
+            name: selectedBrowserId === 'chrome-beta' ? 'Google Chrome Beta' : 'Google Chrome',
             path: '/fake/chrome',
             pid: 1234,
             profile: browserState.profile,
@@ -171,10 +185,29 @@ describe('browser settings', () => {
     await waitFor(() => expect(screen.getByText(t('browser.section'))).toBeTruthy());
 
     await user.click(section().getByRole('button', { name: t('browser.open') }));
+    const dialog = await screen.findByRole('dialog', { name: t('browser.choose') });
+    expect(within(dialog).getByRole('button', { name: t('browser.openNamed', { name: 'Google Chrome Beta' }) })).toHaveProperty('disabled', true);
+    await user.click(within(dialog).getByRole('button', { name: t('browser.openNamed', { name: 'Google Chrome' }) }));
     await waitFor(() => expect(launches).toBe(1));
+    expect(selectedBrowserId).toBe('chrome');
     expect(
       await screen.findByText(t('browser.opened', { name: 'Google Chrome' })),
     ).toBeTruthy();
+  });
+
+  it('launches the selected Chrome Beta rather than the default Chrome', async () => {
+    browserState = {
+      ...browserState,
+      browsers: browserState.browsers.map((item) =>
+        item.id === 'chrome-beta' ? { ...item, available: true } : item),
+    };
+    const user = userEvent.setup();
+    render(<BrowserSection />);
+    await user.click(await section().findByRole('button', { name: t('browser.open') }));
+    const dialog = await screen.findByRole('dialog', { name: t('browser.choose') });
+    await user.click(within(dialog).getByRole('button', { name: t('browser.openNamed', { name: 'Google Chrome Beta' }) }));
+    await waitFor(() => expect(selectedBrowserId).toBe('chrome-beta'));
+    expect(await screen.findByText(t('browser.opened', { name: 'Google Chrome Beta' }))).toBeTruthy();
   });
 
   it('shows the separate profile, so the usual browser is clearly untouched', async () => {
@@ -184,11 +217,19 @@ describe('browser settings', () => {
   });
 
   it('says so when no browser is installed, instead of failing on click', async () => {
-    browserState = { ...browserState, available: false, name: null };
+    browserState = {
+      ...browserState,
+      available: false,
+      name: null,
+      browsers: browserState.browsers.map((item) => ({ ...item, available: false })),
+    };
+    const user = userEvent.setup();
     render(<BrowserSection />);
     expect(await screen.findByText(t('browser.unavailable'))).toBeTruthy();
-    // And offers no button that could only fail.
-    expect(section().queryByRole('button', { name: t('browser.open') })).toBeNull();
+    await user.click(section().getByRole('button', { name: t('browser.open') }));
+    const dialog = await screen.findByRole('dialog', { name: t('browser.choose') });
+    expect(within(dialog).getByRole('button', { name: t('browser.openNamed', { name: 'Google Chrome' }) })).toHaveProperty('disabled', true);
+    expect(launches).toBe(0);
   });
 
   it('warns when HTTPS will not be trusted yet', async () => {
@@ -204,8 +245,10 @@ describe('browser settings', () => {
     await waitFor(() => expect(screen.getByText(t('browser.section'))).toBeTruthy());
 
     await user.click(section().getByRole('button', { name: t('browser.open') }));
+    const dialog = await screen.findByRole('dialog', { name: t('browser.choose') });
+    await user.click(within(dialog).getByRole('button', { name: t('browser.openNamed', { name: 'Google Chrome' }) }));
     expect(
-      await screen.findByText(
+      await within(dialog).findByText(
         // The server's reason, not the bare status code.
         t('browser.failed', { message: 'no Chromium-based browser found' }),
       ),

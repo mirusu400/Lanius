@@ -1135,12 +1135,15 @@ export function getBrowserState(): Promise<import('./types').BrowserState> {
 }
 
 export function openBrowser(
-  url?: string,
+  options?: { url?: string; browserId?: string },
 ): Promise<import('./types').LaunchedBrowser> {
   return request('/api/browser', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(url ? { url } : {}),
+    body: JSON.stringify({
+      ...(options?.url ? { url: options.url } : {}),
+      ...(options?.browserId ? { browser_id: options.browserId } : {}),
+    }),
   });
 }
 

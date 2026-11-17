@@ -1286,6 +1286,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         url = (payload or {}).get("url")
         if url is not None and not isinstance(url, str):
             raise HTTPException(status_code=422, detail="url must be a string")
+        browser_id = (payload or {}).get("browser_id")
+        if browser_id is not None and not isinstance(browser_id, str):
+            raise HTTPException(status_code=422, detail="browser_id must be a string")
         try:
             return await asyncio.to_thread(
                 browser.launch,
@@ -1295,6 +1298,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 confdir=settings.confdir,
                 url=url,
                 custom_profile=browser_profile(),
+                browser_id=browser_id,
             )
         except browser.BrowserError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc

@@ -1747,6 +1747,7 @@ def test_mcp_toggle_rejects_nonsense(client) -> None:
 def test_browser_state_describes_what_is_available(client) -> None:
     body = client.get("/api/browser").json()
     assert "available" in body
+    assert any(choice["id"] == "chrome" for choice in body["browsers"])
     assert body["profile"].endswith("browser-profile")
 
 
@@ -1767,6 +1768,25 @@ def test_opening_a_browser_uses_the_current_listener(client) -> None:
     assert response.json()["pid"] == 99
     args = spawn.call_args[0][0]
     assert f"--proxy-server=http://127.0.0.1:{target}" in args
+
+
+def test_opening_a_selected_browser_uses_its_own_profile(client) -> None:
+    from app import browser as browser_module
+
+    with mock.patch.object(
+        browser_module, "browser_by_id",
+        return_value=browser_module.Browser("Google Chrome Beta", "/fake/chrome-beta"),
+    ) as selected:
+        with mock.patch.object(browser_module, "_spawn", return_value=99) as spawn:
+            response = client.post("/api/browser", json={"browser_id": "chrome-beta"})
+
+    assert response.status_code == 200
+    selected.assert_called_once_with("chrome-beta")
+    assert response.json()["name"] == "Google Chrome Beta"
+    assert response.json()["profile"].endswith("browser-profile-chrome-beta")
+    assert "--user-data-dir=" + response.json()["profile"] in spawn.call_args[0][0]
+    assert client.post("/api/browser", json={"browser_id": 7}).status_code == 422
+    assert client.post("/api/browser", json={"browser_id": "/bin/sh"}).status_code == 409
 
 
 def test_opening_a_browser_without_one_installed_explains(client) -> None:

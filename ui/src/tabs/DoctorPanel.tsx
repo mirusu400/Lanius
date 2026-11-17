@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { getBrowserState, getCaInfo, getDashboard, openBrowser, type CaInfo } from '../api/client';
+import { getBrowserState, getCaInfo, getDashboard, type CaInfo } from '../api/client';
 import type { BrowserState, Dashboard } from '../api/types';
+import { BrowserLaunchDialog } from '../components/BrowserLaunchDialog';
 import { useT } from '../i18n';
 
 type Check<T> = { value: T | null; error: string | null };
@@ -26,8 +27,7 @@ export function DoctorPanel({ onOpenSettings }: {
   const t = useT();
   const [results, setResults] = useState<Results | null>(null);
   const [busy, setBusy] = useState(false);
-  const [browserBusy, setBrowserBusy] = useState(false);
-  const [browserError, setBrowserError] = useState<string | null>(null);
+  const [chooseOpen, setChooseOpen] = useState(false);
 
   const run = useCallback(async () => {
     setBusy(true);
@@ -43,19 +43,6 @@ export function DoctorPanel({ onOpenSettings }: {
     const timer = window.setTimeout(() => { void run(); }, 0);
     return () => window.clearTimeout(timer);
   }, [run]);
-
-  const launchBrowser = async () => {
-    setBrowserBusy(true);
-    setBrowserError(null);
-    try {
-      await openBrowser();
-      await run();
-    } catch (error) {
-      setBrowserError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBrowserBusy(false);
-    }
-  };
 
   const dashboard = results?.dashboard.value;
   const browser = results?.browser.value;
@@ -119,7 +106,7 @@ export function DoctorPanel({ onOpenSettings }: {
               ? t('doctor.checkError', { message: results.browser.error })
               : browser?.available ? t('doctor.browserOk', { name: browser.name ?? '' }) : t('doctor.browserUnavailable')}
             action={browser?.available
-              ? <button type="button" disabled={browserBusy || !dashboard?.proxy.running} onClick={() => void launchBrowser()}>{t('browser.open')}</button>
+              ? <button type="button" disabled={!dashboard?.proxy.running} onClick={() => setChooseOpen(true)}>{t('browser.open')}</button>
               : onOpenSettings && <button type="button" onClick={() => onOpenSettings('browser')}>{t('doctor.browserSettings')}</button>}
           />
           <CheckRow
@@ -146,7 +133,11 @@ export function DoctorPanel({ onOpenSettings }: {
           />}
         </div>
       )}
-      {browserError && <div className="banner error" role="alert">{t('browser.failed', { message: browserError })}</div>}
+      <BrowserLaunchDialog
+        open={chooseOpen}
+        onClose={() => setChooseOpen(false)}
+        onLaunched={() => { void run(); }}
+      />
     </section>
   );
 }

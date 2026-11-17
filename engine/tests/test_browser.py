@@ -215,6 +215,99 @@ def test_state_describes_the_feature_before_use(tmp_path) -> None:
         assert browser.state(tmp_path, confdir)["available"] is False
 
 
+def test_browser_choices_include_separate_chrome_beta_on_macos(tmp_path) -> None:
+    chrome = tmp_path / "Google Chrome"
+    beta = tmp_path / "Google Chrome Beta"
+    chrome.touch()
+    beta.touch()
+    candidates = [
+        ("chrome", "Google Chrome", str(chrome)),
+        ("chrome-beta", "Google Chrome Beta", str(beta)),
+        ("chromium", "Chromium", str(tmp_path / "missing")),
+    ]
+    with mock.patch.object(browser.platform, "system", return_value="Darwin"):
+        with mock.patch.object(browser, "_MACOS_CANDIDATES", candidates):
+            choices = browser.browser_choices()
+            assert [(item.id, item.path is not None) for item in choices] == [
+                ("chrome", True), ("chrome-beta", True), ("chromium", False)
+            ]
+            with mock.patch.object(browser, "_spawn", return_value=6) as spawn:
+                result = browser.launch(
+                    proxy_host="127.0.0.1",
+                    proxy_port=8080,
+                    data_dir=tmp_path,
+                    confdir=tmp_path / "missing-ca",
+                    browser_id="chrome-beta",
+                )
+
+    assert result["name"] == "Google Chrome Beta"
+    assert result["profile"] == str(tmp_path / "browser-profile-chrome-beta")
+    args = spawn.call_args[0][0]
+    assert args[0] == str(beta)
+    assert f"--user-data-dir={tmp_path / 'browser-profile-chrome-beta'}" in args
+    assert browser.profile_dir(tmp_path) != Path(result["profile"])
+
+
+def test_browser_selection_rejects_uninstalled_and_unknown_ids(tmp_path) -> None:
+    candidates = [("chrome-beta", "Google Chrome Beta", str(tmp_path / "missing"))]
+    with mock.patch.object(browser.platform, "system", return_value="Darwin"):
+        with mock.patch.object(browser, "_MACOS_CANDIDATES", candidates):
+            with mock.patch.object(browser, "_spawn") as spawn:
+                with pytest.raises(browser.BrowserError, match="not installed"):
+                    browser.launch(
+                        proxy_host="127.0.0.1", proxy_port=8080,
+                        data_dir=tmp_path, confdir=tmp_path, browser_id="chrome-beta",
+                    )
+                with pytest.raises(browser.BrowserError, match="unknown browser"):
+                    browser.launch(
+                        proxy_host="127.0.0.1", proxy_port=8080,
+                        data_dir=tmp_path, confdir=tmp_path, browser_id="/bin/sh",
+                    )
+    spawn.assert_not_called()
+
+
+def test_clearing_browser_data_removes_all_owned_browser_profiles(tmp_path) -> None:
+    chrome = browser.profile_dir(tmp_path)
+    beta = browser.browser_profile_dir(tmp_path, None, "chrome-beta")
+    for profile in (chrome, beta):
+        profile.mkdir()
+        (profile / "lanius-profile").touch()
+        (profile / "Cookies").write_text("session")
+    assert browser.clear_profile(tmp_path) is True
+    assert not chrome.exists()
+    assert not beta.exists()
+
+
+def test_custom_profile_is_preserved_when_clearing_another_browser(tmp_path) -> None:
+    custom = tmp_path / "personal"
+    custom.mkdir()
+    (custom / "Local State").write_text("{}")
+    derived = browser.browser_profile_dir(tmp_path / "project", custom, "chrome-beta")
+    derived.mkdir()
+    (derived / "lanius-profile").touch()
+
+    assert browser.clear_profile(tmp_path / "project", custom) is True
+    assert custom.exists()
+    assert (custom / "Local State").exists()
+    assert not derived.exists()
+
+
+def test_clear_refuses_while_any_selected_browser_is_running(tmp_path) -> None:
+    chrome = browser.profile_dir(tmp_path)
+    beta = browser.browser_profile_dir(tmp_path, None, "chrome-beta")
+    for profile in (chrome, beta):
+        profile.mkdir()
+        (profile / "lanius-profile").touch()
+
+    with mock.patch.object(
+        browser, "_running_pid", side_effect=lambda profile: 9 if profile == beta else None
+    ):
+        with pytest.raises(browser.BrowserError, match="close the Lanius browser"):
+            browser.clear_profile(tmp_path)
+    assert chrome.exists()
+    assert beta.exists()
+
+
 def _hold_profile(data_dir: Path, proxy: str) -> None:
     """Leave the profile as a running browser launched for ``proxy`` does."""
     profile = browser.profile_dir(data_dir)

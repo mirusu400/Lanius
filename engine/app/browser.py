@@ -35,29 +35,49 @@ logger = logging.getLogger(__name__)
 # absent deliberately: it keeps its own certificate store, so the SPKI
 # trick does not apply and it would need the CA installed properly.
 _MACOS_CANDIDATES = [
-    ("Google Chrome", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
-    ("Chromium", "/Applications/Chromium.app/Contents/MacOS/Chromium"),
-    ("Microsoft Edge", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
-    ("Brave", "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"),
+    (
+        "chrome", "Google Chrome",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ),
+    (
+        "chrome-beta", "Google Chrome Beta",
+        "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta",
+    ),
+    ("chromium", "Chromium", "/Applications/Chromium.app/Contents/MacOS/Chromium"),
+    (
+        "edge", "Microsoft Edge",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    ),
+    ("brave", "Brave", "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"),
 ]
 
 _WINDOWS_CANDIDATES = [
-    ("Google Chrome", r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
     (
+        "chrome", "Google Chrome",
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    ),
+    (
+        "chrome",
         "Google Chrome",
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
     ),
-    ("Microsoft Edge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
-    ("Microsoft Edge", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+    (
+        "edge", "Microsoft Edge",
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    ),
+    (
+        "edge", "Microsoft Edge",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    ),
 ]
 
 _LINUX_COMMANDS = [
-    ("Google Chrome", "google-chrome"),
-    ("Google Chrome", "google-chrome-stable"),
-    ("Chromium", "chromium"),
-    ("Chromium", "chromium-browser"),
-    ("Microsoft Edge", "microsoft-edge"),
-    ("Brave", "brave-browser"),
+    ("chrome", "Google Chrome", "google-chrome"),
+    ("chrome", "Google Chrome", "google-chrome-stable"),
+    ("chromium", "Chromium", "chromium"),
+    ("chromium", "Chromium", "chromium-browser"),
+    ("edge", "Microsoft Edge", "microsoft-edge"),
+    ("brave", "Brave", "brave-browser"),
 ]
 
 
@@ -71,25 +91,51 @@ class Browser:
     path: str
 
 
-def find_browser() -> Browser | None:
-    """The best Chromium-based browser on this machine, if any."""
+@dataclass(slots=True)
+class BrowserChoice:
+    id: str
+    name: str
+    path: str | None
+
+
+def browser_choices() -> list[BrowserChoice]:
+    """Known browsers in preference order, including ones not yet installed."""
     system = platform.system()
     if system == "Darwin":
         candidates = _MACOS_CANDIDATES
     elif system == "Windows":
         candidates = _WINDOWS_CANDIDATES
     else:
-        found = [
-            (name, path)
-            for name, command in _LINUX_COMMANDS
-            if (path := shutil.which(command))
-        ]
-        return Browser(*found[0]) if found else None
+        candidates = _LINUX_COMMANDS
+    choices: dict[str, BrowserChoice] = {}
+    for browser_id, name, candidate in candidates:
+        if system in ("Darwin", "Windows"):
+            path = candidate if Path(candidate).is_file() else None
+        else:
+            path = shutil.which(candidate)
+        if browser_id not in choices:
+            choices[browser_id] = BrowserChoice(browser_id, name, path)
+        elif path and choices[browser_id].path is None:
+            choices[browser_id].path = path
+    return list(choices.values())
 
-    for name, path in candidates:
-        if Path(path).exists():
-            return Browser(name, path)
+
+def find_browser() -> Browser | None:
+    """The best Chromium-based browser on this machine, if any."""
+    for choice in browser_choices():
+        if choice.path:
+            return Browser(choice.name, choice.path)
     return None
+
+
+def browser_by_id(browser_id: str) -> Browser:
+    """Resolve an ID from our allowlist, never an executable path from a client."""
+    for choice in browser_choices():
+        if choice.id == browser_id:
+            if choice.path:
+                return Browser(choice.name, choice.path)
+            raise BrowserError(f"{choice.name} is not installed")
+    raise BrowserError(f"unknown browser: {browser_id}")
 
 
 def ca_spki_hash(confdir: Path) -> str | None:
@@ -127,6 +173,18 @@ def profile_dir(data_dir: Path, custom: Path | str | None = None) -> Path:
     if custom:
         return Path(custom).expanduser()
     return Path(data_dir) / "browser-profile"
+
+
+def browser_profile_dir(
+    data_dir: Path, custom: Path | str | None, browser_id: str | None
+) -> Path:
+    """Keep each browser's profile separate so Chromium cannot steal its launch."""
+    base = profile_dir(data_dir, custom)
+    # The original profile path belongs to the old default launch. Keep it
+    # for Chrome so existing macOS/Windows users retain their browser data.
+    if browser_id is None or browser_id == "chrome":
+        return base
+    return base.with_name(f"{base.name}-{browser_id}")
 
 
 # The proxy a profile's browser was started with. Chromium hands a second
@@ -223,9 +281,10 @@ def launch(
     confdir: Path,
     url: str | None = None,
     custom_profile: Path | str | None = None,
+    browser_id: str | None = None,
 ) -> dict[str, object]:
     """Open the browser against this proxy. Returns what was started."""
-    browser = find_browser()
+    browser = find_browser() if browser_id is None else browser_by_id(browser_id)
     if browser is None:
         raise BrowserError(
             "no Chromium-based browser found. Install Chrome, Chromium, "
@@ -234,9 +293,17 @@ def launch(
 
     if custom_profile:
         # Checked again here: the folder may have changed since it was chosen.
-        profile = check_profile_dir(custom_profile, data_dir)
+        check_profile_dir(custom_profile, data_dir)
+        profile = browser_profile_dir(data_dir, custom_profile, browser_id)
     else:
-        profile = profile_dir(data_dir)
+        profile = browser_profile_dir(data_dir, None, browser_id)
+    if browser_id not in (None, "chrome") and profile.exists():
+        # A derived sibling may already be an unrelated user directory.
+        # Only a folder Lanius previously created may be reused.
+        if not profile.is_dir() or (
+            any(profile.iterdir()) and not (profile / _OWNER_MARKER).exists()
+        ):
+            raise BrowserError(f"{profile} was not created by Lanius")
     profile.mkdir(parents=True, exist_ok=True)
 
     # A loopback proxy must still be used for loopback addresses, or the
@@ -329,6 +396,10 @@ def state(
     return {
         "available": browser is not None,
         "name": browser.name if browser else None,
+        "browsers": [
+            {"id": choice.id, "name": choice.name, "available": choice.path is not None}
+            for choice in browser_choices()
+        ],
         "profile": str(profile_dir(data_dir, custom)),
         "default_profile": str(profile_dir(data_dir)),
         "custom_profile": bool(custom),
@@ -337,29 +408,48 @@ def state(
 
 
 def clear_profile(data_dir: Path, custom: Path | str | None = None) -> bool:
-    """Throw away the browser profile: cookies, logins, history."""
-    profile = profile_dir(data_dir, custom)
-    if not profile.exists():
-        return False
-    if _running_pid(profile) is not None:
-        raise BrowserError("close the Lanius browser before clearing its data")
-    if custom:
-        # A chosen directory is only removed once Lanius has launched a
-        # browser in it, so a mistyped path cannot delete someone's files.
-        if not (profile / _OWNER_MARKER).exists():
-            raise BrowserError(
-                f"{profile} was not created by Lanius, so it is left alone"
-            )
-    # Only ever the directory we created, never a path from a caller.
-    elif profile.name != "browser-profile":  # pragma: no cover - defensive
-        raise BrowserError("refusing to remove an unexpected profile path")
-    shutil.rmtree(profile)
-    return True
+    """Throw away every Lanius-owned browser profile for this directory."""
+    base = profile_dir(data_dir, custom)
+    profiles = [base]
+    browser_ids = {
+        browser_id
+        for candidates in (_MACOS_CANDIDATES, _WINDOWS_CANDIDATES, _LINUX_COMMANDS)
+        for browser_id, _, _ in candidates
+        if browser_id != "chrome"
+    }
+    profiles.extend(
+        browser_profile_dir(data_dir, custom, browser_id)
+        for browser_id in sorted(browser_ids)
+    )
+    removable: list[Path] = []
+    for profile in profiles:
+        if not profile.exists():
+            continue
+        if custom and profile == base and not (profile / _OWNER_MARKER).exists():
+            # A user-selected browser profile is not Lanius-owned.
+            continue
+        if profile != base and not (profile / _OWNER_MARKER).exists():
+            continue
+        if _running_pid(profile) is not None:
+            raise BrowserError("close the Lanius browser before clearing its data")
+        if profile == base:
+            if not custom and profile.name != "browser-profile":
+                raise BrowserError("refusing to remove an unexpected profile path")
+        removable.append(profile)
+    if custom and base.exists() and not (base / _OWNER_MARKER).exists() and not removable:
+        raise BrowserError(f"{base} was not created by Lanius, so it is left alone")
+    for profile in removable:
+        shutil.rmtree(profile)
+    return bool(removable)
 
 
 __all__ = [
     "Browser",
+    "BrowserChoice",
     "BrowserError",
+    "browser_by_id",
+    "browser_choices",
+    "browser_profile_dir",
     "ca_spki_hash",
     "check_profile_dir",
     "clear_profile",

@@ -6115,6 +6115,30 @@ pre.response-preview-text {
   gap: 4px;
 }
 
+.browser-launch-dialog {
+  width: min(420px, 90vw);
+}
+
+.browser-launch-dialog .dialog-body > p:first-child {
+  margin-top: 0;
+}
+
+.browser-launch-choices {
+  display: grid;
+  gap: 8px;
+}
+
+.browser-launch-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.browser-launch-choice button {
+  flex: 1;
+  text-align: left;
+}
+
 .doctor {
   border: 1px solid var(--border);
   border-radius: 6px;

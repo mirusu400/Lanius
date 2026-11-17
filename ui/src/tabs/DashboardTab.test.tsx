@@ -139,6 +139,18 @@ afterEach(() => {
 });
 
 describe('DashboardTab', () => {
+  it('shows browser choices before launching from the dashboard button', async () => {
+    const user = userEvent.setup();
+    render(<DashboardTab />);
+    await screen.findByText(t('dash.empty'));
+
+    await user.click(screen.getByRole('button', { name: t('browser.open') }));
+    const dialog = await screen.findByRole('dialog', { name: t('browser.choose') });
+    expect(within(dialog).getByRole('button', {
+      name: t('browser.openNamed', { name: 'Chromium' }),
+    })).toBeTruthy();
+    expect(vi.mocked(fetch).mock.calls.some(([_, options]) => options?.method === 'POST')).toBe(false);
+  });
   it('shows an active Fuzzer run even before captured traffic exists', async () => {
     const openRun = vi.fn();
     payload = { ...empty, fuzzer_runs: [{
@@ -307,6 +319,8 @@ describe('DashboardTab', () => {
     const doctor = await screen.findByRole('region', { name: t('doctor.title') });
     await screen.findByText(t('doctor.browserOk', { name: 'Chromium' }));
     await userEvent.click(within(doctor).getByRole('button', { name: t('browser.open') }));
+    const dialog = await screen.findByRole('dialog', { name: t('browser.choose') });
+    await userEvent.click(within(dialog).getByRole('button', { name: t('browser.openNamed', { name: 'Chromium' }) }));
     expect(await within(doctor).findByRole('alert')).toHaveProperty('textContent', t('browser.failed', { message: 'profile locked' }));
   });
 });

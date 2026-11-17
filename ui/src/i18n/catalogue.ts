@@ -1053,6 +1053,10 @@ const en = {
   'appearance.missingFont':
     'Not installed on this machine, so a fallback is being used.',
   'browser.open': 'Open browser',
+  'browser.choose': 'Choose a browser',
+  'browser.chooseHelp': 'Open a browser with a separate Lanius profile and proxy settings.',
+  'browser.openNamed': 'Open {name}',
+  'browser.notInstalled': 'Not installed',
   'browser.opening': 'Opening...',
   'browser.opened': 'Opened {name} through the proxy.',
   'browser.failed': 'Could not open a browser: {message}',
@@ -1067,11 +1071,11 @@ const en = {
   'browser.clearProfile': 'Clear browsing data',
   'browser.cleared': 'Browsing data cleared.',
   'browser.confirmClear':
-    'This deletes the cookies, logins and history of the Lanius browser. Continue?',
+    'This deletes the cookies, logins and history of all Lanius browser profiles. Continue?',
   'browser.loadFailed': 'Could not load browser settings: {message}',
   'browser.dataDir': 'Data directory',
   'browser.dataDirHelp':
-    'Where the browser keeps cookies, logins and history. Point it at different folders to keep separate sets of browsing data and switch between them. Leave empty to use this project\'s own profile.',
+    'Where Chrome keeps cookies, logins and history. Other browsers use separate directories beside it. Choose another folder to keep a different set of browsing data, or leave it empty to use this project\'s profile.',
   'browser.browse': 'Browse...',
   'browser.pickTitle': 'Choose a browser data directory',
   'browser.applyDir': 'Use this directory',
@@ -2626,6 +2630,10 @@ const ko: Catalogue = {
   'appearance.missingFont':
     '이 컴퓨터에 설치되어 있지 않아 대체 글꼴이 쓰입니다.',
   'browser.open': '브라우저 열기',
+  'browser.choose': '브라우저 선택',
+  'browser.chooseHelp': '선택한 브라우저를 Lanius 전용 프로필과 프록시 설정으로 엽니다.',
+  'browser.openNamed': '{name} 열기',
+  'browser.notInstalled': '설치되지 않음',
   'browser.opening': '여는 중...',
   'browser.opened': '{name} 을(를) 프록시로 열었습니다.',
   'browser.failed': '브라우저를 열지 못했습니다: {message}',
@@ -2640,11 +2648,11 @@ const ko: Catalogue = {
   'browser.clearProfile': '브라우징 데이터 지우기',
   'browser.cleared': '브라우징 데이터를 지웠습니다.',
   'browser.confirmClear':
-    'Lanius 브라우저의 쿠키, 로그인, 기록을 삭제합니다. 계속할까요?',
+    '모든 Lanius 브라우저 프로필의 쿠키, 로그인, 기록을 삭제합니다. 계속할까요?',
   'browser.loadFailed': '브라우저 설정을 불러오지 못했습니다: {message}',
   'browser.dataDir': '데이터 디렉터리',
   'browser.dataDirHelp':
-    '브라우저가 쿠키, 로그인, 기록을 저장하는 위치입니다. 폴더를 여러 개 두고 바꿔 지정하면 브라우징 데이터를 따로 유지하며 번갈아 쓸 수 있습니다. 비워 두면 이 프로젝트의 기본 프로필을 씁니다.',
+    'Chrome이 쿠키, 로그인, 기록을 저장하는 위치입니다. 다른 브라우저는 이 폴더 옆에 별도 디렉터리를 사용합니다. 다른 폴더를 지정해 브라우징 데이터를 나눠 쓰거나, 비워 두고 이 프로젝트의 기본 프로필을 사용할 수 있습니다.',
   'browser.browse': '찾아보기...',
   'browser.pickTitle': '브라우저 데이터 디렉터리 선택',
   'browser.applyDir': '이 디렉터리 사용',

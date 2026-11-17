@@ -3,11 +3,10 @@
  * Sits next to the history because that is where a user decides they want
  * traffic to look at, rather than buried in Settings.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
-import { getBrowserState, openBrowser } from '../api/client';
-import type { BrowserState } from '../api/types';
 import { useT } from '../i18n';
+import { BrowserLaunchDialog } from './BrowserLaunchDialog';
 import { useToast } from './Toast';
 
 /** A globe, drawn rather than typed.
@@ -39,51 +38,25 @@ function GlobeIcon() {
 export function OpenBrowserButton() {
   const t = useT();
   const { showToast } = useToast();
-  const [state, setState] = useState<BrowserState | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    getBrowserState()
-      .then(setState)
-      .catch(() => setState(null));
-  }, []);
-
-  // Nothing to offer if no browser is installed, and a dead button would
-  // be worse than none: the title says why it cannot be used.
-  const unavailable = state !== null && !state.available;
-
-  const open = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const launched = await openBrowser();
-      showToast({ message: `${t('browser.section')}: ${t('browser.opened', { name: launched.name })}`, tone: 'success', category: 'browser' });
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const [chooseOpen, setChooseOpen] = useState(false);
 
   return (
     <div className="open-browser-action">
       <button
         type="button"
-        disabled={busy || unavailable}
-        title={
-          unavailable
-            ? t('browser.unavailable')
-            : error
-              ? t('browser.failed', { message: error })
-              : t('browser.help')
-        }
-        onClick={() => void open()}
+        title={t('browser.help')}
+        onClick={() => setChooseOpen(true)}
       >
         <GlobeIcon />
-        {busy ? t('browser.opening') : t('browser.open')}
+        {t('browser.open')}
       </button>
-      {error && <span className="field-error" role="alert">{t('browser.failed', { message: error })}</span>}
+      <BrowserLaunchDialog
+        open={chooseOpen}
+        onClose={() => setChooseOpen(false)}
+        onLaunched={(launched) => {
+          showToast({ message: `${t('browser.section')}: ${t('browser.opened', { name: launched.name })}`, tone: 'success', category: 'browser' });
+        }}
+      />
     </div>
   );
 }

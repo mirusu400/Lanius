@@ -90,7 +90,7 @@ const en: DocPage[] = [
           },
           {
             kind: 'text',
-            body: 'Open browser, next to the history and in Settings, starts a Chromium browser configured for this proxy alone. Your usual browser, its history and its logins are untouched.',
+            body: 'Open browser, next to the history and in Settings, lets you choose an installed Chromium browser configured for this proxy alone. Your usual browser, its history and its logins are untouched.',
           },
         ],
       },
@@ -565,7 +565,7 @@ const ko: DocPage[] = [
           },
           {
             kind: 'text',
-            body: '기록 옆과 설정에 있는 브라우저 열기는 이 프록시만 바라보는 Chromium 브라우저를 띄웁니다. 평소 쓰는 브라우저와 기록, 로그인은 그대로 둡니다.',
+            body: '기록 옆과 설정에 있는 브라우저 열기에서 사용할 Chromium 계열 브라우저를 고르면 이 프록시로 설정해 띄웁니다. 평소 쓰는 브라우저와 기록, 로그인은 그대로 둡니다.',
           },
         ],
       },

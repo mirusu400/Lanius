@@ -1,13 +1,13 @@
-/** The bundled browser, already pointed at the proxy. */
+/** Browser selection and profile settings for the proxied browser. */
 
 import { useEffect, useState } from 'react';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { BrowserLaunchDialog } from '../../components/BrowserLaunchDialog';
 import { useToast } from '../../components/Toast';
 import {
   clearBrowserProfile,
   getBrowserState,
   isDesktop,
-  openBrowser,
   pickDirectory,
   setBrowserProfileDir,
 } from '../../api/client';
@@ -27,6 +27,7 @@ export function BrowserSection() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [chooseOpen, setChooseOpen] = useState(false);
   const [note, setNote] = useState<Message | null>(null);
   const [error, setError] = useState<Message | null>(null);
   const [dir, setDir] = useState('');
@@ -52,22 +53,6 @@ export function BrowserSection() {
       setError(msg('browser.loadFailed', { message: (err as Error).message }));
     } finally {
       setLoading(false);
-    }
-  };
-
-  const open = async () => {
-    setBusy(true);
-    setNote(null);
-    setError(null);
-    try {
-      const launched = await openBrowser();
-      setNote(msg('browser.opened', { name: launched.name }));
-      showToast({ message: `${t('browser.section')}: ${t('browser.opened', { name: launched.name })}`,
-        tone: 'success', category: 'browser' });
-    } catch (err) {
-      setError(msg('browser.failed', { message: (err as Error).message }));
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -127,7 +112,10 @@ export function BrowserSection() {
           <button type="button" onClick={() => void retry()}>{t('common.retry')}</button>
         </div>
       ) : !state.available ? (
-        <div className="banner warn">{t('browser.unavailable')}</div>
+        <>
+          <div className="banner warn">{t('browser.unavailable')}</div>
+          <button type="button" onClick={() => setChooseOpen(true)}>{t('browser.open')}</button>
+        </>
       ) : (
         <>
           {!state.ca_trusted && (
@@ -173,8 +161,8 @@ export function BrowserSection() {
           </div>
           <p className="muted">{t('browser.dataDirHelp')}</p>
           <div className="settings-row">
-            <button type="button" disabled={busy} onClick={() => void open()}>
-              {busy ? t('browser.opening') : t('browser.open')}
+            <button type="button" disabled={busy} onClick={() => setChooseOpen(true)}>
+              {t('browser.open')}
             </button>
             <button
               type="button"
@@ -191,6 +179,15 @@ export function BrowserSection() {
       {state && note && <p className="muted">{renderMessage(note, t)}</p>}
       {state && error && <div className="banner error">{renderMessage(error, t)}</div>}
       </section>
+      <BrowserLaunchDialog
+        open={chooseOpen}
+        onClose={() => setChooseOpen(false)}
+        onLaunched={(launched) => {
+          setNote(msg('browser.opened', { name: launched.name }));
+          showToast({ message: `${t('browser.section')}: ${t('browser.opened', { name: launched.name })}`,
+            tone: 'success', category: 'browser' });
+        }}
+      />
       <ConfirmDialog
         open={confirmClear}
         title={t('browser.clearProfile')}
