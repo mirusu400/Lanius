@@ -248,6 +248,29 @@ def test_browser_choices_include_separate_chrome_beta_on_macos(tmp_path) -> None
     assert browser.profile_dir(tmp_path) != Path(result["profile"])
 
 
+def test_browser_choices_include_beta_and_chromium_on_windows_and_linux(tmp_path) -> None:
+    beta = tmp_path / "chrome-beta.exe"
+    chromium = tmp_path / "chromium.exe"
+    beta.touch()
+    chromium.touch()
+    windows = [("chrome-beta", "Google Chrome Beta", str(beta)),
+               ("chromium", "Chromium", str(chromium))]
+    with mock.patch.object(browser.platform, "system", return_value="Windows"), \
+         mock.patch.object(browser, "_WINDOWS_CANDIDATES", windows):
+        choices = browser.browser_choices()
+    assert [(item.id, item.path) for item in choices] == [
+        ("chrome-beta", str(beta)), ("chromium", str(chromium)),
+    ]
+
+    linux = [("chrome-beta", "Google Chrome Beta", "google-chrome-beta"),
+             ("chromium", "Chromium", "chromium")]
+    with mock.patch.object(browser.platform, "system", return_value="Linux"), \
+         mock.patch.object(browser, "_LINUX_COMMANDS", linux), \
+         mock.patch.object(browser.shutil, "which", side_effect=lambda cmd: f"/usr/bin/{cmd}"):
+        choices = browser.browser_choices()
+    assert [item.id for item in choices] == ["chrome-beta", "chromium"]
+
+
 def test_firefox_uses_its_own_profile_proxy_prefs_and_manual_ca(tmp_path) -> None:
     executable = tmp_path / "firefox"
     executable.touch()

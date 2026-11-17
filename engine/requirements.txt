@@ -34,3 +34,5 @@ zstandard>=0.25.0
 packaging>=26
 # Enumerate local interface addresses without hostname DNS lookups.
 psutil>=7.2.2
+# Chromium cookie import uses its local DevTools cookie API for encrypted writes.
+websockets>=17.1

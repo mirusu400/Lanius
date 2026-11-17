@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Lanius Cookie Transfer",
+  "version": "1.0.0",
+  "description": "Send this browser profile's cookies to Lanius on this computer after entering a one-time code.",
+  "permissions": ["cookies"],
+  "host_permissions": ["<all_urls>", "http://127.0.0.1/*"],
+  "action": { "default_title": "Send cookies to Lanius", "default_popup": "popup.html" }
+}

@@ -62,6 +62,16 @@ _WINDOWS_CANDIDATES = [
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
     ),
     (
+        "chrome-beta", "Google Chrome Beta",
+        r"C:\Program Files\Google\Chrome Beta\Application\chrome.exe",
+    ),
+    (
+        "chrome-beta", "Google Chrome Beta",
+        r"C:\Program Files (x86)\Google\Chrome Beta\Application\chrome.exe",
+    ),
+    ("chromium", "Chromium", r"C:\Program Files\Chromium\Application\chrome.exe"),
+    ("chromium", "Chromium", r"C:\Program Files (x86)\Chromium\Application\chrome.exe"),
+    (
         "edge", "Microsoft Edge",
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     ),
@@ -76,6 +86,7 @@ _WINDOWS_CANDIDATES = [
 _LINUX_COMMANDS = [
     ("chrome", "Google Chrome", "google-chrome"),
     ("chrome", "Google Chrome", "google-chrome-stable"),
+    ("chrome-beta", "Google Chrome Beta", "google-chrome-beta"),
     ("chromium", "Chromium", "chromium"),
     ("chromium", "Chromium", "chromium-browser"),
     ("edge", "Microsoft Edge", "microsoft-edge"),
@@ -108,7 +119,16 @@ def browser_choices() -> list[BrowserChoice]:
     if system == "Darwin":
         candidates = _MACOS_CANDIDATES
     elif system == "Windows":
-        candidates = _WINDOWS_CANDIDATES
+        candidates = list(_WINDOWS_CANDIDATES)
+        if local_app_data := os.environ.get("LOCALAPPDATA"):
+            local = Path(local_app_data)
+            candidates.extend([
+                ("chrome", "Google Chrome", str(local / "Google/Chrome/Application/chrome.exe")),
+                ("chrome-beta", "Google Chrome Beta",
+                 str(local / "Google/Chrome Beta/Application/chrome.exe")),
+                ("chromium", "Chromium", str(local / "Chromium/Application/chrome.exe")),
+                ("firefox", "Firefox", str(local / "Mozilla Firefox/firefox.exe")),
+            ])
     else:
         candidates = _LINUX_COMMANDS
     choices: dict[str, BrowserChoice] = {}

@@ -533,6 +533,13 @@ def test_desktop_api_and_websocket_require_the_session_token(tmp_path) -> None:
         # project/capture data, so this narrow path remains reachable.
         assert protected.get("/api/plugin-ui/missing/index.html").status_code != 401
         assert protected.post("/api/plugin-ui/missing/index.html").status_code == 401
+        assert protected.get("/api/browser/cookies/extension-ticket").status_code == 401
+        # The extension handoff has its own one-use code, never the API token.
+        assert protected.post(
+            "/api/browser/cookies/extension-import", content='{"code":"wrong"}',
+            headers={"Origin": "chrome-extension://" + "a" * 32,
+                     "Content-Type": "text/plain"},
+        ).status_code == 403
 
 
 def test_redact_headers_none_passthrough() -> None:
@@ -1787,6 +1794,81 @@ def test_opening_a_selected_browser_uses_its_own_profile(client) -> None:
     assert "--user-data-dir=" + response.json()["profile"] in spawn.call_args[0][0]
     assert client.post("/api/browser", json={"browser_id": 7}).status_code == 422
     assert client.post("/api/browser", json={"browser_id": "/bin/sh"}).status_code == 409
+
+
+def test_cookie_import_api_selects_a_profile_without_exposing_values(client) -> None:
+    from app import cookie_import
+
+    state = {"profiles": [{"id": "chrome:Default", "name": "Google Chrome — Default",
+                           "browser_id": "chrome", "cookie_count": 2}],
+             "targets": [{"id": "firefox", "name": "Firefox", "available": True,
+                          "ready": True, "open": False}]}
+    result = {"imported": 2, "expired": 0, "partitioned": 0,
+              "unsupported": 0, "protected": 0, "session_extended": 1}
+    with mock.patch.object(cookie_import, "state", return_value=state) as inspect:
+        assert client.get("/api/browser/cookies").json() == state
+    inspect.assert_called_once()
+    with mock.patch.object(cookie_import, "import_cookies", return_value=result) as run:
+        response = client.post("/api/browser/cookies/import", json={
+            "source_profile": "chrome:Default", "target_browser": "firefox",
+        })
+    assert response.status_code == 200
+    assert response.json() == result
+    assert "cookie_value" not in response.text
+    run.assert_called_once()
+    assert run.call_args.args[:2] == ("chrome:Default", "firefox")
+    assert client.post("/api/browser/cookies/import", json={"source_profile": 7,
+                                                              "target_browser": "firefox"}).status_code == 422
+
+
+def test_cookie_import_refusal_has_no_cookie_values(client) -> None:
+    from app import cookie_import
+
+    with mock.patch.object(
+        cookie_import, "import_cookies",
+        side_effect=cookie_import.CookieImportError("close the Lanius destination browser"),
+    ):
+        response = client.post("/api/browser/cookies/import", json={
+            "source_profile": "chrome:Default", "target_browser": "chromium",
+        })
+    assert response.status_code == 409
+    assert response.json()["detail"] == "close the Lanius destination browser"
+
+
+def test_cookie_extension_ticket_is_one_use_and_accepts_only_extension_origin(client) -> None:
+    from app import cookie_import
+
+    result = {"imported": 2, "expired": 0, "partitioned": 0,
+              "unsupported": 0, "protected": 0, "session_extended": 1}
+    with mock.patch.object(cookie_import, "_checked_target"):
+        ticket = client.post("/api/browser/cookies/extension-ticket", json={
+            "target_browser": "chromium",
+        }).json()
+    port, code = ticket["code"].split(":", 1)
+    assert int(port) == client.app.state.settings.api_port
+    assert len(code) >= 24
+    archive = client.get("/api/browser/cookies/extension")
+    assert archive.status_code == 200
+    assert archive.content.startswith(b"PK")
+
+    body = json.dumps({"code": code, "cookies": [{"name": "auth", "value": "secret"}]})
+    bad_origin = client.post("/api/browser/cookies/extension-import", content=body,
+                             headers={"Origin": "https://evil.test", "Content-Type": "text/plain"})
+    assert bad_origin.status_code == 403
+    origin = {"Origin": "chrome-extension://" + "a" * 32, "Content-Type": "text/plain"}
+    assert client.post("/api/browser/cookies/extension-import", content='{"code":"wrong"}',
+                       headers=origin).status_code == 403
+    with mock.patch.object(cookie_import, "import_exported_cookies", return_value=result) as run:
+        sent = client.post("/api/browser/cookies/extension-import", content=body, headers=origin)
+    assert sent.status_code == 200
+    assert sent.json() == {"imported": 2}
+    assert "secret" not in sent.text
+    assert run.call_args.args[1] == "chromium"
+    assert client.get("/api/browser/cookies/extension-ticket").json() == {
+        "phase": "done", "result": result, "error": None,
+    }
+    assert client.post("/api/browser/cookies/extension-import", content=body,
+                       headers=origin).status_code == 403
 
 
 def test_opening_a_browser_without_one_installed_explains(client) -> None:

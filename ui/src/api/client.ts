@@ -1134,6 +1134,39 @@ export function getBrowserState(): Promise<import('./types').BrowserState> {
   return request('/api/browser');
 }
 
+export function getCookieImportState(): Promise<import('./types').CookieImportState> {
+  return request('/api/browser/cookies');
+}
+
+export function importBrowserCookies(
+  sourceProfile: string, targetBrowser: string,
+): Promise<import('./types').CookieImportResult> {
+  return request('/api/browser/cookies/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source_profile: sourceProfile, target_browser: targetBrowser }),
+  });
+}
+
+export async function downloadCookieExporter(): Promise<Blob> {
+  const response = await apiFetch('/api/browser/cookies/extension');
+  if (!response.ok) throw new Error(await errorDetail(response));
+  return response.blob();
+}
+
+export function createCookieExtensionTicket(
+  targetBrowser: string,
+): Promise<import('./types').CookieExtensionTicket> {
+  return request('/api/browser/cookies/extension-ticket', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target_browser: targetBrowser }),
+  });
+}
+
+export function getCookieExtensionStatus(): Promise<import('./types').CookieExtensionStatus> {
+  return request('/api/browser/cookies/extension-ticket');
+}
+
 export function openBrowser(
   options?: { url?: string; browserId?: string },
 ): Promise<import('./types').LaunchedBrowser> {

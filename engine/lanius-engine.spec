@@ -63,6 +63,7 @@ if not gost_binary.is_file():
 binaries.append((str(gost_binary), "."))
 datas.append(("vendor/gost/LICENSE", "gost-license"))
 datas.append(("plugin_samples", "plugin-samples"))
+datas.append(("browser_cookie_exporter", "browser-cookie-exporter"))
 excludes = ["mcp.cli", "typer", "tkinter", "matplotlib", "PyInstaller"]
 
 a = Analysis(

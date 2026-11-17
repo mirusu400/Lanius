@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lanius Cookie Transfer</title>
+  <style>
+    body { box-sizing: border-box; width: 330px; margin: 0; padding: 16px; font: 14px system-ui, sans-serif; color: #20242b; }
+    h1 { font-size: 17px; margin: 0 0 8px; }
+    p { line-height: 1.5; margin: 0 0 12px; }
+    label { display: block; font-weight: 600; margin-bottom: 5px; }
+    input { box-sizing: border-box; width: 100%; padding: 8px; margin-bottom: 10px; }
+    button { padding: 8px 12px; cursor: pointer; }
+    #status { margin-top: 10px; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <h1 id="title">Lanius Cookie Transfer</h1>
+  <p id="help"></p>
+  <label id="code-label" for="code"></label>
+  <input id="code" type="text" autocomplete="off" spellcheck="false">
+  <button id="send" type="button"></button>
+  <p id="status" role="status" aria-live="polite"></p>
+  <script src="popup.js"></script>
+</body>
+</html>

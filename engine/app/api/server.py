@@ -66,7 +66,7 @@ from ..tls_trust import TRUSTED_CA_SETTING
 from ..http_protocol import HttpMode
 from .. import updates
 from ..addons.scope import ScopeError, rule_from_url
-from .. import browser, ca_trust
+from .. import browser, ca_trust, cookie_import
 from ..config import Settings
 from ..content_encoding import (
     AUTO_DECOMPRESS_SETTING,
@@ -557,6 +557,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         r"|https?://tauri\.localhost)"
     )
     allowed_origin = re.compile(allowed_origins)
+    cookie_extension_origin = re.compile(r"chrome-extension://[a-p]{32}")
+    cookie_extension_path = "/api/browser/cookies/extension-import"
+    cookie_ticket: dict[str, Any] = {}
+    cookie_import_lock = asyncio.Lock()
 
     def valid_api_token(value: str | None) -> bool:
         expected = settings.api_token
@@ -576,11 +580,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         public_resource = request.method in {"GET", "HEAD"} and path.startswith(
             "/api/plugin-ui/"
         )
+        extension_import = request.method == "POST" and path == cookie_extension_path
         if (
             settings.api_token is not None
             and path.startswith("/api/")
             and request.method != "OPTIONS"
             and not public_resource
+            and not extension_import
             and not valid_api_token(request.headers.get("authorization"))
         ):
             return JSONResponse(
@@ -600,10 +606,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         Local tools that send no Origin are unaffected.
         """
         origin = request.headers.get("origin")
+        extension_import = (
+            request.url.path == cookie_extension_path
+            and request.method == "POST"
+            and origin is not None
+            and cookie_extension_origin.fullmatch(origin)
+        )
         if (
             request.method not in {"GET", "HEAD", "OPTIONS"}
             and origin is not None
             and not allowed_origin.fullmatch(origin)
+            and not extension_import
         ):
             return JSONResponse(
                 {"detail": "cross-origin request refused"}, status_code=403
@@ -1255,6 +1268,111 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/browser")
     async def browser_state() -> dict[str, Any]:
         return browser.state(settings.data_dir, settings.confdir, browser_profile())
+
+    @app.get("/api/browser/cookies")
+    async def browser_cookie_import_state() -> dict[str, Any]:
+        """List local source profiles and available Lanius browser targets."""
+        return await asyncio.to_thread(
+            cookie_import.state, settings.data_dir, browser_profile()
+        )
+
+    @app.post("/api/browser/cookies/import")
+    async def import_browser_cookies(payload: dict[str, Any]) -> dict[str, int]:
+        """Copy cookies locally; decrypted values never enter an HTTP response."""
+        source = payload.get("source_profile")
+        target = payload.get("target_browser")
+        if not isinstance(source, str) or not source or not isinstance(target, str) or not target:
+            raise HTTPException(status_code=422, detail="source_profile and target_browser are required")
+        try:
+            async with cookie_import_lock:
+                return await asyncio.to_thread(
+                    cookie_import.import_cookies,
+                    source, target, settings.data_dir, browser_profile(),
+                )
+        except cookie_import.CookieImportError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/browser/cookies/extension")
+    async def cookie_exporter_extension() -> Response:
+        """Download the bundled extension; it sends only to local Lanius."""
+        try:
+            archive = await asyncio.to_thread(cookie_import.exporter_archive)
+        except OSError as exc:
+            raise HTTPException(status_code=503, detail="cookie extension is unavailable") from exc
+        return Response(
+            archive, media_type="application/zip",
+            headers={"Content-Disposition": 'attachment; filename="lanius-cookie-transfer.zip"'},
+        )
+
+    @app.post("/api/browser/cookies/extension-ticket")
+    async def cookie_extension_ticket(payload: dict[str, Any]) -> dict[str, Any]:
+        target = payload.get("target_browser")
+        if not isinstance(target, str):
+            raise HTTPException(status_code=422, detail="target_browser is required")
+        if cookie_ticket.get("phase") == "importing":
+            raise HTTPException(status_code=409, detail="a cookie import is already running")
+        try:
+            await asyncio.to_thread(
+                cookie_import._checked_target, target, settings.data_dir, browser_profile(),
+            )
+        except cookie_import.CookieImportError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if cookie_ticket.get("phase") == "importing":
+            raise HTTPException(status_code=409, detail="a cookie import is already running")
+        secret = secrets.token_urlsafe(24)
+        cookie_ticket.clear()
+        cookie_ticket.update({"secret": secret, "target": target,
+                              "expires": time.monotonic() + 300, "phase": "waiting"})
+        return {"code": f"{settings.api_port}:{secret}", "expires_seconds": 300}
+
+    @app.get("/api/browser/cookies/extension-ticket")
+    async def cookie_extension_ticket_status() -> dict[str, Any]:
+        if cookie_ticket.get("phase") == "waiting" and time.monotonic() > cookie_ticket["expires"]:
+            cookie_ticket["phase"] = "expired"
+            cookie_ticket["secret"] = ""
+        return {"phase": cookie_ticket.get("phase", "idle"),
+                "result": cookie_ticket.get("result"), "error": cookie_ticket.get("error")}
+
+    @app.post(cookie_extension_path)
+    async def cookie_extension_import(request: Request) -> dict[str, Any]:
+        """One-use local handoff from the source browser extension."""
+        maximum = 32 * 1024 * 1024
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > maximum:
+                raise HTTPException(status_code=413, detail="cookie transfer is too large")
+        try:
+            payload = json.loads(body)
+        except (ValueError, UnicodeError) as exc:
+            raise HTTPException(status_code=422, detail="invalid cookie transfer") from exc
+        secret = payload.get("code") if isinstance(payload, dict) else None
+        if (
+            cookie_ticket.get("phase") != "waiting"
+            or time.monotonic() > cookie_ticket.get("expires", 0)
+            or not isinstance(secret, str)
+            or not secrets.compare_digest(secret, cookie_ticket.get("secret", ""))
+        ):
+            raise HTTPException(status_code=403, detail="cookie transfer code is invalid or expired")
+        cookie_ticket["phase"] = "importing"
+        cookie_ticket["secret"] = ""
+        try:
+            async with cookie_import_lock:
+                result = await asyncio.to_thread(
+                    cookie_import.import_exported_cookies, payload.get("cookies"),
+                    cookie_ticket["target"], settings.data_dir, browser_profile(),
+                )
+        except cookie_import.CookieImportError as exc:
+            cookie_ticket["phase"] = "error"
+            cookie_ticket["error"] = str(exc)
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:
+            cookie_ticket["phase"] = "error"
+            cookie_ticket["error"] = "cookie transfer failed unexpectedly"
+            raise HTTPException(status_code=500, detail="cookie transfer failed unexpectedly") from exc
+        cookie_ticket["phase"] = "done"
+        cookie_ticket["result"] = result
+        return {"imported": result["imported"]}
 
     @app.put("/api/browser/profile")
     async def set_browser_profile(payload: dict[str, Any]) -> dict[str, Any]:

@@ -9,6 +9,7 @@ import { AppearanceSection } from "./settings/AppearanceSection";
 import { ToastSection } from "./settings/ToastSection";
 import { BrowserHelpSection } from "./settings/BrowserHelpSection";
 import { BrowserSection } from "./settings/BrowserSection";
+import { CookieImportSection } from "./settings/CookieImportSection";
 import { HttpProtocolSection } from "./settings/HttpProtocolSection";
 import { BodyDisplaySection } from "./settings/BodyDisplaySection";
 import { CaptureStorageSection } from "./settings/CaptureStorageSection";
@@ -142,6 +143,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
     tls: <TlsSection />,
     shortcuts: <ShortcutsSection />,
     browser: <BrowserSection />,
+    'cookie-import': <CookieImportSection />,
     ca: <CaSection onError={setError} />,
     'browser-help': <BrowserHelpSection />,
     appearance: <AppearanceSection />,

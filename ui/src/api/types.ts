@@ -816,6 +816,31 @@ export interface LaunchedBrowser {
   ca_trusted: boolean;
 }
 
+export interface CookieImportState {
+  profiles: { id: string; name: string; browser_id: string; cookie_count: number }[];
+  targets: { id: string; name: string; available: boolean; ready: boolean; open: boolean }[];
+}
+
+export interface CookieImportResult {
+  imported: number;
+  expired: number;
+  partitioned: number;
+  unsupported: number;
+  protected: number;
+  session_extended: number;
+}
+
+export interface CookieExtensionTicket {
+  code: string;
+  expires_seconds: number;
+}
+
+export interface CookieExtensionStatus {
+  phase: 'idle' | 'waiting' | 'importing' | 'done' | 'error' | 'expired';
+  result: CookieImportResult | null;
+  error: string | null;
+}
+
 export interface McpTool {
   name: string;
   description: string;
