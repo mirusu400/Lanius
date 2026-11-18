@@ -33,6 +33,8 @@ flight, change it, and send it again. Each feature has its own page:
 - [AI Agents](ai-agents.md): MCP and HTTP tools for coding agents.
 - [Settings](settings.md): listener, upstream proxy, TLS fingerprint,
   system capture, appearance, language, shortcuts and updates.
+- [Cookie Import](cookie-import.md): bring logged-in sessions from your
+  usual browser into the Lanius browser.
 
 ## Plugins
 

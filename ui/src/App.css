@@ -6733,6 +6733,16 @@ pre.response-preview-text {
   padding: 0 8px 0 16px;
 }
 
+.docs-toolbar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 0 4px;
+  background: var(--bg);
+  font-size: 0.85em;
+}
+
 .docs-body h2 {
   margin: 0 0 4px;
   font-size: 1.4em;

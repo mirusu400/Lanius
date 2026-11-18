@@ -97,6 +97,7 @@ export default defineConfig({
             { text: 'Projects', link: '/projects' },
             { text: 'AI Agents', link: '/ai-agents' },
             { text: 'Settings', link: '/settings' },
+            { text: 'Cookie Import', link: '/cookie-import' },
           ],
         },
         {

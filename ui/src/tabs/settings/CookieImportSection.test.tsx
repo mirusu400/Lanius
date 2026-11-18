@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { renderWithI18n as render, t } from '../../test-utils';
+import { currentDocsPage } from '../../docs/navigation';
 import { CookieImportSection } from './CookieImportSection';
 import { searchSettings } from './settingsCatalogue';
 
@@ -124,4 +125,13 @@ it('saves the extension through the native Save As dialog in the desktop app', a
     title: t('browser.cookieImportExtensionDownload'),
   }));
   expect(fetched.mock.calls.filter(([url]) => String(url).endsWith('/cookies/extension'))).toHaveLength(0);
+});
+
+it('opens the cookie import guide in Docs', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => available } as Response)));
+  render(<CookieImportSection />);
+
+  await userEvent.setup().click(screen.getByRole('button', { name: t('browser.cookieImportGuide') }));
+
+  expect(currentDocsPage()).toBe('guide:cookie-import');
 });

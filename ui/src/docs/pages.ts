@@ -23,6 +23,8 @@ export interface DocPage {
   title: string;
   summary: string;
   sections: DocSection[];
+  /** The wiki page with the full text, also published on the website. */
+  web?: string;
 }
 
 const en: DocPage[] = [
@@ -159,6 +161,66 @@ const en: DocPage[] = [
           {
             kind: 'note',
             body: 'Import into the Firefox window opened by Lanius, not your usual Firefox profile. If you clear Lanius browsing data or replace the project CA, import the current certificate again. Never turn off certificate verification to get past an HTTPS warning.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'cookie-import',
+    title: 'Cookie import',
+    summary: 'Bring a logged-in session from your usual browser into the Lanius browser.',
+    web: 'cookie-import',
+    sections: [
+      {
+        heading: 'What it does',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Settings > Browser > Import cookies copies cookies from a browser profile you already use into the Lanius browser profile, so you do not have to log in again. Everything happens on this computer, and Lanius reports counts only, never cookie values.',
+          },
+          {
+            kind: 'text',
+            body: 'Before importing, open the destination browser from Lanius once to create its profile, then close it. Lanius does not write into a profile that is in use.',
+          },
+        ],
+      },
+      {
+        heading: 'Direct import',
+        blocks: [
+          {
+            kind: 'text',
+            body: '1. Choose the destination browser.\n2. Choose the source profile. Chrome, Chrome Beta, Chromium and Firefox profiles are listed with their cookie counts.\n3. Click Import cookies and confirm.',
+          },
+          {
+            kind: 'note',
+            body: 'On macOS, Keychain asks whether Lanius may read the browser key; choose Allow. On Linux, the desktop keyring must be unlocked and secret-tool installed. On Windows, recent Chrome binds cookies to Chrome itself, so they are skipped as protected. Use the extension for those.',
+          },
+        ],
+      },
+      {
+        heading: 'Import with the extension',
+        blocks: [
+          {
+            kind: 'note',
+            body: 'Install the extension in the browser you normally use, the one that holds the cookies. Not in the Lanius browser.',
+          },
+          {
+            kind: 'text',
+            body: '1. Click Download Lanius extension, save lanius-cookie-transfer.zip and unzip it.\n2. In your normal browser, open chrome://extensions (edge://extensions in Edge), turn on Developer mode, choose Load unpacked and select the unzipped folder.\n3. In Lanius, choose the destination browser and click Get one-time code.\n4. In your normal browser, click the Lanius Cookie Transfer icon (it may be under the puzzle-piece menu), paste the code and click Send cookies. The code works once, for 5 minutes.\n5. Remove the extension when finished.',
+          },
+          {
+            kind: 'text',
+            body: 'The extension sends cookies only to Lanius on 127.0.0.1 and contacts no other server. Lanius accepts the transfer only with the code shown in its own window.',
+          },
+        ],
+      },
+      {
+        heading: 'What is imported',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Partitioned and expired cookies are skipped. Session-only cookies get an expiry 8 hours ahead so they survive closing the browser. A cookie with the same site, name and path as an existing one replaces it. Some sites keep part of a login outside cookies and may still ask you to log in.',
           },
         ],
       },
@@ -663,6 +725,66 @@ const ko: DocPage[] = [
           {
             kind: 'note',
             body: '평소 쓰는 Firefox가 아닌 Lanius가 연 Firefox 프로필에 가져와야 합니다. Lanius 브라우징 데이터를 지우거나 프로젝트 CA를 바꿨다면 현재 인증서를 다시 가져오세요. HTTPS 경고를 피하려고 인증서 검증을 끄지는 마세요.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'cookie-import',
+    title: '쿠키 가져오기',
+    summary: '평소 쓰는 브라우저의 로그인 세션을 Lanius 브라우저로 가져옵니다.',
+    web: 'cookie-import',
+    sections: [
+      {
+        heading: '무엇을 하나요',
+        blocks: [
+          {
+            kind: 'text',
+            body: 'Settings > 브라우저 > 쿠키 가져오기는 평소 쓰는 브라우저 프로필의 쿠키를 Lanius 브라우저 프로필로 복사해서, 다시 로그인하지 않아도 되게 합니다. 모든 작업은 이 컴퓨터 안에서만 일어나며, Lanius는 쿠키 값이 아니라 개수만 보여줍니다.',
+          },
+          {
+            kind: 'text',
+            body: '가져오기 전에 대상 브라우저를 Lanius에서 한 번 열어 프로필을 만든 뒤 닫으세요. 사용 중인 프로필에는 쓰지 않습니다.',
+          },
+        ],
+      },
+      {
+        heading: '직접 가져오기',
+        blocks: [
+          {
+            kind: 'text',
+            body: '1. 대상 브라우저를 고릅니다.\n2. 원본 프로필을 고릅니다. Chrome, Chrome Beta, Chromium, Firefox 프로필이 쿠키 개수와 함께 표시됩니다.\n3. 쿠키 가져오기를 누르고 확인합니다.',
+          },
+          {
+            kind: 'note',
+            body: 'macOS에서는 키체인이 브라우저 키 접근을 물어보면 허용을 누르세요. Linux에서는 데스크톱 키링이 잠금 해제되어 있어야 하고 secret-tool이 설치되어 있어야 합니다. Windows의 최신 Chrome은 쿠키를 Chrome 자체에 묶어 두기 때문에 보호된 쿠키로 건너뜁니다. 이런 경우 확장 프로그램을 사용하세요.',
+          },
+        ],
+      },
+      {
+        heading: '확장 프로그램으로 가져오기',
+        blocks: [
+          {
+            kind: 'note',
+            body: '확장 프로그램은 쿠키가 들어 있는 평소 쓰는 브라우저에 설치하세요. Lanius 브라우저에 설치하는 것이 아닙니다.',
+          },
+          {
+            kind: 'text',
+            body: '1. Lanius 확장 프로그램 받기를 눌러 lanius-cookie-transfer.zip을 저장하고 압축을 풉니다.\n2. 평소 쓰는 브라우저에서 chrome://extensions(Edge는 edge://extensions)를 열고 개발자 모드를 켠 뒤, "압축해제된 확장 프로그램을 로드합니다"로 압축을 푼 폴더를 선택합니다.\n3. Lanius에서 대상 브라우저를 고르고 일회용 코드 발급을 누릅니다.\n4. 평소 쓰는 브라우저에서 Lanius Cookie Transfer 아이콘(퍼즐 모양 메뉴 안에 있을 수 있음)을 눌러 코드를 붙여넣고 쿠키 보내기를 누릅니다. 코드는 5분 동안 한 번만 쓸 수 있습니다.\n5. 끝나면 확장 프로그램을 제거합니다.',
+          },
+          {
+            kind: 'text',
+            body: '확장 프로그램은 127.0.0.1의 Lanius로만 쿠키를 보내고 다른 서버에는 접속하지 않습니다. Lanius는 자기 창에 표시한 코드가 있을 때만 전송을 받아들입니다.',
+          },
+        ],
+      },
+      {
+        heading: '가져오는 쿠키',
+        blocks: [
+          {
+            kind: 'text',
+            body: '파티션된 쿠키와 만료된 쿠키는 건너뜁니다. 세션 전용 쿠키는 브라우저를 닫아도 남도록 8시간 뒤 만료로 저장합니다. 사이트, 이름, 경로가 같은 기존 쿠키는 교체됩니다. 로그인 정보 일부를 쿠키 밖에 두는 사이트는 다시 로그인을 요구할 수 있습니다.',
           },
         ],
       },

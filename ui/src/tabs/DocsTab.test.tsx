@@ -46,6 +46,26 @@ describe('DocsTab', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Replay' })).toBeTruthy();
   });
 
+  it('links each wiki page and linked quick guide to its website page', async () => {
+    render(<DocsTab />);
+    const viewOnWeb = () => screen.getByRole('link', { name: t('docs.viewOnWeb') }).getAttribute('href');
+    expect(viewOnWeb()).toBe('https://lanius.mir.sh/features');
+    await userEvent.click(screen.getByRole('button', { name: 'Release 0.7.0' }));
+    expect(viewOnWeb()).toBe('https://lanius.mir.sh/releases/v0-7-0');
+    await openPage('Cookie import', '쿠키 가져오기');
+    expect(viewOnWeb()).toBe('https://lanius.mir.sh/cookie-import');
+    await openPage('Firefox CA certificate', 'Firefox CA 인증서');
+    expect(screen.queryByRole('link', { name: t('docs.viewOnWeb') })).toBeNull();
+  });
+
+  it('only links quick guides to wiki pages that exist', () => {
+    for (const locale of LOCALES) {
+      for (const page of docPages(locale).filter((item) => item.web)) {
+        expect(wikiGroups.some((group) => group.pages.some((item) => item.id === page.web))).toBe(true);
+      }
+    }
+  });
+
   it('renders wiki tables from the Markdown source', async () => {
     render(<DocsTab />);
     await userEvent.click(screen.getByRole('button', { name: 'Fuzzer' }));

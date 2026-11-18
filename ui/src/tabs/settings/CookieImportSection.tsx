@@ -7,6 +7,7 @@ import {
 } from '../../api/client';
 import type { CookieImportResult, CookieImportState } from '../../api/types';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { openDocsPage } from '../../docs/navigation';
 import { useToast } from '../../components/Toast';
 import { useT } from '../../i18n';
 
@@ -147,7 +148,12 @@ export function CookieImportSection() {
   return <>
     <section>
       <h3>{t('browser.cookieImportSection')}</h3>
-      <p className="muted">{t('browser.cookieImportHelp')}</p>
+      <p className="muted">
+        {t('browser.cookieImportHelp')}{' '}
+        <button type="button" className="link-button" onClick={() => openDocsPage('guide:cookie-import')}>
+          {t('browser.cookieImportGuide')}
+        </button>
+      </p>
       {loading && !state && <p className="muted" role="status">{t('common.loading')}</p>}
       {state && state.profiles.length === 0 &&
         <div className="banner warn">{t('browser.cookieImportNoSource')}</div>}
@@ -188,13 +194,6 @@ export function CookieImportSection() {
       <h4>{t('browser.cookieImportExtensionTitle')}</h4>
       <p className="muted">{t('browser.cookieImportExtensionHelp')}</p>
       <div className="banner info">{t('browser.cookieImportExtensionWhere')}</div>
-      <ol className="muted">
-        <li>{t('browser.cookieImportExtensionStep1')}</li>
-        <li>{t('browser.cookieImportExtensionStep2')}</li>
-        <li>{t('browser.cookieImportExtensionStep3')}</li>
-        <li>{t('browser.cookieImportExtensionStep4')}</li>
-        <li>{t('browser.cookieImportExtensionStep5')}</li>
-      </ol>
       <div className="settings-row">
         <button type="button" onClick={() => void downloadExtension()}>
           {t('browser.cookieImportExtensionDownload')}

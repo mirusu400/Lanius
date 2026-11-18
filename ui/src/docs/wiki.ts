@@ -63,6 +63,12 @@ export const wikiGroups: WikiGroup[] = [
   },
 ];
 
+/** The website publishes the same pages; release notes use dashed slugs. */
+export function wikiWebUrl(id: string): string {
+  const slug = id.startsWith('releases/') ? id.replaceAll('.', '-') : id;
+  return `https://lanius.mir.sh/${slug}`;
+}
+
 const wikiPageIds = new Set(wikiGroups.flatMap((group) => group.pages.map((item) => item.id)));
 
 export function wikiPage(id: string): WikiPage | undefined {

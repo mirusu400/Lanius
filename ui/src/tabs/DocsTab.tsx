@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 
 import { docPages, type DocBlock } from '../docs/pages';
 import { currentDocsPage, OPEN_DOCS_PAGE, rememberDocsPage } from '../docs/navigation';
-import { linkedWikiPage, wikiGroups, wikiPage } from '../docs/wiki';
+import { linkedWikiPage, wikiGroups, wikiPage, wikiWebUrl } from '../docs/wiki';
 import { useI18n } from '../i18n';
 import { ExternalLink } from '../components/ExternalLink';
 import { Split } from '../components/Split';
@@ -38,6 +38,7 @@ export function DocsTab() {
   const active = pages.find((page) => `guide:${page.id}` === activeId);
 
   if (!activeWiki && !active) return <div className="docs-tab" />;
+  const webId = activeWiki?.id ?? active?.web;
 
   return (
     <div className="docs-tab">
@@ -76,6 +77,9 @@ export function DocsTab() {
       </nav>}
 
         second={<article className="docs-body" ref={bodyRef}>
+        {webId && <div className="docs-toolbar">
+          <ExternalLink href={wikiWebUrl(webId)}>{t('docs.viewOnWeb')}</ExternalLink>
+        </div>}
         {activeWiki ? (
           <div className="docs-wiki">
             <p className="docs-wiki-language">{t('docs.wikiEnglish')}</p>
