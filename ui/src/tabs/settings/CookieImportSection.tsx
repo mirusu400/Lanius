@@ -58,6 +58,20 @@ export function CookieImportSection() {
   const canTarget = Boolean(destination?.available && destination.ready && !destination.open &&
     !loading && !importing && !ticketCode && !ticketBusy);
   const canImport = Boolean(canTarget && selected);
+  const waitingForBrowser = Boolean(destination?.available && (destination.open || !destination.ready));
+
+  // Closing the Lanius browser happens outside this screen, so keep checking
+  // until the destination is usable rather than leaving the buttons disabled.
+  useEffect(() => {
+    if (!waitingForBrowser || importing) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void getCookieImportState().then((next) => {
+        if (active) setState(next);
+      }).catch(() => {});
+    }, 2000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [waitingForBrowser, importing]);
 
   useEffect(() => {
     if (!ticketCode) return;

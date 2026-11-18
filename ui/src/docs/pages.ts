@@ -181,7 +181,7 @@ const en: DocPage[] = [
           },
           {
             kind: 'text',
-            body: 'Before importing, open the destination browser from Lanius once to create its profile, then close it. Lanius does not write into a profile that is in use.',
+            body: 'Before importing, open the destination browser from Lanius once to create its profile, then quit it. Lanius does not write into a profile that is in use. On macOS, closing the windows leaves the browser running, so press Cmd+Q in it.',
           },
         ],
       },
@@ -745,7 +745,7 @@ const ko: DocPage[] = [
           },
           {
             kind: 'text',
-            body: '가져오기 전에 대상 브라우저를 Lanius에서 한 번 열어 프로필을 만든 뒤 닫으세요. 사용 중인 프로필에는 쓰지 않습니다.',
+            body: '가져오기 전에 대상 브라우저를 Lanius에서 한 번 열어 프로필을 만든 뒤 종료하세요. 사용 중인 프로필에는 쓰지 않습니다. macOS에서는 창을 닫아도 브라우저가 계속 실행되므로 해당 브라우저에서 ⌘Q를 누르세요.',
           },
         ],
       },

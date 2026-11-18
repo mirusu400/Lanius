@@ -203,19 +203,34 @@ def _target_database(profile: Path, browser_id: str) -> Path | None:
     return _chromium_database(profile / "Default")
 
 
+def _uses_profile(args: list[str], expected: str) -> bool:
+    for index, arg in enumerate(args):
+        value = arg.partition("=")[2] if arg.startswith("--user-data-dir=") else (
+            args[index + 1] if arg == "--user-data-dir" and index + 1 < len(args) else ""
+        )
+        if value and str(Path(value).expanduser().resolve()).casefold() == expected:
+            return True
+    return False
+
+
 def _chromium_running(profile: Path) -> bool:
-    if browser._running_pid(profile) is not None:
-        return True
     expected = str(profile.resolve()).casefold()
+    # A lock left by a crashed browser can name a pid the OS has since given
+    # to an unrelated process, so trust it only when that process uses the
+    # profile, or when its command line cannot be read.
+    pid = browser._running_pid(profile)
+    if pid is not None:
+        try:
+            if _uses_profile(psutil.Process(pid).cmdline(), expected):
+                return True
+        except psutil.NoSuchProcess:
+            pass
+        except (psutil.Error, OSError):
+            return True
     for process in psutil.process_iter(["cmdline"]):
         try:
-            args = process.info.get("cmdline") or []
-            for index, arg in enumerate(args):
-                value = arg.partition("=")[2] if arg.startswith("--user-data-dir=") else (
-                    args[index + 1] if arg == "--user-data-dir" and index + 1 < len(args) else ""
-                )
-                if value and str(Path(value).expanduser().resolve()).casefold() == expected:
-                    return True
+            if _uses_profile(process.info.get("cmdline") or [], expected):
+                return True
         except (psutil.Error, OSError):
             continue
     return False

@@ -308,3 +308,29 @@ def test_windows_and_linux_source_roots_cover_all_requested_browsers(tmp_path) -
     assert linux["chromium"][1] == Path.home() / "snap/chromium/common/chromium"
     assert linux["firefox"][1] == tmp_path / "config/mozilla/firefox"
     assert linux["firefox"][2] == Path.home() / "snap/firefox/common/.mozilla/firefox"
+
+
+def test_stale_lock_with_reused_pid_does_not_mark_chromium_open(tmp_path) -> None:
+    profile = tmp_path / "browser-profile"
+    profile.mkdir()
+    other = mock.Mock()
+    other.cmdline.return_value = ["/usr/bin/some-daemon", "--serve"]
+    with mock.patch.object(cookie_import.browser, "_running_pid", return_value=4242), \
+         mock.patch.object(cookie_import.psutil, "Process", return_value=other), \
+         mock.patch.object(cookie_import.psutil, "process_iter", return_value=[]):
+        assert cookie_import._chromium_running(profile) is False
+
+
+def test_lock_held_by_the_profile_browser_marks_chromium_open(tmp_path) -> None:
+    profile = tmp_path / "browser-profile"
+    profile.mkdir()
+    owner = mock.Mock()
+    owner.cmdline.return_value = ["chrome", f"--user-data-dir={profile}"]
+    with mock.patch.object(cookie_import.browser, "_running_pid", return_value=4242), \
+         mock.patch.object(cookie_import.psutil, "Process", return_value=owner):
+        assert cookie_import._chromium_running(profile) is True
+    unreadable = mock.Mock()
+    unreadable.cmdline.side_effect = cookie_import.psutil.AccessDenied(4242)
+    with mock.patch.object(cookie_import.browser, "_running_pid", return_value=4242), \
+         mock.patch.object(cookie_import.psutil, "Process", return_value=unreadable):
+        assert cookie_import._chromium_running(profile) is True

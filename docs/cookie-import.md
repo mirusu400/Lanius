@@ -23,8 +23,9 @@ pick as **Destination browser** (Chrome, Chrome Beta, Chromium, or Firefox).
 
 - Open the destination browser from Lanius once, then close it. That creates
   the Lanius profile the cookies are written into.
-- Keep the Lanius destination browser closed while importing. Lanius refuses to
-  write into a profile that is in use.
+- Quit the Lanius destination browser while importing. Lanius refuses to write
+  into a profile that is in use. On macOS, closing its windows leaves the
+  browser running; press Cmd+Q in it. Settings notices when it has quit.
 - If you chose a custom browser data folder in **Settings > Browser**, cookies
   go into that folder's profile.
 
@@ -92,8 +93,9 @@ original device. Those sites may still ask you to log in again.
 
 - **Nothing in Source profile:** no supported profile was found in its standard
   location. Use the extension instead.
-- **Close the Lanius destination browser:** a window of the Lanius browser is
-  still open. Close it and import again.
+- **Quit the Lanius destination browser:** the Lanius browser is still
+  running. On macOS it keeps running after its last window closes, so press
+  Cmd+Q in it. The buttons become available within a few seconds.
 - **Open the destination browser from Lanius once:** the Lanius profile does not
   exist yet.
 - **Keychain or keyring errors:** the OS refused access to the browser key, or

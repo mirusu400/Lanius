@@ -135,3 +135,23 @@ it('opens the cookie import guide in Docs', async () => {
 
   expect(currentDocsPage()).toBe('guide:cookie-import');
 });
+
+it('enables import once the open Lanius browser has quit', async () => {
+  let open = true;
+  vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: true,
+    json: async () => ({
+      ...available,
+      targets: available.targets.map((browser) => ({ ...browser, open: browser.id === 'chrome' && open })),
+    }),
+  } as Response)));
+  render(<CookieImportSection />);
+
+  const pair = await screen.findByRole('button', { name: t('browser.cookieImportExtensionPair') });
+  await waitFor(() => expect(pair.hasAttribute('disabled')).toBe(true));
+  expect(screen.getByText(t('browser.cookieImportTargetOpen', { browser: 'Google Chrome' }))).toBeTruthy();
+
+  open = false;
+  await waitFor(() => expect(pair.hasAttribute('disabled')).toBe(false), { timeout: 4000 });
+  expect(screen.queryByText(t('browser.cookieImportTargetOpen', { browser: 'Google Chrome' }))).toBeNull();
+});
