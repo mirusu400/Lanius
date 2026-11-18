@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 
 import {
   createCookieExtensionTicket, downloadCookieExporter, getCookieExtensionStatus,
-  getCookieImportState, importBrowserCookies,
+  getCookieImportState, importBrowserCookies, isDesktop, saveDesktopCookieExporter,
 } from '../../api/client';
 import type { CookieImportResult, CookieImportState } from '../../api/types';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -87,6 +87,14 @@ export function CookieImportSection() {
   const downloadExtension = async () => {
     setError(null);
     try {
+      if (isDesktop()) {
+        // The desktop webview ignores blob downloads; save through the shell.
+        const path = await saveDesktopCookieExporter(t('browser.cookieImportExtensionDownload'));
+        if (path) {
+          showToast({ message: t('project.savedFile', { path }), tone: 'success', category: 'browser' });
+        }
+        return;
+      }
       const blob = await downloadCookieExporter();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -179,6 +187,14 @@ export function CookieImportSection() {
       </>}
       <h4>{t('browser.cookieImportExtensionTitle')}</h4>
       <p className="muted">{t('browser.cookieImportExtensionHelp')}</p>
+      <div className="banner info">{t('browser.cookieImportExtensionWhere')}</div>
+      <ol className="muted">
+        <li>{t('browser.cookieImportExtensionStep1')}</li>
+        <li>{t('browser.cookieImportExtensionStep2')}</li>
+        <li>{t('browser.cookieImportExtensionStep3')}</li>
+        <li>{t('browser.cookieImportExtensionStep4')}</li>
+        <li>{t('browser.cookieImportExtensionStep5')}</li>
+      </ol>
       <div className="settings-row">
         <button type="button" onClick={() => void downloadExtension()}>
           {t('browser.cookieImportExtensionDownload')}

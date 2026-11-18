@@ -105,3 +105,23 @@ it('pairs a browser extension when no readable source profile exists', async () 
     imported: '5', partitioned: '0', expired: '0', unsupported: '0', protected: '0', session: '1',
   }), {}, { timeout: 3000 })).toBeTruthy();
 });
+
+it('saves the extension through the native Save As dialog in the desktop app', async () => {
+  const invoke = vi.fn(async () => 'C:\Users\tester\lanius-cookie-transfer.zip');
+  vi.stubGlobal('__TAURI_INTERNALS__', { invoke });
+  const fetched = vi.fn(async (_input: RequestInfo | URL) => (
+    { ok: true, json: async () => available } as Response
+  ));
+  vi.stubGlobal('fetch', fetched);
+  render(<CookieImportSection />);
+
+  await userEvent.setup().click(await screen.findByRole('button', {
+    name: t('browser.cookieImportExtensionDownload'),
+  }));
+
+  // The desktop webview drops blob downloads, so the shell must do the saving.
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith('save_cookie_exporter', {
+    title: t('browser.cookieImportExtensionDownload'),
+  }));
+  expect(fetched.mock.calls.filter(([url]) => String(url).endsWith('/cookies/extension'))).toHaveLength(0);
+});

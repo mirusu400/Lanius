@@ -1154,6 +1154,14 @@ export async function downloadCookieExporter(): Promise<Blob> {
   return response.blob();
 }
 
+/** Native Save As for the cookie transfer extension in the desktop app. */
+export function saveDesktopCookieExporter(title: string): Promise<string | null> {
+  const internals = (window as unknown as {
+    __TAURI_INTERNALS__: { invoke(cmd: string, args: unknown): Promise<string | null> };
+  }).__TAURI_INTERNALS__;
+  return internals.invoke('save_cookie_exporter', { title });
+}
+
 export function createCookieExtensionTicket(
   targetBrowser: string,
 ): Promise<import('./types').CookieExtensionTicket> {

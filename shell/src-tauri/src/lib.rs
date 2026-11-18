@@ -16,6 +16,7 @@ use tauri::{Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
 mod ca_export;
+mod cookie_export;
 mod doctor;
 mod fonts;
 #[cfg(windows)]
@@ -1531,6 +1532,7 @@ pub fn run() {
             close_project,
             doctor::run_doctor,
             ca_export::save_ca_certificate,
+            cookie_export::save_cookie_exporter,
             project_export::save_project_file,
             close_ready,
             cancel_close,
