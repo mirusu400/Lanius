@@ -97,7 +97,7 @@ jobs:
 
       - name: Dependency audit
         working-directory: ui
-        run: npm audit --audit-level=high
+        run: node ../scripts/npm-audit.mjs
 
       - name: Type check
         working-directory: ui
@@ -148,7 +148,7 @@ jobs:
       - name: Audit shell tooling dependencies
         if: runner.os == 'Linux'
         working-directory: shell
-        run: npm audit --audit-level=high
+        run: node ../scripts/npm-audit.mjs
 
       - name: Install Rust dependency auditor
         if: runner.os == 'Linux'
