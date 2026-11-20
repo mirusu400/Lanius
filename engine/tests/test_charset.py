@@ -102,6 +102,21 @@ def test_legacy_korean_guess_does_not_apply_to_binary_content() -> None:
     assert charset.charset_of("application/octet-stream", raw) == "utf-8"
 
 
+def test_protobuf_bodies_are_read_and_written_as_single_bytes() -> None:
+    raw = b"\xef\xbb\xbf\x08\x96\x01\x12\xc3\xa9"
+    for content_type in (
+        "application/x-protobuf",
+        "application/grpc+proto",
+        "application/vnd.google.protobuf; charset=utf-8",
+        "application/foo+protobuf",
+    ):
+        selected = charset.charset_of(content_type, raw)
+        assert selected == "iso8859-1"
+        assert charset.encode(charset.decode(raw, selected), selected) == raw
+    assert charset.charset_of("application/grpc-web-text", b"abc") == "utf-8"
+    assert charset.charset_of("application/protobuf-like", b"abc") == "utf-8"
+
+
 def test_only_text_charsets_can_be_selected_manually() -> None:
     assert charset.selectable("EUC-KR") == "euc_kr"
     assert charset.selectable("windows-1252") == "cp1252"

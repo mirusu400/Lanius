@@ -23,6 +23,15 @@ _CHARSET = re.compile(rb'charset\s*=\s*"?([\w.:+-]+)"?', re.IGNORECASE)
 _META_CHARSET = re.compile(
     rb'<meta[^>]+charset\s*=\s*["\']?\s*([\w.:+-]+)', re.IGNORECASE
 )
+# Protobuf and gRPC payloads are binary: read them one byte per character so
+# an edit in the UI sends exactly the bytes that were shown.
+_BINARY_PROTOBUF = re.compile(
+    r"^\s*application/(?:(?:x-)?(?:google-)?protobuf|vnd\.google\.protobuf"
+    r"|grpc(?:-web)?(?:\+proto)?|[\w.+-]+\+protobuf)\s*(?:;|$)",
+    re.IGNORECASE,
+)
+BYTE_CHARSET = "iso8859-1"
+
 # Runs produced when UTF-8 bytes were first mistaken for Latin-1 and the
 # resulting characters were encoded as UTF-8 again.  Keeping this repair
 # separate from ``decode`` matters: request editors rely on ``decode`` being
@@ -130,7 +139,11 @@ def charset_of(content_type: str | None, body: bytes | None) -> str:
     In order: a byte-order mark, then the Content-Type, then a meta tag in
     the markup, then UTF-8. The BOM comes first because a server that
     mislabels UTF-16 as UTF-8 is common, and the mark is unambiguous.
+    Binary protobuf/gRPC types are the exception: they are always read as
+    single bytes, since a leading 0xEF 0xBB 0xBF is data there, not a mark.
     """
+    if isinstance(content_type, str) and _BINARY_PROTOBUF.match(content_type):
+        return BYTE_CHARSET
     if body:
         for bom, name in _BOMS:
             if body.startswith(bom):
