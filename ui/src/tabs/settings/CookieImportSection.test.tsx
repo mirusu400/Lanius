@@ -54,6 +54,8 @@ it('imports the selected whole profile into the selected browser after confirmat
   expect(await screen.findByText(t('browser.cookieImportResult', {
     imported: '20', partitioned: '4', expired: '3', unsupported: '2', protected: '1', session: '1',
   }))).toBeTruthy();
+  expect(screen.getByText(t('browser.cookieImportProtectedNotice', { count: '1' }))).toBeTruthy();
+  expect(screen.getByRole('button', { name: t('browser.cookieImportExtensionDownload') })).toBeTruthy();
 });
 
 it('refuses import while the selected Lanius browser is open', async () => {
@@ -108,13 +110,16 @@ it('pairs a browser extension when no readable source profile exists', async () 
 });
 
 it('saves the extension through the native Save As dialog in the desktop app', async () => {
-  const invoke = vi.fn(async () => 'C:\Users\tester\lanius-cookie-transfer.zip');
+  const invoke = vi.fn(async () => 'C:/Users/tester/lanius-cookie-transfer.zip');
   vi.stubGlobal('__TAURI_INTERNALS__', { invoke });
   const fetched = vi.fn(async (_input: RequestInfo | URL) => (
     { ok: true, json: async () => available } as Response
   ));
   vi.stubGlobal('fetch', fetched);
   render(<CookieImportSection />);
+  await userEvent.setup().click(await screen.findByRole('button', {
+    name: t('browser.cookieImportExtensionReveal'),
+  }));
 
   await userEvent.setup().click(await screen.findByRole('button', {
     name: t('browser.cookieImportExtensionDownload'),
@@ -147,6 +152,9 @@ it('enables import once the open Lanius browser has quit', async () => {
   } as Response)));
   render(<CookieImportSection />);
 
+  await userEvent.setup().click(await screen.findByRole('button', {
+    name: t('browser.cookieImportExtensionReveal'),
+  }));
   const pair = await screen.findByRole('button', { name: t('browser.cookieImportExtensionPair') });
   await waitFor(() => expect(pair.hasAttribute('disabled')).toBe(true));
   expect(screen.getByText(t('browser.cookieImportTargetOpen', { browser: 'Google Chrome' }))).toBeTruthy();

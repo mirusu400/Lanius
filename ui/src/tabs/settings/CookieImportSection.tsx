@@ -25,6 +25,7 @@ export function CookieImportSection() {
   const [ticketCode, setTicketCode] = useState<string | null>(null);
   const [ticketBusy, setTicketBusy] = useState(false);
   const [ticketPhase, setTicketPhase] = useState<'waiting' | 'importing'>('waiting');
+  const [showExtension, setShowExtension] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -147,13 +148,16 @@ export function CookieImportSection() {
     try {
       const next = await importBrowserCookies(source, target);
       setResult(next);
+      if (next.protected > 0) setShowExtension(true);
       showToast({ message: t('browser.cookieImportDone', {
         count: String(next.imported), browser: destination?.name ?? '',
       }),
         tone: 'success', category: 'browser' });
       await refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      if (/protects its cookies|browser extension/i.test(message)) setShowExtension(true);
     } finally {
       setImporting(false);
     }
@@ -177,6 +181,17 @@ export function CookieImportSection() {
         <div className="banner warn">{t('browser.cookieImportTargetNotReady', { browser: destination.name })}</div>}
       {destination?.open &&
         <div className="banner warn">{t('browser.cookieImportTargetOpen', { browser: destination.name })}</div>}
+      {state && state.profiles.length > 0 && <>
+        <div className="settings-row">
+          <label htmlFor="cookie-import-source">{t('browser.cookieImportSource')}</label>
+          <select id="cookie-import-source" value={source} disabled={importing}
+            onChange={(event) => { setSource(event.target.value); setResult(null); }}>
+            {state.profiles.map((profile) => <option key={profile.id} value={profile.id}>
+              {profile.name} ({profile.cookie_count})
+            </option>)}
+          </select>
+        </div>
+      </>}
       {state && <div className="settings-row">
         <label htmlFor="cookie-import-target">{t('browser.cookieImportTarget')}</label>
         <select id="cookie-import-target" value={target} disabled={importing || Boolean(ticketCode)}
@@ -187,35 +202,40 @@ export function CookieImportSection() {
           </option>)}
         </select>
       </div>}
-      {state && state.profiles.length > 0 && <>
+      {state && state.profiles.length > 0 && <div className="settings-row">
+        <button type="button" disabled={loading || importing} onClick={() => void refresh()}>
+          {t('browser.cookieImportRefresh')}
+        </button>
+        <button type="button" disabled={!canImport} onClick={() => setConfirm(true)}>
+          {importing ? t('browser.cookieImportRunning') : t('browser.cookieImportButton')}
+        </button>
+      </div>}
+      {state && state.profiles.length > 0 &&
+        <p className="muted">{t('browser.cookieImportLimit')}</p>}
+      {result && result.protected > 0 &&
+        <div className="banner warn">{t('browser.cookieImportProtectedNotice', {
+          count: String(result.protected),
+        })}</div>}
+      {error && <div className="banner error" role="alert">
+        {t('browser.cookieImportFailed', { message: error })}
+      </div>}
+      {state && state.profiles.length > 0 && !showExtension &&
+        <button type="button" className="link-button" onClick={() => setShowExtension(true)}>
+          {t('browser.cookieImportExtensionReveal')}
+        </button>}
+      {(showExtension || (state && state.profiles.length === 0)) && <>
+        <h4>{t('browser.cookieImportExtensionTitle')}</h4>
+        <p className="muted">{t('browser.cookieImportExtensionHelp')}</p>
+        <div className="banner info">{t('browser.cookieImportExtensionWhere')}</div>
         <div className="settings-row">
-          <label htmlFor="cookie-import-source">{t('browser.cookieImportSource')}</label>
-          <select id="cookie-import-source" value={source} disabled={importing}
-            onChange={(event) => { setSource(event.target.value); setResult(null); }}>
-            {state.profiles.map((profile) => <option key={profile.id} value={profile.id}>
-              {profile.name} ({profile.cookie_count})
-            </option>)}
-          </select>
-          <button type="button" disabled={loading || importing} onClick={() => void refresh()}>
-            {t('browser.cookieImportRefresh')}
+          <button type="button" onClick={() => void downloadExtension()}>
+            {t('browser.cookieImportExtensionDownload')}
           </button>
-          <button type="button" disabled={!canImport} onClick={() => setConfirm(true)}>
-            {importing ? t('browser.cookieImportRunning') : t('browser.cookieImportButton')}
+          <button type="button" disabled={!canTarget} onClick={() => void createTicket()}>
+            {t('browser.cookieImportExtensionPair')}
           </button>
         </div>
-        <p className="muted">{t('browser.cookieImportLimit')}</p>
       </>}
-      <h4>{t('browser.cookieImportExtensionTitle')}</h4>
-      <p className="muted">{t('browser.cookieImportExtensionHelp')}</p>
-      <div className="banner info">{t('browser.cookieImportExtensionWhere')}</div>
-      <div className="settings-row">
-        <button type="button" onClick={() => void downloadExtension()}>
-          {t('browser.cookieImportExtensionDownload')}
-        </button>
-        <button type="button" disabled={!canTarget} onClick={() => void createTicket()}>
-          {t('browser.cookieImportExtensionPair')}
-        </button>
-      </div>
       {ticketCode && <div className="banner info" role="status">
         <p>{t(ticketPhase === 'importing' ? 'browser.cookieImportExtensionRunning'
           : 'browser.cookieImportExtensionCode')}</p>
@@ -228,9 +248,6 @@ export function CookieImportSection() {
           protected: String(result.protected),
           session: String(result.session_extended),
         })}
-      </div>}
-      {error && <div className="banner error" role="alert">
-        {t('browser.cookieImportFailed', { message: error })}
       </div>}
     </section>
     <ConfirmDialog
