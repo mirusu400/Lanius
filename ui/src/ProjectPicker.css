@@ -87,6 +87,11 @@
 .project-picker-card label { margin-bottom: 6px; }
 .project-picker-card input { width: 100%; margin-bottom: 12px; }
 .project-picker-card button { margin-top: auto; }
+.project-picker-location-label { margin-bottom: 6px; }
+.project-picker-location { display: flex; width: 100%; align-items: center; gap: 8px; margin-bottom: 12px; }
+.project-picker-location > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-picker-location button { margin-top: 0; flex: none; }
+.project-picker-card p.project-picker-location-help { flex: none; margin: -6px 0 12px; font-size: 12px; }
 
 .project-picker-import {
   display: flex;

@@ -7,6 +7,14 @@ are removed when closed. Use **Settings > Project > Switch** to return to the
 chooser. The previous single-database workspace remains available as
 **Previous work**.
 
+To keep a named project somewhere else, such as an encrypted volume or a
+client folder, use **Change…** under **Save location** when creating it.
+Lanius creates a new folder named after the project inside the chosen folder
+and stores the database and browser data there; the project list still finds
+it from `~/.lanius/projects/`. If that folder is unavailable, for example on a
+drive that is not connected, the project stays in the list but will not open
+until the folder is back.
+
 Closing the window or quitting Lanius saves pending Replay and Decoder edits
 before stopping the engine. A progress circle stays visible while saving and
 cleaning up. If saving fails, the window stays open so you can retry or cancel.

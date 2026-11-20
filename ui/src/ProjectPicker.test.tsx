@@ -81,7 +81,7 @@ it('creates a saved project and applies Burp settings chosen on the landing page
     if (command === 'list_projects') return [];
     if (command === 'get_global_lockdown') return { enabled: false, forced: false };
     if (command === 'create_project') {
-      expect(args).toEqual({ name: 'demo' });
+      expect(args).toEqual({ name: 'demo', location: null });
       return project;
     }
     if (command === 'startup_progress') return null;
@@ -117,6 +117,55 @@ it('creates a saved project and applies Burp settings chosen on the landing page
 
   await waitFor(() => expect(onOpen).toHaveBeenCalledWith(project));
   expect(fetch.mock.calls.find(([url]) => String(url).endsWith('/api/project/import?settings_only=true'))?.[1]).toMatchObject({ body: file });
+});
+
+it('creates a project in a folder the user chose', async () => {
+  const project = {
+    id: 'chosen', name: 'Client', temporary: false,
+    dbPath: '/Volumes/Work/Client/lanius.sqlite', lastOpened: 0,
+  };
+  const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
+    if (command === 'list_projects') return [];
+    if (command === 'get_global_lockdown') return { enabled: false, forced: false };
+    if (command === 'pick_directory') return '/Volumes/Work';
+    if (command === 'create_project') return project;
+    if (command === 'startup_progress') return null;
+    throw new Error(`unexpected command: ${command} ${JSON.stringify(args)}`);
+  });
+  Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: { invoke } });
+  const onOpen = vi.fn();
+  const user = userEvent.setup();
+  render(<ProjectPicker onOpen={onOpen} />);
+
+  expect(screen.getByText(t('startup.locationDefault'))).toBeTruthy();
+  await user.type(screen.getByLabelText(t('startup.name')), 'Client');
+  await user.click(screen.getByRole('button', { name: t('startup.locationChoose') }));
+  expect(await screen.findByText('/Volumes/Work')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: t('startup.createStart') }));
+
+  await waitFor(() => expect(onOpen).toHaveBeenCalledWith(project));
+  expect(invoke).toHaveBeenCalledWith('create_project', { name: 'Client', location: '/Volumes/Work' });
+});
+
+it('can go back to the default location before creating a project', async () => {
+  const invoke = vi.fn(async (command: string) => {
+    if (command === 'list_projects') return [];
+    if (command === 'get_global_lockdown') return { enabled: false, forced: false };
+    if (command === 'pick_directory') return '/Volumes/Work';
+    if (command === 'create_project') return { id: 'p', name: 'P', temporary: false, dbPath: '/p', lastOpened: 0 };
+    if (command === 'startup_progress') return null;
+    throw new Error(`unexpected command: ${command}`);
+  });
+  Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: { invoke } });
+  const user = userEvent.setup();
+  render(<ProjectPicker onOpen={vi.fn()} />);
+
+  await user.type(screen.getByLabelText(t('startup.name')), 'P');
+  await user.click(screen.getByRole('button', { name: t('startup.locationChoose') }));
+  await user.click(await screen.findByRole('button', { name: t('startup.locationReset') }));
+  expect(screen.getByText(t('startup.locationDefault'))).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: t('startup.createStart') }));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith('create_project', { name: 'P', location: null }));
 });
 
 it('removes the progress overlay and shows the error when a project fails to start', async () => {

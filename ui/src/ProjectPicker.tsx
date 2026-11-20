@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { API_BASE, getGlobalLockdown, setDesktopApiPort, setGlobalLockdown, type GlobalLockdownStatus } from './api/client';
+import { API_BASE, getGlobalLockdown, pickDirectory, setDesktopApiPort, setGlobalLockdown, type GlobalLockdownStatus } from './api/client';
 import { useT, type TranslationKey } from './i18n';
 import {
   closeProject,
@@ -50,6 +50,7 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
   const { showToast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [name, setName] = useState('');
+  const [location, setLocation] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -182,6 +183,16 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
     target: String(progress?.target ?? ''),
   });
 
+  const chooseLocation = async () => {
+    setError(null);
+    try {
+      const picked = await pickDirectory(t('startup.locationPickTitle'), location ?? undefined);
+      if (picked) setLocation(picked);
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
   const applyPort = async () => {
     const wanted = Number(port);
     if (!Number.isInteger(wanted) || wanted < 1 || wanted > 65535) {
@@ -309,7 +320,7 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
             className="project-picker-card"
             onSubmit={(event) => {
               event.preventDefault();
-              void start(() => createProject(name));
+              void start(() => createProject(name, location));
             }}
           >
             <h2>{t('startup.newTitle')}</h2>
@@ -322,6 +333,19 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
               onValueChange={setName}
               placeholder={t('startup.namePlaceholder')}
             />
+            <span className="project-picker-location-label">{t('startup.location')}</span>
+            <div className="project-picker-location">
+              <span className={location ? 'mono' : 'muted'} title={location ?? undefined}>
+                {location ?? t('startup.locationDefault')}
+              </span>
+              <button type="button" disabled={busy} onClick={() => void chooseLocation()}>
+                {t('startup.locationChoose')}
+              </button>
+              {location && <button type="button" disabled={busy} onClick={() => setLocation(null)}>
+                {t('startup.locationReset')}
+              </button>}
+            </div>
+            {location && <p className="muted project-picker-location-help">{t('startup.locationHelp')}</p>}
             <button type="submit" disabled={busy || !name.trim()}>
               {busy ? t('startup.starting') : t('startup.createStart')}
             </button>

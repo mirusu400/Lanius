@@ -1102,9 +1102,20 @@ where
     .map_err(|err| err.to_string())?
 }
 
+/// Create a project, in `location` when the user chose a folder for it.
 #[tauri::command]
-async fn create_project(name: String, app: tauri::AppHandle) -> Result<projects::Project, String> {
-    begin_project_in_background(app, move || projects::create(&projects::home()?, &name)).await
+async fn create_project(
+    name: String,
+    location: Option<String>,
+    app: tauri::AppHandle,
+) -> Result<projects::Project, String> {
+    begin_project_in_background(app, move || {
+        let location = location
+            .filter(|path| !path.trim().is_empty())
+            .map(PathBuf::from);
+        projects::create(&projects::home()?, &name, location.as_deref())
+    })
+    .await
 }
 
 /// Error prefix the picker turns into an upgrade prompt; JSON follows it.

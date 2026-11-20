@@ -63,7 +63,9 @@ export function pendingMigration(error: unknown): PendingMigration | null {
 
 export const listProjects = () => invoke<Project[]>('list_projects');
 export const currentProject = () => invoke<Project | null>('current_project');
-export const createProject = (name: string) => invoke<Project>('create_project', { name });
+/** Create a project; `location` is a parent folder chosen by the user, or the Lanius data folder when omitted. */
+export const createProject = (name: string, location?: string | null) =>
+  invoke<Project>('create_project', { name, location: location ?? null });
 /**
  * Open a saved project. Without `allowMigration` the shell refuses one whose
  * database needs an upgrade, so the user can be asked first.

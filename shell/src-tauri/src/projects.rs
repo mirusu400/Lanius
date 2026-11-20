@@ -21,6 +21,9 @@ struct Meta {
     name: String,
     created_at: u64,
     last_opened: u64,
+    /// Data directory chosen at creation; None keeps it beside this file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    location: Option<PathBuf>,
 }
 
 fn now() -> u64 {
@@ -117,6 +120,10 @@ fn project_dir(root: &Path, id: &str) -> Result<PathBuf, String> {
 }
 
 pub(crate) fn read_project(root: &Path, id: &str) -> Result<Project, String> {
+    read_entry(root, id, true)
+}
+
+fn read_entry(root: &Path, id: &str, require_present: bool) -> Result<Project, String> {
     if id == "legacy" {
         let db = root.join("lanius.sqlite");
         if !db.is_file() {
@@ -143,14 +150,37 @@ pub(crate) fn read_project(root: &Path, id: &str) -> Result<Project, String> {
         return Err("unsafe project metadata".to_string());
     }
     set_mode(&metadata_path, 0o600)?;
-    protect_database(&dir.join("lanius.sqlite"))?;
     let contents = fs::read(metadata_path).map_err(|e| e.to_string())?;
     let meta: Meta = serde_json::from_slice(&contents).map_err(|e| e.to_string())?;
+    let data_dir = match meta.location {
+        Some(location) => {
+            // An external folder can be on a drive that is not mounted now.
+            // Keep the project listed, but never let the engine recreate it
+            // empty: opening needs the folder to be there.
+            match fs::symlink_metadata(&location) {
+                Ok(found) if found.file_type().is_dir() => set_mode(&location, 0o700)?,
+                Ok(_) => return Err("unsafe project directory".to_string()),
+                Err(_) if !require_present => {}
+                Err(_) => {
+                    return Err(format!(
+                        "project folder was not found: {}",
+                        location.display()
+                    ))
+                }
+            }
+            location
+        }
+        None => dir,
+    };
+    let db_path = data_dir.join("lanius.sqlite");
+    if data_dir.is_dir() {
+        protect_database(&db_path)?;
+    }
     Ok(Project {
         id: id.to_string(),
         name: meta.name,
         temporary: false,
-        db_path: dir.join("lanius.sqlite"),
+        db_path,
         last_opened: meta.last_opened,
     })
 }
@@ -167,7 +197,7 @@ pub fn list(root: &Path) -> Result<Vec<Project>, String> {
         for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
             let entry = entry.map_err(|e| e.to_string())?;
             let id = entry.file_name().to_string_lossy().into_owned();
-            if let Ok(project) = read_project(root, &id) {
+            if let Ok(project) = read_entry(root, &id, false) {
                 items.push(project);
             }
         }
@@ -180,7 +210,29 @@ pub fn list(root: &Path) -> Result<Vec<Project>, String> {
     Ok(items)
 }
 
-pub fn create(root: &Path, name: &str) -> Result<Project, String> {
+/// Folder name for a project created in a user-chosen location. Characters
+/// that Windows refuses in file names are replaced so the same name works on
+/// every platform.
+fn folder_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            c => c,
+        })
+        .collect();
+    let cleaned = cleaned.trim_end_matches(['.', ' ']).trim();
+    if cleaned.is_empty() || cleaned.chars().all(|c| c == '.' || c == '_') {
+        "Lanius project".to_string()
+    } else {
+        cleaned.to_string()
+    }
+}
+
+/// Create a project. With `parent`, its data lives in a new folder named
+/// after the project inside that directory; the registry entry under `root`
+/// only points there.
+pub fn create(root: &Path, name: &str, parent: Option<&Path>) -> Result<Project, String> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 80 || name.chars().any(char::is_control) {
         return Err("project name must be 1–80 printable characters".to_string());
@@ -191,6 +243,38 @@ pub fn create(root: &Path, name: &str) -> Result<Project, String> {
     {
         return Err("a project with that name already exists".to_string());
     }
+    let location = match parent {
+        Some(parent) => {
+            if !parent.is_absolute() {
+                return Err("project location must be an absolute path".to_string());
+            }
+            let parent = fs::canonicalize(parent)
+                .map_err(|e| format!("project location is unavailable: {e}"))?;
+            if !parent.is_dir() {
+                return Err("project location must be a folder".to_string());
+            }
+            let location = parent.join(folder_name(name));
+            create_private_dir(&location).map_err(|e| {
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    format!("a folder already exists at {}", location.display())
+                } else {
+                    format!("could not create {}: {e}", location.display())
+                }
+            })?;
+            Some(location)
+        }
+        None => None,
+    };
+    let result = register(root, name, location.clone());
+    if result.is_err() {
+        if let Some(location) = &location {
+            let _ = fs::remove_dir(location);
+        }
+    }
+    result
+}
+
+fn register(root: &Path, name: &str, location: Option<PathBuf>) -> Result<Project, String> {
     let base = root.join("projects");
     ensure_private_dir(root)?;
     ensure_private_dir(&base)?;
@@ -202,11 +286,15 @@ pub fn create(root: &Path, name: &str) -> Result<Project, String> {
                 name: name.to_string(),
                 created_at: now(),
                 last_opened: now(),
+                location,
             };
-            write_private(
-                &dir.join("project.json"),
-                &serde_json::to_vec_pretty(&meta).map_err(|e| e.to_string())?,
-            )?;
+            let written = serde_json::to_vec_pretty(&meta)
+                .map_err(|e| e.to_string())
+                .and_then(|data| write_private(&dir.join("project.json"), &data));
+            if let Err(err) = written {
+                let _ = fs::remove_dir_all(&dir);
+                return Err(err);
+            }
             return read_project(root, &id);
         }
     }
@@ -258,8 +346,8 @@ mod tests {
         let root = std::env::temp_dir().join(format!("lanius-project-test-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         fs::write(root.join("lanius.sqlite"), b"old data").unwrap();
-        let first = create(&root, "Alpha").unwrap();
-        let second = create(&root, "Beta").unwrap();
+        let first = create(&root, "Alpha", None).unwrap();
+        let second = create(&root, "Beta", None).unwrap();
         assert_ne!(first.db_path, second.db_path);
         assert_eq!(list(&root).unwrap().len(), 3);
         assert_eq!(open(&root, &first.id).unwrap().name, "Alpha");
@@ -281,5 +369,40 @@ mod tests {
             assert_eq!(mode(&root.join("lanius.sqlite")), 0o600);
         }
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn projects_can_live_in_a_chosen_folder() {
+        let root =
+            std::env::temp_dir().join(format!("lanius-location-test-{}", std::process::id()));
+        let outside = root.join("elsewhere");
+        fs::create_dir_all(&outside).unwrap();
+        let home = root.join("home");
+        let project = create(&home, "Client: A/B", Some(&outside)).unwrap();
+        let expected = fs::canonicalize(&outside).unwrap().join("Client_ A_B");
+        assert_eq!(project.db_path, expected.join("lanius.sqlite"));
+        assert!(expected.is_dir());
+        assert_eq!(open(&home, &project.id).unwrap().db_path, project.db_path);
+
+        // The folder is never reused, so another project cannot share it.
+        assert!(create(&home, "client: a/b ", Some(&outside)).is_err());
+        assert!(create(&home, "Other", Some(Path::new("relative"))).is_err());
+        assert!(create(&home, "Other", Some(&root.join("missing"))).is_err());
+        assert_eq!(list(&home).unwrap().len(), 1);
+
+        // A folder on an unmounted drive stays listed but does not open.
+        fs::remove_dir_all(&expected).unwrap();
+        assert_eq!(list(&home).unwrap().len(), 1);
+        assert!(open(&home, &project.id).is_err());
+        assert!(!expected.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn folder_names_are_portable() {
+        assert_eq!(folder_name("a<b>c"), "a_b_c");
+        assert_eq!(folder_name("name. "), "name");
+        assert_eq!(folder_name(".."), "Lanius project");
+        assert_eq!(folder_name("??"), "Lanius project");
     }
 }
