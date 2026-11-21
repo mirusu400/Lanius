@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { autosave as startAutosave, flushAutosaves, replaceWorkspace } from './autosave';
+import { AUTOSAVE_FAILED, autosave as startAutosave, flushAutosaves, replaceWorkspace } from './autosave';
 import { addFuzzerDraft, ensureFuzzerDraft, getFuzzerWorkspace, mergeFuzzerWorkspace, newFuzzerDraft, renameFuzzerDraft, resetTarget, setFuzzerWorkspace, subscribeFuzzerWorkspace } from './fuzzerStore';
 
 let puts: { key: string; value: unknown }[] = [];
@@ -120,6 +120,53 @@ describe('autosave', () => {
       'Login fuzz',
     ]);
     expect(getFuzzerWorkspace().activeId).toBe(starter.id);
+  });
+  it('does not save defaults over saved tabs when the first read fails', async () => {
+    // The engine can still be starting when the UI subscribes.
+    stored.replay = { tabs: ['saved'] };
+    vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const store = makeStore<{ tabs: string[] }>({ tabs: [] });
+    const restored: unknown[] = [];
+    autosave<{ tabs: string[] }>('replay', (l) => store.subscribe(l), (value) => restored.push(value), undefined, undefined,
+      (saved, changed) => ({ tabs: [...saved.tabs, ...changed.tabs] }));
+
+    await vi.advanceTimersByTimeAsync(0);
+    store.set({ tabs: ['new'] });
+    await vi.advanceTimersByTimeAsync(900);
+    expect(puts).toHaveLength(0);
+
+    // The retry reads the saved tabs and keeps the edit made meanwhile.
+    await vi.runAllTimersAsync();
+    expect(restored).toEqual([{ tabs: ['saved', 'new'] }]);
+    expect(puts.at(-1)).toEqual({ key: 'replay', value: { tabs: ['saved', 'new'] } });
+  });
+  it('refuses to flush while the saved tabs have never been read', async () => {
+    stored.replay = { tabs: ['saved'] };
+    const respond = vi.mocked(fetch).getMockImplementation()!;
+    // Reads fail; a write would go through and replace the saved tabs.
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (init?.method !== 'PUT') throw new TypeError('Failed to fetch');
+      return respond(input, init);
+    });
+    const store = makeStore<{ tabs: string[] }>({ tabs: [] });
+    autosave('replay', (l) => store.subscribe(l), () => {});
+    await vi.advanceTimersByTimeAsync(0);
+    store.set({ tabs: ['new'] });
+
+    await expect(flushAutosaves()).rejects.toThrow();
+    expect(puts).toHaveLength(0);
+  });
+  it('announces a failed write', async () => {
+    const store = makeStore({ tabs: ['a'] });
+    autosave('replay', (l) => store.subscribe(l), () => {});
+    await vi.runAllTimersAsync();
+    const failed = vi.fn();
+    window.addEventListener(AUTOSAVE_FAILED, failed);
+    vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    store.set({ tabs: ['a', 'b'] });
+    await vi.runAllTimersAsync();
+    window.removeEventListener(AUTOSAVE_FAILED, failed);
+    expect(failed).toHaveBeenCalledTimes(1);
   });
   it('does not write when nothing actually changed', async () => {
     // Stores emit freely, and the payload can be large. Re-sending an

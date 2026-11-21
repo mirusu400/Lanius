@@ -8,6 +8,9 @@
 import { getWorkspace, putWorkspace } from '../api/client';
 
 const SAVE_DELAY_MS = 800;
+const LOAD_RETRY_MAX_MS = 10_000;
+/** Fired when a workspace write fails, so the app can say tabs are unsaved. */
+export const AUTOSAVE_FAILED = 'lanius:autosave-failed';
 interface AutosaveControl {
   flush: () => Promise<void>;
   suspend: () => void;
@@ -70,6 +73,13 @@ export function autosave<T>(
   let changedBeforeLoad: T | undefined;
   let sawInitialEmission = false;
   let inFlight: Promise<void> = Promise.resolve();
+  // Whether the saved state was ever read. Until it has been, nothing may be
+  // written: the store holds defaults, and saving them would replace the tabs
+  // the engine still has.
+  let everLoaded = false;
+  let initialLoad: Promise<void> | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let retryAttempt = 0;
 
   const load = async (resetMissing: boolean) => {
     loaded = false;
@@ -84,6 +94,7 @@ export function autosave<T>(
     if (value != null) restore(value);
     else if (resetMissing) reset?.();
     loaded = true;
+    everLoaded = true;
     // An action made while the initial GET was pending still needs saving.
     if (!resetMissing && changedBeforeLoad !== undefined && (value == null || mergeDuringInitialLoad)) {
       latest = value ?? changedBeforeLoad;
@@ -91,7 +102,26 @@ export function autosave<T>(
       changedBeforeLoad = undefined;
     }
   };
-  const loadPromise = load(false).catch(() => { loaded = true; });
+  // One initial read at a time, shared by the retry timer and a flush.
+  const loadInitial = (): Promise<void> => {
+    initialLoad ??= load(false).finally(() => { initialLoad = null; });
+    return initialLoad;
+  };
+  // The engine may not answer yet when the UI starts. Keep trying in the
+  // background; edits made meanwhile are merged once the read succeeds.
+  const retryInitialLoad = () => {
+    if (disposed || everLoaded) return;
+    const delay = Math.min(1000 * 2 ** retryAttempt, LOAD_RETRY_MAX_MS);
+    retryAttempt += 1;
+    retryTimer = setTimeout(() => {
+      retryTimer = undefined;
+      if (disposed || everLoaded) return;
+      // An import replaces the workspace and reloads it itself.
+      if (suspended) { retryInitialLoad(); return; }
+      loadInitial().catch(retryInitialLoad);
+    }, delay);
+  };
+  const loadPromise = loadInitial().catch(retryInitialLoad);
 
   // What was last written. Stores emit on every change, including ones
   // that leave the saved shape identical, and the payload can be hundreds
@@ -118,7 +148,12 @@ export function autosave<T>(
     await loadPromise;
     // A failed refresh after a successful import must not write stale tabs.
     // Retry restoration before allowing a later close or project switch.
-    if (!loaded) await reload();
+    if (!loaded) {
+      if (everLoaded) await reload();
+      // Never read: merge rather than reset, and give up (throw) instead of
+      // writing defaults over the saved tabs.
+      else await loadInitial();
+    }
     if (timer) clearTimeout(timer);
     timer = undefined;
     if (latest !== undefined) await save(latest);
@@ -129,7 +164,9 @@ export function autosave<T>(
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = undefined;
-      void save(value).catch(() => undefined);
+      void save(value).catch(() => {
+        if (!disposed) window.dispatchEvent(new Event(AUTOSAVE_FAILED));
+      });
     }, SAVE_DELAY_MS);
   };
   const reload = async () => {
@@ -173,6 +210,7 @@ export function autosave<T>(
   return () => {
     disposed = true;
     if (timer) clearTimeout(timer);
+    if (retryTimer) clearTimeout(retryTimer);
     controls.delete(control);
     unsubscribe();
   };

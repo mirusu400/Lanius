@@ -601,18 +601,25 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
 
   /** Run an action with the flow's headers and body loaded.
    *
-   * Falls through with nothing if the fetch fails, so the request still
-   * opens rather than the menu silently doing nothing.
+   * The row is only a summary. If the full request cannot be read, say so
+   * and skip the action: a request line alone is not the request.
    */
   const withDetail = useCallback(
-    async (flow: FlowSummary, run: (detail: FlowDetail | null) => void) => {
+    async (flow: FlowSummary, run: (detail: FlowDetail) => void): Promise<boolean> => {
+      let detail: FlowDetail;
       try {
-        run(await getReplayRequest(flow.id, true));
-      } catch {
-        run(null);
+        detail = await getReplayRequest(flow.id, true);
+      } catch (err) {
+        showToast({
+          message: t('history.requestLoadFailed', { error: err instanceof Error ? err.message : String(err) }),
+          tone: 'error',
+        });
+        return false;
       }
+      run(detail);
+      return true;
     },
-    [],
+    [showToast, t],
   );
 
   const selectedFlow = useMemo(
@@ -643,10 +650,19 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   };
   const sendFlowsToReplay = async (targets: FlowSummary[]) => {
     // One at a time, so the Replay tabs open in table order.
+    let sent = 0;
     for (const flow of targets) {
-      await withDetail(flow, (detail) => sendToReplay(flow, detail));
+      if (await withDetail(flow, (detail) => sendToReplay(flow, detail))) sent += 1;
     }
-    showToast({ message: t('history.sentSelectedToReplay', { count: String(targets.length) }), tone: 'success', category: 'history' });
+    if (sent === targets.length) {
+      showToast({ message: t('history.sentSelectedToReplay', { count: String(sent) }), tone: 'success', category: 'history' });
+    } else {
+      showToast({
+        id: 'history-send-partial',
+        message: t('history.sentSelectedToReplayPartial', { count: String(sent), failed: String(targets.length - sent) }),
+        tone: 'error',
+      });
+    }
   };
 
   const applyHistoryFilters = (next: FlowFilters) => {

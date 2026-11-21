@@ -137,6 +137,13 @@ export function InterceptPanel({
     [current],
   );
   const currentKey = current ? `${current.id}:${current.phase}` : null;
+  // Each held message opens editable. Carrying "Original" over from the
+  // previous one left the next request read-only after Forward.
+  const [stageKey, setStageKey] = useState(currentKey);
+  if (stageKey !== currentKey) {
+    setStageKey(currentKey);
+    setStage('modified');
+  }
   const modified = currentKey ? drafts[currentKey] ?? automatic : '';
   const dirty = modified !== automatic;
   const shown = current && stage !== 'modified'

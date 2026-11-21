@@ -49,6 +49,7 @@ const en = {
 
   // --- proxy tab ---
   'proxy.intercept': 'Intercept',
+  'proxy.heldBadge': '{count} held in Intercept',
   'proxy.history': 'HTTP history',
   'proxy.newerHistory': 'Newer',
   'proxy.olderHistory': 'Older',
@@ -263,6 +264,11 @@ const en = {
   'replay.noTabs':
     'No Replay tabs. Use "Send to Replay" in the Proxy history, or + for a new request.',
   'replay.closeTab': 'close {title}',
+  'replay.tabClosedUndo': 'Closed {title}. Click to undo.',
+  'replay.tabsClosedUndo': 'Closed {count} Replay tabs. Click to undo.',
+  'replay.cancelSend': 'Cancel',
+  'replay.cancelSendHelp': 'Stop waiting and close the connection to the target',
+  'replay.cancelled': 'Request cancelled before a response arrived.',
 
   // --- target ---
   'target.sitemap': 'Site map',
@@ -507,6 +513,9 @@ const en = {
   'history.bulkHighlightApplied': 'Highlight on {count} requests changed to {color}.',
   'history.bulkHighlightRemoved': 'Highlight removed from {count} requests.',
   'history.sentSelectedToReplay': '{count} requests sent to Replay.',
+  'history.sentSelectedToReplayPartial': '{count} requests sent to Replay. {failed} could not be loaded and were skipped.',
+  'history.requestLoadFailed': 'Could not load the full request, so it was not sent: {error}',
+  'autosave.failed': 'Could not save your Replay, Decoder and Fuzzer tabs. Lanius will try again on your next change.',
   'delete.confirmFlows': 'Delete {count} requests? This cannot be undone.',
   'history.bookmarkedOnly': 'Bookmarked only',
   'history.marks': 'History marks',
@@ -1671,6 +1680,7 @@ const ko: Catalogue = {
   'engine.connectionChecking': '확인 중…',
 
   'proxy.intercept': 'Intercept',
+  'proxy.heldBadge': 'Intercept에서 {count}개 보류 중',
   'proxy.history': 'HTTP history',
   'proxy.newerHistory': '이전 페이지',
   'proxy.olderHistory': '다음 페이지',
@@ -1881,6 +1891,11 @@ const ko: Catalogue = {
   'replay.noTabs':
     'Replay 탭이 없습니다. Proxy 히스토리에서 "Send to Replay"를 누르거나 +로 새 요청을 만드세요.',
   'replay.closeTab': '{title} 닫기',
+  'replay.tabClosedUndo': '{title} 탭을 닫았습니다. 클릭하면 되돌립니다.',
+  'replay.tabsClosedUndo': 'Replay 탭 {count}개를 닫았습니다. 클릭하면 되돌립니다.',
+  'replay.cancelSend': '취소',
+  'replay.cancelSendHelp': '응답을 기다리지 않고 대상과의 연결을 끊습니다',
+  'replay.cancelled': '응답이 오기 전에 요청을 취소했습니다.',
 
   'target.sitemap': 'Site map',
   'target.sitemapView': '사이트맵 보기',
@@ -2121,6 +2136,9 @@ const ko: Catalogue = {
   'history.bulkHighlightApplied': '요청 {count}개의 강조 색상을 변경했습니다: {color}',
   'history.bulkHighlightRemoved': '요청 {count}개의 강조 색상을 제거했습니다.',
   'history.sentSelectedToReplay': '요청 {count}개를 Replay로 보냈습니다.',
+  'history.sentSelectedToReplayPartial': '요청 {count}개를 Replay로 보냈습니다. {failed}개는 불러오지 못해 건너뛰었습니다.',
+  'history.requestLoadFailed': '요청 전체를 불러오지 못해 보내지 않았습니다: {error}',
+  'autosave.failed': 'Replay, Decoder, Fuzzer 탭을 저장하지 못했습니다. 다음 변경 때 다시 시도합니다.',
   'delete.confirmFlows': '요청 {count}개를 삭제할까요? 되돌릴 수 없습니다.',
   'history.bookmarkedOnly': '북마크만',
   'history.marks': '기록 표시',

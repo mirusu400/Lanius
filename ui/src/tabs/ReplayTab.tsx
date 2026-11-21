@@ -21,13 +21,14 @@ import {
 } from './replayModel';
 import {
   addTab,
+  closeTabs,
   editReplayTab,
   finishReplaySend,
   getActiveTabId,
   getTabs,
   moveReplayTab,
   renameTab,
-  removeTab,
+  reopenTabs,
   selectTab,
   stepReplayHistory,
   subscribe,
@@ -57,6 +58,9 @@ import { useShortcut } from '../useShortcut';
 import { UndoableInput } from '../components/UndoableText';
 import { EditableTabTitle } from '../components/EditableTabTitle';
 import { useTabDragReorder } from '../components/useTabDragReorder';
+import { useToast } from '../components/Toast';
+
+const CLOSE_UNDO_MS = 8000;
 
 function requestUrl(tab: Pick<ReplayTab, 'url' | 'text'>): string | null {
   try {
@@ -107,6 +111,13 @@ export function ReplayTabView() {
   const menuTab = tabs.find((tab) => tab.id === menu.target);
   const menuUrl = menuTab ? requestUrl(menuTab) : null;
   const sendingIds = useRef(new Set<string>());
+  const sendControllers = useRef(new Map<string, AbortController>());
+  // A closed tab's request has nowhere to show its response; stop it.
+  useEffect(() => {
+    for (const [id, controller] of sendControllers.current) {
+      if (!tabs.some((tab) => tab.id === id)) controller.abort();
+    }
+  }, [tabs]);
 
   const createTab = () => {
     addTab(emptyTab());
@@ -119,9 +130,23 @@ export function ReplayTabView() {
     });
   };
 
-  const closeTab = (id: string) => {
-    removeTab(id);
+  const { showToast } = useToast();
+  // Closing throws away the request and its whole send history, and
+  // autosave makes that permanent, so every close can be undone.
+  const closeReplayTabs = (ids: string[]) => {
+    const closed = closeTabs(ids);
+    if (!closed) return;
+    const count = closed.tabs.length;
+    showToast({
+      id: 'replay-tabs-closed',
+      message: count === 1
+        ? t('replay.tabClosedUndo', { title: closed.tabs[0].tab.title })
+        : t('replay.tabsClosedUndo', { count: String(count) }),
+      onClick: () => reopenTabs(closed),
+      durationMs: CLOSE_UNDO_MS,
+    });
   };
+  const closeTab = (id: string) => closeReplayTabs([id]);
 
   const selectRelativeTab = (step: number) => {
     if (!active || tabs.length < 2) return;
@@ -227,6 +252,7 @@ export function ReplayTabView() {
     initialRequest: Pick<ReplaySnapshot, 'url' | 'text' | 'httpMode'>,
     initialIndex: number | null,
     followAutomatically: boolean,
+    signal: AbortSignal,
   ) => {
     let request = initialRequest;
     let startedIndex = initialIndex;
@@ -239,8 +265,14 @@ export function ReplayTabView() {
         try {
           response = trimResponse(await sendReplayRequest(
             toSendPayload(request.url, request.text, request.httpMode),
+            signal,
           ));
         } catch (err) {
+          if (signal.aborted) {
+            // Nothing came back, so there is nothing to add to the history.
+            updateTab(requestId, { error: msg('replay.cancelled') });
+            break;
+          }
           finishReplaySend(
             requestId, request, startedIndex, null, errorMessage(err),
           );
@@ -248,7 +280,7 @@ export function ReplayTabView() {
         }
 
         finishReplaySend(requestId, request, startedIndex, response, null);
-        if (!followAutomatically) break;
+        if (!followAutomatically || signal.aborted) break;
 
         const next = redirectFor({ ...request, response });
         if (!next) break;
@@ -282,7 +314,12 @@ export function ReplayTabView() {
     } finally {
       updateTab(requestId, { sending: false });
       sendingIds.current.delete(requestId);
+      sendControllers.current.delete(requestId);
     }
+  };
+
+  const cancelSend = (requestId: string) => {
+    sendControllers.current.get(requestId)?.abort();
   };
 
   const startSend = async (
@@ -299,9 +336,11 @@ export function ReplayTabView() {
       return;
     }
     sendingIds.current.add(requestId);
+    const controller = new AbortController();
+    sendControllers.current.set(requestId, controller);
     updateTab(requestId, { sending: true, error: null });
     await sendChain(
-      requestId, request, startedIndex, autoFollowRedirects,
+      requestId, request, startedIndex, autoFollowRedirects, controller.signal,
     );
   };
 
@@ -457,11 +496,9 @@ export function ReplayTabView() {
                     {
                       label: t('menu.closeOthers'),
                       disabled: tabs.length < 2,
-                      onSelect: () => {
-                        for (const tab of tabs) {
-                          if (tab.id !== menu.target) removeTab(tab.id);
-                        }
-                      },
+                      onSelect: () => closeReplayTabs(
+                        tabs.filter((tab) => tab.id !== menu.target).map((tab) => tab.id),
+                      ),
                     },
                   ],
                 })
@@ -510,13 +547,21 @@ export function ReplayTabView() {
             >
               {t('inspector.toggle')}
             </button>
-            <button
-              className="send"
-              onClick={send}
-              disabled={active.sending}
-            >
-              {active.sending ? t('replay.sending') : t('replay.send')}
-            </button>
+            {active.sending ? (<>
+              <span className="muted replay-sending" role="status">{t('replay.sending')}</span>
+              <button
+                type="button"
+                className="send cancel"
+                onClick={() => cancelSend(active.id)}
+                title={t('replay.cancelSendHelp')}
+              >
+                {t('replay.cancelSend')}
+              </button>
+            </>) : (
+              <button className="send" onClick={send}>
+                {t('replay.send')}
+              </button>
+            )}
             {activeRedirect && (
               <button
                 type="button"

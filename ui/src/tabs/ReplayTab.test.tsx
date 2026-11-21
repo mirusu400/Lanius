@@ -690,6 +690,61 @@ describe('ReplayTab', () => {
     await user.click(screen.getByLabelText(t('replay.closeTab', { title: 'GET /hello' })));
     await waitFor(() => expect(getTabs()).toHaveLength(0));
   });
+
+  it('reopens a closed tab, with its history, from the undo notice', async () => {
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
+    await waitFor(() => expect(getTabs()[0].history).toHaveLength(1));
+
+    await user.click(screen.getByLabelText(t('replay.closeTab', { title: 'GET /hello' })));
+    await waitFor(() => expect(getTabs()).toHaveLength(0));
+    await user.click(screen.getByRole('button', { name: t('replay.tabClosedUndo', { title: 'GET /hello' }) }));
+
+    expect(getTabs()).toHaveLength(1);
+    expect(getTabs()[0].history).toHaveLength(1);
+    expect(getTabs()[0].sending).toBe(false);
+  });
+
+  it('puts every tab closed by Close others back in its place', async () => {
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    const titles = ['a', 'b', 'c'].map((name) => sendToReplay({ ...flow, id: name, path: `/${name}` }).title);
+    await waitFor(() => expect(getTabs()).toHaveLength(3));
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: titles[1] }));
+    await user.click(screen.getByRole('menuitem', { name: t('menu.closeOthers') }));
+    expect(getTabs().map((tab) => tab.title)).toEqual([titles[1]]);
+
+    await user.click(screen.getByRole('button', { name: t('replay.tabsClosedUndo', { count: '2' }) }));
+    expect(getTabs().map((tab) => tab.title)).toEqual(titles);
+  });
+
+  it('cancels a request that is still waiting for a response', async () => {
+    const user = userEvent.setup();
+    let signal: AbortSignal | undefined;
+    const respond = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation((url, init) => (String(url).endsWith('/api/replay/send')
+      ? new Promise<Response>((_resolve, reject) => {
+        signal = init?.signal ?? undefined;
+        signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      })
+      : respond(url, init)));
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+
+    await user.click(screen.getByRole('button', { name: t('replay.send') }));
+    await user.click(await screen.findByRole('button', { name: t('replay.cancelSend') }));
+
+    expect(signal?.aborted).toBe(true);
+    await waitFor(() => expect(screen.getByText(t('replay.cancelled'))).toBeTruthy());
+    expect(getTabs()[0].sending).toBe(false);
+    expect(getTabs()[0].history ?? []).toHaveLength(0);
+    expect(screen.getByRole('button', { name: t('replay.send') })).toBeTruthy();
+  });
 });
 
 

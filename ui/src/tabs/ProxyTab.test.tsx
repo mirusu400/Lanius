@@ -1247,6 +1247,24 @@ describe('sending a flow onward', () => {
     expect(screen.getByText(t('toast.requestTransferred', { tool: 'Replay' }))).toBeTruthy();
   });
 
+  it('does not send a bare request line when the full request cannot be loaded', async () => {
+    const user = userEvent.setup();
+    resetTabs();
+    const respond = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input).includes('/replay-request')) {
+        return { ok: false, status: 404, statusText: 'Not Found', json: async () => ({ detail: 'flow not found' }) } as Response;
+      }
+      return respond(input, init);
+    });
+    render(<ProxyTab />);
+    fireEvent.contextMenu((await screen.findByText('/seeded')).closest('tr')!);
+    await user.click(screen.getByRole('menuitem', { name: t('menu.sendToReplay') }));
+
+    expect(await screen.findByText(t('history.requestLoadFailed', { error: 'flow not found' }))).toBeTruthy();
+    expect(getTabs()).toHaveLength(0);
+  });
+
   it('adds the right-clicked history hostname as an Include rule', async () => {
     const user = userEvent.setup();
     render(<ProxyTab />);

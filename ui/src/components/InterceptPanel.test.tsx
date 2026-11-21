@@ -361,6 +361,23 @@ describe('InterceptPanel', () => {
     expect(editorEl().value).toContain('second');
   });
 
+  it('opens the next held request editable after viewing the original of the previous one', async () => {
+    const user = userEvent.setup();
+    const variant = { method: 'GET', scheme: 'http', host: 'example.com', port: 80,
+      path: '/original', http_version: 'HTTP/1.1', headers: [['Host', 'example.com']] as [string, string][],
+      body: '', charset: 'utf-8', content_encoding: null, body_decoded: false, decode_error: null };
+    const first: PausedFlow = { ...pausedFlow, request_variants: { original: variant, auto_modified: variant } };
+    const second: PausedFlow = { ...pausedFlow, id: 'p2', path: '/next' };
+    const { rerender } = render(<InterceptPanel rules={rules} paused={[first, second]}
+      onToggle={() => {}} onResolved={() => {}} />);
+    await user.click(screen.getByRole('tab', { name: t('intercept.view.original') }));
+    expect(editorEl().readOnly).toBe(true);
+
+    rerender(<InterceptPanel rules={rules} paused={[second]} onToggle={() => {}} onResolved={() => {}} />);
+
+    expect(editorEl().value).toContain('/next');
+    expect(editorEl().readOnly).toBe(false);
+  });
   it('shows original and automatic versions read-only while forwarding the edited draft', async () => {
     const user = userEvent.setup();
     const flow: PausedFlow = {

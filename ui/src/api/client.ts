@@ -482,11 +482,13 @@ export function sendReplayRequest(payload: {
   method: string;
   headers: [string, string][];
   body: string;
-}): Promise<import('../tabs/replayModel').ReplayResponse> {
+}, signal?: AbortSignal): Promise<import('../tabs/replayModel').ReplayResponse> {
+  // Aborting closes the connection; the engine then cancels the upstream request.
   return request('/api/replay/send', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify(payload),
+    signal,
   });
 }
 

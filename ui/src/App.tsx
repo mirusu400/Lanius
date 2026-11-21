@@ -1,5 +1,5 @@
 import { Activity, useCallback, useEffect, useMemo, useReducer, useRef, useState, type DragEvent } from "react";
-import { captureWindowToClipboard, getLockdown, getRun, getScannerState, isDesktop, putWorkspace } from "./api/client";
+import { captureWindowToClipboard, getInterceptState, getLockdown, getRun, getScannerState, isDesktop, putWorkspace } from "./api/client";
 import { LOCKDOWN_BLOCKED, LOCKDOWN_CHANGED } from "./lockdownEvents";
 import { connectStream } from "./api/stream";
 import { ProjectPicker } from "./ProjectPicker";
@@ -29,7 +29,7 @@ import { SettingsTab } from "./tabs/SettingsTab";
 import { DocsTab } from "./tabs/DocsTab";
 import { OPEN_DOCS_PAGE } from "./docs/navigation";
 import { useT } from "./i18n";
-import { flushAutosaves } from "./tabs/autosave";
+import { AUTOSAVE_FAILED, flushAutosaves } from "./tabs/autosave";
 import { startWorkspaceAutosaves } from "./tabs/workspace";
 import { clearSelection } from "./tabs/selectionStore";
 import {
@@ -102,6 +102,13 @@ export default function App() {
     const blocked = () => showToast({ message: t('lockdown.blocked'), tone: 'error' });
     window.addEventListener(LOCKDOWN_BLOCKED, blocked);
     return () => window.removeEventListener(LOCKDOWN_BLOCKED, blocked);
+  }, [showToast, t]);
+
+  useEffect(() => {
+    // One notice per burst: every store retries on its next change.
+    const failed = () => showToast({ id: 'autosave-failed', message: t('autosave.failed'), tone: 'error' });
+    window.addEventListener(AUTOSAVE_FAILED, failed);
+    return () => window.removeEventListener(AUTOSAVE_FAILED, failed);
   }, [showToast, t]);
 
   useEffect(() => {
@@ -247,8 +254,33 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
     refreshScannerAvailability();
   }, [project?.id, refreshScannerAvailability]);
 
+  // Held requests stall the browser wherever you are working, so the count
+  // is kept here rather than in the Proxy tab, whose stream pauses while it
+  // is hidden.
+  const [heldIds, setHeldIds] = useState<ReadonlySet<string>>(() => new Set());
+  const refreshHeld = useCallback(() => {
+    void getInterceptState()
+      .then((state) => setHeldIds(new Set((state?.paused ?? []).map((item) => item.id))))
+      .catch(() => undefined);
+  }, []);
+
   useEffect(() => connectStream({
+    // Events missed while disconnected are recovered from the engine.
+    onState: (state) => { if (state === 'open') refreshHeld(); },
     onEvent: (event) => {
+      if (event.type === 'intercept.paused') {
+        setHeldIds((previous) => previous.has(event.data.id) ? previous : new Set(previous).add(event.data.id));
+        return;
+      }
+      if (event.type === 'intercept.resolved') {
+        setHeldIds((previous) => {
+          if (!previous.has(event.data.id)) return previous;
+          const next = new Set(previous);
+          next.delete(event.data.id);
+          return next;
+        });
+        return;
+      }
       if (event.type === 'fuzzer.finished') {
         notifyFuzzerFinished(event.data);
         return;
@@ -284,7 +316,7 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
         tone: 'error',
       });
     },
-  }), [project?.id, refreshScannerAvailability, showToast, t, notifyFuzzerFinished]);
+  }), [project?.id, refreshScannerAvailability, refreshHeld, showToast, t, notifyFuzzerFinished]);
 
   useEffect(() => {
     let live = true;
@@ -438,6 +470,10 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
                 : name === "Docs"
                   ? t("docs.title")
                   : name}
+              {name === 'Proxy' && heldIds.size > 0 && (
+                <span className="badge" title={t('proxy.heldBadge', { count: String(heldIds.size) })}
+                  aria-label={t('proxy.heldBadge', { count: String(heldIds.size) })}>{heldIds.size}</span>
+              )}
               {/* A new build is worth one dot, wherever you are. */}
               {name === "Settings" && updateAvailable && (
                 <span className="tab-dot" aria-label={t("updates.badge")} />

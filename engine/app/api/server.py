@@ -81,6 +81,7 @@ from ..events import EventBroker
 from ..processes import list_processes
 from ..proxy import ProxyEngine, ProxyStartError, local_capture_state
 from ..preview import MAX_PREVIEW_BYTES, response_preview
+from .disconnect import until_disconnected
 from .history import history_page
 
 logger = logging.getLogger(__name__)
@@ -2263,7 +2264,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # --- replay (M3) ----------------------------------------------------
     @app.post("/api/replay/send")
-    async def replay_send(req: ReplayRequest) -> dict[str, Any]:
+    async def replay_send(req: ReplayRequest, request: Request) -> dict[str, Any]:
         try:
             flow = build_flow(
                 url=req.url,
@@ -2273,7 +2274,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 http_version=req.http_version,
                 encode_content_body=auto_decompress_enabled(store),
             )
-            record = await engine.replay.send(flow, timeout=req.timeout, http_mode=req.http_mode)
+            record = await until_disconnected(
+                request,
+                engine.replay.send(flow, timeout=req.timeout, http_mode=req.http_mode),
+            )
         except ReplayError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return render_raw(

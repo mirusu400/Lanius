@@ -193,6 +193,42 @@ export function removeTab(id: string): void {
   emitSelection();
 }
 
+/** Closed tabs and where they were, so a close can be undone. */
+export interface ClosedReplayTabs {
+  tabs: { tab: ReplayTab; index: number }[];
+  activeId: string | null;
+}
+
+/** Close several tabs at once and keep what is needed to reopen them. */
+export function closeTabs(ids: string[]): ClosedReplayTabs | null {
+  const closing = new Set(ids);
+  const closed = tabs.flatMap((tab, index) => (closing.has(tab.id) ? [{ tab, index }] : []));
+  if (!closed.length) return null;
+  const previousActive = activeId;
+  const firstIndex = closed[0].index;
+  tabs = tabs.filter((tab) => !closing.has(tab.id));
+  if (activeId !== null && closing.has(activeId)) {
+    activeId = tabs[firstIndex]?.id ?? tabs[firstIndex - 1]?.id ?? null;
+  }
+  emit();
+  emitSelection();
+  return { tabs: closed, activeId: previousActive };
+}
+
+/** Put closed tabs back in their places and reselect what was shown. */
+export function reopenTabs(closed: ClosedReplayTabs): void {
+  const next = [...tabs];
+  for (const { tab, index } of closed.tabs) {
+    if (next.some((item) => item.id === tab.id)) continue;
+    // A send cut short by closing the tab has no response coming.
+    next.splice(Math.min(index, next.length), 0, { ...tab, sending: false });
+  }
+  tabs = next;
+  if (closed.activeId && tabs.some((tab) => tab.id === closed.activeId)) activeId = closed.activeId;
+  emit();
+  emitSelection();
+}
+
 /** "Send to Replay" from the Proxy history. */
 export function sendToReplay(
   flow: FlowSummary,

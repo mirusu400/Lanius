@@ -1,5 +1,5 @@
 /** Dashboard tab rendered against a mocked engine. */
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -448,6 +448,34 @@ describe('title bar', () => {
       t('issues.title'),
       'Proxy',
     ]);
+  });
+
+  it('counts requests held in Intercept on the Proxy tab while another tab is open', async () => {
+    const sockets: { onmessage: ((event: { data: string }) => void) | null; close(): void }[] = [];
+    class RecordingSocket {
+      onopen: (() => void) | null = null;
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor() { sockets.push(this); }
+      send(): void {}
+      close(): void {}
+    }
+    vi.stubGlobal('WebSocket', RecordingSocket as unknown as typeof WebSocket);
+    render(<App />);
+    const proxy = await screen.findByRole('button', { name: 'Proxy' });
+    const emit = (event: unknown) => act(() => {
+      for (const socket of sockets) socket.onmessage?.({ data: JSON.stringify(event) });
+    });
+
+    emit({ type: 'intercept.paused', data: { id: 'held-1', phase: 'request' } });
+    emit({ type: 'intercept.paused', data: { id: 'held-2', phase: 'request' } });
+    expect(within(proxy).getByLabelText(t('proxy.heldBadge', { count: '2' })).textContent).toBe('2');
+
+    emit({ type: 'intercept.resolved', data: { id: 'held-1', action: 'forward' } });
+    emit({ type: 'intercept.resolved', data: { id: 'held-2', action: 'drop' } });
+    expect(within(proxy).queryByLabelText(t('proxy.heldBadge', { count: '1' }))).toBeNull();
+    expect(proxy.querySelector('.badge')).toBeNull();
   });
 
   it('lets the user drag tabs into a persistent order', async () => {
