@@ -19,8 +19,7 @@ Powered by mitmproxy. Persistent projects, native MCP, and Lockdown Mode.
 ---
 
 Lanius sits between your browser and the web so you can see every request,
-stop it mid flight, change it, and send it again. It is named after the shrike
-(genus *Lanius*), a bird that ambushes its prey and pins it to a thorn.
+stop it mid flight, change it, and send it again.
 
 Lanius embeds [mitmproxy](https://mitmproxy.org/) as its engine, so TLS
 interception, HTTP/2 and WebSocket handling are battle tested. Its desktop
