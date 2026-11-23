@@ -800,6 +800,7 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                   sortDesc={historySort.desc}
                   onSort={onSortHistory}
                   onToggleBookmark={toggleBookmark}
+                  pageKey={JSON.stringify([historyPage, historyPageSize, historySort])}
                   empty={<HistoryEmpty
                     filtered={hasHistoryFilters(filters)}
                     olderPage={historyPage > 0}

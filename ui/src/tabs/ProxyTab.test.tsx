@@ -891,6 +891,34 @@ describe('ProxyTab', () => {
     expect(calls.filter(({ url }) => url.includes('search=needle')).length).toBeGreaterThan(before);
   });
 
+  it('shows the top of the list after moving to another page', async () => {
+    paginateHistory = true;
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('/seeded');
+    const list = document.querySelector('.flow-table-wrap') as HTMLDivElement;
+
+    list.scrollTop = 500;
+    await user.click(screen.getByRole('button', { name: t('proxy.olderHistory') }));
+    await screen.findByText('/old');
+    expect(list.scrollTop).toBe(0);
+
+    list.scrollTop = 500;
+    await user.click(screen.getByRole('button', { name: t('proxy.newerHistory') }));
+    await screen.findByText('/seeded');
+    expect(list.scrollTop).toBe(0);
+  });
+
+  it('keeps the scroll position when live traffic arrives', async () => {
+    render(<ProxyTab />);
+    await screen.findByText('/seeded');
+    const list = document.querySelector('.flow-table-wrap') as HTMLDivElement;
+    list.scrollTop = 500;
+    act(() => MockSocket.instances[0].emit('flow.request', { ...seeded, id: 'live-1', path: '/live' }));
+    await screen.findByText('/live');
+    expect(list.scrollTop).toBe(500);
+  });
+
   it('pages into older history without holding every flow in the table', async () => {
     paginateHistory = true;
     const user = userEvent.setup();

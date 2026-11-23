@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { FlowSummary, HistorySortKey } from '../api/types';
 import { useT } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
@@ -32,13 +32,15 @@ interface Props {
   onToggleBookmark?: (flow: FlowSummary) => void;
   /** Shown in place of rows when there are none. */
   empty?: ReactNode;
+  /** Changes when a different page of history is shown; scrolls back to the top. */
+  pageKey?: string | number;
 }
 
 const SORT_KEYS: HistorySortKey[] = [
   'started_at', 'method', 'host', 'url', 'status_code', 'modified', 'response_size', 'duration_ms',
 ];
 
-export function FlowTable({ flows, selectedId, selectedIds, onSelect, onSelectAll, onContextMenu, searchQuery = '', sortBy, sortDesc, onSort, onToggleBookmark, empty }: Props) {
+export function FlowTable({ flows, selectedId, selectedIds, onSelect, onSelectAll, onContextMenu, searchQuery = '', sortBy, sortDesc, onSort, onToggleBookmark, empty, pageKey }: Props) {
   const t = useT();
   const showSourceIp = useLocalSourceIpColumn();
   const publicIpIndex = showSourceIp ? 11 : 10;
@@ -50,6 +52,16 @@ export function FlowTable({ flows, selectedId, selectedIds, onSelect, onSelectAl
   }, [publicIpIndex]);
   const publicIps = useEgressIpEstimates(flows, showPublicIp);
   const rows = useRef(new Map<string, HTMLTableRowElement>());
+  const wrap = useRef<HTMLDivElement | null>(null);
+  // Another page is a new list; keeping the old offset left the reader
+  // somewhere in its middle. Live updates keep the same key and stay put,
+  // and so does returning to the tab, which reruns effects under Activity.
+  const shownPage = useRef(pageKey);
+  useEffect(() => {
+    if (shownPage.current === pageKey) return;
+    shownPage.current = pageKey;
+    if (wrap.current) wrap.current.scrollTop = 0;
+  }, [pageKey]);
   const isSelected = (id: string) => id === selectedId || Boolean(selectedIds?.has(id));
   const selectAdjacent = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget && !(event.target instanceof HTMLTableRowElement)) return;
@@ -78,7 +90,7 @@ export function FlowTable({ flows, selectedId, selectedIds, onSelect, onSelectAl
     t('flow.status'), t('flow.modified'), t('flow.size'), t('flow.time'),
   ];
   return (
-    <div className="flow-table-wrap" tabIndex={0} onKeyDown={selectAdjacent}>
+    <div className="flow-table-wrap" ref={wrap} tabIndex={0} onKeyDown={selectAdjacent}>
       <ResizableTable columns={columns} className="flow-table"
         defaultHidden={[publicIpIndex]} onHiddenChange={hiddenChanged}>
         <thead>
