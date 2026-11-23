@@ -702,6 +702,31 @@ describe('ProxyTab', () => {
     expect(screen.queryByText(t('toast.searchEmpty'))).toBeNull();
   });
 
+  it('says a search matched nothing, and clears it, instead of claiming no traffic', async () => {
+    const user = userEvent.setup();
+    render(<ProxyTab />);
+    await screen.findByText('seeded.test');
+    searchResponse = Promise.resolve(jsonResponse({ items: [], has_more: false }));
+    await user.type(screen.getByPlaceholderText(t('proxy.searchPlaceholder')), 'missing');
+
+    expect(await screen.findByText(t('proxy.emptyFiltered'))).toBeTruthy();
+    expect(screen.queryByText(t('proxy.emptyNoTraffic'))).toBeNull();
+    await user.click(screen.getByRole('button', { name: t('proxy.clearFilters') }));
+
+    expect(await screen.findByText('seeded.test')).toBeTruthy();
+    expect((screen.getByPlaceholderText(t('proxy.searchPlaceholder')) as HTMLInputElement).value).toBe('');
+  });
+
+  it('offers a way to get traffic flowing when nothing is captured', async () => {
+    flowPageResponse = Promise.resolve(jsonResponse({ items: [], count: 0, has_more: false }));
+    render(<ProxyTab />);
+
+    expect(await screen.findByText(t('proxy.emptyNoTraffic'))).toBeTruthy();
+    expect(await screen.findByText(t('proxy.emptyNoTrafficHelp', { proxy: '127.0.0.1:8080' }))).toBeTruthy();
+    expect(screen.getByRole('button', { name: t('browser.open') })).toBeTruthy();
+    expect(screen.getByRole('button', { name: t('proxy.setupGuide') })).toBeTruthy();
+  });
+
   it('finishes a slow user search before coalescing incoming traffic into one refresh', async () => {
     const user = userEvent.setup();
     render(<ProxyTab />);

@@ -197,7 +197,7 @@ describe('SettingsTab', () => {
   it('puts project switching behind Settings > Project and confirms it', async () => {
     const user = userEvent.setup();
     const onSwitchProject = vi.fn(async () => {});
-    render(<SettingsTab project={{ id: 'p1', name: 'Demo', temporary: false, dbPath: '/tmp/demo', lastOpened: 0 }} onSwitchProject={onSwitchProject} />);
+    render(<SettingsTab project={{ id: 'p1', name: 'Demo', temporary: false, dbPath: '/tmp/demo', lastOpened: 0, external: false }} onSwitchProject={onSwitchProject} />);
     expect(screen.queryByRole('button', { name: t('startup.switch') })).toBeNull();
     await user.click(screen.getByRole('button', { name: t('settings.group.project') }));
     const button = screen.getByRole('button', { name: t('startup.switch') });

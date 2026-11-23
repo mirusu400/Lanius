@@ -14,6 +14,8 @@ pub struct Project {
     pub temporary: bool,
     pub db_path: PathBuf,
     pub last_opened: u64,
+    /// Data lives in a folder the user chose, outside the Lanius data folder.
+    pub external: bool,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -136,6 +138,7 @@ fn read_entry(root: &Path, id: &str, require_present: bool) -> Result<Project, S
             temporary: false,
             db_path: db,
             last_opened: 0,
+            external: false,
         });
     }
     let dir = project_dir(root, id)?;
@@ -152,6 +155,7 @@ fn read_entry(root: &Path, id: &str, require_present: bool) -> Result<Project, S
     set_mode(&metadata_path, 0o600)?;
     let contents = fs::read(metadata_path).map_err(|e| e.to_string())?;
     let meta: Meta = serde_json::from_slice(&contents).map_err(|e| e.to_string())?;
+    let external = meta.location.is_some();
     let data_dir = match meta.location {
         Some(location) => {
             // An external folder can be on a drive that is not mounted now.
@@ -182,6 +186,7 @@ fn read_entry(root: &Path, id: &str, require_present: bool) -> Result<Project, S
         temporary: false,
         db_path,
         last_opened: meta.last_opened,
+        external,
     })
 }
 
@@ -210,6 +215,55 @@ pub fn list(root: &Path) -> Result<Vec<Project>, String> {
     Ok(items)
 }
 
+/// A trimmed project name that no other project uses.
+fn valid_name<'a>(root: &Path, name: &'a str, except: Option<&str>) -> Result<&'a str, String> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 80 || name.chars().any(char::is_control) {
+        return Err("project name must be 1–80 printable characters".to_string());
+    }
+    if list(root)?
+        .iter()
+        .any(|p| Some(p.id.as_str()) != except && p.name.eq_ignore_ascii_case(name))
+    {
+        return Err("a project with that name already exists".to_string());
+    }
+    Ok(name)
+}
+
+fn read_meta(path: &Path) -> Result<Meta, String> {
+    serde_json::from_slice(&fs::read(path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+}
+
+/// Rename a project. Only the listed name changes; a chosen folder keeps
+/// the name it was created with.
+pub fn rename(root: &Path, id: &str, name: &str) -> Result<Project, String> {
+    if id == "legacy" {
+        return Err("the previous project cannot be renamed".to_string());
+    }
+    let name = valid_name(root, name, Some(id))?;
+    let path = project_dir(root, id)?.join("project.json");
+    // Validates the directory and metadata before anything is written.
+    read_entry(root, id, false)?;
+    let mut meta = read_meta(&path)?;
+    meta.name = name.to_string();
+    write_private(
+        &path,
+        &serde_json::to_vec_pretty(&meta).map_err(|e| e.to_string())?,
+    )?;
+    read_entry(root, id, false)
+}
+
+/// Remove a project from the list. Its data is deleted when it lives in the
+/// Lanius data folder; a folder the user chose is left exactly as it is.
+pub fn delete(root: &Path, id: &str) -> Result<(), String> {
+    if id == "legacy" {
+        return Err("the previous project cannot be deleted here".to_string());
+    }
+    let dir = project_dir(root, id)?;
+    read_entry(root, id, false)?;
+    fs::remove_dir_all(&dir).map_err(|e| format!("could not delete the project: {e}"))
+}
+
 /// Folder name for a project created in a user-chosen location. Characters
 /// that Windows refuses in file names are replaced so the same name works on
 /// every platform.
@@ -233,16 +287,7 @@ fn folder_name(name: &str) -> String {
 /// after the project inside that directory; the registry entry under `root`
 /// only points there.
 pub fn create(root: &Path, name: &str, parent: Option<&Path>) -> Result<Project, String> {
-    let name = name.trim();
-    if name.is_empty() || name.chars().count() > 80 || name.chars().any(char::is_control) {
-        return Err("project name must be 1–80 printable characters".to_string());
-    }
-    if list(root)?
-        .iter()
-        .any(|p| p.name.eq_ignore_ascii_case(name))
-    {
-        return Err("a project with that name already exists".to_string());
-    }
+    let name = valid_name(root, name, None)?;
     let location = match parent {
         Some(parent) => {
             if !parent.is_absolute() {
@@ -305,8 +350,7 @@ pub fn open(root: &Path, id: &str) -> Result<Project, String> {
     let mut project = read_project(root, id)?;
     if id != "legacy" {
         let path = project_dir(root, id)?.join("project.json");
-        let mut meta: Meta = serde_json::from_slice(&fs::read(&path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
+        let mut meta = read_meta(&path)?;
         meta.last_opened = now();
         write_private(
             &path,
@@ -331,6 +375,7 @@ pub fn temporary() -> Result<Project, String> {
                 temporary: true,
                 db_path: dir.join("lanius.sqlite"),
                 last_opened: now(),
+                external: false,
             });
         }
     }
@@ -395,6 +440,40 @@ mod tests {
         assert_eq!(list(&home).unwrap().len(), 1);
         assert!(open(&home, &project.id).is_err());
         assert!(!expected.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn projects_can_be_renamed_and_deleted() {
+        let root = std::env::temp_dir().join(format!("lanius-manage-test-{}", std::process::id()));
+        let home = root.join("home");
+        let outside = root.join("elsewhere");
+        fs::create_dir_all(&outside).unwrap();
+        fs::create_dir_all(&home).unwrap();
+        fs::write(home.join("lanius.sqlite"), b"old data").unwrap();
+        let alpha = create(&home, "Alpha", None).unwrap();
+        let beta = create(&home, "Beta", Some(&outside)).unwrap();
+        assert!(!alpha.external);
+        assert!(beta.external);
+
+        assert_eq!(rename(&home, &alpha.id, " Gamma ").unwrap().name, "Gamma");
+        // Changing only the case of its own name is not a clash.
+        assert_eq!(rename(&home, &alpha.id, "GAMMA").unwrap().name, "GAMMA");
+        assert!(rename(&home, &alpha.id, "beta").is_err());
+        assert!(rename(&home, &alpha.id, "").is_err());
+        assert!(rename(&home, "legacy", "Other").is_err());
+        assert!(rename(&home, "../outside", "Other").is_err());
+
+        // A chosen folder survives; only the registry entry goes.
+        let beta_data = beta.db_path.parent().unwrap().to_path_buf();
+        delete(&home, &beta.id).unwrap();
+        assert!(beta_data.is_dir());
+        delete(&home, &alpha.id).unwrap();
+        assert!(!alpha.db_path.parent().unwrap().exists());
+        assert!(delete(&home, "legacy").is_err());
+        assert!(delete(&home, "deadbeef").is_err());
+        assert_eq!(fs::read(home.join("lanius.sqlite")).unwrap(), b"old data");
+        assert_eq!(list(&home).unwrap().len(), 1);
         fs::remove_dir_all(root).unwrap();
     }
 

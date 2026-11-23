@@ -1076,6 +1076,28 @@ fn list_projects() -> Result<Vec<projects::Project>, String> {
 }
 
 #[tauri::command]
+fn rename_project(id: String, name: String) -> Result<projects::Project, String> {
+    projects::rename(&projects::home()?, &id, &name)
+}
+
+#[tauri::command]
+fn delete_project(id: String, session: State<'_, ProjectSession>) -> Result<(), String> {
+    // Held while deleting, so the project cannot be opened halfway through.
+    // A starting project holds it for seconds; refuse rather than freeze.
+    let active = match session.0.try_lock() {
+        Ok(active) => active,
+        Err(std::sync::TryLockError::WouldBlock) => {
+            return Err("a project is starting; try again once it has opened".to_string())
+        }
+        Err(std::sync::TryLockError::Poisoned(err)) => err.into_inner(),
+    };
+    if active.as_ref().is_some_and(|project| project.id == id) {
+        return Err("close the project before deleting it".to_string());
+    }
+    projects::delete(&projects::home()?, &id)
+}
+
+#[tauri::command]
 fn current_project(session: State<'_, ProjectSession>) -> Option<projects::Project> {
     session.0.lock().expect("project lock").clone()
 }
@@ -1535,6 +1557,8 @@ pub fn run() {
             open_directory,
             pick_directory,
             list_projects,
+            rename_project,
+            delete_project,
             current_project,
             create_project,
             open_project,

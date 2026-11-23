@@ -150,3 +150,18 @@
 .project-picker-opening-card .spinner { flex: none; }
 .project-picker-opening-card > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .project-picker-opening-card p { margin: 4px 0 0; }
+
+.project-picker-error-actions { margin-top: 10px; }
+
+.project-picker-row-actions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+.project-picker-more { min-width: 32px; padding-left: 8px; padding-right: 8px; }
+
+.project-picker-advanced { margin-top: 28px; }
+.project-picker-advanced summary { cursor: pointer; font-weight: 600; }
+.project-picker-advanced > p { margin: 10px 0 0; max-width: 720px; }
+.project-picker-advanced .project-picker-port { margin-top: 12px; }

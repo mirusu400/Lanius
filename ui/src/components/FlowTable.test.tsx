@@ -170,10 +170,9 @@ it('hides and restores columns from the header context menu', async () => {
   expect(screen.getByText('example.test')).toBeTruthy();
 });
 
-it('names the listener the proxy actually uses when nothing is captured', () => {
-  render(<FlowTable flows={[]} selectedId={null} onSelect={() => undefined} proxyAddress="127.0.0.1:8083" />);
-  expect(screen.getByText(t('proxy.emptyTable', { proxy: '127.0.0.1:8083' }))).toBeTruthy();
-  expect(screen.queryByText(/8080/)).toBeNull();
+it('shows the empty state it is given when there are no rows', () => {
+  render(<FlowTable flows={[]} selectedId={null} onSelect={() => undefined} empty="nothing here" />);
+  expect(screen.getByText('nothing here')).toBeTruthy();
 });
 
 it('selects several rows with Ctrl/⌘ and Shift, and keeps them for the context menu', async () => {

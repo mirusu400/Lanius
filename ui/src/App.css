@@ -2015,6 +2015,27 @@ td.empty {
   white-space: normal;
 }
 
+td.empty .history-empty {
+  color: var(--fg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+td.empty .history-empty p {
+  margin: 0;
+  max-width: 560px;
+}
+
+.history-empty-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
 .status-2xx {
   color: var(--ok);
 }

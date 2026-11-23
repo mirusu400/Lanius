@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -181,10 +181,14 @@ it('removes the progress overlay and shows the error when a project fails to sta
   render(<ProjectPicker onOpen={vi.fn()} />);
 
   await user.click(screen.getByRole('button', { name: t('startup.tempStart') }));
-  expect(await screen.findByRole('alert')).toHaveProperty(
-    'textContent', 'engine stopped making progress during startup (stage: database)',
-  );
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toContain('engine stopped making progress during startup (stage: database)');
+  expect(alert.textContent).not.toContain('Error:');
   expect(screen.queryByRole('status', { name: t('startup.progress.launching') })).toBeNull();
+
+  // The doctor is one click away from the failure, not somewhere to find.
+  await user.click(within(alert).getByRole('button', { name: t('startup.runDoctor') }));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith('run_doctor', undefined));
 });
 
 describe('opening a project that needs a database upgrade', () => {
@@ -240,5 +244,107 @@ describe('opening a project that needs a database upgrade', () => {
     expect(onOpen).not.toHaveBeenCalled();
     expect(opens).toHaveLength(1);
     expect((screen.getByRole('button', { name: t('startup.open') }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+describe('managing saved projects', () => {
+  const inside = { id: 'a1', name: 'Alpha', temporary: false, dbPath: '/home/.lanius/projects/a1/lanius.sqlite', lastOpened: 1_700_000_000, external: false };
+  const outside = { id: 'b2', name: 'Beta', temporary: false, dbPath: '/Volumes/Work/Beta/lanius.sqlite', lastOpened: 0, external: true };
+
+  function shell() {
+    let projects = [inside, outside];
+    const invoke = vi.fn(async (command: string, args?: { id?: string; name?: string; path?: string }) => {
+      if (command === 'list_projects') return projects;
+      if (command === 'get_global_lockdown') return { enabled: false, forced: false };
+      if (command === 'rename_project') {
+        projects = projects.map((project) => project.id === args?.id ? { ...project, name: args?.name ?? '' } : project);
+        return projects.find((project) => project.id === args?.id);
+      }
+      if (command === 'delete_project') {
+        projects = projects.filter((project) => project.id !== args?.id);
+        return null;
+      }
+      if (command === 'open_directory') return null;
+      throw new Error(`unexpected command: ${command}`);
+    });
+    Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: { invoke } });
+    return invoke;
+  }
+
+  it('renames a project from its menu', async () => {
+    const invoke = shell();
+    const user = userEvent.setup();
+    render(<ProjectPicker onOpen={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: t('startup.projectActions', { name: 'Alpha' }) }));
+    await user.click(screen.getByRole('menuitem', { name: t('startup.rename') }));
+    const field = await screen.findByLabelText(t('startup.name'), { selector: 'dialog input' });
+    // The dialog focuses and selects its field on the next frame.
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    await user.clear(field);
+    await user.type(field, 'Gamma');
+    await user.click(within(field.closest('dialog')!).getByRole('button', { name: t('startup.rename') }));
+
+    expect(await screen.findByText('Gamma')).toBeTruthy();
+    expect(invoke).toHaveBeenCalledWith('rename_project', { id: 'a1', name: 'Gamma' });
+  });
+
+  it('deletes a project in the Lanius folder after confirmation', async () => {
+    const invoke = shell();
+    const user = userEvent.setup();
+    render(<ProjectPicker onOpen={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: t('startup.projectActions', { name: 'Alpha' }) }));
+    await user.click(screen.getByRole('menuitem', { name: t('startup.delete') }));
+    const dialog = screen.getByRole('dialog', { name: t('startup.deleteTitle') });
+    expect(dialog.textContent).toContain(t('startup.deleteMessage', { name: 'Alpha' }));
+    await user.click(within(dialog).getByRole('button', { name: t('startup.delete') }));
+
+    await waitFor(() => expect(screen.queryByText('Alpha')).toBeNull());
+    expect(invoke).toHaveBeenCalledWith('delete_project', { id: 'a1' });
+  });
+
+  it('only unlists a project kept in a folder the user chose, and says the data stays', async () => {
+    shell();
+    const user = userEvent.setup();
+    render(<ProjectPicker onOpen={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: t('startup.projectActions', { name: 'Beta' }) }));
+    await user.click(screen.getByRole('menuitem', { name: t('startup.remove') }));
+    expect(screen.getByRole('dialog', { name: t('startup.removeTitle') }).textContent)
+      .toContain(t('startup.removeMessage', { name: 'Beta', folder: '/Volumes/Work/Beta' }));
+  });
+
+  it('shows the project folder', async () => {
+    const invoke = shell();
+    const user = userEvent.setup();
+    render(<ProjectPicker onOpen={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: t('startup.projectActions', { name: 'Alpha' }) }));
+    await user.click(screen.getByRole('menuitem', { name: t('startup.showFolder') }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('open_directory', { path: '/home/.lanius/projects/a1' }));
+  });
+
+  it('does not label every button as starting while a setting is saved', async () => {
+    shell();
+    let finish: (value: unknown) => void = () => {};
+    const invoke = vi.mocked((window as unknown as { __TAURI_INTERNALS__: { invoke: (c: string) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke);
+    const respond = invoke.getMockImplementation()!;
+    invoke.mockImplementation(async (command: string, ...rest: unknown[]) => command === 'set_global_lockdown'
+      ? new Promise((resolve) => { finish = resolve; })
+      : (respond as (c: string, ...r: unknown[]) => Promise<unknown>)(command, ...rest));
+    const user = userEvent.setup();
+    render(<ProjectPicker onOpen={vi.fn()} />);
+    await screen.findByText('Alpha');
+    await user.click(screen.getByRole('checkbox', { name: t('lockdown.global') }));
+
+    expect(screen.queryByText(t('startup.starting'))).toBeNull();
+    expect(screen.getAllByRole('button', { name: t('startup.open') })).toHaveLength(2);
+    finish({ enabled: true, forced: false });
+  });
+
+  it('keeps the MCP / API port under Advanced, explained as not the proxy port', async () => {
+    shell();
+    render(<ProjectPicker onOpen={vi.fn()} />);
+    const port = await screen.findByLabelText(t('mcp.port'));
+    const advanced = port.closest('details')!;
+    expect(advanced.open).toBe(false);
+    expect(within(advanced).getByText(t('startup.portNotProxy'))).toBeTruthy();
   });
 });

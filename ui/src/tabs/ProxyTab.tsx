@@ -36,7 +36,7 @@ import {
 import { useCodegenMenu } from '../components/useCodegenMenu';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Split } from '../components/Split';
-import { FilterDialog } from '../components/FilterDialog';
+import { countActive, FilterDialog } from '../components/FilterDialog';
 import { UndoableInput } from '../components/UndoableText';
 import {
   clearSelection,
@@ -51,6 +51,7 @@ import { FlowDetailView } from '../components/FlowDetail';
 import { copyTextToClipboard } from '../clipboard';
 import { FilterBar, type HistoryLayout } from '../components/FilterBar';
 import { InterceptPanel } from '../components/InterceptPanel';
+import { HistoryEmpty } from '../components/HistoryEmpty';
 import { WebSocketPanel } from '../components/WebSocketPanel';
 import { matchesFilters, mergeFlow } from './proxyModel';
 import { msg, rawMsg, renderMessage, useT, type Message } from '../i18n';
@@ -67,6 +68,11 @@ const DEFAULT_RULES: InterceptRules = {
 };
 
 type View = 'intercept' | 'history' | 'websockets';
+
+function hasHistoryFilters(filters: FlowFilters): boolean {
+  return countActive(filters) > 0 || Boolean(filters.search || filters.method)
+    || filters.statusCode !== undefined;
+}
 
 const HISTORY_LAYOUT_STORAGE_KEY = 'lanius.layout.proxyHistory';
 
@@ -794,7 +800,12 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
                   sortDesc={historySort.desc}
                   onSort={onSortHistory}
                   onToggleBookmark={toggleBookmark}
-                  proxyAddress={status ? `${status.proxy.host}:${status.proxy.port}` : undefined}
+                  empty={<HistoryEmpty
+                    filtered={hasHistoryFilters(filters)}
+                    olderPage={historyPage > 0}
+                    proxyAddress={status ? `${status.proxy.host}:${status.proxy.port}` : undefined}
+                    onClearFilters={() => applyHistoryFilters({})}
+                  />}
                 />
               </Busy>
             }

@@ -6,6 +6,8 @@ export interface Project {
   temporary: boolean;
   dbPath: string;
   lastOpened: number;
+  /** Data lives in a folder the user chose; deleting only unlists it. */
+  external: boolean;
 }
 
 function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -72,6 +74,9 @@ export const createProject = (name: string, location?: string | null) =>
  */
 export const openProject = (id: string, allowMigration = false) =>
   invoke<Project>('open_project', { id, allowMigration });
+export const renameProject = (id: string, name: string) => invoke<Project>('rename_project', { id, name });
+/** Delete a project; one in a chosen folder is only removed from the list. */
+export const deleteProject = (id: string) => invoke<void>('delete_project', { id });
 export const startTempProject = () => invoke<Project>('start_temp_project');
 export const closeProject = () => invoke<void>('close_project');
 export const runStartupDoctor = () => invoke<StartupDoctorReport>('run_doctor');

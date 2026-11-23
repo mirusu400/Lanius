@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import { API_BASE, getGlobalLockdown, pickDirectory, setDesktopApiPort, setGlobalLockdown, type GlobalLockdownStatus } from './api/client';
+import { API_BASE, getGlobalLockdown, openDirectory, pickDirectory, setDesktopApiPort, setGlobalLockdown, type GlobalLockdownStatus } from './api/client';
 import { useT, type TranslationKey } from './i18n';
 import {
   closeProject,
   createProject,
+  deleteProject,
   getStartupProgress,
   listProjects,
   openProject,
   pendingMigration,
+  renameProject,
   startTempProject,
   type PendingMigration,
   type Project,
@@ -18,6 +20,8 @@ import { UndoableInput } from './components/UndoableText';
 import { StartupDoctor } from './StartupDoctor';
 import { Spinner } from './components/Spinner';
 import { ConfirmDialog } from './components/ConfirmDialog';
+import { TextPromptDialog } from './components/TextPromptDialog';
+import { ContextMenu, useContextMenu } from './components/ContextMenu';
 import { formatBytes } from './tabs/dashboardModel';
 import { useToast } from './components/Toast';
 import { SettingsFileDropOverlay } from './components/SettingsFileDrop';
@@ -34,6 +38,16 @@ import {
 
 /** How often the picker asks the shell what the starting engine is doing. */
 const PROGRESS_POLL_MS = 300;
+
+/** The shell rejects with plain strings; wrapped errors would read "Error: …". */
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** The folder holding a project's database, for either path separator. */
+function projectFolder(project: Project): string {
+  return project.dbPath.replace(/[\\/][^\\/]*$/, '');
+}
 
 const STAGES: Record<string, TranslationKey> = {
   checking: 'startup.progress.checking',
@@ -59,6 +73,13 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
   const [portNote, setPortNote] = useState(false);
   const [lockdownGlobal, setLockdownGlobal] = useState<GlobalLockdownStatus | null>(null);
   const [doctorOpen, setDoctorOpen] = useState(false);
+  // Remounting the doctor runs it again.
+  const [doctorRun, setDoctorRun] = useState(0);
+  // The last error came from starting a project, where the doctor can help.
+  const [openFailed, setOpenFailed] = useState(false);
+  const projectMenu = useContextMenu<Project>();
+  const [renaming, setRenaming] = useState<Project | null>(null);
+  const [deleting, setDeleting] = useState<Project | null>(null);
   const [opening, setOpening] = useState(false);
   const [progress, setProgress] = useState<StartupProgress | null>(null);
   const [upgrade, setUpgrade] = useState<{ project: Project; migration: PendingMigration } | null>(null);
@@ -91,14 +112,14 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
   useEffect(() => {
     void listProjects()
       .then(setProjects)
-      .catch((err: unknown) => setError(String(err)))
+      .catch((err: unknown) => setError(errorText(err)))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
     void getGlobalLockdown()
       .then(setLockdownGlobal)
-      .catch((err: unknown) => setError(String(err)));
+      .catch((err: unknown) => setError(errorText(err)));
   }, []);
 
   const toggleGlobalLockdown = async (enabled: boolean) => {
@@ -107,7 +128,7 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
     try {
       setLockdownGlobal(await setGlobalLockdown(enabled));
     } catch (err) {
-      setError(String(err));
+      setError(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -118,10 +139,12 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
     setOpening(true);
     setProgress(null);
     setError(null);
+    setOpenFailed(false);
     try {
       onOpen(await action());
     } catch (err) {
-      setError(String(err));
+      setError(errorText(err));
+      setOpenFailed(true);
       setBusy(false);
       setOpening(false);
     }
@@ -166,12 +189,16 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
     setOpening(true);
     setProgress(null);
     setError(null);
+    setOpenFailed(false);
     try {
       onOpen(await openProject(project.id));
     } catch (err) {
       const migration = pendingMigration(err);
       if (migration) setUpgrade({ project, migration });
-      else setError(String(err));
+      else {
+        setError(errorText(err));
+        setOpenFailed(true);
+      }
       setBusy(false);
       setOpening(false);
     }
@@ -189,7 +216,7 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
       const picked = await pickDirectory(t('startup.locationPickTitle'), location ?? undefined);
       if (picked) setLocation(picked);
     } catch (err) {
-      setError(String(err));
+      setError(errorText(err));
     }
   };
 
@@ -207,9 +234,40 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
       setCurrentPort(String(wanted));
       setPortNote(true);
     } catch (err) {
-      setError(String(err));
+      setError(errorText(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const runDoctor = () => {
+    setDoctorOpen(true);
+    setDoctorRun((run) => run + 1);
+    window.requestAnimationFrame(() => {
+      document.querySelector('.project-picker .startup-doctor')?.scrollIntoView?.({ block: 'nearest' });
+    });
+  };
+
+  const manage = async (work: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    setOpenFailed(false);
+    try {
+      await work();
+      setProjects(await listProjects());
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revealProject = async (project: Project) => {
+    setError(null);
+    try {
+      await openDirectory(projectFolder(project));
+    } catch (err) {
+      setError(errorText(err));
     }
   };
 
@@ -264,12 +322,60 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
         }}
         onCancel={() => setSettingsImport(null)}
       />
+      {renaming && <TextPromptDialog
+        open
+        title={t('startup.renameTitle')}
+        label={t('startup.name')}
+        initialValue={renaming.name}
+        confirmLabel={t('startup.rename')}
+        onConfirm={(value) => {
+          const project = renaming;
+          setRenaming(null);
+          if (project && value !== project.name) void manage(() => renameProject(project.id, value));
+        }}
+        onCancel={() => setRenaming(null)}
+      />}
+      <ConfirmDialog
+        open={deleting !== null}
+        title={t(deleting?.external ? 'startup.removeTitle' : 'startup.deleteTitle')}
+        message={deleting
+          ? deleting.external
+            ? t('startup.removeMessage', { name: deleting.name, folder: projectFolder(deleting) })
+            : t('startup.deleteMessage', { name: deleting.name })
+          : ''}
+        confirmLabel={t(deleting?.external ? 'startup.remove' : 'startup.delete')}
+        onConfirm={() => {
+          const project = deleting;
+          setDeleting(null);
+          if (project) void manage(() => deleteProject(project.id));
+        }}
+        onCancel={() => setDeleting(null)}
+      />
+      <ContextMenu
+        position={projectMenu.position}
+        items={projectMenu.target ? [
+          { label: t('startup.rename'), disabled: busy, onSelect: () => setRenaming(projectMenu.target) },
+          { label: t('startup.showFolder'), onSelect: () => { if (projectMenu.target) void revealProject(projectMenu.target); } },
+          {
+            label: t(projectMenu.target.external ? 'startup.remove' : 'startup.delete'),
+            separator: true,
+            disabled: busy,
+            onSelect: () => setDeleting(projectMenu.target),
+          },
+        ] : []}
+        onClose={projectMenu.close}
+      />
       <div className="project-picker-main">
         <div className="project-picker-brand">Lanius</div>
         <h1>{t('startup.title')}</h1>
         <p className="muted">{t('startup.intro')}</p>
 
-        {error && <div className="banner error project-picker-error" role="alert">{error}</div>}
+        {error && <div className="banner error project-picker-error" role="alert">
+          {error}
+          {openFailed && <div className="project-picker-error-actions">
+            <button type="button" onClick={runDoctor}>{t('startup.runDoctor')}</button>
+          </div>}
+        </div>}
 
         <label className="project-picker-lockdown lockdown-label">
           <input
@@ -282,37 +388,20 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
         </label>
         <p className="muted">{lockdownGlobal?.forced ? t('lockdown.forced') : t('lockdown.globalHelp')}</p>
 
-        <div className="project-picker-port">
-          <label htmlFor="startup-api-port">{t('mcp.port')}</label>
-          <UndoableInput
-            id="startup-api-port"
-            type="number"
-            min="1"
-            max="65535"
-            value={port}
-            disabled={busy}
-            onValueChange={setPort}
-          />
-          <button type="button" disabled={busy || port === currentPort} onClick={() => void applyPort()}>
-            {t('mcp.applyPort')}
-          </button>
-          <span className="muted">{portNote ? t('startup.portApplied') : t('startup.portHelp')}</span>
-        </div>
-
         <div className="project-picker-doctor">
           <button type="button" disabled={busy} aria-expanded={doctorOpen} onClick={() => setDoctorOpen((open) => !open)}>
             {t('startup.doctor')}
           </button>
           <span className="muted">{t('startup.doctorHelp')}</span>
         </div>
-        {doctorOpen && <StartupDoctor />}
+        {doctorOpen && <StartupDoctor key={doctorRun} />}
 
         <div className="project-picker-grid">
           <section className="project-picker-card">
             <h2>{t('startup.tempTitle')}</h2>
             <p className="muted">{t('startup.tempHelp')}</p>
             <button disabled={busy} onClick={() => void start(startTempProject)}>
-              {busy ? t('startup.starting') : t('startup.tempStart')}
+              {opening ? t('startup.starting') : t('startup.tempStart')}
             </button>
           </section>
 
@@ -347,7 +436,7 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
             </div>
             {location && <p className="muted project-picker-location-help">{t('startup.locationHelp')}</p>}
             <button type="submit" disabled={busy || !name.trim()}>
-              {busy ? t('startup.starting') : t('startup.createStart')}
+              {opening ? t('startup.starting') : t('startup.createStart')}
             </button>
           </form>
         </div>
@@ -373,24 +462,60 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
           </label>
         </section>
 
+
+
         <section className="project-picker-existing">
           <h2>{t('startup.existingTitle')}</h2>
           {loading ? <p className="muted">{t('startup.loading')}</p> :
             projects.length === 0 ? <p className="muted">{t('startup.noProjects')}</p> :
               <ul>
                 {projects.map((project) => (
-                  <li key={project.id}>
+                  <li key={project.id}
+                    onContextMenu={project.id === 'legacy' ? undefined : (event) => projectMenu.open(event, project)}>
                     <div>
                       <strong>{project.id === 'legacy' ? t('startup.legacyName') : project.name}</strong>
-                      <span className="muted mono">{project.dbPath}</span>
+                      <span className="muted mono" title={project.dbPath}>{project.dbPath}</span>
+                      {project.lastOpened > 0 && <span className="muted">
+                        {t('startup.lastOpened', { when: new Date(project.lastOpened * 1000).toLocaleString() })}
+                      </span>}
                     </div>
-                    <button disabled={busy} onClick={() => void open(project)}>
-                      {busy ? t('startup.starting') : t('startup.open')}
-                    </button>
+                    <div className="project-picker-row-actions">
+                      <button disabled={busy} onClick={() => void open(project)}>
+                        {opening ? t('startup.starting') : t('startup.open')}
+                      </button>
+                      {project.id !== 'legacy' && <button
+                        type="button"
+                        className="project-picker-more"
+                        aria-label={t('startup.projectActions', { name: project.name })}
+                        aria-haspopup="menu"
+                        onClick={(event) => projectMenu.open(event, project)}
+                      >⋯</button>}
+                    </div>
                   </li>
                 ))}
               </ul>}
         </section>
+
+        <details className="project-picker-advanced">
+          <summary>{t('startup.advanced')}</summary>
+          <p className="muted">{t('startup.portNotProxy')}</p>
+          <div className="project-picker-port">
+            <label htmlFor="startup-api-port">{t('mcp.port')}</label>
+            <UndoableInput
+              id="startup-api-port"
+              type="number"
+              min="1"
+              max="65535"
+              value={port}
+              disabled={busy}
+              onValueChange={setPort}
+            />
+            <button type="button" disabled={busy || port === currentPort} onClick={() => void applyPort()}>
+              {t('mcp.applyPort')}
+            </button>
+            <span className="muted">{portNote ? t('startup.portApplied') : t('startup.portHelp')}</span>
+          </div>
+        </details>
       </div>
     </div>
   );

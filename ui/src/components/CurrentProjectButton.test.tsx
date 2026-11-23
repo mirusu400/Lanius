@@ -9,7 +9,7 @@ it('keeps the active project visible and opens its settings', async () => {
   const open = vi.fn();
   render(<CurrentProjectButton project={{
     id: 'demo', name: 'Acme audit', temporary: false,
-    dbPath: '/projects/acme/lanius.sqlite', lastOpened: 0,
+    dbPath: '/projects/acme/lanius.sqlite', lastOpened: 0, external: false,
   }} onOpen={open} />);
 
   const button = screen.getByRole('button', {
@@ -24,7 +24,7 @@ it('keeps the active project visible and opens its settings', async () => {
 it('labels a disposable workspace as temporary', () => {
   render(<CurrentProjectButton project={{
     id: 'temp', name: 'ignored', temporary: true,
-    dbPath: '/tmp/lanius.sqlite', lastOpened: 0,
+    dbPath: '/tmp/lanius.sqlite', lastOpened: 0, external: false,
   }} onOpen={() => {}} />);
   expect(screen.getByRole('button', {
     name: `${t('project.current')}: ${t('startup.tempName')}`,

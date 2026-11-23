@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import type { FlowSummary, HistorySortKey } from '../api/types';
 import { useT } from '../i18n';
 import { ResizableFillCell, ResizableFillHeader, ResizableHeader, ResizableTable, useResizableColumns } from './ResizableColumns';
@@ -30,15 +30,15 @@ interface Props {
   sortDesc?: boolean;
   onSort?: (key: HistorySortKey) => void;
   onToggleBookmark?: (flow: FlowSummary) => void;
-  /** The primary listener, named in the empty-table hint. */
-  proxyAddress?: string;
+  /** Shown in place of rows when there are none. */
+  empty?: ReactNode;
 }
 
 const SORT_KEYS: HistorySortKey[] = [
   'started_at', 'method', 'host', 'url', 'status_code', 'modified', 'response_size', 'duration_ms',
 ];
 
-export function FlowTable({ flows, selectedId, selectedIds, onSelect, onSelectAll, onContextMenu, searchQuery = '', sortBy, sortDesc, onSort, onToggleBookmark, proxyAddress = '127.0.0.1:8080' }: Props) {
+export function FlowTable({ flows, selectedId, selectedIds, onSelect, onSelectAll, onContextMenu, searchQuery = '', sortBy, sortDesc, onSort, onToggleBookmark, empty }: Props) {
   const t = useT();
   const showSourceIp = useLocalSourceIpColumn();
   const publicIpIndex = showSourceIp ? 11 : 10;
@@ -127,7 +127,7 @@ export function FlowTable({ flows, selectedId, selectedIds, onSelect, onSelectAl
           {flows.length === 0 && (
             <tr>
               <td colSpan={columns.widths.length} className="empty">
-                {t('proxy.emptyTable', { proxy: proxyAddress })}
+                {empty ?? t('proxy.emptyNoTraffic')}
               </td>
               <ResizableFillCell />
             </tr>
