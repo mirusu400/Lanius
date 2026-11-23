@@ -569,7 +569,7 @@ describe('title bar', () => {
     await user.type(page, '3');
     await user.click(screen.getByRole('button', { name: t('proxy.jumpToPage') }));
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) =>
-      String(url).includes('offset=400')
+      String(url).includes('offset=2000')
     )).toBe(true));
     const table = document.querySelector('.flow-table-wrap') as HTMLElement;
     table.scrollTop = 40;
@@ -596,7 +596,7 @@ describe('title bar', () => {
     await user.clear(page);
     await user.type(page, '3');
     await user.click(screen.getByRole('button', { name: t('proxy.jumpToPage') }));
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('offset=400'))).toBe(true));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('offset=2000'))).toBe(true));
     await user.click(screen.getByRole('button', { name: 'Settings' }));
     await user.click(screen.getByRole('button', { name: t('settings.group.project') }));
     setSelectedFlow('previous-project-flow');

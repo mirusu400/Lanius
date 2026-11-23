@@ -47,8 +47,8 @@ padding, and hex separators.
 
 ## Paging and search
 
-History shows 200 requests per page; **Older**, **Newer**, and the page number
-field move through the whole project. Search checks host, path, query, headers,
+History shows 1000 requests per page by default. **Older**, **Newer**, and the
+page number field in the top bar move through the whole project. Search checks host, path, query, headers,
 decoded request and response bodies, comments, and request versions throughout
 the capture. The trigram index accelerates searches containing at least three
 consecutive characters; shorter searches can still scan the index.

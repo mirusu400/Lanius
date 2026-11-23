@@ -818,6 +818,7 @@ pre.body,
 
 .filter-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   padding: 8px;
@@ -940,6 +941,24 @@ pre.body,
 }
 
 .history-pages input {
+  width: 5.5em;
+}
+
+.history-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.history-pager label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.history-pager input {
   width: 5.5em;
 }
 

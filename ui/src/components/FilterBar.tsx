@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { ConnectionState } from '../api/stream';
 import { useT } from '../i18n';
 import { countActive } from './FilterDialog';
@@ -23,6 +23,8 @@ interface Props {
   onHistoryPageSizeChange: (size: number) => void;
   historyLayout: HistoryLayout;
   onToggleHistoryLayout: () => void;
+  /** Page navigation, kept beside the page size it depends on. */
+  pager?: ReactNode;
 }
 
 function HistoryLayoutIcon({ target }: { target: HistoryLayout }) {
@@ -60,6 +62,7 @@ export function FilterBar({
   onHistoryPageSizeChange,
   historyLayout,
   onToggleHistoryLayout,
+  pager,
 }: Props) {
   const t = useT();
   const [pageSizeInput, setPageSizeInput] = useState(String(historyPageSize));
@@ -132,6 +135,7 @@ export function FilterBar({
           onKeyDown={(event) => { if (event.key === 'Enter') applyPageSize(); }}
         />
       </label>
+      {pager}
       <span className={`conn conn-${connection}`}>
         {connection === 'open'
           ? t(paused ? 'proxy.connected' : 'proxy.live')

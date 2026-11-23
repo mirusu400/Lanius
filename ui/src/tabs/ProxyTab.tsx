@@ -94,7 +94,8 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
   flowsRef.current = flows;
   const [historyPage, setHistoryPage] = useState(0);
   const [historyPageInput, setHistoryPageInput] = useState('1');
-  const [historyPageSize, setHistoryPageSize] = useState(200);
+  // Large enough that paging is rarely needed while testing one target.
+  const [historyPageSize, setHistoryPageSize] = useState(1000);
   const historyPageSizeRef = useRef(historyPageSize);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -770,6 +771,31 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
             onOpenFilter={() => setFilterOpen(true)}
             historyLayout={historyLayout}
             onToggleHistoryLayout={toggleHistoryLayout}
+            pager={
+              <div className="history-pager" role="group" aria-label={t('proxy.historyPages')}>
+                <button disabled={historyPage === 0 || historyLoading} onClick={() => {
+                  prepareHistoryReload();
+                  if (historyPage === 1) {
+                    historyAnchor.current = undefined;
+                    historyCursors.current = {};
+                    setNextHistoryCursor(null);
+                  }
+                  setHistoryPage((page) => page - 1);
+                }}>{t('proxy.newerHistory')}</button>
+                <label>{t('proxy.historyPageLabel')}
+                  <UndoableInput type="number" min="1" value={historyPageInput}
+                    onValueChange={setHistoryPageInput}
+                    onKeyDown={(event) => { if (event.key === 'Enter') jumpToHistoryPage(); }} />
+                </label>
+                <button disabled={historyLoading} onClick={jumpToHistoryPage}>{t('proxy.jumpToPage')}</button>
+                <button disabled={!hasMoreHistory || historyLoading} onClick={() => {
+                  prepareHistoryReload();
+                  if (nextHistoryCursor) historyCursors.current[historyPage + 1] = nextHistoryCursor;
+                  else delete historyCursors.current[historyPage + 1];
+                  setHistoryPage((page) => page + 1);
+                }}>{t('proxy.olderHistory')}</button>
+              </div>
+            }
           />
           {paused && <div className="proxy-pause-notice" role="status">{t('proxy.updatesPaused')}</div>}
           <FilterDialog
@@ -812,29 +838,6 @@ export function ProxyTab({ methodFilterRequest }: { methodFilterRequest?: { meth
             }
             second={<FlowDetailView flow={selectedFlow} searchQuery={filters.search || ''} inspector />}
           />
-          <div className="history-pages">
-            <button disabled={historyPage === 0 || historyLoading} onClick={() => {
-              prepareHistoryReload();
-              if (historyPage === 1) {
-                historyAnchor.current = undefined;
-                historyCursors.current = {};
-                setNextHistoryCursor(null);
-              }
-              setHistoryPage((page) => page - 1);
-            }}>{t('proxy.newerHistory')}</button>
-            <label>{t('proxy.historyPageLabel')}
-              <UndoableInput type="number" min="1" value={historyPageInput}
-                onValueChange={setHistoryPageInput}
-                onKeyDown={(event) => { if (event.key === 'Enter') jumpToHistoryPage(); }} />
-            </label>
-            <button disabled={historyLoading} onClick={jumpToHistoryPage}>{t('proxy.jumpToPage')}</button>
-            <button disabled={!hasMoreHistory || historyLoading} onClick={() => {
-              prepareHistoryReload();
-              if (nextHistoryCursor) historyCursors.current[historyPage + 1] = nextHistoryCursor;
-              else delete historyCursors.current[historyPage + 1];
-              setHistoryPage((page) => page + 1);
-            }}>{t('proxy.olderHistory')}</button>
-          </div>
           <ConfirmDialog
             open={confirmClear}
             title={t('proxy.clearConfirmTitle')}

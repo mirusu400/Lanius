@@ -919,6 +919,16 @@ describe('ProxyTab', () => {
     expect(list.scrollTop).toBe(500);
   });
 
+  it('starts with 1000 rows per page and keeps paging in the top bar', async () => {
+    render(<ProxyTab />);
+    await screen.findByText('/seeded');
+    expect(calls.some(({ url }) => url.includes('/api/flows?') && new URL(url).searchParams.get('limit') === '1000')).toBe(true);
+    const pager = screen.getByRole('group', { name: t('proxy.historyPages') });
+    expect(pager.closest('.filter-bar')).toBeTruthy();
+    expect(within(pager).getByRole('button', { name: t('proxy.olderHistory') })).toBeTruthy();
+    expect(within(pager).getByRole('button', { name: t('proxy.newerHistory') })).toBeTruthy();
+  });
+
   it('pages into older history without holding every flow in the table', async () => {
     paginateHistory = true;
     const user = userEvent.setup();
@@ -927,7 +937,7 @@ describe('ProxyTab', () => {
     await user.click(screen.getByRole('button', { name: t('proxy.olderHistory') }));
     await screen.findByText('/old');
     expect(screen.queryByText('/seeded')).toBeNull();
-    expect(calls.some((call) => call.url.includes('offset=200'))).toBe(true);
+    expect(calls.some((call) => call.url.includes('offset=1000'))).toBe(true);
     await user.click(screen.getByRole('button', { name: t('proxy.newerHistory') }));
     await screen.findByText('/seeded');
     const page = screen.getByRole('spinbutton', { name: t('proxy.historyPageLabel') });
@@ -935,7 +945,7 @@ describe('ProxyTab', () => {
     await user.type(page, '10000');
     await user.click(screen.getByRole('button', { name: t('proxy.jumpToPage') }));
     await waitFor(() => expect(calls.some((call) =>
-      call.url.includes('offset=1999800')
+      call.url.includes('offset=9999000')
     )).toBe(true));
   });
 
@@ -951,7 +961,7 @@ describe('ProxyTab', () => {
     }));
 
     const size = screen.getByRole('spinbutton', { name: t('proxy.historyPageSize') });
-    expect(size).toHaveProperty('value', '200');
+    expect(size).toHaveProperty('value', '1000');
     await user.clear(size);
     await user.type(size, '300{Enter}');
     await screen.findByText('/history-299');
@@ -1009,10 +1019,13 @@ describe('ProxyTab', () => {
     for (const value of ['', '0', '-1', '1.5', '1001']) {
       fireEvent.change(size, { target: { value } });
       fireEvent.blur(size);
-      expect(size).toHaveProperty('value', '200');
+      expect(size).toHaveProperty('value', '1000');
     }
     expect(calls.slice(before).filter(({ url }) => url.includes('/api/flows?'))).toHaveLength(0);
 
+    await user.clear(size);
+    await user.type(size, '500{Enter}');
+    expect(calls.some(({ url }) => new URL(url).searchParams.get('limit') === '500')).toBe(true);
     await user.clear(size);
     await user.type(size, '1000{Enter}');
     expect(calls.some(({ url }) => new URL(url).searchParams.get('limit') === '1000')).toBe(true);
