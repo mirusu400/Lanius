@@ -64,7 +64,7 @@ from ..lockdown import BLOCKED_DETAIL, PROJECT_SETTING, SCOPE_EGRESS_SETTING, Lo
 from ..tls_exceptions import TLS_EXCEPTIONS_SETTING, TLS_INSECURE_SETTING
 from ..tls_trust import TRUSTED_CA_SETTING
 from ..http_protocol import HttpMode
-from .. import updates
+from .. import diagnostics, updates
 from ..addons.scope import ScopeError, rule_from_url
 from .. import browser, ca_trust, cookie_import
 from ..config import Settings
@@ -173,6 +173,16 @@ class CaptureStoragePatch(BaseModel):
 
 class LockdownPatch(BaseModel):
     enabled: bool
+
+
+class ClientErrorBody(BaseModel):
+    """An error the UI caught, posted so it survives a reload."""
+
+    kind: str = Field(default="Error", max_length=200)
+    message: str = Field(default="", max_length=diagnostics.MAX_FIELD_CHARS)
+    stack: str = Field(default="", max_length=diagnostics.MAX_FIELD_CHARS)
+    component_stack: str = Field(default="", max_length=diagnostics.MAX_FIELD_CHARS)
+    where: str = Field(default="", max_length=200)
 
 
 class EgressIpPatch(BaseModel):
@@ -450,6 +460,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rates=CompactRates(settings.data_dir / "compact-rates.json"),
     )
     lockdown = LockdownPolicy.from_env(store)
+    diagnostics_log = diagnostics.Diagnostics.from_env(settings.data_dir)
+    diagnostics.install(diagnostics_log)
 
     # Notable (non per-flow) events are persisted for the Logger tab.
     LOGGED_EVENTS = (
@@ -489,6 +501,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # A proxy that cannot bind must not take the API down with it.
         # Otherwise a port already held by another tool leaves the user with
         # a dead window and no way to change the port from inside the app.
+        diagnostics.install_loop_handler(diagnostics_log)
         startup_progress.report("proxy")
         try:
             await engine.start()
@@ -515,6 +528,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(LockdownBlocked)
     async def lockdown_blocked(_request: Request, _error: LockdownBlocked) -> JSONResponse:
         return JSONResponse(status_code=423, content={"detail": BLOCKED_DETAIL})
+
+    @app.exception_handler(Exception)
+    async def unhandled_error(request: Request, error: Exception) -> JSONResponse:
+        # Starlette still re-raises after this, so the log keeps its traceback.
+        await asyncio.to_thread(
+            diagnostics_log.record_exception,
+            "engine", error, {"where": f"{request.method} {request.url.path}"},
+        )
+        return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
     # MCP over streamable HTTP, on the same local-only port (codex.md §10).
     try:
@@ -636,6 +658,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.broker = broker
     app.state.engine = engine
     app.state.lockdown = lockdown
+    app.state.diagnostics = diagnostics_log
     app.state.egress_ip = egress_ip
 
     async def _apply_lockdown_to_plugins(locked: bool) -> None:
@@ -1984,6 +2007,88 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         A version alone does not say which build someone is running.
         """
         return build_info()
+
+    # --- diagnostics --------------------------------------------------------
+    @app.get("/api/diagnostics")
+    async def list_diagnostics() -> dict[str, Any]:
+        """Recorded errors, redacted exactly as a saved bundle would be."""
+        reports = await asyncio.to_thread(diagnostics_log.reports)
+        return {"items": reports, "count": len(reports)}
+
+    @app.post("/api/diagnostics/reports")
+    async def record_client_error(body: ClientErrorBody) -> dict[str, Any]:
+        trace = body.stack
+        if body.component_stack:
+            trace = f"{trace}\n\nComponent stack:{body.component_stack}"
+        report = await asyncio.to_thread(
+            diagnostics_log.record,
+            "ui", body.kind or "Error", body.message, trace,
+            {"where": body.where} if body.where else None,
+        )
+        return {"recorded": report is not None}
+
+    @app.delete("/api/diagnostics/reports")
+    async def clear_diagnostics() -> dict[str, Any]:
+        return {"removed": await asyncio.to_thread(diagnostics_log.clear)}
+
+    async def _diagnostic_state() -> dict[str, Any]:
+        """What the app was doing, without anything it captured."""
+        from .. import doctor as preflight
+
+        listener = engine.listener_state()
+        plugins = engine.plugins.list()
+        checks = await asyncio.to_thread(
+            lambda: [
+                preflight.check_runtime(),
+                preflight.check_data_dir(settings.data_dir),
+                preflight.check_ca(settings.confdir),
+            ]
+        )
+        return {
+            "about": build_info(),
+            "lockdown": lockdown.status(),
+            "proxy": {
+                "running": listener["running"],
+                "port": settings.proxy_port,
+                "error": listener["error"] or engine.start_error,
+                "modes": engine.mode_status(),
+            },
+            "plugins": {
+                "suspended": engine.plugins.suspended,
+                "safe_mode": engine.plugins.safe_mode,
+                "items": [
+                    {key: plugin.get(key) for key in ("name", "version", "enabled", "loaded", "error")}
+                    for plugin in plugins
+                ],
+            },
+            "flows": await asyncio.to_thread(store.count),
+            "doctor": checks,
+        }
+
+    @app.get("/api/diagnostics/bundle")
+    async def diagnostics_bundle(
+        shell: str | None = Query(None, max_length=64, pattern=r"^[\w.+-]+$"),
+    ) -> Response:
+        state = await _diagnostic_state()
+        if shell:
+            state["shell_version"] = shell
+        data = await asyncio.to_thread(diagnostics_log.bundle, state)
+        name = time.strftime("lanius-diagnostics-%Y%m%d-%H%M%S.zip")
+        return Response(
+            data,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        )
+
+    @app.post("/api/diagnostics/issue")
+    async def diagnostics_issue(
+        shell: str | None = Query(None, max_length=64, pattern=r"^[\w.+-]+$"),
+    ) -> dict[str, Any]:
+        """The new-issue page to open. Refused in Lockdown Mode: the page
+        carries the latest error off this machine."""
+        lockdown.require_outbound("bug report")
+        url = await asyncio.to_thread(diagnostics_log.issue_url, build_info(), shell)
+        return {"url": url}
 
     @app.get("/api/updates")
     async def check_updates(

@@ -7809,3 +7809,15 @@ pre.response-preview-text {
   margin-top: 4px;
   border-top: 1px solid var(--border);
 }
+
+/* Diagnostics: recorded errors, and the fallback a render error leaves. */
+.diagnostics-reports { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; }
+.diagnostics-reports summary { display: flex; gap: 8px; align-items: center; cursor: pointer; min-width: 0; }
+.diagnostics-message { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.diagnostics-reports pre,
+.error-fallback pre {
+  max-height: 240px; overflow: auto; margin: 6px 0; padding: 8px;
+  background: var(--bg-sunken); border: 1px solid var(--border-soft); border-radius: 6px;
+  white-space: pre-wrap; word-break: break-word; font-size: 12px;
+}
+.error-fallback { max-width: 720px; margin: 48px auto; padding: 0 24px; }

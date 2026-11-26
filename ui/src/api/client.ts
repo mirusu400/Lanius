@@ -1601,6 +1601,70 @@ export function getAbout(): Promise<AboutInfo> {
   return request('/api/about');
 }
 
+/** An error recorded by the engine, the shell or the UI, already redacted. */
+export interface DiagnosticReport {
+  id: string;
+  source: 'engine' | 'shell' | 'ui';
+  time: string;
+  version?: string;
+  kind: string;
+  message: string;
+  traceback: string;
+  context: Record<string, unknown>;
+}
+
+export function getDiagnostics(): Promise<{ items: DiagnosticReport[]; count: number }> {
+  return request('/api/diagnostics');
+}
+
+export function clearDiagnostics(): Promise<{ removed: number }> {
+  return request('/api/diagnostics/reports', { method: 'DELETE' });
+}
+
+export interface ClientErrorReport {
+  kind: string;
+  message: string;
+  stack?: string;
+  component_stack?: string;
+  where?: string;
+}
+
+/** Hand a caught UI error to the engine so it survives a reload. Never
+ *  throws: reporting an error must not cause another one. */
+export async function reportClientError(report: ClientErrorReport): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/api/diagnostics/reports`, authenticatedInit({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(report),
+    }));
+  } catch {
+    // The engine may be the thing that is down.
+  }
+}
+
+export async function downloadDiagnosticsBundle(): Promise<Blob> {
+  const res = await apiFetch('/api/diagnostics/bundle');
+  if (!res.ok) throw new Error(await errorDetail(res));
+  return res.blob();
+}
+
+/** Native Save As for the diagnostic bundle in the desktop app. */
+export function saveDesktopDiagnosticsBundle(
+  defaultName: string, title: string,
+): Promise<string | null> {
+  const internals = (window as unknown as {
+    __TAURI_INTERNALS__: { invoke(cmd: string, args: unknown): Promise<string | null> };
+  }).__TAURI_INTERNALS__;
+  return internals.invoke('save_diagnostics_bundle', { defaultName, title });
+}
+
+/** A prefilled new-issue page. Refused with 423 in Lockdown Mode. */
+export function createIssueUrl(shell?: string | null): Promise<{ url: string }> {
+  const query = shell ? `?shell=${encodeURIComponent(shell)}` : '';
+  return request(`/api/diagnostics/issue${query}`, { method: 'POST' });
+}
+
 export type UpdateChannel = 'stable' | 'nightly';
 
 /** One published build, as the release page describes it. */

@@ -42,6 +42,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'document-cache', group: 'project', title: 'documentCache.section', prefixes: ['documentCache.'], aliases: 'HTTP History request response preview document memory cache MiB 요청 응답 미리보기 문서 메모리 캐시 비우기' },
   { id: 'compact', group: 'project', title: 'compact.title', prefixes: ['compact.'], aliases: 'compact vacuum disk storage delete database 용량 압축 정리 삭제 디스크 데이터베이스' },
   { id: 'about', group: 'about', title: 'about.section', prefixes: ['about.'], aliases: 'version build commit release 버전 빌드 커밋 정보' },
+  { id: 'diagnostics', group: 'about', title: 'diagnostics.section', prefixes: ['diagnostics.'], aliases: 'diagnostics error crash traceback telemetry bug report log 진단 오류 에러 트레이스백 텔레메트리 버그 보고 로그' },
   { id: 'updates', group: 'about', title: 'updates.section', prefixes: ['updates.'], aliases: 'update upgrade stable nightly automatic 업데이트 자동 릴리스' },
 ] as const satisfies readonly SectionEntry[];
 

@@ -5,6 +5,7 @@ import { Activity, useEffect, useRef, useState, type ReactNode, type RefObject }
 import { useT } from "../i18n";
 import type { Project } from "../projects";
 import { AboutSection } from "./settings/AboutSection";
+import { DiagnosticsSection } from "./settings/DiagnosticsSection";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { ToastSection } from "./settings/ToastSection";
 import { BrowserHelpSection } from "./settings/BrowserHelpSection";
@@ -161,6 +162,7 @@ export function SettingsTab({ project, onSwitchProject, switchingProject = false
     'document-cache': <DocumentCacheSection />,
     compact: <ProjectCompactSection key={importRevision} />,
     about: <AboutSection />,
+    diagnostics: <DiagnosticsSection />,
     updates: <UpdatesSection />,
   };
 

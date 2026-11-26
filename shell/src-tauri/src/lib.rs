@@ -17,6 +17,7 @@ use tauri_plugin_updater::UpdaterExt;
 
 mod ca_export;
 mod cookie_export;
+mod diagnostics;
 mod doctor;
 mod fonts;
 #[cfg(windows)]
@@ -631,6 +632,18 @@ fn start_engine(
         .stderr(doctor::engine_log());
 
     hide_background_window(&mut command);
+
+    // Error reports from both halves land in one directory, and the engine
+    // bundles the logs it is told about.
+    if let Ok(dir) = diagnostics::log_dir() {
+        command.env("LANIUS_LOG_DIR", dir);
+    }
+    if let Ok(path) = doctor::engine_log_path() {
+        command.env("LANIUS_ENGINE_LOG", path);
+    }
+    if let Some(path) = diagnostics::shell_log_path(app) {
+        command.env("LANIUS_SHELL_LOG", path);
+    }
 
     // Plugin files are installed once per machine. Which plugins are
     // enabled remains a setting in each project's own database.
@@ -1521,6 +1534,8 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     linux_webkit::configure_before_webview();
 
+    diagnostics::install_panic_hook();
+
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -1567,6 +1582,7 @@ pub fn run() {
             close_project,
             doctor::run_doctor,
             ca_export::save_ca_certificate,
+            diagnostics::save_diagnostics_bundle,
             cookie_export::save_cookie_exporter,
             project_export::save_project_file,
             close_ready,
