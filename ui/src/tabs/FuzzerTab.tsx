@@ -23,7 +23,7 @@ import {
   requiredSets,
 } from './fuzzerModel';
 import {
-  addFuzzerDraft, ensureFuzzerDraft, getFuzzerWorkspace, getFuzzerWorkspaceEpoch, newFuzzerDraft, openFuzzerRun,
+  addFuzzerDraft, duplicateFuzzerDraft, ensureFuzzerDraft, getFuzzerWorkspace, getFuzzerWorkspaceEpoch, newFuzzerDraft, openFuzzerRun,
   moveFuzzerDraft, patchFuzzerDraft, removeFuzzerDraft, renameFuzzerDraft, selectFuzzerDraft,
   subscribeFuzzerWorkspace, type FuzzerDraft,
 } from './fuzzerStore';
@@ -235,6 +235,10 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
   // Right-clicking the template is the natural way to mark a payload
   // position, so the menu offers it alongside the editing actions.
   const codegen = useCodegenMenu();
+  // Read from the pane's state: the draft in the store can lag an edit.
+  const duplicateCurrent = () => duplicateFuzzerDraft({
+    ...draft, url, template, httpMode, mode, payloadText, concurrency, delay,
+  });
   // The template carries payload markers, which are not part of the
   // request. They are stripped first, so the generated code is the
   // request as it would be sent with an empty payload rather than one
@@ -306,6 +310,7 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
       sendToReplay: () => sendTextToReplay(
         url, clearMarkers(template), clearMarkers(template).split(/\r?\n/, 1)[0] || url,
       ),
+      sendToFuzzer: duplicateCurrent,
       copyAs: codegen.buildMenu(requestTarget),
       pluginActions: pluginMenu,
     }),
@@ -398,6 +403,7 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
   useShortcut('request.sendToReplay', () => {
     sendResultToReplay(selectedResult?.flow_id);
   }, Boolean(selectedResult?.flow_id));
+  useShortcut('request.sendToFuzzer', duplicateCurrent);
 
   return (
     <div className="fuzzer-tab">

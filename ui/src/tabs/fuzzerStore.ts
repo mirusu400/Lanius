@@ -103,6 +103,14 @@ export function addFuzzerDraft(draft: FuzzerDraft): void {
   workspace = { tabs: [...workspace.tabs, draft], activeId: draft.id };
   emitWorkspace();
 }
+/** "Send to Fuzzer" from Fuzzer itself: the same request, payloads and
+ *  settings in a new tab, so a variation leaves the original alone. */
+export function duplicateFuzzerDraft(source: FuzzerDraft): FuzzerDraft {
+  const draft = { ...source, id: nextTabId(), runId: null };
+  addFuzzerDraft(draft);
+  notifyRequestTransferred('Fuzzer');
+  return draft;
+}
 export function patchFuzzerDraft(id: string, patch: Partial<FuzzerDraft>): void {
   const tab = workspace.tabs.find((entry) => entry.id === id);
   if (!tab || Object.entries(patch).every(([key, value]) => tab[key as keyof FuzzerDraft] === value)) return;

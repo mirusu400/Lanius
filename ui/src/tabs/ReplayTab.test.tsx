@@ -653,6 +653,28 @@ describe('ReplayTab', () => {
     expect(await screen.findByText(t('menu.copied'))).toBeTruthy();
   });
 
+  it('sends the edited request to a new Replay tab from the editor menu', async () => {
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    fireEvent.change(editor(), { target: { value: 'GET /variant HTTP/1.1\nHost: echo.test\n\n' } });
+
+    fireEvent.contextMenu(editor());
+    await user.click(screen.getByRole('menuitem', { name: t('menu.sendToReplay') }));
+
+    await waitFor(() => expect(getTabs()).toHaveLength(2));
+    const [original, copy] = getTabs();
+    expect(copy.id).not.toBe(original.id);
+    expect(copy.text).toContain('/variant');
+    expect(copy.history).toEqual([]);
+    await waitFor(() => expect(editor().value).toContain('/variant'));
+
+    // The shortcut does the same, so a request can be fanned out quickly.
+    fireShortcut('request.sendToReplay', editor());
+    await waitFor(() => expect(getTabs()).toHaveLength(3));
+  });
+
   it('adds the edited Replay path as an Exclude rule', async () => {
     const user = userEvent.setup();
     render(<ReplayTabView />);

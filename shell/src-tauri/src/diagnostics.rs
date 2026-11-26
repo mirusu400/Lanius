@@ -106,7 +106,10 @@ fn rfc3339(secs: u64) -> String {
 }
 
 fn bundle_endpoint() -> String {
-    format!("/api/diagnostics/bundle?shell={}", env!("CARGO_PKG_VERSION"))
+    format!(
+        "/api/diagnostics/bundle?shell={}",
+        env!("CARGO_PKG_VERSION")
+    )
 }
 
 /// Native Save As for the diagnostic bundle. Nothing is uploaded: the user
@@ -173,7 +176,16 @@ mod tests {
         assert!(name.contains("-shell-"));
         let report: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        for key in ["id", "source", "time", "version", "kind", "message", "traceback", "context"] {
+        for key in [
+            "id",
+            "source",
+            "time",
+            "version",
+            "kind",
+            "message",
+            "traceback",
+            "context",
+        ] {
             assert!(report.get(key).is_some(), "missing {key}");
         }
         assert_eq!(report["source"], "shell");

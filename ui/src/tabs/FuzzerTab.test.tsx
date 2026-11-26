@@ -194,6 +194,27 @@ describe('FuzzerTab', () => {
     expect(getTabs()[0].text).toContain('/login?pw=guess');
   });
 
+  it('sends the template, payloads and settings to a new Fuzzer tab', async () => {
+    const user = userEvent.setup();
+    sendToFuzzer(flow);
+    render(<FuzzerTab />);
+    await waitFor(() => expect(templateBox().value).toContain('/login?pw=guess'));
+    fireEvent.change(templateBox(), {
+      target: { value: 'GET /login?pw={{guess}} HTTP/1.1\nHost: app.test\n\n' },
+    });
+
+    fireEvent.contextMenu(templateBox());
+    await user.click(screen.getByRole('menuitem', { name: t('menu.sendToFuzzer') }));
+
+    await waitFor(() => expect(getFuzzerWorkspace().tabs).toHaveLength(2));
+    const [original, copy] = getFuzzerWorkspace().tabs;
+    expect(copy.id).not.toBe(original.id);
+    expect(getFuzzerWorkspace().activeId).toBe(copy.id);
+    expect(copy.template).toContain('{{guess}}');
+    expect(copy.payloadText).toEqual(original.payloadText);
+    expect(copy.runId).toBeNull();
+  });
+
   it('adds the template hostname as an Exclude rule', async () => {
     const user = userEvent.setup();
     sendToFuzzer(flow);

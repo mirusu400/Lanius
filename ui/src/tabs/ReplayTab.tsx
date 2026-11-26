@@ -54,6 +54,7 @@ import { useAddRequestScopeRule } from '../components/requestScope';
 import { usePluginActions } from '../components/usePluginActions';
 import { errorMessage, msg, rawMsg, renderMessage, useT } from '../i18n';
 import { sendTextToFuzzer } from './fuzzerStore';
+import { notifyRequestTransferred } from '../requestTransfers';
 import { useShortcut } from '../useShortcut';
 import { UndoableInput } from '../components/UndoableText';
 import { EditableTabTitle } from '../components/EditableTabTitle';
@@ -128,6 +129,13 @@ export function ReplayTabView() {
       ...source, id: nextTabId(), sending: false, error: null,
       history: [], historyIndex: null, draft: null,
     });
+  };
+
+  /** "Send to Replay" from Replay itself: the request in a new tab. */
+  const sendActiveToReplay = () => {
+    if (!active) return;
+    duplicateTab(active);
+    notifyRequestTransferred('Replay');
   };
 
   const { showToast } = useToast();
@@ -220,6 +228,7 @@ export function ReplayTabView() {
       addScopeRule: activeUrl
         ? (kind, target) => void addRequestScopeRule(activeUrl, kind, target)
         : undefined,
+      sendToReplay: active ? sendActiveToReplay : undefined,
       sendToFuzzer: active ? () => sendTextToFuzzer(active.url, active.text, active.httpMode) : undefined,
       copyAs: codegen.buildMenu(codegenTarget()),
       pluginActions: pluginMenu,
@@ -361,6 +370,7 @@ export function ReplayTabView() {
   };
 
   useShortcut('replay.send', send, Boolean(active && !active.sending));
+  useShortcut('request.sendToReplay', sendActiveToReplay, Boolean(active));
   useShortcut('request.sendToFuzzer', () => {
     if (active) sendTextToFuzzer(active.url, active.text, active.httpMode);
   }, Boolean(active));
