@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { RunResult, FlowDetail, FlowSummary } from '../api/types';
+import type { RunResult, RunSummary, FlowDetail, FlowSummary } from '../api/types';
 import {
   OPEN_MARKER,
   CLOSE_MARKER,
@@ -8,6 +8,7 @@ import {
   clearMarkers,
   countPositions,
   estimateRequests,
+  getRunProgress,
   markOutliers,
   parsePayloads,
   requiredSets,
@@ -43,6 +44,28 @@ describe('countPositions', () => {
   it('treats a close outside a marker as text', () => {
     expect(countPositions(`POST /?q=${O}x${C} HTTP/1.1\n\n{"a":{"b":1}}`)).toBe(1);
     expect(countPositions(`GET /?a=1${C} HTTP/1.1`)).toBe(0);
+  });
+});
+
+describe('getRunProgress', () => {
+  const run: RunSummary = {
+    id: 'run', mode: 'single_position', url: 'https://example.test',
+    status: 'running', total: 100, completed: 20,
+    started_at: 100, finished_at: null, error: null,
+  };
+
+  it('shows a useful average speed and estimated remaining time', () => {
+    expect(getRunProgress(run, 110)).toEqual({
+      percent: 20, rate: 2, remainingSeconds: 40,
+    });
+  });
+
+  it('waits for enough results and never estimates after a run stops', () => {
+    expect(getRunProgress({ ...run, completed: 2 }, 110).remainingSeconds).toBeNull();
+    expect(getRunProgress({ ...run, total: 1000, completed: 999 }, 110).percent).toBe(99);
+    expect(getRunProgress({ ...run, status: 'stopped' }, 110)).toEqual({
+      percent: 20, rate: null, remainingSeconds: null,
+    });
   });
 });
 

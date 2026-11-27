@@ -18,10 +18,12 @@ import {
   countPositions,
   estimateRequests,
   estimateRequestsFromCounts,
+  getRunProgress,
   markOutliers,
   parsePayloads,
   requiredSets,
 } from './fuzzerModel';
+import { formatDuration } from './dashboardModel';
 import {
   addFuzzerDraft, duplicateFuzzerDraft, ensureFuzzerDraft, getFuzzerWorkspace, getFuzzerWorkspaceEpoch, newFuzzerDraft, openFuzzerRun,
   moveFuzzerDraft, patchFuzzerDraft, removeFuzzerDraft, renameFuzzerDraft, selectFuzzerDraft,
@@ -392,6 +394,13 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
     [run],
   );
   const running = run?.status === 'running' || run?.status === 'pending';
+  const [nowSeconds, setNowSeconds] = useState(() => Date.now() / 1000);
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => setNowSeconds(Date.now() / 1000), 1000);
+    return () => window.clearInterval(timer);
+  }, [running, run?.id]);
+  const progress = run ? getRunProgress(run, nowSeconds) : null;
   const selectedResult = run?.results.find((result) => result.index === selectedResultIndex) ?? null;
 
   const sendResultToReplay = (id: string | null | undefined) => {
@@ -541,9 +550,20 @@ function FuzzerPane({ draft }: { draft: FuzzerDraft }) {
         second={<div className="fuzzer-results">
           <div className="results-header">
             {run ? (
-              <span className="mono">
-                {run.status} · {run.completed}/{run.total}
-              </span>
+              <div className="fuzzer-progress">
+                <div className="fuzzer-progress-meta">
+                  <span className="mono">{run.status} · {run.completed}/{run.total}</span>
+                  <span>{t('fuzzer.progressPercent', { percent: String(progress?.percent ?? 0) })}</span>
+                  {progress?.rate !== null && progress?.rate !== undefined && (
+                    <span>{t('fuzzer.rate', { rate: progress.rate.toFixed(1) })}</span>
+                  )}
+                  {progress?.remainingSeconds !== null && progress?.remainingSeconds !== undefined && (
+                    <span>{t('fuzzer.eta', { duration: formatDuration(progress.remainingSeconds) })}</span>
+                  )}
+                </div>
+                <progress aria-label={t('fuzzer.progress')} max={Math.max(run.total, 1)}
+                  value={Math.min(Math.max(run.completed, 0), Math.max(run.total, 1))} />
+              </div>
             ) : (
               <span className="muted">{t('fuzzer.noResults')}</span>
             )}

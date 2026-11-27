@@ -428,8 +428,16 @@ pre.body,
   white-space: nowrap;
 }
 
+.tab-navigation {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+}
+
 .tabs {
   display: flex;
+  flex: 1;
   align-items: stretch;
   gap: 2px;
   /* With ten tabs the strip outgrows a narrow window; scroll it rather
@@ -447,6 +455,65 @@ pre.body,
 .tabs::-webkit-scrollbar {
   display: none;
 }
+
+.tab-overflow {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  border-left: 1px solid var(--border);
+}
+
+.tab-overflow summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.75em 0.8em;
+  color: var(--fg);
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.tab-overflow summary::-webkit-details-marker { display: none; }
+.tab-overflow summary:hover,
+.tab-overflow[open] summary { background: var(--bg-hover); }
+.tab-overflow summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.tab-overflow-list {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  z-index: 50;
+  display: grid;
+  min-width: 180px;
+  max-height: min(70vh, 480px);
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-alt);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.tab-overflow-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tab-overflow-list button:hover,
+.tab-overflow-list button:focus-visible { background: var(--bg-hover); }
+.tab-overflow-list button.active { color: var(--accent); font-weight: 700; }
 
 .tab {
   position: relative;
@@ -3881,6 +3948,11 @@ pre.response-preview-text {
   border-bottom: 1px solid var(--border);
   padding: 6px 10px;
 }
+
+.fuzzer-progress { display: grid; gap: 6px; }
+.fuzzer-progress-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.fuzzer-progress-meta span:not(:first-child) { color: var(--muted); }
+.fuzzer-progress progress { width: 100%; height: 6px; accent-color: var(--accent); }
 
 .flow-table tr.outlier td {
   color: var(--accent);

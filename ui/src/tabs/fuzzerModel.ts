@@ -1,6 +1,6 @@
 /** Pure helpers for the Fuzzer tab. */
 
-import type { RunResult, RunMode, FlowDetail, FlowSummary } from '../api/types';
+import type { RunResult, RunMode, RunSummary, FlowDetail, FlowSummary } from '../api/types';
 import type { TranslationKey } from '../i18n/catalogue';
 
 export const OPEN_MARKER = '{{';
@@ -140,6 +140,32 @@ export function requiredSets(
   return mode === 'single_position' || mode === 'shared_payload'
     ? 1
     : Math.max(positions, 1);
+}
+
+/** Average throughput from the start of a run; defer ETA until it has a useful sample. */
+export function getRunProgress(run: RunSummary, nowSeconds: number): {
+  percent: number;
+  rate: number | null;
+  remainingSeconds: number | null;
+} {
+  const total = Math.max(0, run.total);
+  const completed = Math.min(total, Math.max(0, run.completed));
+  const percent = total > 0
+    ? completed === total ? 100 : Math.min(99, Math.round((completed / total) * 100))
+    : 0;
+  const elapsed = nowSeconds - run.started_at;
+  if (run.status !== 'running' || completed < 3 || elapsed < 2) {
+    return { percent, rate: null, remainingSeconds: null };
+  }
+  const rate = completed / elapsed;
+  if (!Number.isFinite(rate) || rate <= 0) {
+    return { percent, rate: null, remainingSeconds: null };
+  }
+  return {
+    percent,
+    rate,
+    remainingSeconds: completed < total ? Math.ceil((total - completed) / rate) : null,
+  };
 }
 
 /** Build the initial template from a captured flow. */

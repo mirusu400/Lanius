@@ -14,7 +14,7 @@ const OPEN_KEY = 'lanius.inspector.open';
 
 /** Whether the panel is shown, remembered across tabs and restarts. */
 export function useInspectorOpen(): [boolean, () => void] {
-  const [open, setOpen] = useState(() => window.localStorage?.getItem(OPEN_KEY) !== '0');
+  const [open, setOpen] = useState(() => window.localStorage?.getItem(OPEN_KEY) === '1');
   const toggle = useCallback(() => {
     setOpen((current) => {
       window.localStorage?.setItem(OPEN_KEY, current ? '0' : '1');

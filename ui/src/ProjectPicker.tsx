@@ -63,6 +63,7 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
   const t = useT();
   const { showToast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [showAllProjects, setShowAllProjects] = useState(false);
   const [name, setName] = useState('');
   const [location, setLocation] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -396,6 +397,43 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
         </div>
         {doctorOpen && <StartupDoctor key={doctorRun} />}
 
+        {!loading && projects.length > 0 && <section className="project-picker-existing">
+          <h2>{t('startup.existingTitle')}</h2>
+          <ul>
+            {(showAllProjects ? projects : projects.slice(0, 3)).map((project) => (
+              <li key={project.id}
+                onContextMenu={project.id === 'legacy' ? undefined : (event) => projectMenu.open(event, project)}>
+                <div>
+                  <strong>{project.id === 'legacy' ? t('startup.legacyName') : project.name}</strong>
+                  <span className="muted mono" title={project.dbPath}>{project.dbPath}</span>
+                  {project.lastOpened > 0 && <span className="muted">
+                    {t('startup.lastOpened', { when: new Date(project.lastOpened * 1000).toLocaleString() })}
+                  </span>}
+                </div>
+                <div className="project-picker-row-actions">
+                  <button disabled={busy} onClick={() => void open(project)}>
+                    {opening ? t('startup.starting') : t('startup.open')}
+                  </button>
+                  {project.id !== 'legacy' && <button
+                    type="button"
+                    className="project-picker-more"
+                    aria-label={t('startup.projectActions', { name: project.name })}
+                    aria-haspopup="menu"
+                    onClick={(event) => projectMenu.open(event, project)}
+                  >⋯</button>}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {projects.length > 3 && <button type="button" className="project-picker-show-all"
+            aria-expanded={showAllProjects}
+            onClick={() => setShowAllProjects((current) => !current)}>
+            {showAllProjects
+              ? t('startup.showRecentProjects')
+              : t('startup.showAllProjects', { count: String(projects.length) })}
+          </button>}
+        </section>}
+
         <div className="project-picker-grid">
           <section className="project-picker-card">
             <h2>{t('startup.tempTitle')}</h2>
@@ -463,38 +501,6 @@ export function ProjectPicker({ onOpen }: { onOpen: (project: Project) => void }
         </section>
 
 
-
-        <section className="project-picker-existing">
-          <h2>{t('startup.existingTitle')}</h2>
-          {loading ? <p className="muted">{t('startup.loading')}</p> :
-            projects.length === 0 ? <p className="muted">{t('startup.noProjects')}</p> :
-              <ul>
-                {projects.map((project) => (
-                  <li key={project.id}
-                    onContextMenu={project.id === 'legacy' ? undefined : (event) => projectMenu.open(event, project)}>
-                    <div>
-                      <strong>{project.id === 'legacy' ? t('startup.legacyName') : project.name}</strong>
-                      <span className="muted mono" title={project.dbPath}>{project.dbPath}</span>
-                      {project.lastOpened > 0 && <span className="muted">
-                        {t('startup.lastOpened', { when: new Date(project.lastOpened * 1000).toLocaleString() })}
-                      </span>}
-                    </div>
-                    <div className="project-picker-row-actions">
-                      <button disabled={busy} onClick={() => void open(project)}>
-                        {opening ? t('startup.starting') : t('startup.open')}
-                      </button>
-                      {project.id !== 'legacy' && <button
-                        type="button"
-                        className="project-picker-more"
-                        aria-label={t('startup.projectActions', { name: project.name })}
-                        aria-haspopup="menu"
-                        onClick={(event) => projectMenu.open(event, project)}
-                      >⋯</button>}
-                    </div>
-                  </li>
-                ))}
-              </ul>}
-        </section>
 
         <details className="project-picker-advanced">
           <summary>{t('startup.advanced')}</summary>

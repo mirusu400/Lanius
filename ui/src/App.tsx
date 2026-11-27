@@ -1,4 +1,4 @@
-import { Activity, useCallback, useEffect, useMemo, useReducer, useRef, useState, type DragEvent } from "react";
+import { Activity, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type DragEvent } from "react";
 import { captureWindowToClipboard, getInterceptState, getLockdown, getRun, getScannerState, isDesktop, putWorkspace } from "./api/client";
 import { LOCKDOWN_BLOCKED, LOCKDOWN_CHANGED } from "./lockdownEvents";
 import { connectStream } from "./api/stream";
@@ -181,6 +181,9 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
     setHistoryRevision((revision) => revision + 1);
   }, []);
   const [tabOrder, setTabOrder] = useState<Tab[]>(loadTabOrder);
+  const tabStripRef = useRef<HTMLElement>(null);
+  const tabOverflowRef = useRef<HTMLDetailsElement>(null);
+  const [tabOverflow, setTabOverflow] = useState(false);
   const [scannerAvailable, setScannerAvailable] = useState(false);
   const [draggedTab, setDraggedTab] = useState<Tab | null>(null);
   const [dropTarget, setDropTarget] = useState<{ tab: Tab; side: DropSide } | null>(null);
@@ -356,6 +359,71 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
     () => tabOrder.filter((name) => name !== 'Issues' || scannerAvailable),
     [scannerAvailable, tabOrder],
   );
+  const tabNotification = heldIds.size > 0 || updateAvailable || transferIndicators.size > 0;
+  const tabLabel = (name: Tab) => name === 'Dashboard'
+    ? t('dash.title')
+    : name === 'Issues'
+      ? t('issues.title')
+      : name === 'Docs'
+        ? t('docs.title')
+        : name;
+  const measureTabOverflow = useCallback(() => {
+    const strip = tabStripRef.current;
+    if (strip) setTabOverflow(strip.scrollWidth > strip.clientWidth + 2);
+  }, []);
+  useLayoutEffect(() => {
+    const strip = tabStripRef.current;
+    const active = strip?.querySelector<HTMLElement>('.tab.active');
+    if (strip && active) {
+      const left = active.offsetLeft - strip.offsetLeft;
+      const right = left + active.offsetWidth;
+      if (left < strip.scrollLeft) strip.scrollLeft = left;
+      else if (right > strip.scrollLeft + strip.clientWidth) {
+        strip.scrollLeft = right - strip.clientWidth;
+      }
+    }
+    measureTabOverflow();
+  }, [tab, visibleTabs, pluginWorkspace.tabs, tabOverflow, measureTabOverflow]);
+  useEffect(() => {
+    const strip = tabStripRef.current;
+    if (!strip) return;
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(measureTabOverflow);
+    observer?.observe(strip);
+    window.addEventListener('resize', measureTabOverflow);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measureTabOverflow);
+    };
+  }, [measureTabOverflow]);
+  useEffect(() => {
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      const menu = tabOverflowRef.current;
+      if (menu?.open && event.target instanceof Node && !menu.contains(event.target)) menu.open = false;
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && tabOverflowRef.current?.open) {
+        tabOverflowRef.current.open = false;
+        tabOverflowRef.current.querySelector('summary')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
+  const activateBuiltinTab = (name: Tab) => {
+    if (name === 'Settings') setSettingsGroup(null);
+    setTab(name);
+    if (tabOverflowRef.current) tabOverflowRef.current.open = false;
+  };
+  const activatePluginTab = (key: string) => {
+    selectPlugin(key);
+    if (tabOverflowRef.current) tabOverflowRef.current.open = false;
+  };
   const navigationShortcuts = useMemo<Record<string, () => void>>(
     () => Object.fromEntries(
       DEFAULT_TAB_ORDER.map((name) => [`app.${name.toLowerCase()}`, () => setTab(name)]),
@@ -438,55 +506,69 @@ function WorkspaceApp({ project, onLeave }: { project: Project | null; onLeave: 
           <span className="brand-mark" aria-hidden="true" />
         </button>
         {project && <CurrentProjectButton project={project} onOpen={openProject} />}
-        <nav className="tabs">
-          {visibleTabs.map((name) => (
-            <button
-              key={name}
-              className={[
-                'tab',
-                name === tab ? 'active' : '',
-                name === draggedTab ? 'dragging' : '',
-                dropTarget?.tab === name ? `drop-${dropTarget.side}` : '',
-              ].filter(Boolean).join(' ')}
-              draggable
-              aria-grabbed={name === draggedTab}
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('text/plain', name);
-                setDraggedTab(name);
-              }}
-              onDragOver={(event) => dragOverTab(event, name)}
-              onDrop={(event) => dropTab(event, name)}
-              onDragEnd={finishDragging}
-              onClick={() => {
-                if (name === "Settings") setSettingsGroup(null);
-                setTab(name);
-              }}
-            >
-              {name === "Dashboard"
-                ? t("dash.title")
-                : name === "Issues"
-                  ? t("issues.title")
-                : name === "Docs"
-                  ? t("docs.title")
-                  : name}
-              {name === 'Proxy' && heldIds.size > 0 && (
-                <span className="badge" title={t('proxy.heldBadge', { count: String(heldIds.size) })}
-                  aria-label={t('proxy.heldBadge', { count: String(heldIds.size) })}>{heldIds.size}</span>
-              )}
-              {/* A new build is worth one dot, wherever you are. */}
-              {name === "Settings" && updateAvailable && (
-                <span className="tab-dot" aria-label={t("updates.badge")} />
-              )}
-              {(name === 'Replay' || name === 'Fuzzer') && transferIndicators.has(name) && (
-                <span className="tab-dot" aria-label={t('tabs.newRequest', { tool: name })} />
-              )}
-            </button>
-          ))}
-          {pluginWorkspace.tabs.map(({ key, plugin, view }) => <button key={key}
-            className={`tab${tab === key ? ' active' : ''}`} title={plugin.package?.name ?? plugin.name}
-            onClick={() => selectPlugin(key)}>{view.title}</button>)}
-        </nav>
+        <div className="tab-navigation">
+          <nav className="tabs" ref={tabStripRef} onScroll={measureTabOverflow} aria-label={t('tabs.all')}>
+            {visibleTabs.map((name) => (
+              <button
+                key={name}
+                className={[
+                  'tab',
+                  name === tab ? 'active' : '',
+                  name === draggedTab ? 'dragging' : '',
+                  dropTarget?.tab === name ? `drop-${dropTarget.side}` : '',
+                ].filter(Boolean).join(' ')}
+                draggable
+                aria-grabbed={name === draggedTab}
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', name);
+                  setDraggedTab(name);
+                }}
+                onDragOver={(event) => dragOverTab(event, name)}
+                onDrop={(event) => dropTab(event, name)}
+                onDragEnd={finishDragging}
+                onClick={() => activateBuiltinTab(name)}
+              >
+                {tabLabel(name)}
+                {name === 'Proxy' && heldIds.size > 0 && (
+                  <span className="badge" title={t('proxy.heldBadge', { count: String(heldIds.size) })}
+                    aria-label={t('proxy.heldBadge', { count: String(heldIds.size) })}>{heldIds.size}</span>
+                )}
+                {/* A new build is worth one dot, wherever you are. */}
+                {name === "Settings" && updateAvailable && (
+                  <span className="tab-dot" aria-label={t("updates.badge")} />
+                )}
+                {(name === 'Replay' || name === 'Fuzzer') && transferIndicators.has(name) && (
+                  <span className="tab-dot" aria-label={t('tabs.newRequest', { tool: name })} />
+                )}
+              </button>
+            ))}
+            {pluginWorkspace.tabs.map(({ key, plugin, view }) => <button key={key}
+              className={`tab${tab === key ? ' active' : ''}`} title={plugin.package?.name ?? plugin.name}
+              onClick={() => activatePluginTab(key)}>{view.title}</button>)}
+          </nav>
+          {tabOverflow && <details className="tab-overflow" ref={tabOverflowRef}>
+            <summary>{t('tabs.all')}{tabNotification && <span className="tab-dot" aria-hidden="true" />}
+              <span aria-hidden="true">▾</span></summary>
+            <div className="tab-overflow-list">
+              {visibleTabs.map((name) => <button key={name} type="button"
+                className={tab === name ? 'active' : undefined}
+                aria-current={tab === name ? 'page' : undefined}
+                onClick={() => activateBuiltinTab(name)}>
+                {tabLabel(name)}
+                {name === 'Proxy' && heldIds.size > 0 && <span className="badge">{heldIds.size}</span>}
+                {name === 'Settings' && updateAvailable && <span className="tab-dot" aria-hidden="true" />}
+                {(name === 'Replay' || name === 'Fuzzer') && transferIndicators.has(name) &&
+                  <span className="tab-dot" aria-hidden="true" />}
+              </button>)}
+              {pluginWorkspace.tabs.map(({ key, plugin, view }) => <button key={key} type="button"
+                className={tab === key ? 'active' : undefined}
+                title={plugin.package?.name ?? plugin.name}
+                aria-current={tab === key ? 'page' : undefined}
+                onClick={() => activatePluginTab(key)}>{view.title}</button>)}
+            </div>
+          </details>}
+        </div>
         {lockdownActive && (
           <button type="button" className="lockdown-pill" onClick={openLockdown}>
             {t('lockdown.title')}

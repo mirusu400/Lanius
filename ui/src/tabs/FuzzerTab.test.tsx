@@ -178,6 +178,15 @@ const templateBox = () => {
 };
 
 describe('FuzzerTab', () => {
+  it('shows completed work in a labeled progress indicator', async () => {
+    render(<FuzzerTab />);
+    await userEvent.click(screen.getByRole('button', { name: t('fuzzer.start') }));
+    const progress = await screen.findByRole('progressbar', { name: t('fuzzer.progress') });
+    await waitFor(() => expect(progress).toHaveProperty('value', 3));
+    expect(progress).toHaveProperty('max', 3);
+    expect(screen.getByText(t('fuzzer.progressPercent', { percent: '100' }))).toBeTruthy();
+  });
+
   it('shares URL copy and send to Replay actions with the other request editors', async () => {
     const user = userEvent.setup();
     sendToFuzzer(flow);

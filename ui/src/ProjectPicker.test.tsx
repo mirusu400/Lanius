@@ -13,6 +13,44 @@ afterEach(() => {
   setApiBase('http://127.0.0.1:12954');
 });
 
+it('puts saved projects before the create and temporary choices', async () => {
+  const project = { id: 'recent', name: 'Recent work', temporary: false,
+    dbPath: '/projects/recent/lanius.sqlite', lastOpened: 10 };
+  const invoke = vi.fn(async (command: string) => {
+    if (command === 'list_projects') return [project];
+    if (command === 'get_global_lockdown') return { enabled: false, forced: false };
+    throw new Error(`unexpected command: ${command}`);
+  });
+  Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: { invoke } });
+  render(<ProjectPicker onOpen={vi.fn()} />);
+
+  const existing = await screen.findByRole('heading', { name: t('startup.existingTitle') });
+  const temporary = screen.getByRole('heading', { name: t('startup.tempTitle') });
+  expect(existing.compareDocumentPosition(temporary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByText('Recent work')).toBeTruthy();
+});
+
+it('keeps older projects available without pushing create actions below a long list', async () => {
+  const projects = Array.from({ length: 4 }, (_, index) => ({
+    id: `p${index}`, name: `Project ${index + 1}`, temporary: false,
+    dbPath: `/projects/p${index}/lanius.sqlite`, lastOpened: 4 - index,
+  }));
+  const invoke = vi.fn(async (command: string) => {
+    if (command === 'list_projects') return projects;
+    if (command === 'get_global_lockdown') return { enabled: false, forced: false };
+    throw new Error(`unexpected command: ${command}`);
+  });
+  Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: { invoke } });
+  render(<ProjectPicker onOpen={vi.fn()} />);
+
+  const showAll = await screen.findByRole('button', {
+    name: t('startup.showAllProjects', { count: '4' }),
+  });
+  expect(screen.queryByText('Project 4')).toBeNull();
+  await userEvent.click(showAll);
+  expect(screen.getByText('Project 4')).toBeTruthy();
+});
+
 it('lets a user change a busy API/MCP port before opening a project', async () => {
   const calls: string[] = [];
   const invoke = vi.fn(async (command: string, args?: { port: number }) => {

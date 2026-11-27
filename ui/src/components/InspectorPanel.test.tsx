@@ -199,6 +199,8 @@ describe('Inspector in Replay', () => {
       text: request, response: null, sending: false, error: null,
     }]);
     render(<ReplayTabView />);
+    expect(screen.queryByLabelText(t('inspector.title'))).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: t('inspector.toggleLabel') }));
     await userEvent.click(screen.getByRole('tab', { name: t('detail.view.raw') }));
     const editor = screen.getByRole('textbox', { name: t('replay.request') }) as HTMLTextAreaElement;
     const start = request.indexOf('%C8');
@@ -233,6 +235,9 @@ describe('Inspector in Replay', () => {
       text: request, response: null, sending: false, error: null,
     }]);
     const view = render(<ReplayTabView />);
+    expect(screen.queryByLabelText(t('inspector.title'))).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: t('inspector.toggleLabel') }));
     expect(screen.getByLabelText(t('inspector.title'))).toBeTruthy();
 
     await userEvent.click(screen.getByRole('button', { name: t('inspector.toggleLabel') }));
