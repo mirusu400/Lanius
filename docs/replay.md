@@ -30,6 +30,15 @@ The option is saved on this device and is off by default.
 `requests` code repeats exactly what you are about to send. See
 [proxy history](proxy.md) for details.
 
+**Export** and **Import**, beside the request editor's search buttons, pass a
+request between Lanius installations as one line of text. Export copies the
+request, its target URL, HTTP version choice and tab title to the clipboard as
+`lanius:replay:v1:` followed by base64url-encoded JSON. Import reads that line
+from the clipboard and opens it in a new tab without sending it, so the current
+draft is never replaced. Responses and send history are not included. Both are
+also in the editor's context menu and have shortcuts under
+**Settings > Shortcuts**.
+
 Use the HTTP version selector beside the target URL to inherit the project
 default or choose Auto, forced HTTP/1.0, HTTP/1.1, or HTTP/2. The choice is saved
 with each draft and sent exchange, including redirect hops. A forced mode takes

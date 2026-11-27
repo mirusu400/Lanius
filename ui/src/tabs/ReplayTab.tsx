@@ -60,6 +60,9 @@ import { UndoableInput } from '../components/UndoableText';
 import { EditableTabTitle } from '../components/EditableTabTitle';
 import { useTabDragReorder } from '../components/useTabDragReorder';
 import { useToast } from '../components/Toast';
+import { RequestShareButtons } from '../components/RequestShareButtons';
+import { copyTextToClipboard, notifyClipboardError, readClipboardText } from '../clipboard';
+import { decodeSharedRequest, encodeSharedRequest } from '../requestShare';
 
 const CLOSE_UNDO_MS = 8000;
 
@@ -69,6 +72,12 @@ function requestUrl(tab: Pick<ReplayTab, 'url' | 'text'>): string | null {
   } catch {
     return null;
   }
+}
+
+/** "GET /path" from the request line, the way captured tabs are named. */
+function requestLineTitle(text: string): string | null {
+  const [method, target] = text.split(/\r?\n/, 1)[0].trim().split(/\s+/);
+  return method && target ? `${method} ${target}` : null;
 }
 
 function redirectFor(
@@ -156,6 +165,40 @@ export function ReplayTabView() {
   };
   const closeTab = (id: string) => closeReplayTabs([id]);
 
+  const exportActive = () => {
+    if (!active) return;
+    copyTextToClipboard(
+      encodeSharedRequest({
+        url: active.url, text: active.text, httpMode: active.httpMode ?? null, title: active.title,
+      }),
+      t('replay.exported'),
+    );
+  };
+
+  // A new tab, never the current one: importing must not discard a draft.
+  const importFromClipboard = async () => {
+    let clipboard: string;
+    try {
+      clipboard = await readClipboardText();
+    } catch (err) {
+      notifyClipboardError(err);
+      return;
+    }
+    const shared = decodeSharedRequest(clipboard);
+    if (!shared) {
+      showToast({ id: 'replay-import', message: t('replay.importInvalid'), tone: 'error' });
+      return;
+    }
+    addTab({
+      ...emptyTab(),
+      url: shared.url,
+      text: shared.text,
+      httpMode: shared.httpMode,
+      title: shared.title ?? requestLineTitle(shared.text) ?? t('replay.importedTitle'),
+    });
+    showToast({ id: 'replay-import', message: t('replay.imported'), category: 'replay' });
+  };
+
   const selectRelativeTab = (step: number) => {
     if (!active || tabs.length < 2) return;
     const index = tabs.findIndex((item) => item.id === active.id);
@@ -232,6 +275,20 @@ export function ReplayTabView() {
       sendToFuzzer: active ? () => sendTextToFuzzer(active.url, active.text, active.httpMode) : undefined,
       copyAs: codegen.buildMenu(codegenTarget()),
       pluginActions: pluginMenu,
+      after: [
+        {
+          label: t('replay.export'),
+          shortcutId: 'replay.export',
+          separator: true,
+          disabled: !active,
+          onSelect: exportActive,
+        },
+        {
+          label: t('replay.import'),
+          shortcutId: 'replay.import',
+          onSelect: () => void importFromClipboard(),
+        },
+      ],
     }),
   );
 
@@ -374,6 +431,8 @@ export function ReplayTabView() {
   useShortcut('request.sendToFuzzer', () => {
     if (active) sendTextToFuzzer(active.url, active.text, active.httpMode);
   }, Boolean(active));
+  useShortcut('replay.export', exportActive, Boolean(active));
+  useShortcut('replay.import', () => void importFromClipboard());
   useShortcut('replay.new', createTab);
   useShortcut('replay.duplicate', () => {
     if (active) duplicateTab(active);
@@ -403,6 +462,10 @@ export function ReplayTabView() {
           onContextMenu={editorMenu.open}
           initialView="raw"
           enableFindReplace
+          extraControls={<RequestShareButtons
+            onExport={exportActive}
+            onImport={() => void importFromClipboard()}
+          />}
         />}
         second={<ResponseInspector
           flowId={active.response?.id ?? null}

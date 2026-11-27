@@ -641,6 +641,43 @@ describe('ReplayTab', () => {
     expect(document.querySelector('.replay-tabs button.active .tab-title')?.textContent).toBe('GET /newest');
   });
 
+  it('exports the request and imports it into a new tab from the clipboard', async () => {
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    fireEvent.change(editor(), { target: { value: 'PUT /edited HTTP/1.1\r\nHost: echo.test\r\n\r\nbody' } });
+
+    await user.click(screen.getByRole('button', { name: t('replay.export') }));
+    const exported = await navigator.clipboard.readText();
+    expect(exported.startsWith('lanius:replay:v1:')).toBe(true);
+    expect(await screen.findByText(t('replay.exported'))).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: t('replay.import') }));
+    await waitFor(() => expect(getTabs()).toHaveLength(2));
+    const [original, imported] = getTabs();
+    expect(imported.id).not.toBe(original.id);
+    expect(imported.url).toBe(original.url);
+    expect(imported.text).toBe(original.text);
+    expect(imported.title).toBe(original.title);
+    expect(imported.history).toEqual([]);
+    expect(sent).toHaveLength(0);
+    expect(await screen.findByText(t('replay.imported'))).toBeTruthy();
+  });
+
+  it('refuses to import clipboard text that is not an exported request', async () => {
+    const user = userEvent.setup();
+    render(<ReplayTabView />);
+    sendToReplay(flow);
+    await waitFor(() => expect(editor()).toBeTruthy());
+    await navigator.clipboard.writeText('GET / HTTP/1.1');
+
+    fireEvent.contextMenu(editor());
+    await user.click(screen.getByRole('menuitem', { name: t('replay.import') }));
+    expect(await screen.findByText(t('replay.importInvalid'))).toBeTruthy();
+    expect(getTabs()).toHaveLength(1);
+  });
+
   it('copies the request URL from the editor context menu', async () => {
     const user = userEvent.setup();
     render(<ReplayTabView />);

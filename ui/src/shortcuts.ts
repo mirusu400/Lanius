@@ -133,6 +133,20 @@ export const SHORTCUTS: ShortcutDefinition[] = [
     defaults: defaultFor('KeyU', { alt: true }),
   },
   {
+    id: 'replay.export',
+    category: 'replay',
+    label: 'replay.export',
+    description: 'replay.exportHelp',
+    defaults: defaultFor('KeyE', { alt: true }),
+  },
+  {
+    id: 'replay.import',
+    category: 'replay',
+    label: 'replay.import',
+    description: 'replay.importHelp',
+    defaults: defaultFor('KeyO', { alt: true }),
+  },
+  {
     id: 'replay.close',
     category: 'replay',
     label: 'shortcuts.replayClose',
